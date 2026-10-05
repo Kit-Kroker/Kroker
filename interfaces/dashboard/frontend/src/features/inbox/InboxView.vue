@@ -8,6 +8,8 @@ import type { ClarifyItem } from '../../api/types'
 import InboxEntry from './InboxEntry.vue'
 import ClarifyEntry from './ClarifyEntry.vue'
 import GateEntry from './GateEntry.vue'
+import OverrideEntry from './OverrideEntry.vue'
+import EscalationEntry from './EscalationEntry.vue'
 
 const inbox = useInboxStore()
 
@@ -76,6 +78,22 @@ function onToggleEdit(item: ClarifyItem) {
             :item="item"
             :busy="inbox.inFlight.has(entryKey(item))"
             @decide="(outcome, comment) => inbox.decideGate(item.runId, item.id, outcome, comment)"
+          />
+          <OverrideEntry
+            v-else-if="item.type === 'override'"
+            :item="item"
+            :busy="inbox.inFlight.has(entryKey(item))"
+            :draft="inbox.drafts[entryKey(item)] ?? ''"
+            @update:draft="(v) => inbox.setDraft(entryKey(item), v)"
+            @resolve="(approve, text) => inbox.overrideMerge(item.runId, item.id, approve, text)"
+          />
+          <EscalationEntry
+            v-else-if="item.type === 'escalation'"
+            :item="item"
+            :busy="inbox.inFlight.has(entryKey(item))"
+            :draft="inbox.drafts[entryKey(item)] ?? ''"
+            @update:draft="(v) => inbox.setDraft(entryKey(item), v)"
+            @resolve="(retry, guidance) => inbox.resolveEscalation(item.runId, item.id, retry, guidance)"
           />
         </InboxEntry>
       </div>

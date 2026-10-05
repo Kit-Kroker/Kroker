@@ -106,6 +106,15 @@ On a gate entry, approve and reject send at once and revise is unavailable
 until a comment is entered; a decided entry leaves the list. [FR-601,
 FR-301/302]
 
+### CONSOLE-20
+A merge override entry shows the verdict and one check row per check;
+override is unavailable until a justification is entered, and send-back is
+not; a resolved entry leaves the list. [FR-601, FR-304]
+
+### CONSOLE-21
+An escalation entry shows the analysis; retry and quarantine each resolve
+it, with or without guidance, and the entry leaves the list. [FR-601]
+
 ### CONSOLE-23
 A gate decided in the inbox is no longer offered for decision on that run's
 canvas. [FR-601, FR-302]

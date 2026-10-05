@@ -352,3 +352,45 @@ test('a gate decided in the inbox leaves the run canvas too', async ({ page }) =
   await page.goto('/#/runs/feature-graph-demo')
   await expect(page.locator('[data-testid="run-view"] [data-testid="gate-decision"]')).toHaveCount(0)
 })
+
+test('a merge override needs a justification and then resolves', async ({ page }) => {  // clause: CONSOLE-20
+  await page.goto('/#/inbox')
+  const view = page.locator('[data-testid="inbox-view"]')
+  const entry = view.locator(
+    '[data-testid="inbox-entry"][data-run-id="feature-billing-webhooks"][data-key="g1"]',
+  )
+  // Every check and the verdict are shown (FR-006).
+  await expect(entry.locator('[data-testid="check-row"]')).toHaveCount(6)
+  await expect(entry.locator('[data-testid="inbox-verdict"]')).not.toBeEmpty()
+  // Override is unavailable until a justification is entered; send-back is not.
+  await expect(entry.locator('[data-testid="inbox-override"]')).toBeDisabled()
+  await expect(entry.locator('[data-testid="inbox-send-back"]')).toBeEnabled()
+  await entry.locator('[data-testid="field-control"]').fill('Advisory only; the diff is reviewed.')
+  await expect(entry.locator('[data-testid="inbox-override"]')).toBeEnabled()
+  await entry.locator('[data-testid="inbox-override"]').click()
+  await expect(view.locator('[data-testid="inbox-entry"][data-key="g1"]')).toHaveCount(0)
+  await expect(page.locator('[data-testid="inbox-count"]')).toHaveText('5')
+})
+
+test('an escalation retry with guidance resolves the entry', async ({ page }) => {  // clause: CONSOLE-21
+  await page.goto('/#/inbox')
+  const view = page.locator('[data-testid="inbox-view"]')
+  const entry = view.locator(
+    '[data-testid="inbox-entry"][data-run-id="fix-rate-limit-retry"][data-key="e1"]',
+  )
+  await expect(entry.locator('[data-testid="inbox-analysis"]')).not.toBeEmpty()
+  await entry.locator('[data-testid="field-control"]').fill('Check the token bucket constants.')
+  await entry.locator('[data-testid="inbox-retry"]').click()
+  await expect(view.locator('[data-testid="inbox-entry"][data-key="e1"]')).toHaveCount(0)
+})
+
+test('an escalation quarantine works without guidance', async ({ page }) => {  // clause: CONSOLE-21
+  await page.goto('/#/inbox')
+  const view = page.locator('[data-testid="inbox-view"]')
+  const entry = view.locator(
+    '[data-testid="inbox-entry"][data-run-id="fix-rate-limit-retry"][data-key="e1"]',
+  )
+  await expect(entry.locator('[data-testid="inbox-analysis"]')).not.toBeEmpty()
+  await entry.locator('[data-testid="inbox-quarantine"]').click()
+  await expect(view.locator('[data-testid="inbox-entry"][data-key="e1"]')).toHaveCount(0)
+})

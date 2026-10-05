@@ -283,3 +283,143 @@ describe('GateEntry', () => {
     }
   })
 })
+
+// --- OverrideEntry and EscalationEntry (010 T017, RED; contract §3.3 rows
+// 3-4). Same non-literal dynamic imports as above: per-test runtime
+// resolution keeps the RED scoped to the two missing components (T018/T019
+// create them) instead of failing the whole file's collection.
+const overrideEntryPath = './OverrideEntry.vue'
+const mountOverride = async (
+  over: { item?: OverrideItem; busy?: boolean; draft?: string } = {},
+) => {
+  const { default: OverrideEntry } = await import(/* @vite-ignore */ overrideEntryPath)
+  return mount(OverrideEntry, {
+    props: {
+      item: over.item ?? overrideItem(),
+      busy: over.busy ?? false,
+      draft: over.draft ?? '',
+    },
+  })
+}
+
+describe('OverrideEntry', () => {
+  it('renders one check-row per check in order, and the verdict with the longtext class', async () => {
+    const item = {
+      ...overrideItem(),
+      checks: [
+        { name: 'ci', kind: 'ABSOLUTE' as const, ok: false, detail: 'tests red' },
+        { name: 'size', kind: 'ADVISORY' as const, ok: true, detail: 'within budget' },
+        { name: 'lint', kind: 'ADVISORY' as const, ok: true },
+      ],
+    }
+    const wrapper = await mountOverride({ item })
+    const rows = wrapper.findAll('[data-testid="check-row"]')
+    expect(rows).toHaveLength(3)
+    expect(rows.map((r) => r.get('.name').text())).toEqual(['ci', 'size', 'lint'])
+    const verdict = wrapper.get('[data-testid="inbox-verdict"]')
+    expect(verdict.text()).toBe('2 of 6 checks failed.')
+    expect(verdict.classes()).toContain('inbox-longtext')
+  })
+
+  it('an empty verdict renders no verdict block', async () => {
+    const wrapper = await mountOverride({ item: { ...overrideItem(), verdict: '' } })
+    expect(wrapper.find('[data-testid="inbox-verdict"]').exists()).toBe(false)
+  })
+
+  it('override is disabled while the draft is blank; send-back is enabled', async () => {
+    for (const draft of ['', '   ']) {
+      const wrapper = await mountOverride({ draft })
+      expect(wrapper.get('[data-testid="inbox-override"]').attributes('disabled')).toBeDefined()
+      expect(wrapper.get('[data-testid="inbox-send-back"]').attributes('disabled')).toBeUndefined()
+    }
+  })
+
+  it('a draft override emits resolve(true, trimmed)', async () => {
+    const wrapper = await mountOverride({ draft: '  advisory only, safe to merge  ' })
+    await wrapper.get('[data-testid="inbox-override"]').trigger('click')
+    expect(wrapper.emitted('resolve')).toEqual([[true, 'advisory only, safe to merge']])
+  })
+
+  it('send-back emits resolve(false, trimmed), also with an empty draft', async () => {
+    const filled = await mountOverride({ draft: '  send back to staging  ' })
+    await filled.get('[data-testid="inbox-send-back"]').trigger('click')
+    expect(filled.emitted('resolve')).toEqual([[false, 'send back to staging']])
+    const blank = await mountOverride({ draft: '' })
+    await blank.get('[data-testid="inbox-send-back"]').trigger('click')
+    expect(blank.emitted('resolve')).toEqual([[false, '']])
+  })
+
+  it('typing in the Justification field emits update:draft', async () => {
+    const wrapper = await mountOverride()
+    // The Justification field is required (contract §3.3 row 3), so Field
+    // appends the marker to the label text; assert the substring.
+    expect(
+      wrapper.findAll('label').map((l) => l.text()).some((t) => t.includes('Justification')),
+    ).toBe(true)
+    await wrapper.get('[data-testid="field-control"]').setValue('justified')
+    expect(wrapper.emitted('update:draft')).toEqual([['justified']])
+  })
+
+  it('busy disables both buttons and the field', async () => {
+    const wrapper = await mountOverride({ busy: true, draft: 'ready' })
+    for (const id of ['inbox-override', 'inbox-send-back']) {
+      expect(wrapper.get(`[data-testid="${id}"]`).attributes('disabled')).toBeDefined()
+    }
+    expect(wrapper.get('[data-testid="field-control"]').attributes('disabled')).toBeDefined()
+  })
+})
+
+const escalationEntryPath = './EscalationEntry.vue'
+const mountEscalation = async (
+  over: { item?: EscalationItem; busy?: boolean; draft?: string } = {},
+) => {
+  const { default: EscalationEntry } = await import(/* @vite-ignore */ escalationEntryPath)
+  return mount(EscalationEntry, {
+    props: {
+      item: over.item ?? escalationItem(),
+      busy: over.busy ?? false,
+      draft: over.draft ?? '',
+    },
+  })
+}
+
+describe('EscalationEntry', () => {
+  it('shows the analysis with the longtext class', async () => {
+    const wrapper = await mountEscalation()
+    const analysis = wrapper.get('[data-testid="inbox-analysis"]')
+    expect(analysis.text()).toBe('The retry loop could not reproduce the failure locally.')
+    expect(analysis.classes()).toContain('inbox-longtext')
+  })
+
+  it('an empty analysis renders no analysis block', async () => {
+    const wrapper = await mountEscalation({ item: { ...escalationItem(), analysis: '' } })
+    expect(wrapper.find('[data-testid="inbox-analysis"]').exists()).toBe(false)
+  })
+
+  it('retry and quarantine each send the trimmed draft, also with an empty draft', async () => {
+    const filled = await mountEscalation({ draft: '  watch the rate limit  ' })
+    await filled.get('[data-testid="inbox-retry"]').trigger('click')
+    expect(filled.emitted('resolve')).toEqual([[true, 'watch the rate limit']])
+    const blankRetry = await mountEscalation({ draft: '' })
+    await blankRetry.get('[data-testid="inbox-retry"]').trigger('click')
+    expect(blankRetry.emitted('resolve')).toEqual([[true, '']])
+    const blankQuarantine = await mountEscalation({ draft: '' })
+    await blankQuarantine.get('[data-testid="inbox-quarantine"]').trigger('click')
+    expect(blankQuarantine.emitted('resolve')).toEqual([[false, '']])
+  })
+
+  it('typing in the Guidance field emits update:draft', async () => {
+    const wrapper = await mountEscalation()
+    expect(wrapper.findAll('label').map((l) => l.text())).toContain('Guidance')
+    await wrapper.get('[data-testid="field-control"]').setValue('guided')
+    expect(wrapper.emitted('update:draft')).toEqual([['guided']])
+  })
+
+  it('busy disables both buttons and the field', async () => {
+    const wrapper = await mountEscalation({ busy: true, draft: 'ready' })
+    for (const id of ['inbox-retry', 'inbox-quarantine']) {
+      expect(wrapper.get(`[data-testid="${id}"]`).attributes('disabled')).toBeDefined()
+    }
+    expect(wrapper.get('[data-testid="field-control"]').attributes('disabled')).toBeDefined()
+  })
+})

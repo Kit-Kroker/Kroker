@@ -9,7 +9,7 @@ import { createPinia, setActivePinia, getActivePinia } from 'pinia'
 import InboxView from './InboxView.vue'
 import { useInboxStore } from '../../app/inbox.store'
 import { entryKey } from '../../shared/entryKey'
-import type { ClarifyItem, GateItem, UnreadableRun } from '../../api/types'
+import type { ClarifyItem, EscalationItem, GateItem, OverrideItem, UnreadableRun } from '../../api/types'
 
 // Field names per data-model §1.1.
 const clarify = (runId: string, id = 'q1'): ClarifyItem => ({
@@ -24,6 +24,34 @@ const clarify = (runId: string, id = 'q1'): ClarifyItem => ({
 })
 
 const unreadableRun = (runId: string, error = 'boom'): UnreadableRun => ({ runId, error })
+
+// Full OverrideItem and EscalationItem literals, field names per §1.1.
+const override = (runId: string, id = 'merge#1'): OverrideItem => ({
+  id,
+  runId,
+  round: 1,
+  age: '2h 00m',
+  type: 'override',
+  gate: 'merge',
+  verdict: '2 checks did not pass',
+  title: 'Merge override requested',
+  body: 'The merge gate blocked the branch.',
+  checks: [
+    { name: 'lint', kind: 'ABSOLUTE', ok: true, detail: 'clean' },
+    { name: 'diff coverage', kind: 'ADVISORY', ok: false, detail: '0.68 - target 0.80' },
+  ],
+})
+
+const escalation = (runId: string, id = 'task:T07#1'): EscalationItem => ({
+  id,
+  runId,
+  round: 1,
+  age: '2h 00m',
+  type: 'escalation',
+  analysis: 'The task keeps failing the same assertion after four attempts.',
+  title: 'Task escalated',
+  body: 'A repair attempt needs guidance.',
+})
 
 // Full GateItem literal, field names per data-model §1.1.
 const gate = (runId: string, id = 'architecture#1'): GateItem => ({
@@ -322,5 +350,69 @@ describe('InboxView gate wiring', () => {
     expect(spy).toHaveBeenCalledWith('run-b', 'architecture#1', 'revise', 'second comment')
     // FR-012: the first entry's comment is untouched by the second's send.
     expect((entryByRunId(w, 'run-a').find('[data-testid="gate-comment"]').element as HTMLTextAreaElement).value).toBe('first comment')
+  })
+})
+
+// 010 T017 part B (RED): the override and escalation wiring of contract
+// §3.4 rows 3-4. The RED cause is the two missing v-if branches -- the view
+// renders no OverrideEntry or EscalationEntry, so their controls do not
+// exist. The store spies stand in for the actions; the view only routes.
+describe('InboxView override and escalation wiring', () => {
+  it('(16) override and send-back call overrideMerge with booleans and the justification', async () => {
+    const inbox = useInboxStore()
+    const a = override('run-a')
+    inbox.items = [a]
+    inbox.loaded = true
+    inbox.loadError = null
+    inbox.unreadable = []
+    const spy = vi.spyOn(inbox, 'overrideMerge').mockResolvedValue(undefined)
+    const w = mountView()
+    const entry = entryByRunId(w, 'run-a')
+    await entry.find('[data-testid="field-control"]').setValue('because reasons')
+    await entry.find('[data-testid="inbox-override"]').trigger('click')
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy).toHaveBeenCalledWith('run-a', 'merge#1', true, 'because reasons')
+    expect(spy.mock.calls[0]![2]).toBe(true)
+    await entry.find('[data-testid="inbox-send-back"]').trigger('click')
+    expect(spy).toHaveBeenCalledTimes(2)
+    expect(spy).toHaveBeenCalledWith('run-a', 'merge#1', false, 'because reasons')
+    expect(spy.mock.calls[1]![2]).toBe(false)
+  })
+
+  it('(17) retry and quarantine call resolveEscalation with booleans and the guidance', async () => {
+    const inbox = useInboxStore()
+    const e = escalation('run-e')
+    inbox.items = [e]
+    inbox.loaded = true
+    inbox.loadError = null
+    inbox.unreadable = []
+    const spy = vi.spyOn(inbox, 'resolveEscalation').mockResolvedValue(undefined)
+    const w = mountView()
+    const entry = entryByRunId(w, 'run-e')
+    await entry.find('[data-testid="field-control"]').setValue('inject a clock')
+    await entry.find('[data-testid="inbox-retry"]').trigger('click')
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy).toHaveBeenCalledWith('run-e', 'task:T07#1', true, 'inject a clock')
+    expect(spy.mock.calls[0]![2]).toBe(true)
+    await entry.find('[data-testid="inbox-quarantine"]').trigger('click')
+    expect(spy).toHaveBeenCalledTimes(2)
+    expect(spy).toHaveBeenCalledWith('run-e', 'task:T07#1', false, 'inject a clock')
+    expect(spy.mock.calls[1]![2]).toBe(false)
+  })
+
+  it('(18) a notice in the store shows on its own entry only', () => {
+    const inbox = useInboxStore()
+    const a = override('run-a')
+    const b = escalation('run-b')
+    inbox.items = [a, b]
+    inbox.loaded = true
+    inbox.loadError = null
+    inbox.unreadable = []
+    inbox.notice = { [entryKey(a)]: 'failed: boom' }
+    const w = mountView()
+    const shown = entryByRunId(w, 'run-a').find('[data-testid="inbox-notice"]')
+    expect(shown.exists()).toBe(true)
+    expect(shown.text()).toBe('failed: boom')
+    expect(entryByRunId(w, 'run-b').find('[data-testid="inbox-notice"]').exists()).toBe(false)
   })
 })
