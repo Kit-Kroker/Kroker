@@ -90,6 +90,7 @@ class ProviderStub:
         self.mode = mode
         self.count = 0
         self.requests: list[tuple[str, str]] = []  # (path, mode-at-request)
+        self.bodies: list[bytes] = []  # raw request bodies, in arrival order
         self._lock = threading.Lock()
         stub = self
 
@@ -108,13 +109,14 @@ class ProviderStub:
 
             def do_POST(self) -> None:  # noqa: N802 - http.server API
                 length = int(self.headers.get("Content-Length") or 0)
-                self.rfile.read(length)
+                body = self.rfile.read(length)
                 # self.path carries the query string ("?beta=true"); the
                 # protocol pick is on the path alone.
                 path = self.path.split("?", 1)[0]
                 with stub._lock:
                     stub.count += 1
                     stub.requests.append((path, stub.mode))
+                    stub.bodies.append(body)
                     mode = stub.mode
                 anthropic = path.endswith("/v1/messages")
                 if mode == "always_429":

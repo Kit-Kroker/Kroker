@@ -35,6 +35,28 @@ def merge_usage(
         bag.cost_usd = (bag.cost_usd or 0.0) + cost_usd
 
 
+def add_spend(
+    bag: RoleUsage,
+    *,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    cost_usd: float | None = None,
+) -> None:
+    """Fold a sub-run's spend into a caller-held bag WITHOUT relabelling it
+    or counting a call (contrast merge_usage, which sets bag.model and bumps
+    bag.calls): the bag keeps its role's label and its own call count, and
+    gains only tokens and, when priced, dollars. cost_usd=None (unpriced
+    batch) leaves bag.cost_usd untouched."""
+    bag.input_tokens += input_tokens
+    bag.output_tokens += output_tokens
+    bag.cache_read_tokens += cache_read_tokens
+    bag.cache_write_tokens += cache_write_tokens
+    if cost_usd is not None:
+        bag.cost_usd = (bag.cost_usd or 0.0) + cost_usd
+
+
 def cost_bag_from_spend(spend: RoleUsage | None, cost_usd: float | None = None):
     """CostBag for a stage's BenchmarkRecord (E-33, spec §2). Explicit
     cost_usd (harness-reported dollars) wins over the spend's priced sum.
