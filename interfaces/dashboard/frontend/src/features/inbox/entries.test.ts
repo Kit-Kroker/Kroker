@@ -231,3 +231,55 @@ describe('ClarifyEntry', () => {
     expect(wrapper.emitted('update:draft')).toBeUndefined()
   })
 })
+
+// --- GateEntry (010 T014, RED; contract §3.3 row 2). Same non-literal
+// dynamic import as ClarifyEntry above: per-test runtime resolution keeps
+// the RED scoped to the missing ./GateEntry.vue (T015 creates it) instead
+// of failing the whole file's collection. The library GateDecision keeps
+// its comment internally and emits ONE object; GateEntry re-emits it as
+// TWO arguments (contract §3.3 row 2), which is what these tests pin.
+const gateEntryPath = './GateEntry.vue'
+const mountGate = async (over: { item?: GateItem; busy?: boolean } = {}) => {
+  const { default: GateEntry } = await import(/* @vite-ignore */ gateEntryPath)
+  return mount(GateEntry, {
+    props: { item: over.item ?? gateItem(), busy: over.busy ?? false },
+  })
+}
+
+describe('GateEntry', () => {
+  it('renders exactly one gate-decision titled with the data-model 2.6 fixed string', async () => {
+    const wrapper = await mountGate()
+    const decisions = wrapper.findAll('[data-testid="gate-decision"]')
+    expect(decisions).toHaveLength(1)
+    expect(wrapper.get('[data-testid="gate-decision"]').text()).toContain('architecture · round 2')
+  })
+
+  it('clicking approve emits decide as TWO arguments, approve and an empty comment', async () => {
+    const wrapper = await mountGate()
+    await wrapper.get('[data-testid="gate-approve"]').trigger('click')
+    const emissions = wrapper.emitted('decide')
+    expect(emissions).toHaveLength(1)
+    expect(emissions![0]).toEqual(['approve', ''])
+    expect(Array.isArray(emissions![0])).toBe(true)
+    expect((emissions![0] as unknown[]).length).toBe(2)
+  })
+
+  it('a typed comment and revise emit decide with the trimmed comment', async () => {
+    const wrapper = await mountGate()
+    await wrapper.get('[data-testid="gate-comment"]').setValue('  tighten the retry loop  ')
+    await wrapper.get('[data-testid="gate-revise"]').trigger('click')
+    expect(wrapper.emitted('decide')).toEqual([['revise', 'tighten the retry loop']])
+  })
+
+  it('revise is disabled while the comment is empty', async () => {
+    const wrapper = await mountGate()
+    expect(wrapper.get('[data-testid="gate-revise"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('busy disables all three gate buttons', async () => {
+    const wrapper = await mountGate({ busy: true })
+    for (const id of ['gate-approve', 'gate-revise', 'gate-reject']) {
+      expect(wrapper.get(`[data-testid="${id}"]`).attributes('disabled')).toBeDefined()
+    }
+  })
+})

@@ -9,7 +9,7 @@ import { createPinia, setActivePinia, getActivePinia } from 'pinia'
 import InboxView from './InboxView.vue'
 import { useInboxStore } from '../../app/inbox.store'
 import { entryKey } from '../../shared/entryKey'
-import type { ClarifyItem, UnreadableRun } from '../../api/types'
+import type { ClarifyItem, GateItem, UnreadableRun } from '../../api/types'
 
 // Field names per data-model §1.1.
 const clarify = (runId: string, id = 'q1'): ClarifyItem => ({
@@ -24,6 +24,18 @@ const clarify = (runId: string, id = 'q1'): ClarifyItem => ({
 })
 
 const unreadableRun = (runId: string, error = 'boom'): UnreadableRun => ({ runId, error })
+
+// Full GateItem literal, field names per data-model §1.1.
+const gate = (runId: string, id = 'architecture#1'): GateItem => ({
+  id,
+  runId,
+  round: 1,
+  age: '2h 00m',
+  type: 'gate',
+  gate: 'architecture',
+  title: 'Architecture needs a decision',
+  body: 'Review the architecture proposal.',
+})
 
 const RouterLinkStub = { props: ['to'], template: '<a><slot /></a>' }
 
@@ -263,5 +275,52 @@ describe('InboxView clarify wiring', () => {
     inbox.items = [fresh()]
     await w.vm.$nextTick()
     expect(fieldValue(entryByRunId(w, 'run-a'))).toBe('persisted answer')
+  })
+})
+
+// 010 T014 part B (RED): the gate wiring of contract §3.4 row 2. The RED
+// cause is the missing gate branch -- the view renders no GateEntry, so no
+// gate-decision controls exist. GateDecision keeps its comment internally
+// (research R-7); the entry adapts its one-object payload to two arguments.
+describe('InboxView gate wiring', () => {
+  it('(14) approve and revise call decideGate with the runId, id, outcome and comment', async () => {
+    const inbox = useInboxStore()
+    const a = gate('run-a')
+    inbox.items = [a]
+    inbox.loaded = true
+    inbox.loadError = null
+    inbox.unreadable = []
+    const spy = vi.spyOn(inbox, 'decideGate').mockResolvedValue(undefined)
+    const w = mountView()
+    const entry = entryByRunId(w, 'run-a')
+    await entry.find('[data-testid="gate-approve"]').trigger('click')
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy).toHaveBeenCalledWith('run-a', 'architecture#1', 'approve', '')
+    await entry.find('[data-testid="gate-comment"]').setValue('needs work  ')
+    await entry.find('[data-testid="gate-revise"]').trigger('click')
+    expect(spy).toHaveBeenCalledTimes(2)
+    expect(spy).toHaveBeenCalledWith('run-a', 'architecture#1', 'revise', 'needs work')
+  })
+
+  it('(15) two runs sharing a gate id: comments stay separate and survive two refreshes', async () => {
+    const inbox = useInboxStore()
+    inbox.items = [gate('run-a'), gate('run-b')]
+    inbox.loaded = true
+    inbox.loadError = null
+    inbox.unreadable = []
+    const spy = vi.spyOn(inbox, 'decideGate').mockResolvedValue(undefined)
+    const w = mountView()
+    await entryByRunId(w, 'run-a').find('[data-testid="gate-comment"]').setValue('first comment')
+    await entryByRunId(w, 'run-b').find('[data-testid="gate-comment"]').setValue('second comment')
+    // SC-005: two applied refreshes with fresh equal objects must not
+    // disturb either entry's in-progress comment.
+    inbox.items = [gate('run-a'), gate('run-b')]
+    inbox.items = [gate('run-a'), gate('run-b')]
+    await w.vm.$nextTick()
+    await entryByRunId(w, 'run-b').find('[data-testid="gate-revise"]').trigger('click')
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy).toHaveBeenCalledWith('run-b', 'architecture#1', 'revise', 'second comment')
+    // FR-012: the first entry's comment is untouched by the second's send.
+    expect((entryByRunId(w, 'run-a').find('[data-testid="gate-comment"]').element as HTMLTextAreaElement).value).toBe('first comment')
   })
 })

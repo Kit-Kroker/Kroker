@@ -318,3 +318,37 @@ test('a clarify entry is answered by accepting or typing', async ({ page }) => {
   await expect(view.locator('[data-testid="inbox-entry"][data-key="q2"]')).toHaveCount(0)
   await expect(page.locator('[data-testid="inbox-count"]')).toHaveText('4')
 })
+
+test('a gate entry is decided from the inbox', async ({ page }) => {  // clause: CONSOLE-19
+  await page.goto('/#/inbox')
+  const view = page.locator('[data-testid="inbox-view"]')
+  // Revise is unavailable until a comment is entered (FR-005).
+  const g2 = view.locator(
+    '[data-testid="inbox-entry"][data-run-id="feature-usage-metering"][data-key="g2"]',
+  )
+  await expect(g2.locator('[data-testid="gate-revise"]')).toBeDisabled()
+  await g2.locator('[data-testid="gate-comment"]').fill('Tighten the rollback story first.')
+  await expect(g2.locator('[data-testid="gate-revise"]')).toBeEnabled()
+  await g2.locator('[data-testid="gate-revise"]').click()
+  await expect(view.locator('[data-testid="inbox-entry"][data-key="g2"]')).toHaveCount(0)
+  await expect(page.locator('[data-testid="inbox-count"]')).toHaveText('5')
+  // Reject sends at once.
+  const graphGate = view.locator('[data-testid="inbox-entry"][data-run-id="feature-graph-demo"]')
+  await graphGate.locator('[data-testid="gate-reject"]').click()
+  await expect(
+    view.locator('[data-testid="inbox-entry"][data-run-id="feature-graph-demo"]'),
+  ).toHaveCount(0)
+})
+
+test('a gate decided in the inbox leaves the run canvas too', async ({ page }) => {  // clause: CONSOLE-23
+  await page.goto('/#/inbox')
+  const view = page.locator('[data-testid="inbox-view"]')
+  const graphGate = view.locator('[data-testid="inbox-entry"][data-run-id="feature-graph-demo"]')
+  await graphGate.locator('[data-testid="gate-approve"]').click()
+  await expect(
+    view.locator('[data-testid="inbox-entry"][data-run-id="feature-graph-demo"]'),
+  ).toHaveCount(0)
+  // The same gate is no longer offered on that run's canvas (FR-008).
+  await page.goto('/#/runs/feature-graph-demo')
+  await expect(page.locator('[data-testid="run-view"] [data-testid="gate-decision"]')).toHaveCount(0)
+})

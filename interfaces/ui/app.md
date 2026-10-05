@@ -101,6 +101,15 @@ On a clarify entry, accepting the suggestion sends it with that one action;
 a typed answer is sent only when it is not blank. Either way the entry
 leaves the list and the badge drops by one. [FR-601]
 
+### CONSOLE-19
+On a gate entry, approve and reject send at once and revise is unavailable
+until a comment is entered; a decided entry leaves the list. [FR-601,
+FR-301/302]
+
+### CONSOLE-23
+A gate decided in the inbox is no longer offered for decision on that run's
+canvas. [FR-601, FR-302]
+
 ## Failure modes
 
 Both clauses are asserted by `app.pw.ts` against the built dashboard on

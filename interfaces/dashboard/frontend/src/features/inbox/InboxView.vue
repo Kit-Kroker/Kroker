@@ -7,6 +7,7 @@ import { entryKey } from '../../shared/entryKey'
 import type { ClarifyItem } from '../../api/types'
 import InboxEntry from './InboxEntry.vue'
 import ClarifyEntry from './ClarifyEntry.vue'
+import GateEntry from './GateEntry.vue'
 
 const inbox = useInboxStore()
 
@@ -69,6 +70,12 @@ function onToggleEdit(item: ClarifyItem) {
             @update:draft="(v) => inbox.setDraft(entryKey(item), v)"
             @toggle-edit="onToggleEdit(item)"
             @answer="(text) => inbox.answerClarify(item.runId, item.id, text)"
+          />
+          <GateEntry
+            v-else-if="item.type === 'gate'"
+            :item="item"
+            :busy="inbox.inFlight.has(entryKey(item))"
+            @decide="(outcome, comment) => inbox.decideGate(item.runId, item.id, outcome, comment)"
           />
         </InboxEntry>
       </div>
