@@ -6,6 +6,11 @@ vi.mock('../api/client', () => {
   const api = {
     listRuns: vi.fn(async () => fakeRuns),
     listInbox: vi.fn(async () => [{ id: 'q1', type: 'clarify' }]),
+    // 010 T007: the store reads getInboxState now; same one item.
+    getInboxState: vi.fn(async () => ({
+      items: [{ id: 'q1', runId: 'r1', type: 'clarify' }],
+      unreadable: [],
+    })),
     startRun: vi.fn(async (input: { title: string }) => ({ id: 'feature-new', title: input.title })),
   }
   return { api }
