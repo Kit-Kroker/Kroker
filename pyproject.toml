@@ -1,10 +1,17 @@
 [build-system]
-requires = ["setuptools>=68"]
+# >=77 for the PEP 639 SPDX `license` string and `license-files`.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ai-sdlc-temporal"
-version = "0.1.0"
+# The distribution is `kroker`; the import package stays `sdlc`.
+name = "kroker"
+version = "0.0.1"
+description = "Idea to deployed feature pipeline: Temporal orchestrates, Pydantic AI agents think, coding harnesses do."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Maksim Shautsou" }]
 requires-python = ">=3.11"
 dependencies = [
     "temporalio>=1.9",

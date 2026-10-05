@@ -1,5 +1,5 @@
 {
-  "name": "ai-sdlc-temporal",
+  "name": "kroker",
   // Built from the repo's own multi-stage Dockerfile, target `dev`: the same
   // base layers as the production worker image (python 3.13, pinned
   // opencode/claude-code/gh) and the same uv.lock -- dev drifts from prod

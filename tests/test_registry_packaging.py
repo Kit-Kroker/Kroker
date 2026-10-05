@@ -1,6 +1,6 @@
 """A NON-editable install must find the registry.
 
-The local install is editable (__editable__.ai_sdlc_temporal-0.1.0.pth), so
+The local install is editable (an `__editable__.kroker-*.pth` file), so
 sdlc resolves to src/sdlc and any __file__-relative walk lands on the repo
 root by accident. `pip install .` puts the package in site-packages, where
 that accident does not happen — which is why the image could not boot. Slow

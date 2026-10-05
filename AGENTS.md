@@ -6,7 +6,8 @@ one exists; this file is the tool-agnostic equivalent.
 
 ## What this repo is
 
-`ai-sdlc-temporal` is an idea → deployed feature pipeline. A Temporal
+Kroker (distribution `kroker`, import package `sdlc`) is an idea →
+deployed feature pipeline. A Temporal
 workflow (`FactoryWorkflow`) deterministically orchestrates a fixed 15-stage
 DAG; Pydantic AI agents *think* — they emit schema-validated artifacts
 (requirements, architecture, plans, reviews) and never touch tools directly;
