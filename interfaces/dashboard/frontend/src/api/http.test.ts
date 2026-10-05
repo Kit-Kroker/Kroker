@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import snapshot from './__fixtures__/fleet-snapshot.json'
-import { mapSnapshot } from './http'
+import { mapInboxState, mapSnapshot } from './http'
 
 const NOW = new Date('2026-08-18T11:00:00Z')
 
@@ -153,5 +153,42 @@ describe('project_key mapping', () => {
       .find((r) => r.run_id === 'feature-add-sso')!.project_key = null
     const nulled = mapSnapshot(s as never, NOW)
     expect((nulled.runs.find((r) => r.id === 'feature-add-sso')! as { projectKey?: unknown }).projectKey).toBeNull()
+  })
+})
+
+// --- 010 T004 (RED): mapInboxState carries the inbox items and the
+// unreadable runs out of one snapshot (contract inbox-screen.md §1). The
+// items must be exactly what mapSnapshot already produces; unreadable is
+// open_errors mapped to camelCase, absent when the key is absent, and a
+// closed run's failure in `errors` is not an unreadable run.
+describe('mapInboxState', () => {
+  it('items deep-equal mapSnapshot inbox and the fixture has no unreadable runs', () => {
+    const state = mapInboxState(snapshot as never, NOW)
+    expect(state.items).toEqual(mapSnapshot(snapshot as never, NOW).inbox)
+    expect(state.unreadable).toEqual([])
+  })
+
+  it('maps open_errors entries to { runId, error }', () => {
+    const s = structuredClone(snapshot)
+    ;(s as { open_errors: Record<string, unknown>[] }).open_errors = [
+      { run_id: 'r9', error: 'boom' },
+    ]
+    expect(mapInboxState(s as never, NOW).unreadable).toEqual([
+      { runId: 'r9', error: 'boom' },
+    ])
+  })
+
+  it('a payload with no open_errors gives an empty unreadable list', () => {
+    const s = structuredClone(snapshot)
+    delete (s as { open_errors?: unknown }).open_errors
+    expect(mapInboxState(s as never, NOW).unreadable).toEqual([])
+  })
+
+  it('a closed-run failure in errors is not an unreadable run', () => {
+    const s = structuredClone(snapshot)
+    ;(s as { errors: Record<string, unknown>[] }).errors.push({
+      run_id: 'rc', error: 'summary failed',
+    })
+    expect(mapInboxState(s as never, NOW).unreadable).toEqual([])
   })
 })

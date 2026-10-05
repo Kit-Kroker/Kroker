@@ -31,6 +31,14 @@ describe('mock api decision flows', () => {
     expect(await api.listInbox()).toHaveLength(6)
   })
 
+  it('getInboxState returns the six items and no unreadable runs', async () => {
+    // 010 T004 (RED): the mock has one snapshot, so nothing is unreadable
+    // and the items are the same list listInbox serves (contract §1).
+    const state = await api.getInboxState()
+    expect(state.items).toEqual(await api.listInbox())
+    expect(state.unreadable).toEqual([])
+  })
+
   it('answers a clarify question and logs a decision', async () => {
     await api.answerClarify('feature-add-sso', 'q1', 'Use OIDC.')
     const inbox = await api.listInbox()

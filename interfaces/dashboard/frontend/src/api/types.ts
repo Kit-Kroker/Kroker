@@ -112,10 +112,24 @@ export interface FleetState {
   errors: { runId: string; error: string }[]
 }
 
+// 010 (R-5): FR-011 needs the items and the open runs whose pending state
+// could not be read from ONE snapshot; two calls could pair halves of two
+// different snapshots.
+export interface UnreadableRun {
+  runId: string
+  error: string
+}
+
+export interface InboxState {
+  items: InboxItem[]
+  unreadable: UnreadableRun[]
+}
+
 export interface DashboardApi {
   listRuns(): Promise<Run[]>
   getRun(id: string): Promise<Run | undefined>
   listInbox(): Promise<InboxItem[]>
+  getInboxState(): Promise<InboxState>
   answerClarify(runId: string, key: string, answer: string): Promise<void>
   decideGate(runId: string, key: string, outcome: GateOutcome, comment: string): Promise<void>
   overrideMerge(runId: string, key: string, approve: boolean, justification: string): Promise<void>

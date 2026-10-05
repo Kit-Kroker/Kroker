@@ -343,6 +343,11 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       await delay()
       return clone(inbox)
     },
+    // 010 (contract §1): one snapshot; the mock has no unreadable runs.
+    async getInboxState() {
+      await delay()
+      return { items: clone(inbox), unreadable: [] }
+    },
 
     async answerClarify(runId: string, key: string, answer: string) {
       await delay()

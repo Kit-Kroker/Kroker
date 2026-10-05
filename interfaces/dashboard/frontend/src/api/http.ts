@@ -1,6 +1,6 @@
 import type {
   ClarifyItem, DashboardApi, Decision, EscalationItem, FleetState, GateItem,
-  GateOutcome, InboxItem, OverrideItem, Run, StartRunInput, Status,
+  GateOutcome, InboxItem, InboxState, OverrideItem, Run, StartRunInput, Status,
 } from './types'
 import type { DotState } from '@kroker/ui/components/stage_dots/StageDots.vue'
 import { createHttpGraphApi } from './http-graph'
@@ -158,6 +158,21 @@ export function mapSnapshot(snap: any, now: Date = new Date()): FleetState {
   return { runs, inbox, errors }
 }
 
+// 010 (contract §1): the items use the same per-item mapping mapSnapshot
+// uses, in the same order; mapSnapshot itself stays untouched. open_errors
+// are the OPEN runs whose pending state could not be read — `errors` also
+// holds closed-run failures, which are not unreadable runs.
+export function mapInboxState(snap: any, now: Date = new Date()): InboxState {
+  const items: InboxItem[] = []
+  for (const r of snap.inbox ?? []) {
+    for (const p of r.pending) items.push(mapPending(r.run_id, p, now))
+  }
+  const unreadable = (snap.open_errors ?? []).map((e: any) => ({
+    runId: e.run_id, error: e.error,
+  }))
+  return { items, unreadable }
+}
+
 export function createHttpApi(baseUrl = '/api'): DashboardApi {
   const json = async (path: string, init?: RequestInit) => {
     const r = await fetch(`${baseUrl}${path}`, {
@@ -184,6 +199,7 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
     async listRuns() { return (await snapshot()).runs },
     async getRun(id) { return (await snapshot()).runs.find((r) => r.id === id) },
     async listInbox() { return (await snapshot()).inbox },
+    async getInboxState() { return mapInboxState(await json('/inbox')) },
 
     async answerClarify(runId, key, answer) {
       await json(`/runs/${encodeURIComponent(runId)}/answer`, {
