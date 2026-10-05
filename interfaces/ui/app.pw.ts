@@ -394,3 +394,53 @@ test('an escalation quarantine works without guidance', async ({ page }) => {  /
   await entry.locator('[data-testid="inbox-quarantine"]').click()
   await expect(view.locator('[data-testid="inbox-entry"][data-key="e1"]')).toHaveCount(0)
 })
+
+test('resolving every waiting item ends in the empty state and no badge', async ({ page }) => {  // clause: CONSOLE-22
+  await page.goto('/#/inbox')
+  const view = page.locator('[data-testid="inbox-view"]')
+  const entries = view.locator('[data-testid="inbox-entry"]')
+  const badge = page.locator('[data-testid="inbox-count"]')
+  // SC-002: after every resolution, both the entry count and the header
+  // badge drop by exactly one -- seven observations including the first.
+  // The badge is asserted only down to 1: at zero it is omitted (that is
+  // the end state this clause pins), not a zero-width "0".
+  const observe = async (n: number) => {
+    await expect(entries).toHaveCount(n)
+    if (n > 0) await expect(badge).toHaveText(String(n))
+  }
+  await observe(6)
+  // accept q1, accept q2 (CONSOLE-18's one-action accept)
+  await view.locator(
+    '[data-testid="inbox-entry"][data-run-id="feature-add-sso"][data-key="q1"] [data-testid="inbox-accept"]',
+  ).click()
+  await observe(5)
+  await view.locator(
+    '[data-testid="inbox-entry"][data-key="q2"] [data-testid="inbox-accept"]',
+  ).click()
+  await observe(4)
+  // approve the usage-metering gate, then the graph-demo gate (CONSOLE-19)
+  await view.locator(
+    '[data-testid="inbox-entry"][data-run-id="feature-usage-metering"][data-key="g2"] [data-testid="gate-approve"]',
+  ).click()
+  await observe(3)
+  await view.locator(
+    '[data-testid="inbox-entry"][data-run-id="feature-graph-demo"] [data-testid="gate-approve"]',
+  ).click()
+  await observe(2)
+  // override the merge gate with a justification (CONSOLE-20)
+  const g1 = view.locator(
+    '[data-testid="inbox-entry"][data-run-id="feature-billing-webhooks"][data-key="g1"]',
+  )
+  await g1.locator('[data-testid="field-control"]').fill('Advisory only; the diff is reviewed.')
+  await g1.locator('[data-testid="inbox-override"]').click()
+  await observe(1)
+  // quarantine the escalation (CONSOLE-21)
+  await view.locator(
+    '[data-testid="inbox-entry"][data-run-id="fix-rate-limit-retry"][data-key="e1"] [data-testid="inbox-quarantine"]',
+  ).click()
+  // The end state: the explicit empty state shows, no entries, and the
+  // badge is omitted at zero (the seventh observation).
+  await expect(entries).toHaveCount(0)
+  await expect(view.locator('[data-testid="inbox-empty"]')).toBeVisible()
+  await expect(badge).toHaveCount(0)
+})

@@ -115,6 +115,10 @@ not; a resolved entry leaves the list. [FR-601, FR-304]
 An escalation entry shows the analysis; retry and quarantine each resolve
 it, with or without guidance, and the entry leaves the list. [FR-601]
 
+### CONSOLE-22
+When every waiting item has been resolved the inbox shows its explicit
+empty state and the header shows no inbox badge. [FR-601]
+
 ### CONSOLE-23
 A gate decided in the inbox is no longer offered for decision on that run's
 canvas. [FR-601, FR-302]
@@ -125,4 +129,9 @@ Both clauses are asserted by `app.pw.ts` against the built dashboard on
 `VITE_API=mock` (the mock is what makes the whole SPA runnable headless
 with no backend). A failure here is usually not a component fault but an
 assembly fault: an adapter mapping, a store refresh, or the provider
-selection in `dashboard/frontend/src/api/client.ts`.
+selection in `dashboard/frontend/src/api/client.ts`. The inbox's
+load-failure, incomplete-list and already-decided states are pinned at
+the unit tier (`inbox.store.test.ts`, `InboxView.test.ts`): the mock
+provider cannot fail a read or report an unreadable run, and it refuses a
+write only in the few seconds between a decision taken on another screen
+and the next poll, which a test cannot hit reliably.
