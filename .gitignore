@@ -5,6 +5,9 @@ __pycache__/
 runs/
 .superpowers/
 .env
+# per-machine compose additions (host bind mounts); the committed template is
+# docker-compose.override.example.yml
+docker-compose.override.yml
 .vscode/
 opencode.json
 # spec-kit runtime caches (catalog mirror); scaffold itself is tracked

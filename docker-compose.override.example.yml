@@ -1,0 +1,20 @@
+# Per-machine additions to docker-compose.yml. Copy to
+# docker-compose.override.yml (gitignored; compose loads it automatically)
+# and keep only the parts you need. Paths on the left are host paths.
+services:
+  worker:
+    volumes:
+      # Local repositories the pipeline may work on, referenced in a run as
+      # /srv/scratch-repos/<name>. Everything mounted here is readable and
+      # writable by the code a run builds and tests (SECURITY.md).
+      - /path/to/your/repos:/srv/scratch-repos
+
+      # The harness roles (dev, test, devops) run `opencode`, which
+      # authenticates from its own login rather than from .env. Log in on the
+      # host once (`opencode auth login`) and share the result read-only, so
+      # the container can resolve the provider without clobbering host state.
+      # Linux/macOS:
+      - ~/.local/share/opencode/auth.json:/root/.local/share/opencode/auth.json:ro
+      - ~/.cache/opencode/models.json:/root/.cache/opencode/models.json:ro
+      # Windows: the same two files live under C:/Users/<you>/.local/share/
+      # and C:/Users/<you>/.cache/.

@@ -32,6 +32,11 @@ services:
     restart: unless-stopped
 
   worker:
+    # Published by .github/workflows/release.yml on every v* tag. With both
+    # `image` and `build` set, `docker compose pull worker` fetches the
+    # published image and `docker compose up --build` builds this checkout
+    # and tags it with the same name.
+    image: ghcr.io/kit-kroker/kroker-worker:${KROKER_IMAGE_TAG:-latest}
     build:
       context: .
       # The Dockerfile is multi-stage: runtime is the worker image, dev is
@@ -58,13 +63,9 @@ services:
       # rebuild/recreate (lost 5 runs' worth of today's history to exactly
       # this before adding the mount)
       - worker-runs:/app/runs
-      # host-side scratch repos referenced by benchmark case.yaml repo_url
-      - D:/own/sdlc-scratch-repos:/srv/scratch-repos
-      # share the host's opencode auth + provider catalog so harness runs can
-      # resolve providers (e.g. zai-coding-plan) the container never logged
-      # into itself; read-only so the container can't clobber host state
-      - C:/Users/start/.local/share/opencode/auth.json:/root/.local/share/opencode/auth.json:ro
-      - C:/Users/start/.cache/opencode/models.json:/root/.cache/opencode/models.json:ro
+      # Host bind mounts (your repositories, the host's opencode login) are
+      # per-machine and live in docker-compose.override.yml, which compose
+      # loads automatically -- see docker-compose.override.example.yml.
     restart: unless-stopped
 
 volumes:
