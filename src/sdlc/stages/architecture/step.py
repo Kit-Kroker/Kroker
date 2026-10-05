@@ -158,6 +158,13 @@ async def produce(
         memory_watermark=memory_watermark,
         scope="architect",
         research_model=research_model,
+        # C12 N2/N3 (D3): the tool path's deps carry the configured run
+        # ceiling and request limit (floor 1: a 0 limit would stop the inner
+        # run before its first request). Default-config payloads are
+        # unchanged -- both are omitted or equal to the defaults at the
+        # default config, pinned by the deps tests.
+        max_run_cost_usd=cfg.research.max_run_cost_usd,
+        max_requests=max(1, cfg.research.max_requests),
     )
 
     delta_retries = cfg.max_delta_retries
