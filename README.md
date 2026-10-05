@@ -4,6 +4,15 @@ Idea → deployed feature pipeline. Temporal orchestrates; Pydantic AI agents
 think (clarify, architect, plan, QA, quality gate, devops); coding harnesses
 do (`claude -p`, `opencode run`) inside isolated git worktrees.
 
+> **Alpha — your own repositories only, localhost only.** The pipeline
+> executes the target repository's code (dependency installs, builds, tests)
+> as the user the worker runs as, with that user's network access and
+> credentials. A git worktree is not a sandbox. There is no authentication,
+> no tenant isolation and no network egress control. Do not point it at a
+> repository you do not trust, and do not expose its ports beyond loopback.
+> The threat model and how to report a vulnerability are in
+> [`SECURITY.md`](SECURITY.md).
+
 ## Roles
 Governed by the versioned registry in `agents/` (`agents/registry.yaml` +
 one `agents/<role>/` folder per role) and validated at worker boot
@@ -113,10 +122,13 @@ Checks never call `npm` directly: `python scripts/check_ui.py` runs
 install, typecheck, both Vitest suites and both Playwright tiers.
 
 **Bind to localhost** — there is no auth yet, and the `X-Actor` header
-identifying a writer is self-asserted (ROADMAP OQ-11). The Markdown URLs are
-designed to be pasted into a chat or a ticket, which makes this easier to
-forget: pasting one shares a link that only works inside the trusted
-network, and anyone who reaches that network can read it.
+identifying a writer is self-asserted (OQ-11,
+[`docs/roadmap/pipeline-as-data.md`](docs/roadmap/pipeline-as-data.md)).
+Anyone who can reach the port can start a run and answer its gates, the
+merge gate included. The Markdown URLs are designed to be pasted into a chat
+or a ticket, which makes this easier to forget: pasting one shares a link
+that only works inside the trusted network, and anyone who reaches that
+network can read it. See [`SECURITY.md`](SECURITY.md).
 
 **Deploy (stage 13).** Off by default. Enable per project with
 `PipelineConfig.deploy` — `adapter: compose` (reference) or `script`
