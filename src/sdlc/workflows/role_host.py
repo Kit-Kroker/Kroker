@@ -39,6 +39,8 @@ with workflow.unsafe.imports_passed_through():
         cache_put,
     )
     from ..memoization.cache import content_key
+    from ..observability.sub_run_usage import harvest_reports
+    from ..observability.usage import add_spend
     from ..pending import GateContext
     from ..pricing import PriceUsageInput, price_usage
     from .memory_host import MEM_ACT
@@ -125,6 +127,31 @@ class RoleHost:
         )
         return result, False
 
+    async def _price(
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cache_read_tokens: int,
+        cache_write_tokens: int,
+    ) -> float | None:
+        """Price one model's usage in an activity (replay-safe). Failure of
+        ANY kind degrades to None; it must never fail the caller."""
+        try:
+            return await workflow.execute_activity(
+                price_usage,
+                PriceUsageInput(
+                    model=model,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cache_read_tokens=cache_read_tokens,
+                    cache_write_tokens=cache_write_tokens,
+                ),
+                **PRICE_ACT,
+            )
+        except Exception:
+            return None
+
     async def _run_role(
         self,
         cfg: PipelineConfig,
@@ -148,7 +175,18 @@ class RoleHost:
         override; a disagreeing label fails the call non-retryably before
         any model request rather than record a label the model never had.
         No-override and override-equals-registry calls are made exactly as
-        before (E1), so no-override replays are byte-identical."""
+        before (E1), so no-override replays are byte-identical.
+
+        architect-research-surface (D4): after the role's own accounting,
+        the run's messages are harvested for sub-run usage reports (a tool
+        that ran a model inside its own activity hands the usage back as
+        tool-return metadata). Each report is tracked under role `research`
+        with into=None; the reports are priced ONCE per distinct answering
+        model and the summed spend is folded into the caller's bag with
+        add_spend — never merge_usage, never _track_usage(into=into), so
+        the bag keeps its label and its own call count. A run with no
+        report schedules nothing here, which is why this needs no
+        workflow.patched marker."""
         fwd = forwarded_model(cfg, role)
         if fwd is None:
             result = await agent.run(*args, **kwargs)
@@ -165,20 +203,13 @@ class RoleHost:
         u = result.usage
         usd: float | None = None
         if u.input_tokens or u.output_tokens:
-            try:
-                usd = await workflow.execute_activity(
-                    price_usage,
-                    PriceUsageInput(
-                        model=model,
-                        input_tokens=u.input_tokens or 0,
-                        output_tokens=u.output_tokens or 0,
-                        cache_read_tokens=u.cache_read_tokens or 0,
-                        cache_write_tokens=u.cache_write_tokens or 0,
-                    ),
-                    **PRICE_ACT,
-                )
-            except Exception:
-                usd = None
+            usd = await self._price(
+                model,
+                u.input_tokens or 0,
+                u.output_tokens or 0,
+                u.cache_read_tokens or 0,
+                u.cache_write_tokens or 0,
+            )
         self._track_usage(  # type: ignore[attr-defined]
             role=role,
             model=model,
@@ -189,6 +220,54 @@ class RoleHost:
             cost_usd=usd,
             into=into,
         )
+        reports = harvest_reports(result)
+        if reports:
+            # Batch pricing (D4/AM3): group by answering model in
+            # first-seen order, sum the counts, price each batch once.
+            sums: dict[str, dict[str, int]] = {}
+            order: list[str] = []
+            for report in reports:
+                if report.model not in sums:
+                    sums[report.model] = {
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "cache_read_tokens": 0,
+                        "cache_write_tokens": 0,
+                    }
+                    order.append(report.model)
+                bucket = sums[report.model]
+                bucket["input_tokens"] += report.input_tokens
+                bucket["output_tokens"] += report.output_tokens
+                bucket["cache_read_tokens"] += report.cache_read_tokens
+                bucket["cache_write_tokens"] += report.cache_write_tokens
+            batch_usd: dict[str, float | None] = {}
+            for batch_model in order:
+                batch_usd[batch_model] = await self._price(batch_model, **sums[batch_model])
+            # Per-report accounting in message order: the first report of a
+            # model carries the batch's dollars, later same-model reports
+            # carry 0.0, and every report of an unpriced batch carries None.
+            priced_once: set[str] = set()
+            for report in reports:
+                if batch_usd[report.model] is None:
+                    share: float | None = None
+                elif report.model in priced_once:
+                    share = 0.0
+                else:
+                    share = batch_usd[report.model]
+                    priced_once.add(report.model)
+                self._track_usage(  # type: ignore[attr-defined]
+                    role="research",
+                    model=report.model,
+                    input_tokens=report.input_tokens,
+                    output_tokens=report.output_tokens,
+                    cache_read_tokens=report.cache_read_tokens,
+                    cache_write_tokens=report.cache_write_tokens,
+                    cost_usd=share,
+                    into=None,
+                )
+            if into is not None:
+                for batch_model in order:
+                    add_spend(into, **sums[batch_model], cost_usd=batch_usd[batch_model])
         return result
 
     async def _check_budget(self, cfg: PipelineConfig) -> None:
