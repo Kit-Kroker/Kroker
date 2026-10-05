@@ -68,17 +68,70 @@ python -m sdlc.cli benchmark score --case cat-cafe-monitoring
 ```
 
 ## Run
-**Local:**
-1. `temporal server start-dev`
-2. `pip install -e .` then `python -m sdlc.worker`
-3. `python -m sdlc.cli start ...`
 
-**Docker Compose** (`docker-compose.yml`): brings up Temporal, a real
-[Hindsight](https://github.com/vectorize-io/hindsight) memory backend, and the
-worker together, all reading secrets from `.env` (`env_file:`) — copy
-`.env.example` to `.env` first. The worker image installs the `logfire` extra
-so `logfire_setup.configure()` doesn't crash-loop on a missing module when
-`LOGFIRE_TOKEN` is set. `docker compose up`.
+### Quickstart (Docker Compose)
+
+The supported environment is the container: the worker image carries
+Python 3.13, the pinned `opencode` and `claude` CLIs, `gh` and `git`, and
+`docker-compose.yml` puts Temporal and a
+[Hindsight](https://github.com/vectorize-io/hindsight) memory backend next
+to it. You need Docker and the accounts below; nothing else is installed on
+the host.
+
+```bash
+git clone https://github.com/Kit-Kroker/Kroker.git && cd Kroker
+cp .env.example .env                                   # then fill in the keys
+cp docker-compose.override.example.yml docker-compose.override.yml   # then edit the paths
+docker compose up -d --build
+docker compose exec worker python -m sdlc.cli doctor   # every line should PASS
+```
+
+What you have to bring:
+
+| What | Where it goes | Needed for |
+|---|---|---|
+| z.ai key | `ZAI_API_KEY`, `ANTHROPIC_API_KEY` in `.env` | every proposer role; the worker does not start without them |
+| Exa key | `EXA_API_KEY` in `.env` | the research role; the worker does not start without it, even if no run uses research |
+| An LLM key for Hindsight | `HINDSIGHT_API_LLM_API_KEY` in `.env` | the memory backend container |
+| An `opencode` login | `opencode auth login` on the host, mounted through `docker-compose.override.yml` | the coding roles (`dev`, `test`, `devops`) |
+| A repository to work on | a host directory mounted through `docker-compose.override.yml` | any run |
+| GitHub token, `repo` scope | `GH_TOKEN` in `.env` | only the last step of a run against a GitHub repository (push + pull request) |
+
+`doctor` checks the provider keys, `GH_TOKEN`, the CLIs, the git identity
+and the Temporal connection, and reports every problem at once. It does not
+check the Hindsight key, the `opencode` login or your mounts. Then start a
+run and answer its gates:
+
+```bash
+docker compose exec worker python -m sdlc.cli start \
+    --title "Add a health endpoint" --mode brownfield --repo /srv/scratch-repos/<your-repo>
+docker compose exec worker python -m sdlc.cli inbox
+```
+
+A run spends tokens from the first stage; there is no dry-run mode yet.
+Read [`SECURITY.md`](SECURITY.md) before pointing it at a repository: the
+pipeline executes that repository's build and tests with the worker's
+environment.
+
+**Published image.** Each `v*` tag publishes
+`ghcr.io/kit-kroker/kroker-worker:<version>` (and `latest`) from the same
+Dockerfile target, so from the first release after `v0.0.1` you can
+`docker compose pull worker` and drop `--build`. Set `KROKER_IMAGE_TAG` to
+pin a version.
+
+### Without Docker
+
+For working on Kroker itself rather than running it. Requires Python 3.13
+and, on `PATH`, `git`, `gh`, the Temporal CLI and the `opencode` and
+`claude` CLIs at the versions the Dockerfile pins.
+
+1. `temporal server start-dev`
+2. `uv sync --frozen --extra dev` (or `pip install -e ".[dev]"`), copy
+   `.env.example` to `.env`, then `python -m sdlc.worker`
+3. `python -m sdlc.cli doctor`, then `python -m sdlc.cli start ...`
+
+The repository also ships a dev container (`.devcontainer/`) built from the
+same Dockerfile.
 
 **Agent board API.** Optional, read-mostly service over the board the pipeline
 writes as it runs (`$SDLC_BOARD_DB`, default `runs/board.sqlite3`):
@@ -138,7 +191,8 @@ that is not `passed`, then opens a `deploy_failed` gate. A check that could
 not be evaluated is `errored` and never counts as a pass.
 
 ## Develop
-- `pip install -e .[dev]` then `python -m pytest` (needs `git` on PATH).
+- `uv sync --frozen --extra dev` (or `pip install -e ".[dev]"`) then
+  `python -m pytest`. Python 3.13; needs `git` on PATH.
 - Importing the workflow/agents currently requires `ANTHROPIC_API_KEY` /
   `OPENAI_API_KEY` / `EXA_API_KEY` / `ZAI_API_KEY` set (agents are
   constructed at import, including the shipped research role's

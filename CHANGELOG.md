@@ -7,6 +7,30 @@ version is 0, any release may break compatibility.
 
 ## [Unreleased]
 
+### Added
+
+- A release workflow that publishes the worker image to
+  `ghcr.io/kit-kroker/kroker-worker` on every `v*` tag.
+- `docker-compose.override.example.yml`, the template for per-machine bind
+  mounts.
+- A container-first quickstart in the README, with the list of keys and
+  logins a run needs.
+
+### Changed
+
+- Python 3.13 is now the minimum (`requires-python = ">=3.13"`), and CI
+  runs on it. 3.11 and 3.12 were declared but never the version the image
+  ran.
+- `docker-compose.yml` names the worker image
+  (`ghcr.io/kit-kroker/kroker-worker`) and no longer carries host-specific
+  bind mounts. If you relied on them, move them to
+  `docker-compose.override.yml`.
+
+### Fixed
+
+- `.env.example` asks for `EXA_API_KEY`, which the shipped research role
+  requires at worker start, instead of `TAVILY_API_KEY`, which it does not.
+
 ## [0.0.1] - 2026-10-05
 
 The first tagged version. Alpha: single operator, your own repositories,
