@@ -97,7 +97,7 @@ async def _drive(handle: Any, emit: Emit, done: asyncio.Event) -> None:
 
 def export_root() -> Path:
     # The same resolution export_run_artifacts performs inside the activity.
-    return Path(os.environ.get("SDLC_EXPORT_ROOT", "./runs"))
+    return Path(os.environ.get("SDLC_EXPORT_ROOT", "./runs/pipeline"))
 
 
 async def run_demo(

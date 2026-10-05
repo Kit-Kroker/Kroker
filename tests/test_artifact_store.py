@@ -35,3 +35,14 @@ def test_env_root_fallback(tmp_path, monkeypatch):
     store = LocalFileStore()
     store.put("harness_session", "r", "n.jsonl", b"y")
     assert (tmp_path / "art" / "r" / "sessions" / "n.jsonl").exists()
+
+
+def test_export_root_fallback_is_runs_pipeline(tmp_path, monkeypatch):
+    """Layout contract: no env at all -> artifacts ride beside the E-32
+    exports under runs/pipeline/."""
+    monkeypatch.delenv("SDLC_ARTIFACT_ROOT", raising=False)
+    monkeypatch.delenv("SDLC_EXPORT_ROOT", raising=False)
+    monkeypatch.chdir(tmp_path)
+    store = LocalFileStore()
+    store.put("harness_session", "run-1", "s.jsonl", b"x")
+    assert (tmp_path / "runs" / "pipeline" / "run-1" / "sessions" / "s.jsonl").exists()

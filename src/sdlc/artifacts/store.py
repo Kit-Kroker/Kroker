@@ -42,7 +42,7 @@ class LocalFileStore:
         self.root = Path(
             root
             or os.environ.get("SDLC_ARTIFACT_ROOT")
-            or os.environ.get("SDLC_EXPORT_ROOT", "./runs")
+            or os.environ.get("SDLC_EXPORT_ROOT", "./runs/pipeline")
         )
 
     def put(self, kind: str, run_id: str, name: str, data: bytes) -> ArtifactRef:

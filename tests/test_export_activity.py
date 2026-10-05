@@ -57,3 +57,40 @@ async def test_export_writes_summary_json_as_data(tmp_path, monkeypatch):
     again = RunSummary.model_validate_json(p.read_text(encoding="utf-8"))
     assert again.run_id == "run-abc"
     assert again.outcome == "deployed:http://pr/1"
+
+
+@pytest.mark.asyncio
+async def test_unset_export_root_defaults_to_runs_pipeline(tmp_path, monkeypatch):
+    """Layout contract: an unset SDLC_EXPORT_ROOT lands pipeline exports in
+    runs/pipeline/, never beside benchmarks/ or ops/ in runs/."""
+    monkeypatch.delenv("SDLC_EXPORT_ROOT", raising=False)
+    monkeypatch.chdir(tmp_path)
+    summary = RunSummary(
+        run_id="run-def",
+        mode="greenfield",
+        outcome="deployed:pr",
+        terminal_stage="deploy",
+        started_at=T0,
+        ended_at=T0,
+        duration_s=0.0,
+    )
+    await export_run_artifacts(
+        RunExportInput(
+            run_id="run-def",
+            summary=summary,
+            trace=[RunEvent(seq=0, at=T0, kind=RunEventKind.RUN_FINISHED)],
+        )
+    )
+    assert (tmp_path / "runs" / "pipeline" / "run-def" / "summary.json").exists()
+
+
+def test_demo_export_root_matches_the_activity_default(tmp_path, monkeypatch):
+    """demo/run.py mirrors the activity's root resolution; the two literals
+    must not drift apart."""
+    monkeypatch.delenv("SDLC_EXPORT_ROOT", raising=False)
+    monkeypatch.chdir(tmp_path)
+    from pathlib import Path
+
+    from sdlc.demo.run import export_root
+
+    assert export_root() == Path("runs") / "pipeline"

@@ -18,3 +18,9 @@ services:
       - ~/.cache/opencode/models.json:/root/.cache/opencode/models.json:ro
       # Windows: the same two files live under C:/Users/<you>/.local/share/
       # and C:/Users/<you>/.cache/.
+
+  # One shared runs/ tree: docker-compose.yml mounts a named volume at
+  # /app/runs unless KROKER_RUNS_BIND names a host path. Set it in .env
+  # (compose reads that file for interpolation) so pipeline exports,
+  # benchmark records and host-side tooling all see the same tree:
+  #   KROKER_RUNS_BIND=/path/to/this/checkout/runs

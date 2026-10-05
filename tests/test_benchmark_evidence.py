@@ -125,3 +125,24 @@ def test_report_is_imported_lazily_not_at_module_scope():
     src = pathlib.Path("src/sdlc/benchmarks/evidence.py").read_text(encoding="utf-8")
     head = src.split("def load_run_summaries")[0]
     assert "from .report import" not in head
+
+
+def test_default_export_root_reads_runs_pipeline(tmp_path, monkeypatch):
+    """Layout contract: with no explicit export root the SC rollup reads
+    summaries from runs/pipeline/ relative to the CWD."""
+    RecordStore(root=str(tmp_path), bench_run_id="b1").append(_rec("b1"))
+    summary = RunSummary(
+        run_id="r1",
+        mode="greenfield",
+        outcome="deployed:pr",
+        terminal_stage="deploy",
+        started_at=T,
+        ended_at=T,
+        duration_s=0.0,
+    )
+    run_dir = tmp_path / "runs" / "pipeline" / "r1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(summary.model_dump_json(), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    ev = load_evidence(bench="b1", root=str(tmp_path))
+    assert [s.run_id for s in ev.summaries] == ["r1"]

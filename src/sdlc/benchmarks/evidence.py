@@ -2,7 +2,7 @@
 
 Two stores, joined here and nowhere else:
   - runs/benchmarks/<bench_run_id>/*.jsonl   BenchmarkRecords
-  - runs/<run_id>/summary.json               RunSummary (E-32 retro export)
+  - runs/pipeline/<run_id>/summary.json      RunSummary (E-32 retro export)
 
 The artifact store (harness transcripts) is deliberately NOT read: OQ-B7
 leaves the transcript TTL open, so any aggregation joining against it goes
@@ -27,7 +27,7 @@ from ..core.models import (
 )
 from .models import BenchmarkRecord
 
-DEFAULT_EXPORT_ROOT = "./runs"
+DEFAULT_EXPORT_ROOT = "./runs/pipeline"
 
 
 class Evidence(BaseModel):
