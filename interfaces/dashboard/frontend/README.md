@@ -34,5 +34,9 @@ interface. The active provider is selected by `VITE_API`:
 
 ## Status
 
-- Plan 1 (this code): foundation + Fleet view.
-- Plan 2 (follow-up): decision inbox cards + run-detail panels.
+- Built: the Fleet view, the run page (Graph and Board tabs), the graph
+  editor, and the decision inbox (`src/features/inbox/` — it lists every
+  item waiting on a person across runs and resolves all four kinds:
+  clarify answers, gate decisions, merge overrides, escalations).
+- Not built: the run page's Gates and Cost tabs (disabled placeholders,
+  ruling G7 of spec 002).

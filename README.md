@@ -173,7 +173,10 @@ than a partial render; the JSON route stays available as the escape hatch.
 `/api` (live run state read from Temporal) next to the board routes. The
 Vue frontend in `interfaces/dashboard/frontend/` is built from the
 `@kroker/ui` design system (`interfaces/ui/`) and organised by screen: the
-fleet, the run page, the graph editor, and a decision-inbox placeholder.
+fleet, the run page, the graph editor, and the decision inbox. The inbox
+lists everything waiting on a person across runs and lets the operator
+answer questions, decide gates, override or send back a merge, and retry
+or quarantine an escalated task.
 The run page is a tab host — Graph | Board | Gates | Cost, with Gates and
 Cost not built yet. The tab is kept in the URL (`#/runs/<id>?tab=board`).
 The Board tab is a read-only view of the run's tasks, their evidence and
@@ -194,6 +197,8 @@ install, typecheck, both Vitest suites and both Playwright tiers.
 **Bind to localhost** — there is no auth yet, and the `X-Actor` header
 identifying a writer is self-asserted (OQ-11,
 [`docs/roadmap/pipeline-as-data.md`](docs/roadmap/pipeline-as-data.md)).
+The dashboard sends no `X-Actor`, so a decision taken there is recorded as
+`human:unknown`; closing that is PRD FR-1004.
 Anyone who can reach the port can start a run and answer its gates, the
 merge gate included. The Markdown URLs are designed to be pasted into a chat
 or a ticket, which makes this easier to forget: pasting one shares a link
