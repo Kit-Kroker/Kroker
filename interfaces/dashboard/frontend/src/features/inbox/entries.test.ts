@@ -2,9 +2,11 @@
 // before InboxEntry.vue exists (that unresolved import is the RED cause).
 // Field names per data-model §1.1; kind labels and the RouterLink target per
 // data-model §2.6 and §3.2. Mount pattern: RunView.test.ts's RouterLink stub.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import InboxEntry from './InboxEntry.vue'
+import { useFleetStore } from '../../shared/fleet.store'
 import type {
   ClarifyItem,
   GateItem,
@@ -421,5 +423,71 @@ describe('EscalationEntry', () => {
       expect(wrapper.get(`[data-testid="${id}"]`).attributes('disabled')).toBeDefined()
     }
     expect(wrapper.get('[data-testid="field-control"]').attributes('disabled')).toBeDefined()
+  })
+})
+
+// --- 011 T015 (RED): the budget gate says what approve grants (FR-008) ------
+// A gate item whose gate is 'budget' renders gate-budget-note: approving
+// grants threshold + budget of the run row (read via the fleet store,
+// dollars through money); with the run row unknown the amount is omitted;
+// any other gate renders no note. The decide flow is untouched.
+
+const budgetGateItem = (): GateItem => ({
+  id: 'budget#1',
+  runId: 'r1',
+  round: 2,
+  age: '1m',
+  type: 'gate',
+  gate: 'budget',
+  title: 'Budget needs a decision',
+  body: 'Run cost $40.2000 >= budget $40.00',
+})
+
+describe('GateEntry budget note (011 T015)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('a budget gate on a known run states the raised limit', async () => {
+    useFleetStore().runs = [
+      {
+        id: 'r1',
+        title: 'T',
+        mode: 'brownfield',
+        repo: 'r',
+        activeStages: ['clarify'],
+        stageMarks: null,
+        status: 'blocked',
+        blocker: '',
+        cost: 40.2,
+        budget: 20,
+        roles: [],
+        budgetThreshold: 40,
+        budgetCounted: 40.2,
+        budgetCrossings: 1,
+        budgetNotice: null,
+        age: '1m',
+        decisions: [],
+        projectKey: null,
+      } as any,
+    ]
+    const wrapper = await mountGate({ item: budgetGateItem() })
+    expect(wrapper.get('[data-testid="gate-budget-note"]').text()).toBe(
+      'Approve raises the limit to $60.00 and the run continues. Any other decision ends the run.',
+    )
+  })
+
+  it('an unknown run row omits the amount', async () => {
+    const wrapper = await mountGate({ item: budgetGateItem() })
+    const note = wrapper.get('[data-testid="gate-budget-note"]').text()
+    expect(note).toBe(
+      'Approve raises the limit and the run continues. Any other decision ends the run.',
+    )
+    expect(note).not.toContain('$')
+  })
+
+  it('a gate that is not budget renders no note', async () => {
+    const wrapper = await mountGate()
+    expect(wrapper.find('[data-testid="gate-budget-note"]').exists()).toBe(false)
   })
 })

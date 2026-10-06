@@ -260,7 +260,13 @@ function seedRuns(): Run[] {
   ]
 }
 
-function seedInbox(): InboxItem[] {
+// 011 R-9 (contract §7): the budget-gate entry exists on the mock only
+// behind this default-off switch, so the pinned six-item inbox and the
+// badge-count chains never see it. The assembled console opts in with
+// /?mockBudgetGate=1 (the search part precedes the hash).
+export const MOCK_BUDGET_GATE_PARAM = 'mockBudgetGate'
+
+function seedInbox(budgetGate = false): InboxItem[] {
   return [
     {
       // The recorded blocked_at_architecture pending gate (architecture#1).
@@ -332,17 +338,34 @@ function seedInbox(): InboxItem[] {
       body: 'QA fix loop hit MAX_REPAIR_ATTEMPTS. The task branch stays parked on its worktree; wave 3 is holding.',
       analysis: 'test_retry_budget flakes on wall-clock timing. A reliable fix needs an injected clock in RateLimiter, but rate_limiter/core.py is outside the task’s declared file scope. Recommend widening scope or quarantining.',
     },
+    ...(budgetGate
+      ? [
+          {
+            // The seeded budget run has budget 20, one crossing approved
+            // (limit now 40); this second crossing is round 2.
+            id: 'budget#2',
+            type: 'gate',
+            gate: 'budget',
+            runId: 'feature-graph-demo',
+            round: 2,
+            age: '1m',
+            title: 'Budget (round 2) — graph demo',
+            body: 'Run cost $40.2000 >= budget $40.00',
+          } as GateItem,
+        ]
+      : []),
   ]
 }
 
 export interface MockOptions {
   simulateLive?: boolean
+  budgetGate?: boolean
 }
 
 export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(): void } {
   const simulateLive = opts.simulateLive ?? true
   let runs: Run[] = seedRuns()
-  let inbox: InboxItem[] = seedInbox()
+  let inbox: InboxItem[] = seedInbox(opts.budgetGate ?? false)
   const graph = createMockGraph()
 
   const delay = () => new Promise<void>((r) => setTimeout(r, 120 + Math.random() * 180))

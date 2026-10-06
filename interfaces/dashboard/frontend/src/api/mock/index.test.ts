@@ -322,3 +322,51 @@ describe('tickCosts funds the first role (011 T007)', () => {
     expect(tickCosts(runs)[0].cost).toBeCloseTo(1.05, 5)
   })
 })
+
+// --- 011 T015 (RED): the default-off budget-gate switch ----------------------
+// MockOptions.budgetGate (default false): with it off (and by default) the
+// inbox seed stays at exactly SIX items, none of gate 'budget'; with it on a
+// SEVENTH item is appended, exactly as data-model §2.4 gives it. Nothing at
+// runtime creates a budget gate, so the switch is the only source.
+
+describe('the budget-gate switch (011 T015)', () => {
+  it('by default the inbox stays at six items, none of gate budget', async () => {
+    const def = createMockApi({ simulateLive: false })
+    const noOptions = createMockApi()
+    for (const api of [def, noOptions]) {
+      const inbox = await api.listInbox()
+      expect(inbox).toHaveLength(6)
+      expect(inbox.some((i) => (i as { gate?: string }).gate === 'budget')).toBe(false)
+      const state = await api.getInboxState()
+      expect(state.items).toHaveLength(6)
+      expect(state.items.some((i) => (i as { gate?: string }).gate === 'budget')).toBe(false)
+    }
+  })
+
+  it('budgetGate: true seeds the seventh item verbatim with the note math intact', async () => {
+    const api = createMockApi({ simulateLive: false, budgetGate: true })
+    const inbox = await api.listInbox()
+    expect(inbox).toHaveLength(7)
+    const seventh = inbox[6]
+    expect(seventh).toEqual({
+      id: 'budget#2',
+      type: 'gate',
+      gate: 'budget',
+      runId: 'feature-graph-demo',
+      round: 2,
+      age: '1m',
+      title: 'Budget (round 2) — graph demo',
+      body: 'Run cost $40.2000 >= budget $40.00',
+    })
+    // The note math holds: the seeded run has budget 20, one crossing
+    // already approved (current limit 40); approving raises it to $60.00.
+    const run = (await api.listRuns()).find((r) => r.id === 'feature-graph-demo')
+    expect(run?.budget).toBe(20)
+    expect(run?.budgetThreshold).toBe(40)
+  })
+
+  it('exports the URL param constant', async () => {
+    const mod = await import('./index')
+    expect(mod.MOCK_BUDGET_GATE_PARAM).toBe('mockBudgetGate')
+  })
+})
