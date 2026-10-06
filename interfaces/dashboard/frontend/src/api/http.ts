@@ -1,10 +1,11 @@
 import type {
   ClarifyItem, DashboardApi, Decision, EscalationItem, FleetState, GateItem,
-  GateOutcome, InboxItem, InboxState, OverrideItem, Run, StartRunInput, Status,
+  GateOutcome, InboxItem, InboxState, OverrideItem, RoleCost, Run, StartRunInput, Status,
 } from './types'
 import type { DotState } from '@kroker/ui/components/stage_dots/StageDots.vue'
 import { createHttpGraphApi } from './http-graph'
 import { HttpStatusError } from './errors'
+import { totalPrice } from '../shared/cost'
 
 // Stage NAMES only (E-76 spec §9.1): the strip's canonical list is served by
 // GET /graphs/catalog, never copied here, and no node id is ever invented.
@@ -59,7 +60,22 @@ function decisions(raw: any[]): Decision[] {
   }))
 }
 
+// 011: snake->camel per role row; absent roles key -> [].
+function rolesOf(s: any): RoleCost[] {
+  return (s.roles ?? []).map((r: any) => ({
+    role: r.role,
+    model: r.model,
+    calls: r.calls ?? 0,
+    inputTokens: r.input_tokens ?? 0,
+    outputTokens: r.output_tokens ?? 0,
+    cacheReadTokens: r.cache_read_tokens ?? 0,
+    cacheWriteTokens: r.cache_write_tokens ?? 0,
+    cost: (r.cost_usd === undefined ? null : r.cost_usd) as number | null,
+  }))
+}
+
 function mapRun(s: any, pendingCount: number, now: Date): Run {
+  const roles = rolesOf(s)
   return {
     id: s.run_id,
     title: s.title,
@@ -71,8 +87,14 @@ function mapRun(s: any, pendingCount: number, now: Date): Run {
     stageMarks: s.stage_marks ?? null,
     status: liveStatus(s.status),
     blocker: blocker(s.status, pendingCount),
-    cost: s.cost_usd_total,
+    // 011: through the price rule -- a zero total with tokens is null.
+    cost: totalPrice(roles, s.cost_usd_total).usd,
     budget: s.budget_usd,
+    roles,
+    budgetThreshold: s.budget_threshold_usd ?? null,
+    budgetCounted: s.budget_counted_usd ?? null,
+    budgetCrossings: s.budget_crossings ?? 0,
+    budgetNotice: null,
     age: age(s.started_at, now),
     decisions: decisions(s.decisions),
     // 002 G4: the wire's project_key; ?? null so absent and null are both
@@ -82,6 +104,7 @@ function mapRun(s: any, pendingCount: number, now: Date): Run {
 }
 
 function mapClosed(s: any, marks: Record<string, DotState> | null | undefined, now: Date): Run {
+  const roles = rolesOf(s)
   return {
     id: s.run_id,
     title: s.title,
@@ -93,8 +116,14 @@ function mapClosed(s: any, marks: Record<string, DotState> | null | undefined, n
     stageMarks: marks ?? null,
     status: closedStatus(s.outcome),
     blocker: '',
-    cost: s.cost_usd_total,
+    cost: totalPrice(roles, s.cost_usd_total).usd,
     budget: s.budget_usd,
+    roles,
+    // A closed run keeps no live threshold (011 R-3).
+    budgetThreshold: null,
+    budgetCounted: s.budget_counted_usd ?? null,
+    budgetCrossings: s.budget_crossings ?? 0,
+    budgetNotice: null,
     age: age(s.started_at, now),
     decisions: [],
     // 002 G4: same rule on closed rows (run_summary replay or old payload).
@@ -218,11 +247,14 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
       }),
 
     async startRun(input: StartRunInput) {
-      const { run_id } = await json('/runs', {
+      const { run_id, budget_notice } = await json('/runs', {
         method: 'POST',
         body: JSON.stringify({
           title: input.title, description: input.description,
           mode: input.mode, repo: input.repo,
+          // 011: the key rides the request only when a budget was asked for
+          // -- absent means off, exactly today's behaviour.
+          ...(input.budget !== null ? { budget_usd: input.budget } : {}),
         }),
       })
       const run = (await snapshot()).runs.find((r) => r.id === run_id)
@@ -231,7 +263,14 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
       return {
         id: run_id, title: input.title, mode: input.mode, repo: input.repo,
         activeStages: [], stageMarks: null, status: 'running' as const, blocker: '',
-        cost: null, budget: null, age: age(nowIso, new Date(nowIso)),
+        cost: null,
+        budget: input.budget,
+        roles: [],
+        budgetThreshold: input.budget,
+        budgetCounted: input.budget !== null ? 0 : null,
+        budgetCrossings: 0,
+        budgetNotice: budget_notice ?? null,
+        age: age(nowIso, new Date(nowIso)),
         decisions: [], projectKey: null,
       }
     },

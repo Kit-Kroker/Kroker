@@ -51,6 +51,7 @@ function seedRuns(): Run[] {
       blocker: 'architecture gate — round 1',
       cost: 2.6,
       budget: 20,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
       age: '40m',
       decisions: [
         { ts: '09:25', gate: 'architecture r1', outcome: 'revise', comment: 'split the auth service', decider: 'human · sam' },
@@ -70,6 +71,7 @@ function seedRuns(): Run[] {
       blocker: 'clarify gate — 2 questions',
       cost: 3.12,
       budget: 40,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
       age: '2h 14m',
       decisions: [
         { ts: '09:12', gate: 'clarify r1 (partial)', outcome: 'approve', comment: '4 questions auto-answered, confidence ≥ 0.95', decider: 'policy (soft)' },
@@ -87,6 +89,7 @@ function seedRuns(): Run[] {
       blocker: 'merge gate — advisory: coverage',
       cost: 18.4,
       budget: 60,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
       age: '9h 03m',
       decisions: [
         { ts: '02:20', gate: 'architecture r1', outcome: 'approve', comment: 'delta grounded in CodebaseMap', decider: 'human · mika' },
@@ -106,6 +109,7 @@ function seedRuns(): Run[] {
       blocker: '',
       cost: 9.75,
       budget: 50,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
       age: '4h 41m',
       decisions: [
         { ts: '11:02', gate: 'clarify r1', outcome: 'approve', comment: 'all suggestions accepted', decider: 'human · sam' },
@@ -126,6 +130,7 @@ function seedRuns(): Run[] {
       blocker: 'escalation — T-07 resolver 3/3',
       cost: 6.2,
       budget: 30,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
       age: '6h 27m',
       decisions: [{ ts: '13:15', gate: 'plan r1', outcome: 'approve', comment: '', decider: 'policy (soft)' }],
       projectKey: null,
@@ -141,6 +146,7 @@ function seedRuns(): Run[] {
       blocker: 'architecture gate — round 1',
       cost: 2.05,
       budget: 45,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
       age: '1h 02m',
       decisions: [{ ts: '14:30', gate: 'clarify r1', outcome: 'approve', comment: 'auto, confidence 0.96', decider: 'policy (soft)' }],
       projectKey: null,
@@ -156,6 +162,7 @@ function seedRuns(): Run[] {
       blocker: '',
       cost: 14.02,
       budget: 40,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
       age: '11h 50m',
       decisions: [
         { ts: '05:12', gate: 'merge r1', outcome: 'approve', comment: 'all checks green', decider: 'policy (soft)' },
@@ -177,6 +184,7 @@ function seedRuns(): Run[] {
       blocker: 'plan gate — round 1',
       cost: 1.4,
       budget: 20,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
       age: '22m',
       decisions: [{ ts: '09:40', gate: 'plan r1', outcome: 'approve', comment: '', decider: 'policy (soft)' }],
       projectKey: 'ghost-project',
@@ -192,6 +200,7 @@ function seedRuns(): Run[] {
       blocker: '',
       cost: 0.3,
       budget: 15,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
       age: '5m',
       decisions: [],
       projectKey: 'kroker-empty',
@@ -207,6 +216,7 @@ function seedRuns(): Run[] {
       blocker: '',
       cost: 7.88,
       budget: 30,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
       age: '1d 3h',
       decisions: [
         { ts: 'yday', gate: 'merge r1', outcome: 'approve', comment: '', decider: 'policy (soft)' },
@@ -430,6 +440,7 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
         blocker: '',
         cost: 0.04,
         budget: 40,
+        roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
         age: 'just now',
         decisions: [],
         projectKey: null,

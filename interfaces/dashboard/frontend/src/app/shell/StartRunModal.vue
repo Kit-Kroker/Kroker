@@ -12,6 +12,9 @@ async function onSubmit(payload: StartRunPayload) {
     description: '',
     repo: payload.repo,
     mode: payload.mode,
+    // 011 T006: the form grows its budget field in T014; until then a
+    // start from the dashboard carries no budget, exactly as before.
+    budget: null,
   })
   ui.toast(`Run started — ${r.id}`, '#5b9dd9')
   ui.resetStartForm()

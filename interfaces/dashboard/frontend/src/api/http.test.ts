@@ -192,3 +192,94 @@ describe('mapInboxState', () => {
     expect(mapInboxState(s as never, NOW).unreadable).toEqual([])
   })
 })
+
+// --- 011 T006 (RED): budget and roles mapping (data-model §2.4). The wire
+// gains roles, budget_threshold_usd, budget_counted_usd and
+// budget_crossings; the mapper must carry them onto the view model in
+// camelCase, with absent keys mapped to their honest defaults (absent
+// crossings = 0, absent budget = null, absent roles = []). A zero total
+// with tokens is a not-priced run, never 0.
+
+type RoleRow = {
+  role: string
+  inputTokens: number
+  cacheReadTokens: number
+  cost: number | null
+}
+
+type WithBudget = {
+  roles?: RoleRow[]
+  budgetThreshold?: number | null
+  budgetCounted?: number | null
+  budgetCrossings?: number
+  budgetNotice?: string | null
+}
+
+describe('011 budget and roles mapping', () => {
+  it("maps an open run's roles in wire order, camelCase, with the budget fields", () => {
+    const { runs } = mapSnapshot(snapshot as never, NOW)
+    const sso = runs.find((r) => r.id === 'feature-add-sso')! as typeof sso & WithBudget
+    const [architect, dev, planner] = sso.roles!
+    expect(architect).toMatchObject({ role: 'architect', inputTokens: 4200, cacheReadTokens: 15000, cost: 3.12 })
+    expect(dev).toMatchObject({ role: 'dev', inputTokens: 12000, cost: 0 })
+    expect(planner).toMatchObject({ role: 'planner', cost: null })
+    expect(sso.budgetThreshold).toBe(40)
+    expect(sso.budgetCounted).toBe(3.12)
+    expect(sso.budgetCrossings).toBe(1)
+    expect(sso.budgetNotice).toBeNull()
+  })
+
+  it('a closed run keeps no live threshold but keeps its counted total', () => {
+    const { runs } = mapSnapshot(snapshot as never, NOW)
+    const closed = runs.find((r) => r.id === 'graph-run-closed')! as typeof closed & WithBudget
+    expect(closed.budgetThreshold).toBeNull()
+    expect(closed.budgetCounted).toBe(4.4)
+  })
+
+  it('a closed run with no roles key maps roles to [] and keeps the wire total', () => {
+    const { runs } = mapSnapshot(snapshot as never, NOW)
+    const dark = runs.find((r) => r.id === 'feature-dark-mode')! as typeof dark & WithBudget
+    expect(dark.roles).toEqual([])
+    expect(dark.cost).toBe(7.88)
+  })
+
+  it('maps every absent budget and roles key to its honest default', () => {
+    const s = structuredClone(snapshot)
+    const row = (s as { runs: Record<string, unknown>[] }).runs.find(
+      (r) => r.run_id === 'feature-add-sso',
+    )!
+    delete row.budget_crossings
+    delete row.budget_threshold_usd
+    delete row.budget_counted_usd
+    delete row.roles
+    const sso = mapSnapshot(s as never, NOW).runs.find(
+      (r) => r.id === 'feature-add-sso',
+    )! as typeof sso & WithBudget
+    expect(sso.budgetCrossings).toBe(0)
+    expect(sso.budgetThreshold).toBeNull()
+    expect(sso.budgetCounted).toBeNull()
+    expect(sso.roles).toEqual([])
+  })
+
+  it('a zero total with tokens stays null, never 0 and never $0.00', () => {
+    const s = structuredClone(snapshot)
+    const unpriced = (s as { runs: Record<string, unknown>[] }).runs.find(
+      (r) => r.run_id === 'feature-unpriced',
+    )!
+    unpriced.roles = [
+      {
+        role: 'dev',
+        model: 'm',
+        calls: 1,
+        input_tokens: 12000,
+        output_tokens: 3400,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        cost_usd: 0.0,
+      },
+    ]
+    unpriced.cost_usd_total = 0.0
+    const row = mapSnapshot(s as never, NOW).runs.find((r) => r.id === 'feature-unpriced')!
+    expect(row.cost).toBeNull()
+  })
+})

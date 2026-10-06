@@ -2,8 +2,14 @@ export function money(n: number): string {
   return '$' + n.toFixed(2)
 }
 
-export function budgetPct(cost: number, budget: number): number {
-  return Math.min(100, (cost / budget) * 100)
+export function tokens(n: number): string {
+  return n.toLocaleString('en-US')
+}
+
+// 011: counted over the CURRENT threshold (the gate's own figure and its
+// raised limit), never total-over-configured-budget.
+export function budgetPct(counted: number, threshold: number): number {
+  return Math.min(100, (counted / threshold) * 100)
 }
 
 export function budgetColor(pct: number): string {

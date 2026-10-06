@@ -16,6 +16,18 @@ export interface Decision {
   decider: string
 }
 
+export interface RoleCost {
+  role: string
+  model: string
+  calls: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  // raw wire value; display goes through shared/cost.ts
+  cost: number | null
+}
+
 export interface Run {
   id: string
   title: string
@@ -33,6 +45,15 @@ export interface Run {
   blocker: string
   cost: number | null
   budget: number | null
+  // 011: the per-role breakdown and the gate's live numbers. cost goes
+  // through totalPrice(roles, wire total) so a zero-with-tokens total is
+  // null, never $0.00; budgetThreshold is the CURRENT limit (null closed);
+  // budgetNotice rides only the row startRun returns.
+  roles: RoleCost[]
+  budgetThreshold: number | null
+  budgetCounted: number | null
+  budgetCrossings: number
+  budgetNotice: string | null
   age: string
   decisions: Decision[]
   // 002 G4/FR-020a: the run's board project, from the wire's project_key.
@@ -104,6 +125,8 @@ export interface StartRunInput {
   description: string
   repo: string
   mode: ProjectMode
+  // 011 US2: dollars; null = no budget (today's behaviour).
+  budget: number | null
 }
 
 export interface FleetState {
