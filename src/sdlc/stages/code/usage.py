@@ -29,9 +29,10 @@ def _record_attempt_usage(
     ctx: StageContext, code_spend: RoleUsage, run: HarnessRunResult, model: str
 ) -> None:
     """Emit the attempt's MODEL_USAGE event and fold the same tokens into
-    `code_spend`. cost_usd is emitted but NOT folded: stage_record takes the
-    harness-reported dollars explicitly, and folding them here would
-    double-count the bag."""
+    `code_spend`. cost_usd rides the event only when the harness reported
+    one (FR-015a: a missing price is no key, never a printed 0.0) and is
+    NOT folded: stage_record takes the harness-reported dollars explicitly,
+    and folding them here would double-count the bag."""
     merge_usage(
         code_spend,
         model=model,
@@ -46,5 +47,5 @@ def _record_attempt_usage(
         calls="1",
         input_tokens=str(run.input_tokens or 0),
         output_tokens=str(run.output_tokens or 0),
-        cost_usd=str(run.cost_usd or 0.0),
+        **({"cost_usd": str(run.cost_usd)} if run.cost_usd is not None else {}),
     )
