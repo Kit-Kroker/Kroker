@@ -105,9 +105,46 @@ def build() -> dict:
                         decided_at=AT,
                     )
                 ],
-                roles=[RoleUsage(role="architect", model="m", calls=2, cost_usd=3.12)],
+                # 011 T005 teaching rows: one open budgeted run carrying the
+                # gate's live numbers (threshold, counted, one crossing) and
+                # three roles covering the price states the client must tell
+                # apart — priced, a real 0.0 WITH tokens (the opencode shape,
+                # N7), and an unpriced None (N8). counted is the gate's own
+                # bag sum: the priced 3.12 plus the zero, never the None.
+                roles=[
+                    RoleUsage(
+                        role="architect",
+                        model="m",
+                        calls=2,
+                        input_tokens=4200,
+                        output_tokens=810,
+                        cache_read_tokens=15000,
+                        cache_write_tokens=900,
+                        cost_usd=3.12,
+                    ),
+                    RoleUsage(
+                        role="dev",
+                        model="zai-coding-plan/glm-5.2",
+                        calls=3,
+                        input_tokens=12000,
+                        output_tokens=3400,
+                        cache_read_tokens=22000,
+                        cost_usd=0.0,
+                    ),
+                    RoleUsage(
+                        role="planner",
+                        model="m",
+                        calls=1,
+                        input_tokens=900,
+                        output_tokens=410,
+                        cost_usd=None,
+                    ),
+                ],
                 cost_usd_total=3.12,
                 budget_usd=40.0,
+                budget_threshold_usd=40.0,
+                budget_counted_usd=3.12,
+                budget_crossings=1,
                 project_key="kroker",
             ),
             RunState(
@@ -130,6 +167,9 @@ def build() -> dict:
                 started_at=AT + timedelta(minutes=30),
                 cost_usd_total=2.18,
                 budget_usd=20.0,
+                # 011 T005: a budgeted run still under its first limit.
+                budget_threshold_usd=20.0,
+                budget_counted_usd=2.18,
                 stage_marks=_STAGE_MARKS_LIVE,
                 graph_sha=_GRAPH_SHA,
             ),
@@ -188,6 +228,12 @@ def build() -> dict:
                 repo_url="git@github.com:acme/graph-demo",
                 cost_usd_total=4.4,
                 budget_usd=20.0,
+                # 011 T005: the gate's counted figure at close; roles stay
+                # empty here and on every other closed row (N9: closed runs
+                # written before role tracking show a total with no
+                # breakdown — feature-dark-mode keeps the positive-total
+                # case).
+                budget_counted_usd=4.4,
             ),
         ],
         inbox=[
