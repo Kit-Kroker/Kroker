@@ -29,7 +29,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..memory.models import MemoryKind
     from ..notify.contract import NotifyReason
-    from ..observability.summary import build_run_summary
+    from ..observability.summary import _role_rollup, build_run_summary
     from ..observability.trace import RunEventKind
     from ..stages import retro
 
@@ -100,6 +100,10 @@ class RunHost:
         """Stage 14 (E-32). Best-effort: any failure is swallowed so the run's
         return string is never changed."""
         try:
+            # The gate's own sum over its bag (sorted for determinism-lint
+            # parity with the graph modules; a sum is order-insensitive).
+            bag = self._role_usage  # type: ignore[attr-defined]
+            gate_sum = sum(bag[u].cost_usd or 0.0 for u in sorted(bag))
             summary = build_run_summary(
                 run_id=workflow.info().workflow_id,
                 mode=idea.mode.value,
@@ -108,6 +112,9 @@ class RunHost:
                 memory_enabled=cfg.memory.enabled,
                 memory_watermark=self._memory_watermark,  # type: ignore[attr-defined]
                 budget_usd=(cfg.run_budget_usd if cfg.run_budget_usd > 0 else None),
+                # 011 R-3: the gate's own sum at close, so "over budget, no
+                # gate" is readable after the run ends; None without a budget.
+                budget_counted_usd=gate_sum if cfg.run_budget_usd > 0 else None,
                 title=idea.title,
                 repo_url=idea.repo_url,
                 # E-77 R-3: the run's pinned graph, when the host is a
@@ -137,12 +144,18 @@ class RunHost:
         """
         if self._idea is None or self._started_at is None:
             return None
-        priced = [
+        # 011 R-1: roles and the total come from the trace rollup — the same
+        # source the closed summary uses — so every role the run recorded
+        # (the coding harness included) is visible and the tab cannot jump
+        # when the run closes. The bag still feeds the gate's counted figure.
+        roles = _role_rollup(self._trace)  # type: ignore[attr-defined]
+        priced = [u.cost_usd for u in roles if u.cost_usd is not None]
+        budget = self._cfg.run_budget_usd if self._cfg and self._cfg.run_budget_usd > 0 else None
+        gate_priced = [
             u.cost_usd
             for u in self._role_usage.values()  # type: ignore[attr-defined]
             if u.cost_usd is not None
         ]  # determinism: insertion-ordered usage dict
-        budget = self._cfg.run_budget_usd if self._cfg and self._cfg.run_budget_usd > 0 else None
         stage = next(
             (e.stage for e in reversed(self._trace) if e.kind is RunEventKind.STAGE_STARTED),  # type: ignore[attr-defined]
             None,
@@ -156,11 +169,20 @@ class RunHost:
             current_stage=stage,
             started_at=self._started_at,
             decisions=list(self._gate_decisions.values()),  # type: ignore[attr-defined]
-            roles=list(self._role_usage.values()),  # type: ignore[attr-defined]
+            roles=roles,
             # None, not 0.0: a pricing miss must never read as a free run.
             cost_usd_total=sum(priced) if priced else None,
             budget_usd=budget,
             budget_crossings=self._budget_crossings,  # type: ignore[attr-defined]
+            # 011 R-3: the gate's live state. threshold rises by one budget
+            # per approve, so it cannot be derived from budget_usd and
+            # budget_crossings; counted is the gate's own sum over its bag.
+            budget_threshold_usd=(
+                self._budget_threshold  # type: ignore[attr-defined]
+                if budget is not None
+                else None
+            ),
+            budget_counted_usd=(sum(gate_priced) if budget is not None else None),
             # 002 G4: the board's project key; None until _cfg is stashed.
             project_key=(self._cfg.project_key if self._cfg else None),
         )
