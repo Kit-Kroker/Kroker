@@ -54,7 +54,7 @@ on the graph editor holding the run's graph. [FR-1205]
 ### CONSOLE-10
 The run page's tab state round-trips through the URL: `?tab=board` opens the
 Board tab, a copied board URL reopens it, selecting Graph clears `?tab`, and
-unknown (`?tab=nonsense`) or disabled (`?tab=cost`) values render Graph with
+unknown (`?tab=nonsense`) or disabled (`?tab=gates`) values render Graph with
 the URL left untouched. [FR-017, SC-005]
 
 ### CONSOLE-11
@@ -123,6 +123,26 @@ empty state and the header shows no inbox badge. [FR-601]
 A gate decided in the inbox is no longer offered for decision on that run's
 canvas. [FR-601, FR-302]
 
+### CONSOLE-24
+The run page's Cost tab lists one row per role with its calls, tokens and
+dollars, and a total; `?tab=cost` opens it and a copied URL reopens it.
+[FR-001, FR-701]
+
+### CONSOLE-25
+A role or total that has tokens and no price reads "not priced", and a total
+that mixes priced and unpriced roles is marked partial; no such figure reads
+`$0.00`. [FR-003, FR-701]
+
+### CONSOLE-26
+With a budget, the Cost tab shows the budget, the dollars counted toward it,
+the share of the current limit used, the number of crossings, and which spend
+the budget does not count; without one it says there is no budget. [FR-001b,
+FR-701]
+
+### CONSOLE-27
+The header's spend figure totals priced runs only and states how many runs it
+left out. [FR-003]
+
 ## Failure modes
 
 Both clauses are asserted by `app.pw.ts` against the built dashboard on
@@ -134,4 +154,5 @@ load-failure, incomplete-list and already-decided states are pinned at
 the unit tier (`inbox.store.test.ts`, `InboxView.test.ts`): the mock
 provider cannot fail a read or report an unreadable run, and it refuses a
 write only in the few seconds between a decision taken on another screen
-and the next poll, which a test cannot hit reliably.
+and the next poll, which a test cannot hit reliably. A closed run recorded
+before role tracking shows its total with "No breakdown recorded".

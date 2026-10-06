@@ -447,3 +447,65 @@ test('resolving every waiting item ends in the empty state and no badge', async 
   await expect(view.locator('[data-testid="inbox-empty"]')).toBeVisible()
   await expect(badge).toHaveCount(0)
 })
+
+// --- The Cost tab (011 T010): the budget run is the seeded
+// feature-graph-demo (blocked, three roles, one not-priced); the no-budget
+// run is the closed feature-dark-mode. Both are non-running, so the mock
+// ticker never moves their figures.
+
+test('the Cost tab lists the roles, the total, and reopens from a copied URL', async ({ page }) => {  // clause: CONSOLE-24
+  await page.goto('/#/runs/feature-graph-demo?tab=cost')
+  const tab = page.locator('[data-testid="cost-tab"]')
+  await expect(tab).toBeVisible()
+  await expect(tab.locator('[data-testid="cost-row"]')).toHaveCount(3)
+  const total = tab.locator('[data-testid="cost-total-price"]')
+  await expect(total).toBeVisible()
+  await expect(total).toContainText('2.60')
+  // A copied URL reopens the tab (SC-005 for cost).
+  await page.reload()
+  await expect(page.locator('[data-testid="cost-tab"]')).toBeVisible()
+})
+
+test('the budget block counts the dollars, the share, the crossings and the scope', async ({ page }) => {  // clause: CONSOLE-26
+  await page.goto('/#/runs/feature-graph-demo?tab=cost')
+  const budget = page.locator('[data-testid="cost-tab"] [data-testid="cost-budget"]')
+  await expect(budget).toContainText('20.00')
+  await expect(budget).toContainText('40.00')
+  const counted = page.locator('[data-testid="cost-budget-counted"]')
+  await expect(counted).toContainText('counted toward budget')
+  await expect(counted).toContainText('2.60')
+  // Whole percent of the CURRENT limit (2.6 of 40 -> 6%), never cost/budget.
+  await expect(page.locator('[data-testid="cost-budget-pct"]')).toHaveText(/^\d+%$/)
+  await expect(page.locator('[data-testid="cost-budget-crossings"]')).toContainText('1')
+  await expect(page.locator('[data-testid="cost-budget-note"]')).not.toBeEmpty()
+  // A closed run without a budget says so and how one is set.
+  await page.goto('/#/runs/feature-dark-mode?tab=cost')
+  const none = page.locator('[data-testid="cost-tab"] [data-testid="cost-budget"]')
+  await expect(none).toContainText('No budget')
+  await expect(none).toContainText('start form')
+})
+
+test('a missing price reads "not priced" and no figure on the tab is $0.00', async ({ page }) => {  // clause: CONSOLE-25
+  await page.goto('/#/runs/feature-graph-demo?tab=cost')
+  // The unpriced dev role states the absence in words, never as dollars.
+  const rowPrices = page.locator('[data-testid="cost-row-price"]')
+  await expect(rowPrices.filter({ hasText: 'not priced' }).first()).toBeVisible()
+  // The total says what it left out: partial.
+  await expect(page.locator('[data-testid="cost-total-price"]')).toContainText('partial')
+  // And nowhere on the tab does a figure read exactly $0.00 (FR-003).
+  const priceEls = page.locator('[data-testid="cost-row-price"], [data-testid="cost-total-price"]')
+  const count = await priceEls.count()
+  expect(count).toBeGreaterThan(0)
+  for (let i = 0; i < count; i++) {
+    expect(await priceEls.nth(i).textContent()).not.toContain('$0.00')
+  }
+})
+
+test('the header spend states how many runs it left out', async ({ page }) => {  // clause: CONSOLE-27
+  await page.goto('/')
+  const stats = page.locator('.cmp-app-header .stats')
+  // The spend figure names the excluded runs ("N not priced") rather than
+  // summing them in as zeros; the dollar sum itself is ticker-fed on running
+  // seeds, so only the exclusion wording is pinned here.
+  await expect(stats).toContainText('not priced')
+})
