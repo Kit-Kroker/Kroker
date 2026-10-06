@@ -168,6 +168,15 @@ describe('RunPage composes the board (R-13)', () => {
     expect(boardTab.attributes('disabled')).toBeUndefined()
     expect(boardTab.attributes('aria-selected')).toBe('true')
   })
+
+  it('fills the cost slot with a live CostTab', async () => {
+    // 011 T009 (RED): the #cost slot is filled by RunPage, not by a probe;
+    // the panel carries CostTab's own root testid cost-tab.
+    const { w } = await mountPage('/runs/r1?tab=cost', 'kroker')
+    const panel = w.find('[data-testid="run-tab-cost"]')
+    expect(panel.exists()).toBe(true)
+    expect(panel.find('[data-testid="cost-tab"]').exists()).toBe(true)
+  })
 })
 
 describe('BoardTab receives the run identity (FR-020a)', () => {

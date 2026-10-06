@@ -217,7 +217,9 @@ test('the board tab round-trips through ?tab', async ({ page }) => {  // clause:
   await page.goto('/#/runs/feature-graph-demo?tab=nonsense')
   await expect(page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')).toBeVisible()
   await expect(page.locator('[data-testid="board-tab"]')).toHaveCount(0)
-  await page.goto('/#/runs/feature-graph-demo?tab=cost')
+  // 011 T009 (CONSOLE-10's disabled example moves to gates): Cost is live
+  // through the #cost slot, so the disabled-value case is gates.
+  await page.goto('/#/runs/feature-graph-demo?tab=gates')
   await expect(page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')).toBeVisible()
   await expect(page.locator('[data-testid="board-tab"]')).toHaveCount(0)
 })

@@ -4,11 +4,11 @@
 // editor" is the only way to /graphs (FR-1205). The header (title + stage
 // strip) sits ABOVE the tab bar so every tab carries the run's identity;
 // the graph-specific banners, the copy link and the canvas live inside the
-// Graph panel. Board is disabled unless a #board slot is supplied (the app
-// layer composes BoardTab through it -- R-13); Gates and Cost are disabled
-// with no content (G7). The active tab comes in as a prop (never useRoute:
-// the banner tests mount this view routerless), and tab selection calls
-// router.replace only when a router is present.
+// Graph panel. Board and Cost are disabled unless their slot is supplied
+// (the app layer composes BoardTab and CostTab through them -- R-13, 011
+// R-6); Gates stays disabled with no content (G7). The active tab comes in
+// as a prop (never useRoute: the banner tests mount this view routerless),
+// and tab selection calls router.replace only when a router is present.
 import { computed, onBeforeUnmount, onMounted, ref, useSlots, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import GraphCanvas from '@kroker/ui/components/graph_canvas/GraphCanvas.vue'
@@ -23,6 +23,9 @@ import { toStageDots } from '../../shared/stageStrip.adapter'
 
 defineSlots<{
   board?: (props: { runId: string; projectKey: string | null }) => unknown
+  // 011 R-6: the cost slot carries only the run id; CostTab reads the run
+  // from the fleet store itself.
+  cost?: (props: { runId: string }) => unknown
 }>()
 
 const props = defineProps<{ id: string; tab?: string }>()
@@ -57,17 +60,22 @@ const model = computed(() =>
 const gateOf = (nodeKey: string) => model.value?.pendingByNode[nodeKey]?.find((p) => p.kind === 'gate')
 const otherPending = (nodeKey: string) => model.value?.pendingByNode[nodeKey]?.filter((p) => p.kind !== 'gate') ?? []
 
-// The tab host (R-13): Board exists only when the app layer supplied the
-// slot; Gates and Cost are placeholders with no content (G7).
+// The tab host (R-13): Board and Cost exist only when the app layer
+// supplied their slot; Gates is a placeholder with no content (G7).
 const hasBoardSlot = computed(() => typeof slots.board === 'function')
+const hasCostSlot = computed(() => typeof slots.cost === 'function')
 const tabs = computed<TabItem[]>(() => [
   { id: 'graph', label: 'Graph' },
   { id: 'board', label: 'Board', disabled: !hasBoardSlot.value },
   { id: 'gates', label: 'Gates', disabled: true },
-  { id: 'cost', label: 'Cost', disabled: true },
+  { id: 'cost', label: 'Cost', disabled: !hasCostSlot.value },
 ])
 // R-4: an unknown or disabled value renders Graph and leaves the URL alone.
-const active = computed(() => (props.tab === 'board' && hasBoardSlot.value ? 'board' : 'graph'))
+const active = computed(() => {
+  if (props.tab === 'board' && hasBoardSlot.value) return 'board'
+  if (props.tab === 'cost' && hasCostSlot.value) return 'cost'
+  return 'graph'
+})
 
 function onSelect(id: string) {
   if (id === active.value) return
@@ -139,6 +147,12 @@ function onSelect(id: string) {
       <p v-if="run === undefined && fleet.lastFetched === null" class="banner" data-testid="run-board-loading">loading run...</p>
       <p v-else-if="run === undefined" class="banner" data-testid="run-board-not-found">run not found</p>
       <slot v-else name="board" :run-id="id" :project-key="run.projectKey" />
+    </section>
+
+    <!-- 011 R-6: CostTab owns its loading and empty states, so the slot
+         renders unconditionally -- it needs only the run id. -->
+    <section v-else-if="active === 'cost'" data-testid="run-tab-cost" class="board-panel">
+      <slot name="cost" :run-id="id" />
     </section>
   </main>
 </template>

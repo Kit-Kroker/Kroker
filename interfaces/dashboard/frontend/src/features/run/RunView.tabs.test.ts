@@ -90,16 +90,21 @@ const makeRouter = async (initial: string): Promise<Router> => {
 }
 
 // The host forwards the board slot into the route component through the
-// RouterView slot -- exactly app/RunPage.vue's composition (R-13).
-const mountRun = async (initial: string, withBoardSlot = true) => {
+// RouterView slot -- exactly app/RunPage.vue's composition (R-13). The
+// optional cost slot (011 T009) carries the scoped runId the way RunPage
+// will forward it, rendering a probe that echoes it.
+const mountRun = async (initial: string, withBoardSlot = true, withCostSlot = false) => {
   const router = await makeRouter(initial)
+  const slots =
+    (withBoardSlot ? '<template #board><div data-testid="board-probe">PROBE</div></template>' : '') +
+    (withCostSlot
+      ? '<template #cost="{ runId }"><div data-testid="cost-probe">COST {{ runId }}</div></template>'
+      : '')
   const Host = {
     components: { RouterView: (await import('vue-router')).RouterView },
-    template: withBoardSlot
+    template: slots
       ? `<RouterView v-slot="{ Component }">
-           <component :is="Component">
-             <template #board><div data-testid="board-probe">PROBE</div></template>
-           </component>
+           <component :is="Component">${slots}</component>
          </RouterView>`
       : `<RouterView v-slot="{ Component }"><component :is="Component" /></RouterView>`,
   }
@@ -167,11 +172,11 @@ describe('RunView as a tab host', () => {
     expect(router.currentRoute.value.query.tab).toBe('board') // disabled: URL untouched (R-4)
   })
 
-  it('Gates and Cost are disabled and clicking them does not switch', async () => {
+  it('Gates is disabled; Cost is disabled without a cost slot', async () => {
     seedRun()
     catalogWithRunGraph()
     const { w, router } = await mountRun('/runs/r1')
-    for (const id of ['gates', 'cost']) {
+    for (const id of ['gates']) {
       const tab = w.find(`[data-testid="tab-${id}"]`)
       expect(tab.exists()).toBe(true)
       expect(tab.attributes('disabled')).toBeDefined()
@@ -181,6 +186,46 @@ describe('RunView as a tab host', () => {
       expect(tab.attributes('aria-selected')).not.toBe('true')
     }
     expect(w.find('.canvas-wrap').exists()).toBe(true) // still Graph
+  })
+
+  it('without a cost slot Cost is disabled and clicking it does not switch', async () => {
+    seedRun()
+    catalogWithRunGraph()
+    const { w, router } = await mountRun('/runs/r1')
+    const costTab = w.find('[data-testid="tab-cost"]')
+    expect(costTab.exists()).toBe(true)
+    expect(costTab.attributes('disabled')).toBeDefined()
+    expect(w.find('[data-testid="cost-probe"]').exists()).toBe(false)
+    await costTab.trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="cost-probe"]').exists()).toBe(false)
+    expect(costTab.attributes('aria-selected')).not.toBe('true')
+    expect(router.currentRoute.value.query.tab).toBeUndefined() // disabled: URL untouched (R-4)
+  })
+
+  it('with a cost slot, ?tab=cost shows the slot content, selecting Cost sets ?tab=cost, selecting Graph clears it', async () => {
+    seedRun()
+    catalogWithRunGraph()
+    const { w, router } = await mountRun('/runs/r1', false, true)
+    const costTab = w.find('[data-testid="tab-cost"]')
+    expect(costTab.attributes('disabled')).toBeUndefined() // the slot enables the tab
+    await costTab.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.tab).toBe('cost')
+    const probe = w.find('[data-testid="cost-probe"]')
+    expect(probe.exists()).toBe(true)
+    expect(probe.text()).toContain('COST r1') // the scoped runId reached the slot
+
+    await w.find('[data-testid="tab-graph"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.tab).toBeUndefined()
+    expect(w.find('[data-testid="cost-probe"]').exists()).toBe(false)
+    expect(w.find('.canvas-wrap').exists()).toBe(true)
+
+    // A deep link straight to the cost tab shows the slot content too.
+    const { w: w2 } = await mountRun('/runs/r1?tab=cost', false, true)
+    expect(w2.find('[data-testid="cost-probe"]').exists()).toBe(true)
+    expect(w2.find('[data-testid="cost-probe"]').text()).toContain('COST r1')
   })
 
   it('selecting Graph from Board unmounts the probe and clears ?tab (replace semantics)', async () => {
