@@ -21,3 +21,13 @@ test('modal is not rendered when open is false', async ({ page }) => {  // claus
   const modal = page.locator(`${at('closed')} [data-testid="modal-card"]`)
   await expect(modal).toHaveCount(0)
 })
+
+test('a zero budget shows the omit-it message and blocks the submit', async ({ page }) => {  // clause: START_RUN_MODAL-3
+  // Profile 'with-budget-error' (initialTitle valid, initialBudget '0') —
+  // added by the executor together with the component change (011 T014).
+  await page.goto('/')
+  const modal = page.locator(`${at('with-budget-error')}`)
+  const error = modal.locator('[data-testid="start-budget-error"]')
+  await expect(error).toContainText('omit it to run without a budget')
+  await expect(modal.locator('[data-testid="submit"]')).toBeDisabled()
+})

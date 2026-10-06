@@ -14,6 +14,9 @@ export const useUiStore = defineStore('ui', () => {
   const startTitle = ref('')
   const startRepo = ref('')
   const startMode = ref<ProjectMode>('brownfield')
+  // 011 US2: the start form's budget text ('' = none); the shell converts
+  // on submit, the library modal validates.
+  const startBudget = ref('')
   let next = 1
 
   function toast(msg: string, color = '#4fae7f') {
@@ -34,7 +37,8 @@ export const useUiStore = defineStore('ui', () => {
     startTitle.value = ''
     startRepo.value = ''
     startMode.value = 'brownfield'
+    startBudget.value = ''
   }
 
-  return { toasts, startOpen, startTitle, startRepo, startMode, toast, openStart, closeStart, resetStartForm }
+  return { toasts, startOpen, startTitle, startRepo, startMode, startBudget, toast, openStart, closeStart, resetStartForm }
 })

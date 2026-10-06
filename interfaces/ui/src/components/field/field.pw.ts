@@ -8,7 +8,9 @@ test('label click focuses the control', async ({ page }) => {  // clause: FIELD-
   // backdrop intercepts pointer events across the page. Remove those
   // articles so the label click is a real, unobstructed user click.
   await page
-    .locator('#showcase-start_run_modal-open-filled, #showcase-start_run_modal-open-empty')
+    .locator(
+      '#showcase-start_run_modal-open-filled, #showcase-start_run_modal-open-empty, #showcase-start_run_modal-with-budget-error',
+    )
     .evaluateAll((els) => els.forEach((e) => e.remove()))
   await page.locator(`${at('with-hint')} label`).click()
   await expect(page.locator(`${at('with-hint')} [data-testid="field-control"]`)).toBeFocused()
