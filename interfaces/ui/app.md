@@ -143,6 +143,14 @@ FR-701]
 The header's spend figure totals priced runs only and states how many runs it
 left out. [FR-003]
 
+### CONSOLE-28
+The start form accepts an optional budget; a budget that is not a number
+greater than zero blocks the start with a message, and a run started with a
+budget shows that budget on its Cost tab. [FR-006, FR-007]
+
+### CONSOLE-29
+A budget gate entry in the inbox says what approving grants. [FR-008, FR-701]
+
 ## Failure modes
 
 Both clauses are asserted by `app.pw.ts` against the built dashboard on

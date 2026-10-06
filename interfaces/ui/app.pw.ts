@@ -485,6 +485,43 @@ test('the budget block counts the dollars, the share, the crossings and the scop
   await expect(none).toContainText('start form')
 })
 
+// --- The start form's budget and the inbox budget gate (011 T016). The
+// budget switch test loads its OWN page (/?mockBudgetGate=1#/inbox, search
+// before the hash) so the default six-item badge chains above stay intact.
+
+test('the start form rejects a zero budget and starts a budgeted run', async ({ page }) => {  // clause: CONSOLE-28
+  await page.goto('/')
+  // The fleet must be rendered before its rows are counted (the provider
+  // answers asynchronously; CONSOLE-1's first-row wait).
+  await expect(page.locator('[data-testid="fleet-row"]').first()).toBeVisible()
+  const before = await page.locator('[data-testid="fleet-row"]').count()
+  await page.locator('[data-testid="start-btn"]').click()
+  await expect(page.locator('[data-testid="modal-card"]')).toBeVisible()
+  // Zero is refused with the omit-it message; nothing is added.
+  await page.locator('[data-testid="start-budget-input"]').fill('0')
+  await expect(page.locator('[data-testid="start-budget-error"]')).toContainText(
+    'omit it to run without a budget',
+  )
+  await expect(page.locator('[data-testid="submit"]')).toBeDisabled()
+  expect(await page.locator('[data-testid="fleet-row"]').count()).toBe(before)
+  // A valid budget starts the run, and the new run's Cost tab shows it.
+  await page.locator('[data-testid="start-title-input"]').fill('Budgeted demo')
+  await page.locator('[data-testid="start-budget-input"]').fill('5')
+  await page.locator('[data-testid="submit"]').click()
+  await page.goto('/#/runs/feature-budgeted-demo?tab=cost')
+  await expect(page.locator('[data-testid="cost-budget"]')).toContainText('5.00')
+})
+
+test('the inbox budget gate entry says what approving grants', async ({ page }) => {  // clause: CONSOLE-29
+  // The seventh (budget) item exists only behind the mock switch; this test
+  // owns its page load so the badge chains of the other inbox tests are
+  // untouched.
+  await page.goto('/?mockBudgetGate=1#/inbox')
+  await expect(page.locator('[data-testid="gate-budget-note"]')).toContainText(
+    'Approve raises the limit to $60.00 and the run continues. Any other decision ends the run.',
+  )
+})
+
 test('a missing price reads "not priced" and no figure on the tab is $0.00', async ({ page }) => {  // clause: CONSOLE-25
   await page.goto('/#/runs/feature-graph-demo?tab=cost')
   // The unpriced dev role states the absence in words, never as dollars.
