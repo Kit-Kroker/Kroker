@@ -35,3 +35,61 @@ describe('AppHeader', () => {
     expect(ui.startOpen).toBe(true)
   })
 })
+
+// --- 011 T008 (RED): the header's spend figure is honest (contract §4) ------
+// The shell formats the string from the store's totalCost
+// { usd, excluded }: priced-only prints the sum; excluded runs are counted
+// aloud; an all-unpriced fleet says "not priced"; an empty fleet says "—".
+
+const role = (cost: number | null) =>
+  ({
+    role: 'dev',
+    model: 'm',
+    calls: 1,
+    inputTokens: 10,
+    outputTokens: 5,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    cost,
+  }) as any
+
+describe('AppHeader honest spend (011 T008)', () => {
+  const mountWithRuns = (runs: any[]) => {
+    const fleet = useFleetStore()
+    fleet.runs = runs
+    return mount(AppHeader, { global: { stubs: { RouterLink: RouterLinkStub } } })
+  }
+
+  it('all runs priced: prints the sum alone', () => {
+    const w = mountWithRuns([
+      { id: 'r1', status: 'running', cost: 2, roles: [] } as any,
+      { id: 'r2', status: 'blocked', cost: 3.4, roles: [] } as any,
+    ])
+    expect(w.text()).toContain('$5.40')
+    expect(w.text()).not.toContain('not priced')
+  })
+
+  it('priced and unpriced mix: sum plus the excluded count', () => {
+    const w = mountWithRuns([
+      { id: 'r1', status: 'running', cost: 5, roles: [] } as any,
+      { id: 'r2', status: 'running', cost: null, roles: [role(0)] } as any,
+      { id: 'r3', status: 'running', cost: null, roles: [role(0)] } as any,
+      { id: 'r4', status: 'blocked', cost: null, roles: [role(null)] } as any,
+    ])
+    expect(w.text()).toContain('$5.00 · 3 not priced')
+  })
+
+  it('runs exist but none is priced: "not priced", never $0.00', () => {
+    const w = mountWithRuns([
+      { id: 'r1', status: 'running', cost: null, roles: [role(0)] } as any,
+      { id: 'r2', status: 'blocked', cost: null, roles: [role(null)] } as any,
+    ])
+    expect(w.text()).toContain('not priced')
+    expect(w.text()).not.toContain('$0.00')
+  })
+
+  it('no runs: the em dash placeholder', () => {
+    const w = mountWithRuns([])
+    expect(w.text()).toContain('—')
+  })
+})

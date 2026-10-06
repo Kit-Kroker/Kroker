@@ -19,3 +19,4 @@ The active navigation tab carries a stable class, `tab-active`. [FR-1404]
 ## Failure modes
 
 Omitting stats renders fallback placeholders. Negative or zero inbox count suppresses the badge.
+Omitting stats renders fallback placeholders stays true with the spend stat's own placeholder `—` (never `$0.00`); the stat's label is `spend` (011: the sum was never windowed by day).

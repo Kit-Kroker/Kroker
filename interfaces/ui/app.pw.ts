@@ -57,7 +57,8 @@ test('the fleet view renders rows from the provider', async ({ page }) => {  // 
 test('the header renders stats and the inbox badge', async ({ page }) => {  // clause: CONSOLE-2
   const stats = page.locator('.cmp-app-header .stats')
   await expect(stats).toContainText('runs')
-  await expect(stats).toContainText('spend today')
+  // 011 T008: the label is `spend` (the sum was never windowed by day).
+  await expect(stats).toContainText('spend')
   await expect(stats.locator('b').first()).toHaveText(/\d/)
   // The badge is absent at zero (APP_HEADER-1.1); the mock seeds inbox
   // items, so the assembled console must show it.

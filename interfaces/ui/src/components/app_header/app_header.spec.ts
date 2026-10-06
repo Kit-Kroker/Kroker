@@ -23,7 +23,17 @@ describe('AppHeader', () => {
     expect(w.text()).toContain('INBOX')
     expect(w.text()).toContain('GRAPHS')
     expect(w.text()).toContain('runs 7/50')
-    expect(w.text()).toContain('spend today $19.80')
+    expect(w.text()).toContain('spend $19.80')
+  })
+
+  it('without a totalCost prop the spend placeholder is the em dash', () => {  // clause: APP_HEADER-1
+    // 011 T008 (RED): the default was '$0.00' — a fleet that spent nothing
+    // and one that never reported must not read the same.
+    const w = mount(AppHeader, {
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+    expect(w.find('.stats').text()).toContain('spend —')
+    expect(w.find('.stats').text()).not.toContain('$0.00')
   })
 
   it('omits inbox badge when count is zero, never rendering 0', () => {  // clause: APP_HEADER-1.1

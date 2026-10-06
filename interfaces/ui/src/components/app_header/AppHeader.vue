@@ -10,7 +10,9 @@ export interface AppHeaderProps {
 withDefaults(defineProps<AppHeaderProps>(), {
   activeCount: 0,
   maxCount: 50,
-  totalCost: '$0.00',
+  // 011: the placeholder is the em dash — a fleet that spent nothing and
+  // one that never reported a price must not read the same ($0.00).
+  totalCost: '—',
   inboxCount: 0,
   activeTab: 'fleet',
 })
@@ -57,7 +59,7 @@ const emit = defineEmits<{
     <div class="spacer" />
     <div class="stats">
       <span>runs <b>{{ activeCount }}</b>/{{ maxCount }}</span>
-      <span>spend today <b>{{ totalCost }}</b></span>
+      <span>spend <b>{{ totalCost }}</b></span>
       <button data-testid="start-btn" class="start" @click="emit('start-run')">+ START RUN</button>
     </div>
   </header>

@@ -11,7 +11,16 @@ const inbox = useInboxStore()
 const ui = useUiStore()
 
 const inboxCount = computed(() => inbox.items.length)
-const totalCost = computed(() => money(fleet.totalCost))
+// 011 R-8 (contract §4): the four honest strings — the priced sum, the sum
+// with the excluded count said aloud, "not priced" for a fleet with nothing
+// priced, and the em dash when there is nothing to sum. money() runs only on
+// a non-null usd; the excluded count is the store's, never re-derived here.
+const totalCost = computed(() => {
+  if (fleet.runs.length === 0) return '—'
+  const { usd, excluded } = fleet.totalCost
+  if (usd === null) return 'not priced'
+  return excluded > 0 ? `${money(usd)} · ${excluded} not priced` : money(usd)
+})
 </script>
 
 <template>

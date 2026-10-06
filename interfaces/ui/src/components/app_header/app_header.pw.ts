@@ -7,7 +7,7 @@ test('renders brand, tabs, and supplied stats', async ({ page }) => {  // clause
   const hdr = page.locator(`${at('with-inbox')} .cmp-app-header`)
   await expect(hdr.locator('.mark')).toHaveText('SDLC·FACTORY')
   await expect(hdr.locator('.stats')).toContainText('runs 12/50')
-  await expect(hdr.locator('.stats')).toContainText('spend today $145.20')
+  await expect(hdr.locator('.stats')).toContainText('spend $145.20')
 })
 
 test('inbox badge is omitted when inbox count is zero', async ({ page }) => {  // clause: APP_HEADER-1.1
