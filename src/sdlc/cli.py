@@ -194,6 +194,37 @@ def _render_gates_list() -> str:
     return "\n".join(lines)
 
 
+def _budget_usd_arg(raw: str) -> float:
+    """argparse type for --budget-usd: the shared validation, with the
+    ValueError turned into ArgumentTypeError so argparse names the flag and
+    exits 2 (011 US2, contract 1.2)."""
+    from .run_budget import parse_run_budget
+
+    try:
+        return parse_run_budget(raw)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from None
+
+
+def _start_config(args: argparse.Namespace) -> PipelineConfig:
+    """The start branch's config, extracted so its budget wiring is testable
+    without Temporal (011 T012): role-model overrides as before, plus the
+    requested run budget; absent stays 0.0 = off (SC-003)."""
+    from .cli_roles import build_role_overrides, parse_role_models
+
+    cfg = PipelineConfig()
+    if args.role_model:
+        try:
+            overrides = parse_role_models(args.role_model)
+            cfg.roles.update(build_role_overrides(overrides))
+        except Exception as e:  # ValueError / RegistryError
+            print(f"invalid --role-model: {e}")
+            raise SystemExit(1) from None
+    if getattr(args, "budget_usd", None) is not None:
+        cfg.run_budget_usd = args.budget_usd
+    return cfg
+
+
 def build_parser() -> argparse.ArgumentParser:
     """The operator CLI's argument parser. Extracted to module level so the
     tidyup-cli wiring test can exercise the same parser main() uses, and so
@@ -215,6 +246,17 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="ROLE=MODEL",
         help="override a role's model, e.g. --role-model "
         "architect=anthropic:claude-opus-4-8 (repeatable)",
+    )
+    s.add_argument(
+        # 011 US2: one validation with the dashboard start request; a
+        # rejected value is argparse's usage error (exit 2, names the flag).
+        "--budget-usd",
+        dest="budget_usd",
+        default=None,
+        type=_budget_usd_arg,
+        metavar="AMOUNT",
+        help="run budget in USD; crossing it raises the budget gate "
+        "(0 is rejected; omit it to run without a budget)",
     )
 
     add_decision_parsers(sub)
@@ -423,16 +465,7 @@ async def main() -> None:
         )
 
     if args.cmd == "start":
-        from .cli_roles import build_role_overrides, parse_role_models
-
-        cfg = PipelineConfig()
-        if args.role_model:
-            try:
-                overrides = parse_role_models(args.role_model)
-                cfg.roles.update(build_role_overrides(overrides))
-            except Exception as e:  # ValueError / RegistryError
-                print(f"invalid --role-model: {e}")
-                raise SystemExit(1) from None
+        cfg = _start_config(args)
         wf_id = f"feature-{slug(args.title)}"
         assert client is not None
         # B4 fleet back-pressure -- see
@@ -475,6 +508,13 @@ async def main() -> None:
             client, GraphWorkflow.run, run_input, id=wf_id, task_queue=TASK_QUEUE
         )
         print(f"started {handle.id}")
+        # 011 US2 (FR-009): the notice says what the budget counts, on its
+        # own line after the run id; None (no budget) prints nothing.
+        from .run_budget import budget_notice
+
+        notice = budget_notice(cfg)
+        if notice is not None:
+            print(notice)
         return
 
     if args.cmd == "benchmark":
