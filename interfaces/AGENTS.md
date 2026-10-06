@@ -23,6 +23,7 @@ Two packages:
 | Decision inbox | `/inbox` | `src/features/inbox/` | `InboxView.vue` |
 | Run detail | `/runs/:id` (route component `src/app/RunPage.vue`, composition only) | `src/features/run/` | `RunView.vue` (tab host) |
 | Board | tab of `/runs/:id` (`?tab=board`) | `src/features/board/` | `BoardTab.vue` |
+| Cost | tab of `/runs/:id` (`?tab=cost`) | `src/features/cost/` | `CostTab.vue` |
 | Graphs (editor) | `/graphs` | `src/features/graphs/` | `GraphEditorView.vue` |
 
 The screen-location table mirrors the stage table in the root `AGENTS.md`:
