@@ -27,7 +27,7 @@ jobs:
       # v0.0.2 -> 0.0.2 and latest. The repository owner is mixed-case and
       # registry paths must be lowercase, hence the literal image name.
       - id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/kit-kroker/kroker-worker
           tags: |
