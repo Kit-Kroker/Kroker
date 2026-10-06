@@ -1,5 +1,6 @@
 ﻿import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createMockApi, tickCosts } from './index'
+import { BUDGET_SCOPE_NOTE, totalPrice } from '../../shared/cost'
 import type { Run } from '../types'
 
 const mk = (over: Partial<Run>): Run => ({
@@ -148,5 +149,176 @@ describe('mock runs cover the board scenarios (T028)', () => {
     const runs = await api.listRuns()
     const nonNull = new Set(runs.map((r) => r.projectKey).filter((k) => k != null))
     expect(nonNull.size).toBeGreaterThanOrEqual(3)
+  })
+})
+
+// --- 011 T007 (RED): mock seeds cover the four contract cases (§2.2) -------
+// feature-graph-demo stays the budget run (status unchanged); dark-mode is
+// the closed all-priced case; audit-export the N9 no-breakdown closed case;
+// onboarding-v2 the all-not-priced case with its own budget. The seed counts
+// (10 runs, 6 inbox items) are pinned by the first describe; not repeated.
+
+describe('mock cost seeds (011 T007)', () => {
+  let api: ReturnType<typeof createMockApi>
+  beforeEach(() => {
+    api = createMockApi({ simulateLive: false })
+  })
+
+  const find = async (id: string): Promise<Run> => {
+    const run = (await api.listRuns()).find((r) => r.id === id)
+    expect(run, `seed run ${id} missing`).toBeDefined()
+    return run as Run
+  }
+
+  it('feature-graph-demo is the budget run: one not-priced dev role, one crossing', async () => {
+    const r = await find('feature-graph-demo')
+    expect(r.status).toBe('blocked') // unchanged by this task
+    expect(r.budget).toBe(20)
+    expect(r.budgetThreshold).toBe(40) // raised once
+    expect(r.budgetCounted).toBeCloseTo(2.6, 5)
+    expect(r.budgetCrossings).toBe(1)
+    expect(r.cost).toBeCloseTo(2.6, 5) // the priced sum
+    expect(r.roles).toHaveLength(3)
+    const [architect, qa, dev] = r.roles
+    expect(architect.role).toBe('architect')
+    expect(architect.cost).toBeCloseTo(1.85, 5)
+    expect(architect.inputTokens + architect.outputTokens).toBeGreaterThan(0)
+    expect(qa.role).toBe('qa')
+    expect(qa.cost).toBeCloseTo(0.75, 5)
+    expect(qa.inputTokens + qa.outputTokens).toBeGreaterThan(0)
+    expect(dev.role).toBe('dev')
+    expect(dev.cost).toBe(0) // not-priced: 0 with tokens
+    expect(dev.inputTokens + dev.outputTokens).toBeGreaterThan(0)
+  })
+
+  it('feature-dark-mode is closed, all priced, no budget fields', async () => {
+    const r = await find('feature-dark-mode')
+    expect(r.status).toBe('done')
+    expect(r.budget).toBeNull()
+    expect(r.budgetThreshold).toBeNull()
+    expect(r.budgetCounted).toBeNull()
+    expect(r.roles).toHaveLength(3)
+    for (const role of r.roles) expect(role.cost).not.toBeNull()
+    const sum = r.roles.reduce((acc, x) => acc + (x.cost ?? 0), 0)
+    expect(sum).toBeCloseTo(7.88, 5)
+    expect(r.cost).toBeCloseTo(7.88, 5)
+  })
+
+  it('feature-audit-export is the N9 closed case: a total with no breakdown', async () => {
+    const r = await find('feature-audit-export')
+    expect(r.status).toBe('done')
+    expect(r.roles).toEqual([])
+    expect(r.cost).toBeCloseTo(14.02, 5)
+  })
+
+  it('feature-onboarding-v2 is all not-priced with its own budget', async () => {
+    const r = await find('feature-onboarding-v2')
+    expect(r.status).toBe('blocked') // NOT running, so tickCosts never touches it
+    expect(r.roles.length).toBeGreaterThan(0)
+    expect(r.roles.some((x) => x.cost === 0)).toBe(true)
+    expect(r.roles.some((x) => x.cost === null)).toBe(true)
+    for (const role of r.roles) {
+      expect(role.inputTokens + role.outputTokens).toBeGreaterThan(0)
+    }
+    expect(r.cost).toBeNull()
+    expect(r.budget).toBe(50)
+    expect(r.budgetThreshold).toBe(50)
+    expect(r.budgetCounted).toBe(0)
+    expect(r.budgetCrossings).toBe(0)
+  })
+
+  it('startRun honours a budget and returns the scope notice', async () => {
+    const r = await api.startRun({
+      title: 'Budgeted run',
+      description: '',
+      repo: '',
+      mode: 'greenfield',
+      budget: 5,
+    } as never)
+    expect(r.budget).toBe(5)
+    expect(r.budgetNotice).not.toBeNull()
+    expect(r.budgetNotice as string).toContain(BUDGET_SCOPE_NOTE)
+    expect((r.budgetNotice as string).startsWith('Budget $5.00')).toBe(true)
+  })
+
+  it('startRun without a budget keeps notice and budget null', async () => {
+    const r = await api.startRun({
+      title: 'Plain run',
+      description: '',
+      repo: '',
+      mode: 'greenfield',
+      budget: null,
+    } as never)
+    expect(r.budget).toBeNull()
+    expect(r.budgetNotice).toBeNull()
+  })
+})
+
+// --- 011 T007 (RED): tickCosts funds a role, never invents a total (R-7) ----
+// For a RUNNING run with roles the increment lands on the FIRST role's cost
+// and run.cost is recomputed as totalPrice(roles, null).usd; running runs
+// without roles keep today's direct bump; non-running runs are untouched
+// (pinned by the first tickCosts describe). random 0.5 -> increment 0.05.
+
+describe('tickCosts funds the first role (011 T007)', () => {
+  const roleRow = (role: string, cost: number | null) => ({
+    role,
+    cost,
+    inputTokens: 100,
+    outputTokens: 10,
+  })
+
+  it('lands the increment on the first role and recomputes the partial total', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const runs = [
+      mk({
+        id: 'a',
+        status: 'running',
+        cost: 1.0,
+        roles: [roleRow('architect', 1.0), roleRow('dev', 0)] as never,
+      }),
+    ]
+    const out = tickCosts(runs)
+    const [architect, dev] = (out[0] as { roles: { cost: number | null }[] }).roles
+    expect(architect.cost).toBeCloseTo(1.05, 5) // 1.0 + 0.05
+    expect(dev.cost).toBe(0) // untouched
+    expect(out[0].cost).toBe(totalPrice(out[0].roles as never, null).usd)
+    expect(out[0].cost).toBeCloseTo(1.05, 5) // the partial priced sum 1.05
+  })
+
+  it('funds a not-priced first role instead of inventing a total', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const runs = [
+      mk({
+        id: 'a',
+        status: 'running',
+        cost: null,
+        roles: [roleRow('dev', 0)] as never, // not-priced: 0 with tokens
+      }),
+    ]
+    const out = tickCosts(runs)
+    expect((out[0] as { roles: { cost: number | null }[] }).roles[0].cost).toBeCloseTo(0.05, 5)
+    expect(out[0].cost).toBeCloseTo(0.05, 5)
+  })
+
+  it('recomputes a null cost from the roles instead of adding to null', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const runs = [
+      mk({
+        id: 'a',
+        status: 'running',
+        cost: null,
+        roles: [roleRow('architect', 1.0), roleRow('dev', null)] as never,
+      }),
+    ]
+    const out = tickCosts(runs)
+    expect(out[0].cost).toBe(totalPrice(out[0].roles as never, null).usd)
+    expect(out[0].cost).toBeCloseTo(1.05, 5)
+  })
+
+  it('keeps the direct bump for a running run with no roles', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const runs = [mk({ id: 'a', status: 'running', cost: 1 })]
+    expect(tickCosts(runs)[0].cost).toBeCloseTo(1.05, 5)
   })
 })

@@ -12,6 +12,7 @@ import type {
 } from '../types'
 import { createMockGraph } from './graph'
 import { HttpStatusError } from '../errors'
+import { BUDGET_SCOPE_NOTE, totalPrice } from '../../shared/cost'
 import catalogJson from '../__fixtures__/graph/catalog.json'
 
 // Stage NAMES, advanced along the served canonical list (E-76 spec §9.1).
@@ -21,12 +22,21 @@ const nextStage = (stages: string[]): string[] => {
   return [CANONICAL[Math.min(i + 1, CANONICAL.length - 1)]]
 }
 
+// 011 R-7: a running run with roles absorbs its increment on the FIRST
+// role and its total is recomputed from the roles (the ticker can fund a
+// role, never invent a total); running runs without roles keep the direct
+// bump; non-running runs are untouched.
 export function tickCosts(runs: Run[]): Run[] {
-  return runs.map((r) =>
-    r.status === 'running'
-      ? { ...r, cost: +((r.cost ?? 0) + 0.02 + Math.random() * 0.06).toFixed(2) }
-      : r,
-  )
+  return runs.map((r) => {
+    if (r.status !== 'running') return r
+    const inc = 0.02 + Math.random() * 0.06
+    if (r.roles && r.roles.length > 0) {
+      const roles = r.roles.map((x, i) => (i === 0 ? { ...x, cost: (x.cost ?? 0) + inc } : x))
+      const total = totalPrice(roles, null)
+      return { ...r, roles, cost: total.usd === null ? null : +total.usd.toFixed(2) }
+    }
+    return { ...r, cost: +((r.cost ?? 0) + inc).toFixed(2) }
+  })
 }
 
 function seedRuns(): Run[] {
@@ -49,9 +59,17 @@ function seedRuns(): Run[] {
       },
       status: 'blocked',
       blocker: 'architecture gate — round 1',
+      // 011 T007: the budget run. One crossing already approved (20 -> 40);
+      // counted is the gate's own planning-agent sum (the priced roles only,
+      // never the dev harness row); dev is not-priced — tokens, cost 0.
       cost: 2.6,
       budget: 20,
-      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
+      roles: [
+        { role: 'architect', model: 'm', calls: 4, inputTokens: 21000, outputTokens: 3200, cacheReadTokens: 44000, cacheWriteTokens: 1800, cost: 1.85 },
+        { role: 'qa', model: 'm', calls: 2, inputTokens: 8300, outputTokens: 940, cacheReadTokens: 9100, cacheWriteTokens: 0, cost: 0.75 },
+        { role: 'dev', model: 'zai-coding-plan/glm-5.2', calls: 3, inputTokens: 52000, outputTokens: 11400, cacheReadTokens: 88000, cacheWriteTokens: 0, cost: 0 },
+      ],
+      budgetThreshold: 40, budgetCounted: 2.6, budgetCrossings: 1, budgetNotice: null,
       age: '40m',
       decisions: [
         { ts: '09:25', gate: 'architecture r1', outcome: 'revise', comment: 'split the auth service', decider: 'human · sam' },
@@ -105,11 +123,18 @@ function seedRuns(): Run[] {
       repo: 'git@github.com:acme/onboard',
       activeStages: ['code'],
       stageMarks: null, // legacy row: linear strip fallback
-      status: 'running',
-      blocker: '',
-      cost: 9.75,
+      // 011 T007: the all-not-priced case (a coding-plan run: every role has
+      // tokens, none has dollars) with its own budget — which cannot trip,
+      // counted 0 of 50. Blocked, so the ticker never funds a role here.
+      status: 'blocked',
+      blocker: 'review gate — round 1',
+      cost: null,
       budget: 50,
-      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
+      roles: [
+        { role: 'dev', model: 'zai-coding-plan/glm-5.2', calls: 6, inputTokens: 61000, outputTokens: 15800, cacheReadTokens: 120000, cacheWriteTokens: 0, cost: 0 },
+        { role: 'planner', model: 'm', calls: 2, inputTokens: 15400, outputTokens: 2100, cacheReadTokens: 26000, cacheWriteTokens: 400, cost: null },
+      ],
+      budgetThreshold: 50, budgetCounted: 0, budgetCrossings: 0, budgetNotice: null,
       age: '4h 41m',
       decisions: [
         { ts: '11:02', gate: 'clarify r1', outcome: 'approve', comment: 'all suggestions accepted', decider: 'human · sam' },
@@ -158,10 +183,12 @@ function seedRuns(): Run[] {
       repo: 'git@github.com:acme/portal',
       activeStages: ['deploy'],
       stageMarks: null, // legacy row: linear strip fallback
-      status: 'running',
+      // 011 T007: the N9 closed case — a total with no breakdown recorded
+      // (closed before role tracking). Done, so the ticker leaves it alone.
+      status: 'done',
       blocker: '',
       cost: 14.02,
-      budget: 40,
+      budget: null,
       roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
       age: '11h 50m',
       decisions: [
@@ -214,9 +241,15 @@ function seedRuns(): Run[] {
       stageMarks: null, // legacy row: linear strip fallback
       status: 'done',
       blocker: '',
+      // 011 T007: the closed all-priced case — every role priced, no budget.
       cost: 7.88,
-      budget: 30,
-      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
+      budget: null,
+      roles: [
+        { role: 'architect', model: 'm', calls: 3, inputTokens: 16800, outputTokens: 2400, cacheReadTokens: 31000, cacheWriteTokens: 900, cost: 4.12 },
+        { role: 'reviewer', model: 'm', calls: 2, inputTokens: 9700, outputTokens: 1300, cacheReadTokens: 18000, cacheWriteTokens: 0, cost: 2.0 },
+        { role: 'qa', model: 'm', calls: 1, inputTokens: 4200, outputTokens: 600, cacheReadTokens: 6100, cacheWriteTokens: 0, cost: 1.76 },
+      ],
+      budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
       age: '1d 3h',
       decisions: [
         { ts: 'yday', gate: 'merge r1', outcome: 'approve', comment: '', decider: 'policy (soft)' },
@@ -439,8 +472,16 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
         status: 'running',
         blocker: '',
         cost: 0.04,
-        budget: 40,
-        roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
+        budget: input.budget ?? null,
+        roles: [],
+        budgetThreshold: input.budget ?? null,
+        budgetCounted: input.budget != null ? 0 : null,
+        budgetCrossings: 0,
+        // 011 T007: the same FR-009 sentence the server returns.
+        budgetNotice:
+          input.budget != null
+            ? `Budget $${input.budget.toFixed(2)} ${BUDGET_SCOPE_NOTE}`
+            : null,
         age: 'just now',
         decisions: [],
         projectKey: null,
