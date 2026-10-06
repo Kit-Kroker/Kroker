@@ -276,3 +276,41 @@ def test_without_project_key_the_field_is_none():
         memory_watermark=None,
     )
     assert s.project_key is None
+
+
+# --- 011 T002 (RED): build_run_summary budget_counted_usd --------------------
+# data-model §2.1: the same priced-dollars figure RunState carries live, at
+# close; None = no budget or a summary built before this change.
+
+
+def test_budget_counted_usd_keyword_sets_the_field():
+    trace = [
+        _ev(0, RunEventKind.STAGE_ENDED, stage="code", role="dev", outcome="pass", duration_s=4.0),
+        _ev(1, RunEventKind.RUN_FINISHED),
+    ]
+    s = build_run_summary(
+        run_id="r11",
+        mode="greenfield",
+        outcome="done",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+        budget_counted_usd=1.5,
+    )
+    assert s.budget_counted_usd == 1.5
+
+
+def test_without_budget_counted_usd_the_field_is_none():
+    trace = [
+        _ev(0, RunEventKind.STAGE_ENDED, stage="code", role="dev", outcome="pass", duration_s=4.0),
+        _ev(1, RunEventKind.RUN_FINISHED),
+    ]
+    s = build_run_summary(
+        run_id="r11",
+        mode="greenfield",
+        outcome="done",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+    )
+    assert s.budget_counted_usd is None

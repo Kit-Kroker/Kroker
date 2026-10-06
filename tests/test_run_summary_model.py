@@ -111,3 +111,27 @@ def test_pre_002_summary_json_without_project_key_parses_unchanged():
     s2 = RunSummary.model_validate_json(json.dumps(captured))
     assert s2 == s
     assert s2.project_key is None
+
+
+# --- 011 T002 (RED): old summaries load without budget_counted_usd ------------
+
+
+def test_pre_011_summary_json_without_budget_counted_usd_parses_unchanged():
+    """data-model §2.1: a summary.json written before 011 has no
+    budget_counted_usd key; it loads with the field None (no budget, or a
+    summary from before this change) and equals the original summary."""
+    import json
+
+    s = _summary()
+    captured = json.loads(s.model_dump_json())
+    captured.pop("budget_counted_usd", None)  # a pre-011 summary.json has no such key
+    s2 = RunSummary.model_validate_json(json.dumps(captured))
+    assert s2 == s
+    assert s2.budget_counted_usd is None
+
+
+def test_run_summary_budget_counted_usd_round_trips():
+    """data-model §2.1: the additive wire carries a real counted value —
+    RunSummary.budget_counted_usd survives a model_dump_json round-trip."""
+    s = _summary(budget_counted_usd=2.5)
+    assert RunSummary.model_validate_json(s.model_dump_json()) == s

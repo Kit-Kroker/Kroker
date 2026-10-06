@@ -494,6 +494,9 @@ class RunSummary(BaseModel):
     cost_usd_total: float | None = None
     budget_usd: float | None = None  # configured run budget; None = off
     budget_crossings: int = 0  # budget-gate rounds raised (E-33)
+    # 011 R-3: the priced dollars the gate actually compares, at close.
+    # None = no budget, or a summary written before this change.
+    budget_counted_usd: float | None = None
     memory_enabled: bool = False
     memory_watermark: str | None = None
     memory_retains: int = 0
@@ -534,6 +537,12 @@ class RunState(BaseModel):
     cost_usd_total: float | None = None
     budget_usd: float | None = None
     budget_crossings: int = 0
+    # 011 R-3: the gate's live state. threshold starts at the budget and
+    # rises by one budget per approve (role_host), so it cannot be derived
+    # from budget_usd and budget_crossings. None = no budget.
+    budget_threshold_usd: float | None = None
+    # The priced dollars the gate compares (its own bag); None = no budget.
+    budget_counted_usd: float | None = None
     # E-75 spec §5.3: canonical stage -> mark, projected from router state by
     # GraphWorkflow.run_state. None for FeatureWorkflow runs (linear strip
     # fallback). Not named `stages`: RunSummary.stages means something else.

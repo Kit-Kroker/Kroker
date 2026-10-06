@@ -55,6 +55,7 @@ def test_run_state_mirrors_run_summary_field_names_where_they_overlap():
         "title",
         "repo_url",
         "project_key",
+        "budget_counted_usd",
     }
     assert shared <= set(RunState.model_fields)
     assert shared <= set(RunSummary.model_fields)
@@ -128,3 +129,19 @@ def test_run_state_project_key_defaults_to_none():
     "default" stays behind the run wire."""
     s = RunState(run_id="feature-x", title="X", mode="greenfield", status="running", started_at=AT)
     assert s.project_key is None
+
+
+# --- 011 T002 (RED): additive budget wire fields -----------------------------
+# data-model §2.1: budget_counted_usd is shared (RunState and RunSummary carry
+# the priced dollars the gate compares); budget_threshold_usd is RunState-only
+# (the gate's live threshold — a closed run keeps budget_usd).
+
+
+def test_run_state_budget_threshold_usd_is_a_run_state_field():
+    assert "budget_threshold_usd" in set(RunState.model_fields)
+
+
+def test_run_state_defaults_to_no_budget_wire_fields():
+    s = RunState(run_id="feature-x", title="X", mode="greenfield", status="running", started_at=AT)
+    assert s.budget_threshold_usd is None
+    assert s.budget_counted_usd is None
