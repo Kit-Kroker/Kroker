@@ -23,7 +23,7 @@ from collections.abc import Callable
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from ..channels.contract import Reply, default_render
 from ..channels.transport import NoMatch, resolve_key, submit
@@ -69,10 +69,27 @@ class StartBody(BaseModel):
     description: str = ""
     mode: ProjectMode
     repo: str | None = None
+    # 011 US2: optional run budget, validated by the shared parse_run_budget
+    # so FastAPI answers 422 with loc ["body", "budget_usd"] carrying the
+    # same messages the CLI prints. None (absent) passes through untouched;
+    # the before-validator sees the raw JSON (number or numeric string), the
+    # stored value is always float | None.
+    budget_usd: float | None = None
+
+    @field_validator("budget_usd", mode="before")
+    @classmethod
+    def _validate_budget(cls, raw: object) -> float | None:
+        from ..run_budget import parse_run_budget
+
+        if raw is None:
+            return None
+        return parse_run_budget(raw)
 
 
 class StartedRun(BaseModel):
     run_id: str
+    # 011: the FR-009 notice — what the budget counts; None without one.
+    budget_notice: str | None = None
 
 
 async def _handle(poller: FleetPoller, run_id: str):
@@ -346,7 +363,10 @@ def create_router(
             except FleetCapacityExceeded as e:
                 raise HTTPException(429, str(e)) from None
         try:
-            await start_run(idea, PipelineConfig(), wf_id)
+            # 011 US2: the only difference from the default config is the
+            # budget; the fleet-capacity path above is unchanged.
+            cfg = PipelineConfig(run_budget_usd=body.budget_usd or 0.0)
+            await start_run(idea, cfg, wf_id)
         except HTTPException:
             raise
         except GraphStartError as e:
@@ -355,6 +375,8 @@ def create_router(
             if "already started" in str(e).lower():
                 raise HTTPException(409, f"run {wf_id!r} already exists") from e
             raise HTTPException(502, str(e)) from e
-        return StartedRun(run_id=wf_id)
+        from ..run_budget import budget_notice
+
+        return StartedRun(run_id=wf_id, budget_notice=budget_notice(cfg))
 
     return router

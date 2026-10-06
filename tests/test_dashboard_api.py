@@ -299,3 +299,85 @@ def test_start_run_422s_on_an_unstartable_graph(snap):
     r = TestClient(app).post("/runs", json={"title": "t", "description": "d", "mode": "greenfield"})
     assert r.status_code == 422
     assert "no_handler" in r.text
+
+
+# --- 011 T013 (RED): POST /runs budget_usd ------------------------------------
+# The optional budget rides StartBody through the shared parse_run_budget
+# (mode="before") into PipelineConfig.run_budget_usd (0.0 = off, absent),
+# and the response carries budget_notice (the FR-009 text, None without a
+# budget). The starter capturing cfg mirrors the capacity tests' local-client
+# pattern; the fleet-capacity path itself is untouched.
+
+
+@pytest.fixture
+def budget_client(snap):
+    started = []
+
+    async def starter(idea, cfg, wf_id):
+        started.append(cfg)
+        return wf_id
+
+    app = FastAPI()
+    app.include_router(create_router(_FakePoller(snap), starter=starter))
+    c = TestClient(app)
+    c.started = started
+    return c
+
+
+def test_start_without_a_budget_keeps_the_gate_off_and_the_notice_null(budget_client):
+    r = budget_client.post(
+        "/runs", json={"title": "Add SSO", "description": "d", "mode": "greenfield"}
+    )
+    assert r.status_code == 200
+    assert budget_client.started[0].run_budget_usd == 0.0
+    assert r.json()["budget_notice"] is None
+
+
+def test_start_with_a_numeric_budget_reaches_the_starter_and_returns_the_notice(budget_client):
+    r = budget_client.post(
+        "/runs",
+        json={"title": "Add SSO", "description": "d", "mode": "greenfield", "budget_usd": 5},
+    )
+    assert r.status_code == 200
+    assert budget_client.started[0].run_budget_usd == 5.0
+    notice = r.json()["budget_notice"]
+    assert isinstance(notice, str)
+    assert notice.startswith("Budget $5.00 ")
+
+
+def test_start_with_a_string_budget_parses_through_the_shared_validator(budget_client):
+    r = budget_client.post(
+        "/runs",
+        json={"title": "Add SSO", "description": "d", "mode": "greenfield", "budget_usd": "5"},
+    )
+    assert r.status_code == 200
+    assert budget_client.started[0].run_budget_usd == 5.0
+    notice = r.json()["budget_notice"]
+    assert isinstance(notice, str)
+    assert notice.startswith("Budget $5.00 ")
+
+
+@pytest.mark.parametrize(
+    ("raw", "id_"),
+    [
+        ("0", "zero"),
+        ("-1", "negative"),
+        ("abc", "not-a-number"),
+        (True, "json-true"),
+    ],
+    ids=["zero", "negative", "abc", "json-true"],
+)
+def test_start_rejects_a_bad_budget_before_anything_starts(budget_client, raw, id_):
+    # Rejection happens in StartBody's mode="before" validator: 422 naming
+    # budget_usd, and the starter is never called — nothing starts (FR-006).
+    # json=true is the bool trap: bool subclasses int, and 1 would parse.
+    r = budget_client.post(
+        "/runs",
+        json={"title": "Add SSO", "description": "d", "mode": "greenfield", "budget_usd": raw},
+    )
+    assert r.status_code == 422
+    detail = r.json()["detail"][0]
+    assert detail["loc"][-1] == "budget_usd"
+    assert budget_client.started == []
+    if id_ == "zero":
+        assert "omit it to run without a budget" in detail["msg"]
