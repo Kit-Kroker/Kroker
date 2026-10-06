@@ -39,7 +39,7 @@ Gates: clarify, architecture, plan, merge, deploy — each `hard` / `soft` /
 `off` per project (`PipelineConfig.gates`). Humans interact through signals:
 
 ```
-python -m sdlc.cli start --title "Add SSO" --mode brownfield --repo git@...
+python -m sdlc.cli start --title "Add SSO" --mode brownfield --repo git@... --budget-usd 5
 python -m sdlc.cli status  --id feature-add-sso
 python -m sdlc.cli answer  --id feature-add-sso --q Q1 --text "Use OIDC"
 python -m sdlc.cli approve --id feature-add-sso --gate architecture
@@ -48,6 +48,13 @@ python -m sdlc.cli doctor            # diagnose this environment's setup
 python -m sdlc.cli doctor --json     # the same results, for machines
 python -m sdlc.cli doctor --strict   # exit non-zero on warnings too
 ```
+
+`--budget-usd` caps a run's spend: crossing it raises the budget gate
+(approve grants one more increment of the same amount; reject ends the
+run). An explicit `0` is rejected — omit the flag to run without a
+budget. The budget counts priced planning-agent dollars only; the
+coding harness, crew and research stage are not counted (the run's Cost
+tab shows both figures).
 
 > Run it before the first `start` on a new machine, and whenever a run fails in a way that smells like configuration. It reports every finding at once rather than dying on the first, and it writes nothing.
 >
@@ -177,8 +184,9 @@ fleet, the run page, the graph editor, and the decision inbox. The inbox
 lists everything waiting on a person across runs and lets the operator
 answer questions, decide gates, override or send back a merge, and retry
 or quarantine an escalated task.
-The run page is a tab host — Graph | Board | Gates | Cost, with Gates and
-Cost not built yet. The tab is kept in the URL (`#/runs/<id>?tab=board`).
+The run page is a tab host — Graph | Board | Gates | Cost, with Cost live
+(per-role spend, tokens, the total and the budget's counted dollars) and
+Gates not built yet. The tab is kept in the URL (`#/runs/<id>?tab=board`).
 The Board tab is a read-only view of the run's tasks, their evidence and
 event timeline, and the artifact versions the run published. It reads the
 `/projects/*` routes above, keyed by the run's `project_key`. A run with no

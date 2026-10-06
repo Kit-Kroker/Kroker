@@ -34,9 +34,12 @@ interface. The active provider is selected by `VITE_API`:
 
 ## Status
 
-- Built: the Fleet view, the run page (Graph and Board tabs), the graph
-  editor, and the decision inbox (`src/features/inbox/` — it lists every
-  item waiting on a person across runs and resolves all four kinds:
-  clarify answers, gate decisions, merge overrides, escalations).
-- Not built: the run page's Gates and Cost tabs (disabled placeholders,
-  ruling G7 of spec 002).
+- Built: the Fleet view, the run page (Graph, Board and Cost tabs), the
+  graph editor, and the decision inbox (`src/features/inbox/` — it lists
+  every item waiting on a person across runs and resolves all four kinds:
+  clarify answers, gate decisions, merge overrides, escalations). The Cost
+  tab (`src/features/cost/`, 011) shows per-role spend and tokens, the
+  priced/partial total, and the budget block with the dollars counted
+  toward the gate.
+- Not built: the run page's Gates tab (disabled placeholder, ruling G7 of
+  spec 002).
