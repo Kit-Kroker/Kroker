@@ -84,7 +84,7 @@ class _CrewDefaultPipelineConfig:
                 model="zai-coding-plan/glm-5.3",
             ),
             "test": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"),
-            "devops": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"),
+            "devops": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.3"),
         }
 
 

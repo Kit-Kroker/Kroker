@@ -12,7 +12,12 @@ from sdlc.core.models import (
     RoleConfig,
 )
 
-_HARNESS_MODEL = "zai-coding-plan/glm-5.2"
+# 7f5191d0 moved dev/devops to glm-5.3; test stayed on glm-5.2.
+_HARNESS_MODELS = {
+    "dev": "zai-coding-plan/glm-5.3",
+    "test": "zai-coding-plan/glm-5.2",
+    "devops": "zai-coding-plan/glm-5.3",
+}
 _PROPOSER_MODEL = "anthropic:glm-5.2"
 _FLIPPED_PROPOSER_MODEL = "zai:glm-5.3"
 
@@ -21,7 +26,7 @@ def _complete_registry(**overrides: RoleConfig) -> dict[str, RoleConfig]:
     """A registry that passes every check. Tests perturb ONE role via
     overrides so each assertion fails for the reason under test."""
     roles: dict[str, RoleConfig] = {
-        name: RoleConfig(kind="harness", harness=HarnessKind.OPENCODE, model=_HARNESS_MODEL)
+        name: RoleConfig(kind="harness", harness=HarnessKind.OPENCODE, model=_HARNESS_MODELS[name])
         for name in ("dev", "test", "devops")
     }
     roles.update(
@@ -62,7 +67,8 @@ def test_shipped_registry_loads_and_validates():
 def test_shipped_registry_models_are_the_005_targets():
     """US1 (005 T019, data-model.md): the SHIPPED agents/ tree declares the
     flipped models exactly — the 11 glm proposer roles on ``zai:glm-5.3``,
-    the harness trio unchanged on ``zai-coding-plan/glm-5.2``, adversary on
+    dev and devops on ``zai-coding-plan/glm-5.3`` (moved off glm-5.2 by
+    7f5191d0, test stays on ``zai-coding-plan/glm-5.2``), adversary on
     ``anthropic:claude-sonnet-4-6`` and discover/risk on
     ``anthropic:claude-sonnet-4-5`` — and ADR-6 still holds on the flipped
     registry (validate_registry does not raise)."""
@@ -85,9 +91,9 @@ def test_shipped_registry_models_are_the_005_targets():
             f"glm proposer roles on '{_FLIPPED_PROPOSER_MODEL}' (data-model.md)"
         )
     for name in ("dev", "test", "devops"):
-        assert roles[name].model == _HARNESS_MODEL, (
-            f"{name} ships {roles[name].model!r}; the harness trio keeps "
-            f"'{_HARNESS_MODEL}' (data-model.md)"
+        assert roles[name].model == _HARNESS_MODELS[name], (
+            f"{name} ships {roles[name].model!r}; the harness default is "
+            f"'{_HARNESS_MODELS[name]}' (dev/devops glm-5.3 since 7f5191d0)"
         )
     assert roles["adversary"].model == "anthropic:claude-sonnet-4-6"
     assert roles["discover"].model == "anthropic:claude-sonnet-4-5"

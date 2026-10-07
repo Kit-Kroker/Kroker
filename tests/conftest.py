@@ -164,7 +164,14 @@ def git_repo(tmp_path, monkeypatch):
     return str(repo)
 
 
-_HARNESS_AGENT_YAML = b"kind: harness\nharness: opencode\nmodel: zai-coding-plan/glm-5.2\n"
+# 7f5191d0 moved dev/devops to glm-5.3 while test stayed on glm-5.2; the
+# fixture mirrors the shipped defaults so the pipeline-mirror boot check
+# (loader.py _validate_pipeline_mirror) passes on a structurally valid tree.
+_HARNESS_AGENT_YAMLS = {
+    "dev": b"kind: harness\nharness: opencode\nmodel: zai-coding-plan/glm-5.3\n",
+    "test": b"kind: harness\nharness: opencode\nmodel: zai-coding-plan/glm-5.2\n",
+    "devops": b"kind: harness\nharness: opencode\nmodel: zai-coding-plan/glm-5.3\n",
+}
 _PROPOSER_AGENT_YAML = b"kind: proposer\nmodel: anthropic:glm-5.2\n"
 
 HARNESS_ROLE_NAMES = ("dev", "test", "devops")
@@ -212,7 +219,7 @@ def write_registry_dir(root, version=1):
     for name in HARNESS_ROLE_NAMES:
         d = root / name
         d.mkdir(exist_ok=True)
-        (d / "agent.yaml").write_bytes(_HARNESS_AGENT_YAML)
+        (d / "agent.yaml").write_bytes(_HARNESS_AGENT_YAMLS[name])
     for name in PROPOSER_ROLE_NAMES:
         d = root / name
         d.mkdir(exist_ok=True)
