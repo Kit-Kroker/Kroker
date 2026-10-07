@@ -118,6 +118,13 @@ ENV SDLC_AGENTS_DIR=/app/agents
 ENV SDLC_CASES_ROOT=/app/benchmarks/cases
 ENV SDLC_CHAT_ASSETS=/app/interfaces/chat
 ENV SDLC_BLUEPRINTS_DIR=/app/blueprints
+# 012 (FR-014/FR-016): the commit the worker records on every benchmark
+# record. A bind-mounted worktree's .git points at a host path git inside
+# the container cannot read, so the build argument is the fallback that
+# keeps provenance explicit rather than empty; a CI build can pass
+# --build-arg KROKER_COMMIT=<sha> for an exact id.
+ARG KROKER_COMMIT=unknown
+ENV KROKER_COMMIT=${KROKER_COMMIT}
 
 CMD ["python", "-m", "sdlc.worker"]
 
