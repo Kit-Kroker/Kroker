@@ -9,12 +9,13 @@ existing case-level oracle grading is unaffected.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+from .paths import cases_dir as _default_cases_dir
 
 ERROR_CLASSES: list[str] = [
     "functional",
@@ -72,21 +73,13 @@ class TaskGrade(BaseModel):
     detail: str
 
 
-def _cases_dir() -> Path:
-    return Path(
-        os.environ.get(
-            "SDLC_CASES_ROOT", str(Path(__file__).resolve().parents[3] / "benchmarks" / "cases")
-        )
-    )
-
-
 def load_task_suite(case_id: str, cases_dir: Path | None = None) -> TaskSuite | None:
-    """Load benchmarks/cases/<case_id>/tasks.yaml, or None if absent.
+    """Load <cases root>/<case_id>/tasks.yaml, or None if absent.
 
     Raises pydantic.ValidationError on a malformed file -- tasks.yaml is a
     human-authored artifact, so a load-time error is loud on purpose rather
     than silently degrading."""
-    base = cases_dir if cases_dir is not None else _cases_dir()
+    base = cases_dir if cases_dir is not None else _default_cases_dir()
     p = Path(base) / case_id / "tasks.yaml"
     if not p.is_file():
         return None

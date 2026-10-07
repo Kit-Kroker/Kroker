@@ -11,12 +11,12 @@ from pathlib import Path
 import yaml
 
 from ..agents.loader import _resolve_agents_dir
+from ..benchmarks.paths import cases_dir
 from .fixtures import FixtureError
 from .gate import GateUnavailable, run_gate
 from .verdict import GateVerdict, PromptGateResult
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_CASES_ROOT = _REPO_ROOT / "benchmarks" / "cases"
 _BENCH_CONFIG = _REPO_ROOT / "benchmarks" / "config.yaml"
 
 # (role, case) pairs the gate covers today. Grows as rubrics and seeds are
@@ -80,7 +80,7 @@ def run_eval(
             role,
             _resolve_case(role, case),
             repo_root=_REPO_ROOT,
-            cases_root=_CASES_ROOT,
+            cases_root=cases_dir(),  # 012 R-1: one cases location (call-time)
             agents_dir=_resolve_agents_dir(),
             judge_model=judge_model,
             repeat=k,

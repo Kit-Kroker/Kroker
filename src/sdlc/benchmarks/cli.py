@@ -164,13 +164,13 @@ def dispatch_calibrate(
     rubric: str, *, judge_model: str | None, epsilon: float, threshold: float, calib_root=None
 ) -> str:
     from .calibration import (
-        _CALIB_DIR,
         load_scored_fixtures,
         run_calibration,
         write_calibration_report,
     )
+    from .paths import calibration_dir
 
-    root = Path(calib_root) if calib_root is not None else _CALIB_DIR
+    root = Path(calib_root) if calib_root is not None else calibration_dir()
     rubric_dir = root / rubric
     fixtures = load_scored_fixtures(rubric_dir)
     if not fixtures:
@@ -260,9 +260,10 @@ def dispatch_import_deveval(
     corpus -- see the importer's module docstring.
     """
     from .importers.deveval import convert_repo
+    from .paths import cases_dir
 
     src_root = Path(src)
-    dest = Path(out) if out else (Path(__file__).resolve().parents[3] / "benchmarks" / "cases")
+    dest = Path(out) if out else cases_dir()
     repos = [src_root / repo] if repo else [d for d in sorted(src_root.iterdir()) if d.is_dir()]
     if not repos:
         raise SystemExit(f"no repositories under {src_root}")
@@ -290,12 +291,9 @@ def dispatch_import_deveval(
 def dispatch_verify_case(*, case: str, cases_root: str | None = None) -> str:
     """Run one imported case's oracle against its own reference/."""
     from .importers.verify import verify_case
+    from .paths import cases_dir
 
-    root = (
-        Path(cases_root)
-        if cases_root
-        else (Path(__file__).resolve().parents[3] / "benchmarks" / "cases")
-    )
+    root = Path(cases_root) if cases_root else cases_dir()
     result = verify_case(root / case)
     head = f"{result.case_id}: {'PASS' if result.ok else 'FAIL'}"
     return head if result.ok else f"{head}\n{result.output}"

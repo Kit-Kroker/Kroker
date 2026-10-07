@@ -20,6 +20,7 @@ from temporalio import activity
 
 from ..agents.model_ids import resolve_model
 from .models import QualityScore
+from .paths import cases_dir
 from .vetoes import check, parse_vetoes
 
 
@@ -215,25 +216,21 @@ async def judge_artifact(inp: JudgeInput) -> QualityScore:
 judge_artifact.sync = _judge_sync  # type: ignore[attr-defined]
 
 
-# Repo root, derived from this module's location (editable install resolves
-# __file__ to the worktree source). Used to locate golden-case dirs:
-#   <root>/benchmarks/cases/<case_id>/
-_CASES_DIR = Path(__file__).resolve().parents[3] / "benchmarks" / "cases"
-
-
 @activity.defn
 async def load_case_assets(case_id: str, rubric_files: dict[str, str]) -> dict[str, str]:
     """Read each rubric file and return {stage: rubric_text}.
 
     ``rubric_files`` is the CaseSpec.rubrics map (stage -> file path). Paths
-    may be absolute or relative to the case dir
-    (``benchmarks/cases/<case_id>/``). A missing file is skipped — that stage
-    simply won't be judged — so the workflow never crashes on a absent rubric.
+    may be absolute or relative to the case dir, resolved through
+    ``paths.cases_dir()`` (012 R-1: one cases location for every reader,
+    honouring SDLC_CASES_ROOT the way the oracle always did). A missing file
+    is skipped — that stage simply won't be judged — so the workflow never
+    crashes on a absent rubric.
 
     All filesystem I/O lives here (the activity); the workflow passes only
     serializable args (``case_id`` + the path map).
     """
-    case_dir = _CASES_DIR / case_id
+    case_dir = cases_dir() / case_id
     out: dict[str, str] = {}
     for stage, rel in rubric_files.items():
         p = Path(rel) if Path(rel).is_absolute() else case_dir / rel

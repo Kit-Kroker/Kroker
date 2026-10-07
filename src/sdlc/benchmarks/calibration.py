@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from ..agents.loader import model_family
 from .models import QualityScore
+from .paths import calibration_dir
 
 if TYPE_CHECKING:
     from .judge import JudgeInput
@@ -237,8 +238,6 @@ def run_calibration(
 
 # --- Trust surfacing (E-36 Task 8): report load + render helpers ----------
 
-_CALIB_DIR = Path(__file__).resolve().parents[3] / "benchmarks" / "calibration"
-
 # record stage (BenchmarkSummary.stage) -> rubric key (calibration bucket)
 STAGE_TO_RUBRIC: dict[str, str] = {
     "clarify": "clarifier",
@@ -259,7 +258,7 @@ def write_calibration_report(rep: CalibrationReport, rubric_dir: Path) -> Path:
 
 
 def load_calibration_reports(calib_root: Path | None = None) -> dict[str, CalibrationReport]:
-    root = calib_root if calib_root is not None else _CALIB_DIR
+    root = calib_root if calib_root is not None else calibration_dir()
     out: dict[str, CalibrationReport] = {}
     if not Path(root).is_dir():
         return out

@@ -8,8 +8,8 @@ import yaml
 from temporalio import activity
 
 from .heatmap import build_heatmap, render_heatmap_html, render_heatmap_json
-from .judge import _CASES_DIR
 from .models import BenchmarkRecord, BenchmarkSummary, CompositeWeights
+from .paths import cases_dir as _default_cases_dir
 from .recorder import RecordStore, _root
 from .scoring import compute_summaries
 
@@ -112,7 +112,7 @@ def resolve_language_map(case_ids: list[str], cases_dir: Path | None = None) -> 
     """Best-effort {case_id: language} from each case's case.yaml. A missing
     manifest or language contributes ""; never raises (a broken manifest just
     means that case is language-unknown)."""
-    base = cases_dir if cases_dir is not None else _CASES_DIR
+    base = cases_dir if cases_dir is not None else _default_cases_dir()
     out: dict[str, str] = {}
     for cid in case_ids:
         lang = ""

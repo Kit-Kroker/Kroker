@@ -22,6 +22,7 @@ from ..process import _bounded_shell
 from ..toolchain.adapters import TOOLCHAINS, ToolchainKind, detect
 from ..vcs import _git
 from .judge import JudgeInput, _judge_sync
+from .paths import cases_dir
 from .tasks import TaskGrade, grade_tasks, load_task_suite
 
 
@@ -158,17 +159,6 @@ class OracleGrade:
     task_grades: list[TaskGrade] = field(default_factory=list)
 
 
-def _cases_dir() -> Path:
-    """Root holding benchmarks/cases/<case>/oracle/. Honors SDLC_CASES_ROOT
-    (read at call time) so tests point it at a temp dir, mirroring
-    recorder._root / activities._worktrees_root."""
-    return Path(
-        os.environ.get(
-            "SDLC_CASES_ROOT", str(Path(__file__).resolve().parents[3] / "benchmarks" / "cases")
-        )
-    )
-
-
 def _grade(
     score, passed, total, lang, detected, held, detail, task_grades: list[TaskGrade] | None = None
 ) -> OracleGrade:
@@ -192,7 +182,7 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
     strictly AFTER the child that produced the code. Fail-safe -- every failure
     returns score=None with a detail; never raises past this boundary."""
     lang = inp.language
-    oracle_src = _cases_dir() / inp.case_id / "oracle"
+    oracle_src = cases_dir() / inp.case_id / "oracle"
     if not oracle_src.is_dir():
         return _grade(None, 0, 0, lang, None, True, "no oracle dir for case")
     try:
