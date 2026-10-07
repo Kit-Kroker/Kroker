@@ -60,6 +60,8 @@ class BenchmarkScope(StrEnum):
     TASK_ATTEMPT = "task_attempt"
     ORACLE = "oracle"
     ORACLE_TASK = "oracle_task"
+    # 012: the one cell record per cell (stage "cell", role "cell").
+    CELL = "cell"
 
 
 class BenchmarkOutcome(StrEnum):
@@ -67,6 +69,9 @@ class BenchmarkOutcome(StrEnum):
     FAIL = "fail"
     REVISED = "revise"
     ESCALATED = "escalated"
+    # 012: a gate not evaluated in benchmark mode, or an oracle grade that
+    # could not run. Counted by no aggregate (plan rule 3: no reader guesses).
+    NOT_EVALUATED = "not_evaluated"
 
 
 class QualityScore(BaseModel):
@@ -156,6 +161,24 @@ class GraphAttribution(BaseModel):
         return self
 
 
+class CellStatus(BaseModel):
+    """012 (data-model §1.2): one cell's outcome status, carried only on the
+    cell record (`BenchmarkRecord.cell`, scope `CELL`). `completed` is
+    stored, not derived at read: it is `pipeline_finished and code_finished`
+    at write time. `last_stage` is the latest stage by `CELL_STAGE_ORDER`
+    that wrote a record; None when the cell wrote none."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    pipeline_finished: bool
+    code_finished: bool
+    completed: bool
+    last_stage: str | None = None
+    grading: Literal["graded", "not_graded", "grading_failed", "no_oracle"]
+    # The child's return text or its failure text, truncated to 500 chars.
+    child_result: str | None = None
+
+
 class BenchmarkRecord(BaseModel):
     # identity
     run_id: str
@@ -185,6 +208,18 @@ class BenchmarkRecord(BaseModel):
     # E-77: the graph the record's run pinned; None = FeatureWorkflow or a
     # pre-E-77 record (contracts/records-and-store.md).
     graph: GraphAttribution | None = None
+    # 012 (data-model §1.1): provenance and cell identity. None = the record
+    # predates 012 / the field is not recorded — never a real value guessed
+    # by a reader. A 012 writer always writes a commit id or the literal
+    # "unknown" (contract §2.1).
+    kroker_commit: str | None = None
+    tree_dirty: bool | None = None
+    # The cell label (ruling R1: the arm name) and the cell id; identical on
+    # every record of one cell so they land in one file and one report row.
+    arm: str | None = None
+    cell_id: str | None = None
+    # Set only on the cell record (scope CELL).
+    cell: CellStatus | None = None
 
 
 class CompositeWeights(BaseModel):
@@ -264,6 +299,62 @@ class BenchmarkCell(BaseModel):
         return f"{self.case_id}#{self.harness.value}{lead}#{self.arm_name}"
 
 
+# 012 (data-model §2.3): the record stage names in pipeline order. Every
+# writer stage is in it (a test fails when a writer uses a name that is
+# not); intake and retro emit trace events only and write no record.
+CELL_STAGE_ORDER: tuple[str, ...] = (
+    "research",
+    "clarify",
+    "architecture",
+    "plan",
+    "code",
+    "tool_approval",
+    "qa",
+    "review",
+    "adversary",
+    "deep_review",
+    "handoff",
+    "analyze",
+    "merge",
+    "deploy",
+)
+
+# 012: a post-code stage record is the "code stage finished" signal (R-4).
+POST_CODE_STAGES: frozenset[str] = frozenset({"analyze", "merge", "deploy"})
+
+
+def cell_key(r: BenchmarkRecord) -> str | None:
+    """012 (data-model §2.3): one label per cell. The record's `cell_id`
+    when set (a 012 record), else the pre-012 derivation — exactly
+    `recorder._cell_id_for`: `case#harness[:lead]#model` with `proposer`
+    when the record has no harness, and None for drift records
+    (`case_id == "_production"`), which share one file per bench run."""
+    if r.cell_id is not None:
+        return r.cell_id
+    if r.case_id == "_production":
+        return None
+    h = r.harness.value if r.harness else "proposer"
+    if r.lead_harness is not None:
+        h = f"{h}:{r.lead_harness.value}"
+    return f"{r.case_id}#{h}#{r.model}"
+
+
+def arm_label(r: BenchmarkRecord) -> str:
+    """012 (data-model §2.3): the cell's label for readers — the arm name
+    (ruling R1) when the record carries one, else the record's model
+    (the pre-012 label)."""
+    return r.arm if r.arm is not None else r.model
+
+
+def is_pre012(r: BenchmarkRecord) -> bool:
+    """012 (data-model §2.3): True exactly when the record predates the
+    round (`kroker_commit is None`) and is not a drift record: drift
+    records are written outside benchmark runs by a writer this round
+    does not change, never carry a commit, and are not counted as
+    pre-012 (contract §7.2)."""
+    return r.kroker_commit is None and r.case_id != "_production"
+
+
 class BenchmarkSummary(BaseModel):
     """Aggregate over all records for one (case, stage, harness, model),
     split further by lead_harness on harness=CREW records -- otherwise a
@@ -280,3 +371,9 @@ class BenchmarkSummary(BaseModel):
     mean_wall_clock_s: float | None
     composite: float | None
     errors: list[str] = Field(default_factory=list)
+    # 012 (data-model §1.4): the cell the row belongs to (012 rows only);
+    # `pre012` marks a row that aggregates pre-012 records only — a row
+    # never mixes kinds (contract §7.3).
+    cell_id: str | None = None
+    arm: str | None = None
+    pre012: bool = False

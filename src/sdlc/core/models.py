@@ -232,6 +232,14 @@ class BenchmarkConfig(BaseModel):
     rubrics: dict[str, str] = Field(default_factory=dict)  # stage -> rubric text
     vetoes: dict[str, str] = Field(default_factory=dict)  # stage -> veto YAML text (E-83)
     judge_model: str | None = None  # model the judge uses
+    # 012 (data-model §1.5): per-run provenance and cell identity, resolved
+    # once at benchmark start and copied onto every record the run writes
+    # (contract §2.7). Optional and defaulted: old payloads validate
+    # unchanged, and a non-benchmark run never sets them.
+    arm: str | None = None
+    cell_id: str | None = None
+    kroker_commit: str | None = None
+    tree_dirty: bool | None = None
 
 
 def gate_key(gate: str, round: int) -> str:

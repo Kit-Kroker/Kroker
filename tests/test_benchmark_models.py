@@ -240,3 +240,183 @@ def test_current_record_json_without_graph_key_parses_unchanged():
     r2 = BenchmarkRecord.model_validate_json(json.dumps(captured))
     assert r2 == r
     assert r2.graph is None
+
+
+# --- 012 T002 (RED): provenance fields, CellStatus, cell-key helpers --------
+# Names: .specify/specs/012-benchmark-record-trust/data-model.md §1.1-1.4
+# and §2.3. New symbols are imported function-local (the file's E-77
+# convention) so each missing name fails its own test instead of breaking
+# collection of the file.
+
+
+def test_record_without_new_fields_reads_as_not_recorded():
+    """data-model §1.1: every addition is optional with default None;
+    absent reads as pre-012 / not recorded."""
+    r = _record()
+    assert r.kroker_commit is None
+    assert r.tree_dirty is None
+    assert r.arm is None
+    assert r.cell_id is None
+    assert r.cell is None
+
+
+def test_cell_scope_and_not_evaluated_outcome_exist():
+    """data-model §1.3: the two new enum values, exact strings."""
+    assert BenchmarkScope.CELL.value == "cell"
+    assert BenchmarkOutcome.NOT_EVALUATED.value == "not_evaluated"
+
+
+def _cell_status(**kw):
+    from sdlc.benchmarks.models import CellStatus
+
+    base = dict(
+        pipeline_finished=True,
+        code_finished=True,
+        completed=True,
+        last_stage="merge",
+        grading="graded",
+        child_result="ok",
+    )
+    base.update(kw)
+    return CellStatus(**base)
+
+
+def test_cell_status_minimal_build_round_trips():
+    """data-model §1.2: CellStatus built from its six fields keeps them."""
+    s = _cell_status()
+    assert (s.pipeline_finished, s.code_finished, s.completed) == (True, True, True)
+    assert s.last_stage == "merge"
+    assert s.grading == "graded"
+    assert s.child_result == "ok"
+
+
+def test_cell_status_child_result_may_be_none():
+    assert _cell_status(child_result=None).child_result is None
+
+
+def test_cell_status_is_frozen():
+    import pytest
+    from pydantic import ValidationError
+
+    s = _cell_status()
+    with pytest.raises(ValidationError):
+        s.grading = "not_graded"
+
+
+def test_cell_status_rejects_unknown_field():
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        _cell_status(bogus=1)
+
+
+def test_cell_status_grading_is_limited_to_the_contract_states():
+    import pytest
+    from pydantic import ValidationError
+
+    for grading in ("graded", "not_graded", "grading_failed", "no_oracle"):
+        assert _cell_status(grading=grading).grading == grading
+    with pytest.raises(ValidationError):
+        _cell_status(grading="failed")
+
+
+def test_cell_key_prefers_the_record_cell_id():
+    from sdlc.benchmarks.models import cell_key
+
+    r = _record(kroker_commit="deadbeef", arm="a1", cell_id="add-login#opencode#a1")
+    assert cell_key(r) == "add-login#opencode#a1"
+
+
+def test_cell_key_pre012_derivation_matches_recorder():
+    """data-model §2.3: `case#harness[:lead]#model`, `proposer` when no
+    harness — exactly recorder.py `_cell_id_for`'s pre-012 derivation."""
+    from sdlc.benchmarks.models import cell_key
+
+    proposer = _record(harness=None)
+    assert cell_key(proposer) == f"add-login#proposer#{proposer.model}"
+    harness = _record(harness=HarnessKind.OPENCODE)
+    assert cell_key(harness) == (f"add-login#{HarnessKind.OPENCODE.value}#{harness.model}")
+    crew = _record(harness=HarnessKind.CREW, lead_harness=HarnessKind.CLAUDE_CODE)
+    assert cell_key(crew) == (
+        f"add-login#{HarnessKind.CREW.value}:{HarnessKind.CLAUDE_CODE.value}#{crew.model}"
+    )
+
+
+def test_arm_label_prefers_arm_else_model():
+    from sdlc.benchmarks.models import arm_label
+
+    assert arm_label(_record(arm="zai-glm")) == "zai-glm"
+    assert arm_label(_record(model="anthropic:claude-sonnet-4-6")) == (
+        "anthropic:claude-sonnet-4-6"
+    )
+
+
+def test_is_pre012_cases():
+    """data-model §2.3: `kroker_commit is None and case_id != '_production'`.
+    Drift records are never pre-012; an explicit `unknown` commit is a 012
+    record, not a pre-012 one."""
+    from sdlc.benchmarks.models import is_pre012
+
+    assert is_pre012(_record(kroker_commit="deadbeef")) is False
+    assert is_pre012(_record(kroker_commit="unknown")) is False
+    assert is_pre012(_record()) is True
+    assert is_pre012(_record(case_id="_production")) is False
+    assert is_pre012(_record(case_id="_production", kroker_commit="deadbeef")) is False
+
+
+def test_post_code_stages_constant():
+    from sdlc.benchmarks.models import POST_CODE_STAGES
+
+    assert POST_CODE_STAGES == frozenset({"analyze", "merge", "deploy"})
+
+
+# The 14 record-writing stage names in pipeline order (data-model §2.3;
+# tasks T001(d) writer inventory).
+_WRITER_STAGES = (
+    "research",
+    "clarify",
+    "architecture",
+    "plan",
+    "code",
+    "tool_approval",
+    "qa",
+    "review",
+    "adversary",
+    "deep_review",
+    "handoff",
+    "analyze",
+    "merge",
+    "deploy",
+)
+
+
+def test_cell_stage_order_covers_exactly_the_writer_inventory():
+    """data-model §2.3: CELL_STAGE_ORDER holds exactly the record writers,
+    in pipeline order — no renamed stage can silently fall out."""
+    from sdlc.benchmarks.models import CELL_STAGE_ORDER
+
+    assert set(CELL_STAGE_ORDER) == set(_WRITER_STAGES)
+    order = {stage: i for i, stage in enumerate(CELL_STAGE_ORDER)}
+    assert order["research"] < order["plan"] < order["code"] < order["qa"]
+    assert order["code"] < order["review"] < order["analyze"]
+    assert order["analyze"] < order["merge"] < order["deploy"]
+
+
+def test_benchmark_summary_cell_row_fields_default():
+    """data-model §1.4: BenchmarkSummary gains cell_id, arm (None) and
+    pre012 (False); a row never starts out marked 012."""
+    s = BenchmarkSummary(
+        case_id="add-login",
+        stage="code",
+        harness=HarnessKind.CLAUDE_CODE,
+        model="anthropic:claude-sonnet-4-6",
+        n=3,
+        mean_quality=0.9,
+        mean_cost_usd=0.5,
+        mean_wall_clock_s=120.0,
+        composite=0.88,
+    )
+    assert s.cell_id is None
+    assert s.arm is None
+    assert s.pre012 is False
