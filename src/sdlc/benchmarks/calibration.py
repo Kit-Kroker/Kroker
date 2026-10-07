@@ -242,6 +242,11 @@ def run_calibration(
 STAGE_TO_RUBRIC: dict[str, str] = {
     "clarify": "clarifier",
     "architecture": "architect",
+    # 012 (FR-004): records say "plan", the heatmap's canonical name still
+    # says "planning" — both map until the three vocabularies are unified
+    # (filed follow-up); the key-set pin in tests/test_calibration_render.py
+    # fails the next rename that loses one.
+    "plan": "planner",
     "planning": "planner",
     "qa": "qa",
     "research": "research",
