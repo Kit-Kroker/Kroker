@@ -90,3 +90,110 @@ def test_other_cases_are_excluded():
     )
     cell = next(c for c in am.cells if c.metric == "split_rate")
     assert cell.value == 0.0
+
+
+# --- 012 T010b (chaos seat): immunity, keying, pre-012 line -------------------
+
+
+def _cell_rec(*, arm="a1"):
+    from datetime import timedelta
+
+    from sdlc.benchmarks.models import CellStatus
+
+    return BenchmarkRecord(
+        run_id=f"b1/c1#opencode#{arm}",
+        bench_run_id="b1",
+        case_id="c1",
+        scope=BenchmarkScope.CELL,
+        stage="cell",
+        role="cell",
+        harness=HarnessKind.OPENCODE,
+        model="deterministic",
+        prompt_sha="none:deterministic",
+        quality=QualityScore(score=None, judge="contract"),
+        speed=SpeedBag(wall_clock_s=1.0, started_at=_T, ended_at=_T + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.FAIL,
+        kroker_commit="abc",
+        tree_dirty=False,
+        arm=arm,
+        cell_id=f"c1#opencode#{arm}",
+        cell=CellStatus(
+            pipeline_finished=True,
+            code_finished=False,
+            completed=False,
+            last_stage="clarify",
+            grading="not_graded",
+            child_result=None,
+        ),
+    )
+
+
+def _rec012(stage, outcome, *, arm="a1", task_id="t1", usd=0.02):
+    r = _rec(stage, outcome, task_id=task_id, usd=usd)
+    return r.model_copy(
+        update={
+            "kroker_commit": "abc",
+            "tree_dirty": False,
+            "arm": arm,
+            "cell_id": f"c1#claude_code#{arm}",
+        }
+    )
+
+
+def test_not_evaluated_record_enters_no_cell():
+    """Contract 7.8: a not_evaluated adversary record with the SAME task_id
+    and arm as existing records enters neither n_records, nor the split
+    denominator, nor the spend."""
+    base = [
+        _rec("adversary", BenchmarkOutcome.FAIL),
+        _rec("adversary", BenchmarkOutcome.PASS),
+    ]
+    am = build_agreement_matrix("c1", base)
+    polluter = _rec("adversary", BenchmarkOutcome.NOT_EVALUATED, usd=0.99)
+    am2 = build_agreement_matrix("c1", base + [polluter, _cell_rec()])
+    assert [c.model_dump() for c in am2.cells] == [c.model_dump() for c in am.cells]
+    assert am2.arms == am.arms
+
+
+def test_012_arm_key_uses_the_arm_label():
+    recs = [_rec012("adversary", BenchmarkOutcome.FAIL, arm="a1")]
+    am = build_agreement_matrix("c1", recs)
+    assert am.arms == ["claude_code#a1"]
+    cell = next(c for c in am.cells if c.metric == "split_rate")
+    assert cell.arm_key == "claude_code#a1"
+
+
+def test_pre012_arm_key_stays_harness_model_byte_identical():
+    am = build_agreement_matrix("c1", [_rec("adversary", BenchmarkOutcome.FAIL)])
+    assert am.arms == ["claude_code#anthropic:x"]
+
+
+def test_agreement_matrix_carries_the_pre012_count_when_present():
+    import json
+
+    from sdlc.benchmarks.agreement_matrix import (
+        render_agreement_matrix_html,
+        render_agreement_matrix_json,
+    )
+
+    recs = [
+        _rec("adversary", BenchmarkOutcome.FAIL),
+        _rec012("adversary", BenchmarkOutcome.FAIL, arm="a1"),
+        _cell_rec(),  # cell-scope records are not counted
+    ]
+    am = build_agreement_matrix("c1", recs)
+    assert "includes 1 pre-012 records (untrusted)" in render_agreement_matrix_html(am)
+    assert json.loads(render_agreement_matrix_json(am))["pre012_records"] == 1
+
+
+def test_agreement_matrix_has_no_pre012_line_when_count_is_zero():
+    import json
+
+    from sdlc.benchmarks.agreement_matrix import (
+        render_agreement_matrix_html,
+        render_agreement_matrix_json,
+    )
+
+    am = build_agreement_matrix("c1", [_rec012("adversary", BenchmarkOutcome.FAIL)])
+    assert "pre-012" not in render_agreement_matrix_html(am)
+    assert json.loads(render_agreement_matrix_json(am))["pre012_records"] == 0

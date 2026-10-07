@@ -281,3 +281,79 @@ def test_html_and_json_render():
     rollup = build_sc_rollup(_n_summaries(MIN_RUNS), [])
     assert "<!doctype html>" in render_sc_rollup_html(rollup)
     assert json.loads(render_sc_rollup_json(rollup))["rates"]
+
+
+# --- 012 T010 (RED): rollup immunity + the pre-012 line (contract §7.6/7.8) -
+
+
+def _cell_scope_rec(run="run-1"):
+    from sdlc.benchmarks.models import CellStatus
+
+    r = _code(run, "t-x", BenchmarkOutcome.PASS, 0)
+    return r.model_copy(
+        update={
+            "scope": BenchmarkScope.CELL,
+            "stage": "cell",
+            "role": "cell",
+            "task_id": None,
+            "attempt": None,
+            "quality": QualityScore(score=None, judge="contract"),
+            "cell": CellStatus(
+                pipeline_finished=True,
+                code_finished=True,
+                completed=True,
+                last_stage="merge",
+                grading="graded",
+                child_result="ok",
+            ),
+            "kroker_commit": "abc123",
+        }
+    )
+
+
+def _not_evaluated_merge_rec(run="run-1"):
+    """A gate recorded as not evaluated in benchmark mode: neither pass nor
+    fail -- the SC-3 code-stage grouping must not see it."""
+    r = _code(run, "t-x", BenchmarkOutcome.FAIL, 0)
+    return r.model_copy(
+        update={
+            "stage": "merge",
+            "task_id": None,
+            "attempt": None,
+            "outcome": BenchmarkOutcome.NOT_EVALUATED,
+            "quality": QualityScore(score=None, judge="contract"),
+        }
+    )
+
+
+def test_cell_and_not_evaluated_records_change_no_rate():
+    """Both records ride an EXISTING run id, so the invariant is about
+    aggregation, not run discovery."""
+    summaries = _n_summaries(MIN_RUNS)
+    recs = []
+    for i in range(MIN_RUNS):
+        recs += _loop(f"run-{i}", f"t{i}", BenchmarkOutcome.PASS)
+    base = build_sc_rollup(summaries, recs)
+    with_extra = build_sc_rollup(
+        summaries, recs + [_cell_scope_rec("run-1"), _not_evaluated_merge_rec("run-1")]
+    )
+    assert [(x.criterion, x.n, x.rate) for x in with_extra.rates] == [
+        (x.criterion, x.n, x.rate) for x in base.rates
+    ]
+    assert with_extra.sc4_series == base.sc4_series
+
+
+def test_sc_rollup_markdown_and_html_state_the_pre012_count_when_present():
+    """The count comes from the records handed to build_sc_rollup: three
+    pre-012 code records (plus one 012) must put the exact line in BOTH
+    renderers; with only 012 records the line is absent."""
+    summaries = _n_summaries(MIN_RUNS)
+    pre = [_code(f"run-{i}", f"p{i}", BenchmarkOutcome.PASS, 0) for i in range(3)]
+    only_012 = [pre[0].model_copy(update={"kroker_commit": "abc123"})]
+    line = "includes 3 pre-012 records (untrusted)"
+    rollup = build_sc_rollup(summaries, pre + only_012)
+    assert line in render_sc_rollup_markdown(rollup)
+    assert line in render_sc_rollup_html(rollup)
+    plain = build_sc_rollup(summaries, only_012)
+    assert "pre-012" not in render_sc_rollup_markdown(plain)
+    assert "pre-012" not in render_sc_rollup_html(plain)

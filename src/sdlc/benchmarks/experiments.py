@@ -26,7 +26,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from .evidence import Evidence
-from .models import CompositeWeights
+from .models import BenchmarkOutcome, CompositeWeights, arm_label
 from .waste_matrix import WASTE_METRICS
 
 # Below this many observations of a cell, a delta IS noise. No p-values on
@@ -108,16 +108,34 @@ def _cells(ev: Evidence, weights: CompositeWeights):
     )
     waste_n: dict[tuple[str, str, str], int] = defaultdict(int)
     for r in ev.records:
-        if r.waste is None:
+        # 012 (contract §7.7/§7.8): the arm component is arm_label — the
+        # arm for a 012 record, the bare model for a pre-012 record, so
+        # pre-012 keys are unchanged; a not_evaluated record enters no mean.
+        # A record with no harness keys by its label alone (a proposer-side
+        # cell's identity is the label; an empty-harness prefix would only
+        # add noise to the column name).
+        if r.waste is None or r.outcome is BenchmarkOutcome.NOT_EVALUATED:
             continue
-        key = (r.case_id, r.stage, f"{r.harness.value if r.harness else ''}#{r.model}")
+        label = arm_label(r)
+        key = (
+            (r.case_id, r.stage, f"{r.harness.value}#{label}")
+            if r.harness
+            else (r.case_id, r.stage, label)
+        )
         waste_n[key] += 1
         for m in WASTE_METRICS:
             waste_sum[key][m] += float(getattr(r.waste, m))
 
     out = {}
     for s in aggregate("", weights, _records=ev.records):
-        key = (s.case_id, s.stage, f"{s.harness.value if s.harness else ''}#{s.model}")
+        # the summary join reads the same label: BenchmarkSummary.arm for a
+        # 012 row, the bare model for a pre-012 row.
+        label = s.arm or s.model
+        key = (
+            (s.case_id, s.stage, f"{s.harness.value}#{label}")
+            if s.harness
+            else (s.case_id, s.stage, label)
+        )
         n = waste_n.get(key, 0)
         waste = {m: waste_sum[key][m] / n for m in WASTE_METRICS} if n else {}
         out[key] = (s, n, waste)
@@ -164,8 +182,10 @@ def compute_deltas(
     return rows
 
 
-def render_deltas_markdown(rows: list[DeltaRow]) -> str:
-    """ASCII only (report.py:70-74)."""
+def render_deltas_markdown(rows: list[DeltaRow], pre012_records: int = 0) -> str:
+    """ASCII only (report.py:70-74). The pre-012 count is the caller's to
+    compute over its evidence records (contract §7.6): the line renders
+    only when pre-012 records are included."""
     if not rows:
         return "No overlapping cells between baseline and candidate.\n"
 
@@ -182,6 +202,8 @@ def render_deltas_markdown(rows: list[DeltaRow]) -> str:
             f"{f(r.cost_usd)} | {f(r.wall_s)} | {f(r.composite)} | "
             f"{f(r.waste.get('tool_calls'))} | {r.n} | {r.note} |"
         )
+    if pre012_records:
+        lines += ["", f"includes {pre012_records} pre-012 records (untrusted)"]
     return "\n".join(lines) + "\n"
 
 

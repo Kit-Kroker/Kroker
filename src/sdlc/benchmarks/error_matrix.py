@@ -12,7 +12,7 @@ from html import escape
 
 from pydantic import BaseModel, Field
 
-from .models import BenchmarkRecord, BenchmarkScope
+from .models import BenchmarkRecord, BenchmarkScope, arm_label, is_pre012
 from .tasks import ERROR_CLASSES, TaskSuite
 
 
@@ -29,17 +29,20 @@ class ErrorMatrix(BaseModel):
     arms: list[str] = Field(default_factory=list)
     cells: list[ErrorMatrixCell] = Field(default_factory=list)
     max_value: float = 0.0
+    # 012 (contract §7.6): pre-012 records among this case's input
+    # (cell-scope records excluded); rendered as the untrusted line.
+    pre012_records: int = 0
 
 
 def build_error_matrix(
     case_id: str, records: list[BenchmarkRecord], suite: TaskSuite
 ) -> ErrorMatrix:
     class_by_task = {t.id: t.error_class for t in suite.tasks}
+    case_recs = [r for r in records if r.case_id == case_id and r.scope is not BenchmarkScope.CELL]
     recs = [
         r
-        for r in records
+        for r in case_recs
         if r.scope is BenchmarkScope.ORACLE_TASK
-        and r.case_id == case_id
         and r.task_id in class_by_task
         and r.quality.score is not None
     ]
@@ -53,7 +56,9 @@ def build_error_matrix(
         h = r.harness.value if r.harness else ""
         if r.lead_harness:
             h = f"{h}:{r.lead_harness.value}"
-        arm_key = f"{h}#{r.model}"
+        # 012 (contract §7.7): arm_label — the arm for a 012 record, the
+        # bare model for a pre-012 record, so pre-012 keys are unchanged.
+        arm_key = f"{h}#{arm_label(r)}"
         cls = class_by_task[r.task_id]
         mass[(r.bench_run_id, arm_key, cls)] += 1.0 - r.quality.score
         runs_by_arm_class[(arm_key, cls)].add(r.bench_run_id)
@@ -76,7 +81,12 @@ def build_error_matrix(
     classes = [c for c in ERROR_CLASSES if c in present]
     max_value = max((c.avg_failure_mass for c in cells), default=0.0)
     return ErrorMatrix(
-        case_id=case_id, error_classes=classes, arms=arms, cells=cells, max_value=max_value
+        case_id=case_id,
+        error_classes=classes,
+        arms=arms,
+        cells=cells,
+        max_value=max_value,
+        pre012_records=sum(1 for r in case_recs if is_pre012(r)),
     )
 
 
@@ -115,6 +125,11 @@ def render_error_matrix_html(em: ErrorMatrix) -> str:
                 )
             rows.append("<tr>" + "".join(tds) + "</tr>")
         body = f"<table><tr><th>error class \\ arm</th>{head}</tr>" + "".join(rows) + "</table>"
+    untrusted = (
+        f"\n<p>includes {em.pre012_records} pre-012 records (untrusted)</p>"
+        if em.pre012_records
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Error-class matrix - {escape(em.case_id)}</title>
@@ -129,5 +144,5 @@ th{{background:#f3f3f3}} td.empty{{background:#fafafa}}
 <p>Cell = average per-task failure mass (sum of 1-score) per run, for that
 error class on that harness#model arm. Whiter is cleaner; redder is more
 failure-prone.</p>
-{body}
+{body}{untrusted}
 </body></html>"""

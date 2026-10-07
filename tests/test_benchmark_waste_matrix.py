@@ -172,3 +172,103 @@ def test_json_round_trips():
 def test_empty_records_render_without_raising():
     wm = build_waste_matrix("c1", [])
     assert "No waste records" in render_waste_matrix_html(wm)
+
+
+# --- 012 T010b (chaos seat): immunity, keying, pre-012 line -------------------
+
+
+def _cell_rec(*, arm="a1"):
+    from sdlc.benchmarks.models import CellStatus
+
+    return BenchmarkRecord(
+        run_id=f"b1/c1#opencode#{arm}",
+        bench_run_id="b1",
+        case_id="c1",
+        scope=BenchmarkScope.CELL,
+        stage="cell",
+        role="cell",
+        harness=HarnessKind.OPENCODE,
+        model="deterministic",
+        prompt_sha="none:deterministic",
+        quality=QualityScore(score=None, judge="contract"),
+        speed=SpeedBag(wall_clock_s=1.0, started_at=T, ended_at=T),
+        outcome=BenchmarkOutcome.FAIL,
+        kroker_commit="abc",
+        tree_dirty=False,
+        arm=arm,
+        cell_id=f"c1#opencode#{arm}",
+        cell=CellStatus(
+            pipeline_finished=True,
+            code_finished=False,
+            completed=False,
+            last_stage="clarify",
+            grading="not_graded",
+            child_result=None,
+        ),
+    )
+
+
+def _rec012(*, task, model="m", arm="a1", bench="b1"):
+    r = _rec(task=task, bench=bench, model=model, waste=WasteBag(tool_calls=5))
+    return r.model_copy(
+        update={
+            "kroker_commit": "abc",
+            "tree_dirty": False,
+            "arm": arm,
+            "cell_id": f"c1#opencode#{arm}",
+        }
+    )
+
+
+def test_not_evaluated_record_changes_no_waste_value():
+    """Contract 7.8: a not_evaluated record with the SAME task and arm as
+    an existing record enters no mean and no run count -- even when it
+    carries a WasteBag."""
+    base = [
+        _rec(task="t01", bench="b1", waste=WasteBag(tool_calls=10)),
+        _rec(task="t01", bench="b2", waste=WasteBag(tool_calls=20)),
+    ]
+    wm = build_waste_matrix("c1", base)
+    polluter = _rec(task="t01", bench="b1", waste=WasteBag(tool_calls=999)).model_copy(
+        update={
+            "outcome": BenchmarkOutcome.NOT_EVALUATED,
+            "quality": QualityScore(score=None, judge="contract"),
+        }
+    )
+    wm2 = build_waste_matrix("c1", base + [polluter, _cell_rec()])
+    assert _cell(wm2, "t01", "opencode#m", "tool_calls") == _cell(
+        wm, "t01", "opencode#m", "tool_calls"
+    )
+
+
+def test_012_arm_key_uses_the_arm_label():
+    r = _rec012(task="t01", model="m1", arm="a1")
+    wm = build_waste_matrix("c1", [r])
+    assert wm.arms == ["opencode#a1"]
+    assert _cell(wm, "t01", "opencode#a1", "tool_calls").arm_key == "opencode#a1"
+
+
+def test_pre012_arm_key_stays_harness_model_byte_identical():
+    wm = build_waste_matrix("c1", [_rec(task="t01", model="m1", waste=WasteBag(tool_calls=1))])
+    assert wm.arms == ["opencode#m1"]
+
+
+def test_waste_matrix_carries_the_pre012_count_when_present():
+    import json
+
+    recs = [
+        _rec(task="t01", bench="b1", waste=WasteBag(tool_calls=1)),
+        _rec012(task="t01", bench="b2", model="m2", arm="a1"),
+        _cell_rec(),  # cell-scope records are not counted
+    ]
+    wm = build_waste_matrix("c1", recs)
+    assert "includes 1 pre-012 records (untrusted)" in render_waste_matrix_html(wm)
+    assert json.loads(render_waste_matrix_json(wm))["pre012_records"] == 1
+
+
+def test_waste_matrix_has_no_pre012_line_when_count_is_zero():
+    import json
+
+    wm = build_waste_matrix("c1", [_rec012(task="t01")])
+    assert "pre-012" not in render_waste_matrix_html(wm)
+    assert json.loads(render_waste_matrix_json(wm))["pre012_records"] == 0

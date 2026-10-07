@@ -125,3 +125,110 @@ def test_build_error_matrix_n_runs_scoped_per_error_class():
     # Security: only run b2 contributed (b1 had score=None, filtered out)
     assert security.n_runs == 1
     assert security.avg_failure_mass == 0.8  # (1-0.2) / 1
+
+
+# --- 012 T010b (chaos seat): immunity, keying, pre-012 line -------------------
+
+
+def _cell_rec():
+    from datetime import timedelta
+
+    from sdlc.benchmarks.models import CellStatus
+
+    t = datetime(2026, 7, 20, 10)
+    return BenchmarkRecord(
+        run_id="b1/c1#opencode#a1",
+        bench_run_id="b1",
+        case_id="c1",
+        scope=BenchmarkScope.CELL,
+        stage="cell",
+        role="cell",
+        harness=HarnessKind.OPENCODE,
+        model="deterministic",
+        prompt_sha="none:deterministic",
+        quality=QualityScore(score=None, judge="contract"),
+        speed=SpeedBag(wall_clock_s=1.0, started_at=t, ended_at=t + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.FAIL,
+        kroker_commit="abc",
+        tree_dirty=False,
+        arm="a1",
+        cell_id="c1#opencode#a1",
+        cell=CellStatus(
+            pipeline_finished=True,
+            code_finished=False,
+            completed=False,
+            last_stage="clarify",
+            grading="not_graded",
+            child_result=None,
+        ),
+    )
+
+
+def _rec012(*, run, model, arm, task_id, score):
+    r = _rec(run=run, model=model, task_id=task_id, score=score)
+    return r.model_copy(
+        update={
+            "kroker_commit": "abc",
+            "tree_dirty": False,
+            "arm": arm,
+            "cell_id": f"c1#opencode#{arm}",
+        }
+    )
+
+
+def test_cell_and_not_evaluated_records_change_no_cell():
+    """Contract 7.6/7.8: a cell-scope record and a not_evaluated record
+    (same task_id and model as an existing record) change no cell's average
+    failure mass or run count."""
+    recs = [_rec(run="b1", model="m1", task_id="t01", score=0.0)]
+    em = build_error_matrix("c1", recs, _suite())
+    not_evaluated = _rec(run="b1", model="m1", task_id="t01", score=None)
+    not_evaluated = not_evaluated.model_copy(update={"outcome": BenchmarkOutcome.NOT_EVALUATED})
+    em2 = build_error_matrix("c1", recs + [_cell_rec(), not_evaluated], _suite())
+    assert [c.model_dump() for c in em2.cells] == [c.model_dump() for c in em.cells]
+    assert em2.arms == em.arms
+    assert em2.max_value == em.max_value
+
+
+def test_012_arm_key_uses_the_arm_label():
+    """Contract 7.7: a 012 record's arm key is harness + the ARM, so two
+    cells of one arm share a column across bench runs even when their
+    model strings differ."""
+    recs = [_rec012(run="b1", model="m1", arm="a1", task_id="t01", score=0.0)]
+    em = build_error_matrix("c1", recs, _suite())
+    assert em.arms == ["opencode#a1"]
+    cell = next(c for c in em.cells if c.error_class == "functional")
+    assert cell.arm_key == "opencode#a1"
+    assert cell.avg_failure_mass == 1.0
+
+
+def test_pre012_arm_key_stays_harness_model_byte_identical():
+    recs = [_rec(run="b1", model="m1", task_id="t01", score=0.0)]
+    em = build_error_matrix("c1", recs, _suite())
+    assert em.arms == ["opencode#m1"]
+
+
+def test_error_matrix_carries_the_pre012_count_when_present():
+    import json
+
+    from sdlc.benchmarks.error_matrix import render_error_matrix_html, render_error_matrix_json
+
+    recs = [
+        _rec(run="b1", model="m1", task_id="t01", score=0.0),
+        _rec012(run="b1", model="m2", arm="a1", task_id="t01", score=0.5),
+        _cell_rec(),  # cell-scope records are not counted
+    ]
+    em = build_error_matrix("c1", recs, _suite())
+    assert "includes 1 pre-012 records (untrusted)" in render_error_matrix_html(em)
+    assert json.loads(render_error_matrix_json(em))["pre012_records"] == 1
+
+
+def test_error_matrix_has_no_pre012_line_when_count_is_zero():
+    import json
+
+    from sdlc.benchmarks.error_matrix import render_error_matrix_html, render_error_matrix_json
+
+    recs = [_rec012(run="b1", model="m1", arm="a1", task_id="t01", score=0.0)]
+    em = build_error_matrix("c1", recs, _suite())
+    assert "pre-012" not in render_error_matrix_html(em)
+    assert json.loads(render_error_matrix_json(em))["pre012_records"] == 0

@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from ..core.models import (
     RunSummary,
 )
-from .models import BenchmarkOutcome, BenchmarkRecord
+from .models import BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, is_pre012
 
 # Below this many runs a percentage is noise dressed as a result. A single
 # green run rendering "100%" WILL be quoted; n/a cannot be.
@@ -51,6 +51,9 @@ class SC4Point(BaseModel):
 class SCRollup(BaseModel):
     rates: list[SCRate] = Field(default_factory=list)
     sc4_series: list[SC4Point] = Field(default_factory=list)
+    # 012 (contract §7.6): pre-012 records among the input (cell-scope
+    # records excluded); rendered as the untrusted line.
+    pre012_records: int = 0
 
 
 def _rate(n_hits: int, n: int) -> float | None:
@@ -61,9 +64,11 @@ def _rate(n_hits: int, n: int) -> float | None:
 
 def build_sc_rollup(summaries: list[RunSummary], records: list[BenchmarkRecord]) -> SCRollup:
     ordered = sorted(summaries, key=lambda s: (s.started_at, s.run_id))
+    data = [r for r in records if r.scope is not BenchmarkScope.CELL]
     return SCRollup(
-        rates=[_sc1(ordered), _sc3(records), _sc4(ordered), *_sc6(ordered)],
+        rates=[_sc1(ordered), _sc3(data), _sc4(ordered), *_sc6(ordered)],
         sc4_series=_sc4_series(ordered),
+        pre012_records=sum(1 for r in data if is_pre012(r)),
     )
 
 
@@ -215,6 +220,8 @@ def render_sc_rollup_markdown(r: SCRollup) -> str:
         lines += [f"- {p.index}: {p.run_id} {p.human_rate:.2f}" for p in r.sc4_series]
     lines += ["", "Definitions:", ""]
     lines += [f"- **{x.criterion}**: {x.note}" for x in r.rates if x.note]
+    if r.pre012_records:
+        lines += ["", f"includes {r.pre012_records} pre-012 records (untrusted)"]
     return "\n".join(lines) + "\n"
 
 
@@ -228,6 +235,11 @@ def render_sc_rollup_html(r: SCRollup) -> str:
     )
     notes = "".join(
         f"<li><b>{escape(x.criterion)}</b>: {escape(x.note)}</li>" for x in r.rates if x.note
+    )
+    untrusted = (
+        f"<p>includes {r.pre012_records} pre-012 records (untrusted)</p>"
+        if r.pre012_records
+        else ""
     )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Success criteria</title>
@@ -243,5 +255,5 @@ th{{background:#f3f3f3}} li{{margin:.3rem 0}}
 run displaying 100% would be quoted as a result.</p>
 <table><tr><th>criterion</th><th>measure</th><th>rate</th><th>n</th>
 <th>target</th><th></th></tr>{rows}</table>
-<h2>Definitions</h2><ul>{notes}</ul>
+<h2>Definitions</h2><ul>{notes}</ul>{untrusted}
 </body></html>"""

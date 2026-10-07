@@ -12,7 +12,7 @@ from html import escape
 
 from pydantic import BaseModel, Field
 
-from .models import BenchmarkOutcome, BenchmarkRecord, BenchmarkScope
+from .models import BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, is_pre012
 
 # 'review', 'adversary', 'handoff' and 'deep_review' are LENSES, not DAG
 # stages. They are listed so they render in a sensible column order rather
@@ -68,15 +68,25 @@ class Heatmap(BaseModel):
     stages: list[str] = Field(default_factory=list)
     max_density: float = 0.0
     language_by_case: dict[str, str] = Field(default_factory=dict)
+    # 012 (contract §7.6): pre-012 records among the input (cell-scope
+    # records excluded — status, not data). Rendered as the untrusted line.
+    pre012_records: int = 0
 
 
 def build_heatmap(
     records: list[BenchmarkRecord], language_by_case: dict[str, str] | None = None
 ) -> Heatmap:
     language_by_case = language_by_case or {}
+    # 012 (contract §7.6/§7.8): the one cell record per cell is status, not
+    # a measurement — it enters no count and, critically, its child-run id
+    # enters no run denominator. A not_evaluated outcome is neither rework
+    # nor a pass (it is not in REWORK_OUTCOMES), so stage records under it
+    # still count their run as a run.
+    data = [r for r in records if r.scope is not BenchmarkScope.CELL]
+    pre012_records = sum(1 for r in data if is_pre012(r))
 
     runs_by_case: dict[str, set[str]] = defaultdict(set)
-    for r in records:
+    for r in data:
         runs_by_case[r.case_id].add(r.run_id)
 
     acc: dict[tuple[str, str], dict[str, int]] = defaultdict(
@@ -95,7 +105,7 @@ def build_heatmap(
     # no producer emits task_id=None with a nonzero counter, and
     # per-record passthrough keeps pre-attribution records byte-stable.
     fix_group_max: dict[tuple[str, str, str, str], int] = {}
-    for r in records:
+    for r in data:
         if r.scope is BenchmarkScope.ORACLE_TASK:
             # task-level detail belongs in the task/error matrices (E-36
             # follow-on), not this case x stage rework-density heatmap.
@@ -126,7 +136,7 @@ def build_heatmap(
     # count. Skipped entirely when no record carries the indicator, so
     # output stays byte-identical to pre-E-77 records.
     reentered: set[tuple[str, str, str, str]] = set()
-    for r in records:
+    for r in data:
         g = r.graph
         if (
             g is not None
@@ -162,7 +172,12 @@ def build_heatmap(
     max_density = max((c.density for c in cells), default=0.0)
     lang = {c: language_by_case.get(c, "") for c in cases}
     return Heatmap(
-        cells=cells, cases=cases, stages=stages, max_density=max_density, language_by_case=lang
+        cells=cells,
+        cases=cases,
+        stages=stages,
+        max_density=max_density,
+        language_by_case=lang,
+        pre012_records=pre012_records,
     )
 
 
@@ -211,6 +226,12 @@ def render_heatmap_html(hm: Heatmap, calibration_html: str = "") -> str:
             cases = [c for c in hm.cases if hm.language_by_case.get(c) == lang]
             sections.append(f"<h2>{escape(lang)}</h2>{_grid(hm, cases)}")
         body = "".join(sections)
+    # 012 (contract §7.6): one line, only when pre-012 records are included.
+    untrusted = (
+        f"\n<p>includes {hm.pre012_records} pre-012 records (untrusted)</p>"
+        if hm.pre012_records
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Benchmark heatmap</title>
 <style>
@@ -223,6 +244,6 @@ th{{background:#f3f3f3}} td.empty{{background:#fafafa}}
 <h1>Rework-density heatmap</h1>
 <p>Cell = (gate rejections + fix-loop attempts + oracle failures) per run.
 Greener is cleaner; redder is more rework.</p>
-{body}
+{body}{untrusted}
 {calibration_html}
 </body></html>"""

@@ -17,7 +17,13 @@ from html import escape
 
 from pydantic import BaseModel, Field
 
-from .models import BenchmarkRecord
+from .models import (
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    arm_label,
+    is_pre012,
+)
 from .tasks import TaskSuite
 
 # The six metrics that measure work which did not advance the goal.
@@ -50,21 +56,37 @@ class WasteMatrix(BaseModel):
     arms: list[str] = Field(default_factory=list)
     cells: list[WasteCell] = Field(default_factory=list)
     max_by_metric: dict[str, float] = Field(default_factory=dict)
+    # 012 (contract §7.6): pre-012 records among this case's input
+    # (cell-scope records excluded); rendered as the untrusted line.
+    pre012_records: int = 0
 
 
 def build_waste_matrix(
     case_id: str, records: list[BenchmarkRecord], suite: TaskSuite | None = None
 ) -> WasteMatrix:
-    recs = [r for r in records if r.case_id == case_id and r.task_id and r.waste is not None]
+    case_recs = [r for r in records if r.case_id == case_id and r.scope is not BenchmarkScope.CELL]
+    # 012 (contract §7.8): a not_evaluated outcome is neither pass nor fail
+    # nor rework — it enters no mean here either.
+    recs = [
+        r
+        for r in case_recs
+        if r.task_id and r.waste is not None and r.outcome is not BenchmarkOutcome.NOT_EVALUATED
+    ]
     if not recs:
-        return WasteMatrix(case_id=case_id, metrics=list(WASTE_METRICS))
+        return WasteMatrix(
+            case_id=case_id,
+            metrics=list(WASTE_METRICS),
+            pre012_records=sum(1 for r in case_recs if is_pre012(r)),
+        )
 
     # sum within a run-instance, then mean across run-instances
     per_run: dict[tuple[str, str, str, str], float] = defaultdict(float)
     runs: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     for r in recs:
         assert r.task_id is not None
-        arm = f"{r.harness.value if r.harness else ''}#{r.model}"
+        # 012 (contract §7.7): arm_label — the arm for a 012 record, the
+        # bare model for a pre-012 record, so pre-012 keys are unchanged.
+        arm = f"{r.harness.value if r.harness else ''}#{arm_label(r)}"
         for metric in WASTE_METRICS:
             per_run[(r.bench_run_id, r.task_id, arm, metric)] += float(getattr(r.waste, metric))
         runs[(r.task_id, arm, "")].add(r.bench_run_id)
@@ -97,6 +119,7 @@ def build_waste_matrix(
         arms=sorted({c.arm_key for c in cells}),
         cells=cells,
         max_by_metric=max_by_metric,
+        pre012_records=sum(1 for r in case_recs if is_pre012(r)),
     )
 
 
@@ -142,6 +165,11 @@ def render_waste_matrix_html(wm: WasteMatrix) -> str:
         body += "tasks, so a case with no graded coding attempts has none.</p>"
     else:
         body = "".join(_grid(wm, m) for m in wm.metrics)
+    untrusted = (
+        f"\n<p>includes {wm.pre012_records} pre-012 records (untrusted)</p>"
+        if wm.pre012_records
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Harness waste - {escape(wm.case_id)}</title>
@@ -157,5 +185,5 @@ th{{background:#f3f3f3}} td.empty{{background:#fafafa}}
 Whiter is cleaner; redder is more waste. A blank cell was never measured --
 it is not a zero. Proposer stages (clarify, architect, planner, qa, reviewer,
 analyst) have no harness transcript at all and never appear here.</p>
-{body}
+{body}{untrusted}
 </body></html>"""

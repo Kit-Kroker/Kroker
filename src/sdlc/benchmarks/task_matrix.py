@@ -12,7 +12,7 @@ from html import escape
 
 from pydantic import BaseModel, Field
 
-from .models import BenchmarkRecord, BenchmarkScope
+from .models import BenchmarkRecord, BenchmarkScope, arm_label, cell_key, is_pre012
 from .tasks import TaskSuite
 
 
@@ -30,6 +30,9 @@ class TaskMatrix(BaseModel):
     task_ids: list[str] = Field(default_factory=list)
     columns: list[TaskMatrixColumn] = Field(default_factory=list)
     scores: dict[str, dict[str, float | None]] = Field(default_factory=dict)
+    # 012 (contract §7.6): pre-012 records among this case's input
+    # (cell-scope records excluded); rendered as the untrusted line.
+    pre012_records: int = 0
 
 
 def _column_key(col: TaskMatrixColumn) -> str:
@@ -38,15 +41,27 @@ def _column_key(col: TaskMatrixColumn) -> str:
 
 def build_task_matrix(case_id: str, records: list[BenchmarkRecord], suite: TaskSuite) -> TaskMatrix:
     task_ids = [t.id for t in suite.tasks]
-    recs = [r for r in records if r.scope is BenchmarkScope.ORACLE_TASK and r.case_id == case_id]
+    case_recs = [r for r in records if r.case_id == case_id and r.scope is not BenchmarkScope.CELL]
+    # 012 (contract §7.8): a not_evaluated task grade is neither pass nor
+    # fail — it enters no column mean (and must not shadow a scored grade
+    # for the same task, which dict-keyed by task_id would otherwise do).
+    from .models import BenchmarkOutcome
+
+    recs = [
+        r
+        for r in case_recs
+        if r.scope is BenchmarkScope.ORACLE_TASK and r.outcome is not BenchmarkOutcome.NOT_EVALUATED
+    ]
 
     by_col: dict[tuple[str, str], list[BenchmarkRecord]] = defaultdict(list)
     for r in recs:
-        h = r.harness.value if r.harness else ""
-        if r.lead_harness:
-            h = f"{h}:{r.lead_harness.value}"
-        cell_id = f"{case_id}#{h}#{r.model}"
-        by_col[(r.bench_run_id, cell_id)].append(r)
+        # 012 (contract §7.7): cell_key — the record's cell_id when set
+        # (one column per cell), else exactly the base derivation
+        # case#harness[:lead]#model, so pre-012 keys are unchanged.
+        cid = cell_key(r)
+        if cid is None:
+            continue  # drift records have no cell; the ORACLE_TASK filter makes this unreachable
+        by_col[(r.bench_run_id, cid)].append(r)
 
     columns: list[TaskMatrixColumn] = []
     scores: dict[str, dict[str, float | None]] = {tid: {} for tid in task_ids}
@@ -56,7 +71,7 @@ def build_task_matrix(case_id: str, records: list[BenchmarkRecord], suite: TaskS
         present = [s for s in by_task.values() if s is not None]
         mean_score = sum(present) / len(present) if present else None
         harness = next((r.harness.value for r in col_recs if r.harness), "")
-        model = col_recs[0].model
+        model = arm_label(col_recs[0])
         col = TaskMatrixColumn(
             bench_run_id=bench_run_id,
             cell_id=cell_id,
@@ -71,7 +86,13 @@ def build_task_matrix(case_id: str, records: list[BenchmarkRecord], suite: TaskS
             scores[tid][key] = by_task.get(tid)
 
     columns.sort(key=lambda c: c.started_at)
-    return TaskMatrix(case_id=case_id, task_ids=task_ids, columns=columns, scores=scores)
+    return TaskMatrix(
+        case_id=case_id,
+        task_ids=task_ids,
+        columns=columns,
+        scores=scores,
+        pre012_records=sum(1 for r in case_recs if is_pre012(r)),
+    )
 
 
 def render_task_matrix_json(tm: TaskMatrix) -> str:
@@ -119,6 +140,11 @@ def render_task_matrix_html(tm: TaskMatrix) -> str:
             "<table><tr><th>task</th>" + "".join(head_cells) + "</tr>"
             "<tr><th>sum</th>" + "".join(sum_cells) + "</tr>" + "".join(rows) + "</table>"
         )
+    untrusted = (
+        f"\n<p>includes {tm.pre012_records} pre-012 records (untrusted)</p>"
+        if tm.pre012_records
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Task history - {escape(tm.case_id)}</title>
@@ -130,5 +156,5 @@ td,th{{border:1px solid #ccc;padding:.3rem .6rem;text-align:center}}
 th{{background:#f3f3f3}}
 </style></head><body>
 <h1>Task history - {escape(tm.case_id)}</h1>
-{body}
+{body}{untrusted}
 </body></html>"""

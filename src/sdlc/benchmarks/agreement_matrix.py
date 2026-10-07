@@ -21,7 +21,13 @@ from html import escape
 
 from pydantic import BaseModel, Field
 
-from .models import BenchmarkOutcome, BenchmarkRecord
+from .models import (
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    arm_label,
+    is_pre012,
+)
 from .tasks import TaskSuite
 
 ADVERSARY_STAGE = "adversary"
@@ -43,21 +49,39 @@ class AgreementMatrix(BaseModel):
     arms: list[str] = Field(default_factory=list)
     cells: list[AgreementCell] = Field(default_factory=list)
     max_by_metric: dict[str, float] = Field(default_factory=dict)
+    # 012 (contract §7.6): pre-012 records among this case's input
+    # (cell-scope records excluded); rendered as the untrusted line.
+    pre012_records: int = 0
 
 
 def build_agreement_matrix(
     case_id: str, records: list[BenchmarkRecord], suite: TaskSuite | None = None
 ) -> AgreementMatrix:
-    recs = [r for r in records if r.case_id == case_id and r.task_id and r.stage == ADVERSARY_STAGE]
+    case_recs = [r for r in records if r.case_id == case_id and r.scope is not BenchmarkScope.CELL]
+    # 012 (contract §7.8): a not_evaluated outcome is neither pass nor fail
+    # nor a split — it enters neither n_records nor the split denominator.
+    recs = [
+        r
+        for r in case_recs
+        if r.task_id
+        and r.stage == ADVERSARY_STAGE
+        and r.outcome is not BenchmarkOutcome.NOT_EVALUATED
+    ]
     if not recs:
-        return AgreementMatrix(case_id=case_id, metrics=list(AGREEMENT_METRICS))
+        return AgreementMatrix(
+            case_id=case_id,
+            metrics=list(AGREEMENT_METRICS),
+            pre012_records=sum(1 for r in case_recs if is_pre012(r)),
+        )
 
     totals: dict[tuple[str, str], int] = defaultdict(int)
     splits: dict[tuple[str, str], int] = defaultdict(int)
     spend: dict[tuple[str, str], float] = defaultdict(float)
     for r in recs:
         assert r.task_id is not None
-        arm = f"{r.harness.value if r.harness else ''}#{r.model}"
+        # 012 (contract §7.7): arm_label — the arm for a 012 record, the
+        # bare model for a pre-012 record, so pre-012 keys are unchanged.
+        arm = f"{r.harness.value if r.harness else ''}#{arm_label(r)}"
         key = (r.task_id, arm)
         totals[key] += 1
         if r.outcome is BenchmarkOutcome.FAIL:
@@ -106,6 +130,7 @@ def build_agreement_matrix(
         arms=sorted({c.arm_key for c in cells}),
         cells=cells,
         max_by_metric=max_by_metric,
+        pre012_records=sum(1 for r in case_recs if is_pre012(r)),
     )
 
 
@@ -158,6 +183,11 @@ def render_agreement_matrix_html(am: AgreementMatrix) -> str:
             "adversary was right. That needs an on/off arm comparison "
             "against the held-out oracle.</em></p>"
         )
+    untrusted = (
+        f"\n<p>includes {am.pre012_records} pre-012 records (untrusted)</p>"
+        if am.pre012_records
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Reviewer agreement - {escape(am.case_id)}</title>
@@ -170,5 +200,5 @@ th{{background:#f5f5f5;text-align:left}}
 td.empty{{background:repeating-linear-gradient(45deg,#fafafa,#fafafa 4px,#f0f0f0 4px,#f0f0f0 8px)}}
 </style></head><body>
 <h1>Reviewer agreement - {escape(am.case_id)}</h1>
-{body}
+{body}{untrusted}
 </body></html>"""

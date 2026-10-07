@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from sdlc.benchmarks.heatmap import (
     ORACLE_STAGE,
     build_heatmap,
+    render_heatmap_html,
     render_heatmap_json,
 )
 from sdlc.benchmarks.models import (
@@ -260,7 +261,8 @@ _PINNED_JSON = """{
   "max_density": 1.5,
   "language_by_case": {
     "pin": ""
-  }
+  },
+  "pre012_records": 5
 }"""
 
 
@@ -268,7 +270,10 @@ def test_current_records_render_byte_identical_to_the_pinned_literal():
     """T032(a): captured on the pre-T033 code over fixed current-shape
     records (varied stages, an oracle record, no graph field). No record
     carries fail_reentry == 1, so T033's extra pass must be a no-op here --
-    byte-identical forever."""
+    byte-identical forever. 012 T010 regenerated the literal ONCE, on
+    purpose: contract 7.6 adds the pre012_records count (all five pin
+    records are pre-012); every other byte is unchanged, and the pin
+    holds from here on."""
     assert render_heatmap_json(build_heatmap(_PIN_RECORDS)) == _PINNED_JSON
 
 
@@ -483,3 +488,101 @@ def test_fail_reentry_pass_stays_additive_on_top_of_the_grouped_max():
         )
     by = {(c.case, c.stage): c for c in build_heatmap(stamped).cells}
     assert by[("fx", "code")].fix_attempts == 3
+
+
+# --- 012 T010 (RED): readers are immune to cell/not-evaluated records -------
+# contract §7.6/§7.8: a cell record is status, not data; a not_evaluated
+# outcome is neither pass nor fail. Nothing they say may move a count,
+# density, or the run denominator.
+
+_CELL_STATUS_CACHE = {}
+
+
+def _cell_status():
+    from sdlc.benchmarks.models import CellStatus
+
+    if not _CELL_STATUS_CACHE:
+        _CELL_STATUS_CACHE["v"] = CellStatus(
+            pipeline_finished=True,
+            code_finished=True,
+            completed=True,
+            last_stage="merge",
+            grading="graded",
+            child_result="ok",
+        )
+    return _CELL_STATUS_CACHE["v"]
+
+
+def _cell_scope_rec(case="c1", run="r-cell-9", cell_id="c1#opencode#a1", arm="a1"):
+    r = _rec(case=case, run=run, stage="cell")
+    return r.model_copy(
+        update={
+            "scope": BenchmarkScope.CELL,
+            "role": "cell",
+            "quality": QualityScore(score=None, judge="contract"),
+            "cell": _cell_status(),
+            "kroker_commit": "abc123",
+            "cell_id": cell_id,
+            "arm": arm,
+        }
+    )
+
+
+def _not_evaluated_rec(case="c1", run="r1", stage="merge"):
+    r = _rec(case=case, run=run, stage=stage)
+    return r.model_copy(
+        update={
+            "outcome": BenchmarkOutcome.NOT_EVALUATED,
+            "quality": QualityScore(score=None, judge="contract"),
+        }
+    )
+
+
+def _cells_by_key(hm):
+    return {
+        (c.case, c.stage): (c.gate_rejects, c.fix_attempts, c.oracle_fails, c.n_runs, c.density)
+        for c in hm.cells
+    }
+
+
+def test_cell_and_not_evaluated_records_change_no_heatmap_cell():
+    """The cell record carries a run_id NOT among the measured runs on
+    purpose: it must not join the case's run set (n_runs) either -- a
+    status record is not a run."""
+    base = [
+        _rec(run="r1", stage="code", outcome=BenchmarkOutcome.REVISED, fix=2),
+        _rec(run="r2", stage="code", outcome=BenchmarkOutcome.FAIL, fix=3),
+    ]
+    with_extra = base + [_cell_scope_rec(), _not_evaluated_rec()]
+    assert _cells_by_key(build_heatmap(with_extra)) == _cells_by_key(build_heatmap(base))
+
+
+# --- 012 T010 (RED): the pre-012 line (contract §7.6) -----------------------
+
+
+def _012_rec(case="c1", run="r1", stage="code"):
+    r = _rec(case=case, run=run, stage=stage)
+    return r.model_copy(
+        update={
+            "kroker_commit": "abc123",
+            "cell_id": "c1#opencode#a1",
+            "arm": "a1",
+        }
+    )
+
+
+def test_heatmap_html_states_the_pre012_count_when_present():
+    pre = [
+        _rec(run="r1", stage="code", outcome=BenchmarkOutcome.FAIL, fix=1),
+        _rec(run="r2", stage="qa", outcome=BenchmarkOutcome.FAIL),
+        _rec(run="r2", stage="clarify", outcome=BenchmarkOutcome.FAIL),
+    ]
+    hm = build_heatmap(pre + [_012_rec()])
+    html = render_heatmap_html(hm)
+    line = "includes 3 pre-012 records (untrusted)"
+    assert html.count(line) == 1
+
+
+def test_heatmap_html_drops_the_pre012_line_when_none():
+    hm = build_heatmap([_012_rec(), _012_rec(run="r2", stage="qa")])
+    assert "pre-012" not in render_heatmap_html(hm)

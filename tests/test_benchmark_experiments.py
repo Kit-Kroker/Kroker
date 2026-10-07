@@ -176,3 +176,98 @@ def test_compare_hard_errors_on_an_empty_bench(tmp_path):
             exp_dir=str(tmp_path),
             root=str(tmp_path / "empty-records"),
         )
+
+
+# --- 012 T010 (RED): delta immunity, cell keying, the pre-012 line ----------
+# contract §7.6/§7.7/§7.8, data-model §2.3 (cell_key / arm_label / is_pre012).
+
+
+def _cell_scope_rec(bench="b2"):
+    from sdlc.benchmarks.models import CellStatus
+
+    r = _rec(bench=bench)
+    return r.model_copy(
+        update={
+            "scope": BenchmarkScope.CELL,
+            "stage": "cell",
+            "role": "cell",
+            "task_id": None,
+            "quality": QualityScore(score=None, judge="contract"),
+            "cell": CellStatus(
+                pipeline_finished=True,
+                code_finished=True,
+                completed=True,
+                last_stage="merge",
+                grading="graded",
+                child_result="ok",
+            ),
+            "kroker_commit": "abc123",
+            "cell_id": "c1#opencode#a1",
+            "arm": "a1",
+        }
+    )
+
+
+def _not_evaluated_rec(bench="b2"):
+    r = _rec(bench=bench)
+    return r.model_copy(
+        update={
+            "outcome": BenchmarkOutcome.NOT_EVALUATED,
+            "quality": QualityScore(score=None, judge="contract"),
+        }
+    )
+
+
+def test_cell_and_not_evaluated_records_change_no_delta_row():
+    """Cell records ride the candidate evidence and the not_evaluated
+    record rides its code group: neither may move any delta value, count
+    or note."""
+    base_recs = [_rec(q=0.5, run=f"r{i}") for i in range(3)]
+    cand_recs = [_rec(q=0.9, run=f"r{i}", bench="b2") for i in range(3)]
+    base = compute_deltas(_ev(base_recs), _ev(cand_recs, "b2"), CompositeWeights())
+    with_extra = compute_deltas(
+        _ev(base_recs + [_cell_scope_rec("b1")]),
+        _ev(cand_recs + [_not_evaluated_rec()], "b2"),
+        CompositeWeights(),
+    )
+    assert [r.model_dump() for r in with_extra] == [r.model_dump() for r in base]
+
+
+def test_012_cells_label_by_arm_and_pre012_cells_keep_the_model_key():
+    """contract §7.7: a 012 record's cell third component is the arm label
+    (the summary join reads BenchmarkSummary.arm); a pre-012 record keeps
+    exactly the base `harness#model` key."""
+    cand = _ev(
+        [
+            _rec(q=0.9, bench="b2").model_copy(
+                update={
+                    "task_id": None,
+                    "harness": None,
+                    "model": "anthropic:glm-5.2",
+                    "kroker_commit": "abc123",
+                    "cell_id": "c1#opencode#a1",
+                    "arm": "a1",
+                }
+            ),
+            _rec(q=0.7, bench="b2"),
+        ],
+        "b2",
+    )
+    rows = compute_deltas(_ev([]), cand, CompositeWeights())
+    arms = {r.arm for r in rows}
+    assert "a1" in arms, "the 012 cell must be labelled by its arm"
+    assert "opencode#m" in arms, "the pre-012 cell keeps its base key"
+
+
+def test_render_deltas_markdown_states_the_pre012_count_when_given():
+    """The count is the caller's to compute (is_pre012 over its records,
+    cell-scope records excluded): render_deltas_markdown gains an optional
+    pre012_records keyword. Default and 0 render no line; N>0 renders it
+    exactly."""
+    rows = compute_deltas(
+        _ev([_rec(q=0.5)]), _ev([_rec(q=0.9, bench="b2")], "b2"), CompositeWeights()
+    )
+    line = "includes 2 pre-012 records (untrusted)"
+    assert line in render_deltas_markdown(rows, pre012_records=2)
+    assert "pre-012" not in render_deltas_markdown(rows)
+    assert "pre-012" not in render_deltas_markdown(rows, pre012_records=0)
