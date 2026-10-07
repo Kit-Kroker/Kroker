@@ -223,13 +223,27 @@ async def load_case_assets(case_id: str, rubric_files: dict[str, str]) -> dict[s
     ``rubric_files`` is the CaseSpec.rubrics map (stage -> file path). Paths
     may be absolute or relative to the case dir, resolved through
     ``paths.cases_dir()`` (012 R-1: one cases location for every reader,
-    honouring SDLC_CASES_ROOT the way the oracle always did). A missing file
-    is skipped — that stage simply won't be judged — so the workflow never
-    crashes on a absent rubric.
+    honouring SDLC_CASES_ROOT the way the oracle always did).
+
+    012 (contract §1.4): a registered file that is missing or empty RAISES
+    a non-retryable ApplicationError of type ``MissingCaseAsset`` carrying
+    the ``check_case_assets`` messages — the activity runs under a
+    five-attempt retry policy, and a plain exception would be retried five
+    times before failing the run. The run stops before the first cell is
+    built, at zero model spend; a broken manifest is a manifest that names
+    a file it does not ship.
 
     All filesystem I/O lives here (the activity); the workflow passes only
     serializable args (``case_id`` + the path map).
     """
+    from temporalio.exceptions import ApplicationError
+
+    from .paths import MISSING_CASE_ASSET, check_case_assets
+
+    problems = check_case_assets(rubric_files, {}, cases_dir() / case_id)
+    if problems:
+        raise ApplicationError("\n".join(problems), type=MISSING_CASE_ASSET, non_retryable=True)
+
     case_dir = cases_dir() / case_id
     out: dict[str, str] = {}
     for stage, rel in rubric_files.items():

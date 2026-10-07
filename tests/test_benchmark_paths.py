@@ -333,3 +333,98 @@ def test_eval_cli_run_gate_receives_the_override(tmp_path, monkeypatch):
     )
     assert "stubbed" in out
     assert captured["cases_root"] == tmp_path
+
+
+# --- T004 (chaos seat): check_case_assets pre-flight -------------------------
+
+
+def test_check_case_assets_all_present_returns_empty_list(tmp_path):
+    from sdlc.benchmarks.paths import check_case_assets
+
+    (tmp_path / "rubric-architect.md").write_text("RUBRIC", encoding="utf-8")
+    (tmp_path / "veto-qa.md").write_text("VETO", encoding="utf-8")
+    assert (
+        check_case_assets({"architect": "rubric-architect.md"}, {"qa": "veto-qa.md"}, tmp_path)
+        == []
+    )
+
+
+def test_check_case_assets_missing_rubric_message(tmp_path):
+    from sdlc.benchmarks.paths import check_case_assets
+
+    # Contract 1.2 verbatim: <kind> '<key>': <path> is missing
+    got = check_case_assets({"architect": "rubric-architect.md"}, {}, tmp_path)
+    assert got == [f"rubric 'architect': {tmp_path / 'rubric-architect.md'} is missing"]
+
+
+def test_check_case_assets_whitespace_only_rubric_is_empty_variant(tmp_path):
+    from sdlc.benchmarks.paths import check_case_assets
+
+    (tmp_path / "rubric-architect.md").write_text("  \n\t\n", encoding="utf-8")
+    # Contract 1.2 verbatim: <kind> '<key>': <path> is empty
+    got = check_case_assets({"architect": "rubric-architect.md"}, {}, tmp_path)
+    assert got == [f"rubric 'architect': {tmp_path / 'rubric-architect.md'} is empty"]
+
+
+def test_check_case_assets_missing_veto_uses_veto_kind(tmp_path):
+    from sdlc.benchmarks.paths import check_case_assets
+
+    got = check_case_assets({}, {"qa": "veto-qa.md"}, tmp_path)
+    assert got == [f"veto 'qa': {tmp_path / 'veto-qa.md'} is missing"]
+
+
+def test_check_case_assets_absolute_registered_path_checked_as_given(tmp_path):
+    from sdlc.benchmarks.paths import check_case_assets
+
+    absent = tmp_path / "elsewhere" / "never-written.md"
+    got = check_case_assets({"architect": str(absent)}, {}, tmp_path / "case")
+    assert got == [f"rubric 'architect': {absent} is missing"]
+
+
+def test_check_case_assets_empty_maps_return_empty_list(tmp_path):
+    from sdlc.benchmarks.paths import check_case_assets
+
+    assert check_case_assets({}, {}, tmp_path) == []
+
+
+def test_check_case_assets_rubric_problem_before_veto_problem(tmp_path):
+    """Order assumption (contract 1.2 / Names 2.1): problems are reported
+    across the two maps in registration order -- every rubrics-map problem
+    first, then every vetoes-map problem. The two-problem case here is the
+    minimal lock on that cross-map order."""
+    from sdlc.benchmarks.paths import check_case_assets
+
+    got = check_case_assets({"architect": "absent-rubric.md"}, {"qa": "absent-veto.md"}, tmp_path)
+    assert got == [
+        f"rubric 'architect': {tmp_path / 'absent-rubric.md'} is missing",
+        f"veto 'qa': {tmp_path / 'absent-veto.md'} is missing",
+    ]
+
+
+def test_check_case_assets_within_a_map_insertion_order_holds(tmp_path):
+    """Order assumption: within one map, dict insertion order (not sorted
+    order) -- 'zstage' is registered before 'astage' and must be reported
+    first."""
+    from sdlc.benchmarks.paths import check_case_assets
+
+    rubrics = {"zstage": "rubric-z.md", "astage": "rubric-a.md"}
+    got = check_case_assets(rubrics, {}, tmp_path)
+    assert got == [
+        f"rubric 'zstage': {tmp_path / 'rubric-z.md'} is missing",
+        f"rubric 'astage': {tmp_path / 'rubric-a.md'} is missing",
+    ]
+
+
+def test_shipped_corpus_passes_check_case_assets():
+    """The shipped corpus is clean and must stay clean: every
+    benchmarks/cases/*/case.yaml passes the pre-flight with no problems."""
+    from sdlc.benchmarks.cli import load_case_spec
+    from sdlc.benchmarks.paths import check_case_assets
+
+    cases_root = Path(__file__).resolve().parents[1] / "benchmarks" / "cases"
+    case_dirs = sorted(p for p in cases_root.iterdir() if (p / "case.yaml").is_file())
+    assert case_dirs, "expected shipped cases under benchmarks/cases"
+    for case_dir in case_dirs:
+        spec = load_case_spec(str(case_dir / "case.yaml"))
+        problems = check_case_assets(spec.rubrics, spec.vetoes, case_dir)
+        assert problems == [], f"{case_dir.name}: {problems}"

@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 import sdlc.benchmarks.judge as judge_mod
@@ -527,3 +529,43 @@ def test_run_judge_agent_builds_a_google_string_through_the_framework(monkeypatc
     assert built.model_name == reference.model_name, (
         "the judge site changed the model name on the framework path"
     )
+
+
+# --- 012 T004 (RED): a missing registered rubric stops the activity --------
+# contract §1.4/§1.5, data-model §2.1 (MISSING_CASE_ASSET), research R-2:
+# load_case_assets must raise a non-retryable ApplicationError typed
+# MissingCaseAsset naming the map key and the resolved path, instead of
+# silently skipping the stage; an empty rubric map still returns {}.
+
+
+def test_load_case_assets_missing_registered_rubric_raises(monkeypatch, tmp_path):
+    from temporalio.exceptions import ApplicationError
+
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(tmp_path))
+    case_id = "asset-case"
+    (tmp_path / case_id).mkdir()
+
+    # relative registered path: resolved against paths.cases_dir()/case_id
+    with pytest.raises(ApplicationError) as excinfo:
+        asyncio.run(judge_mod.load_case_assets(case_id, {"architect": "absent-rubric.md"}))
+    exc = excinfo.value
+    assert exc.type == "MissingCaseAsset"
+    assert exc.non_retryable is True
+    assert "architect" in str(exc), "the error must name the registered map key"
+    assert str(tmp_path / case_id / "absent-rubric.md") in str(exc), (
+        "the error must name the resolved path"
+    )
+
+    # absolute registered path: checked as given, raises the same way
+    absent_abs = tmp_path / "elsewhere" / "nope.md"
+    with pytest.raises(ApplicationError) as excinfo_abs:
+        asyncio.run(judge_mod.load_case_assets("ignored", {"architect": str(absent_abs)}))
+    assert excinfo_abs.value.type == "MissingCaseAsset"
+    assert excinfo_abs.value.non_retryable is True
+    assert str(absent_abs) in str(excinfo_abs.value)
+
+
+def test_load_case_assets_empty_maps_return_empty_without_raising():
+    """contract §1.5: a case registering no rubrics at all passes through
+    load_case_assets untouched — no failure, empty dict."""
+    assert asyncio.run(judge_mod.load_case_assets("ignored", {})) == {}

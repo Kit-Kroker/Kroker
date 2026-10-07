@@ -1,3 +1,5 @@
+import pytest
+
 from sdlc.benchmarks.cli import build_parser, dispatch_score, load_case_spec
 
 
@@ -144,6 +146,50 @@ def test_run_matrix_overrides_spec_gate_policy(tmp_path, monkeypatch):
 
     asyncio.run(_run_matrix(str(case), "hard"))
     assert '"gate_policy":"hard"' in captured["spec_json"]
+
+
+def test_run_matrix_missing_registered_rubric_exits_before_temporal(tmp_path, monkeypatch):
+    """012 T004 (chaos seat): a case that registers a rubric file which is
+    not on disk must be refused by the _run_matrix pre-flight (contract
+    1.3) -- every 1.2 message printed via SystemExit, BEFORE any Temporal
+    client is created or any workflow started."""
+    import asyncio
+
+    from sdlc.benchmarks.cli import _run_matrix
+
+    # Modelled on benchmarks/cases/todo-api-greenfield/case.yaml but with
+    # opencode only, one model, no crew entries (so preflight_crew never
+    # runs) and one registered rubric that does not exist.
+    case = tmp_path / "case.yaml"
+    case.write_text(
+        "case_id: preflight-case\n"
+        "idea_summary: pre-flight probe\n"
+        "mode: greenfield\n"
+        "harnesses: [opencode]\n"
+        "models: [anthropic:claude-sonnet-4-6]\n"
+        "judge_model: openai/gpt-5.2\n"
+        "rubrics:\n"
+        "  architect: rubric-absent.md\n",
+        encoding="utf-8",
+    )
+
+    connect_calls: list = []
+
+    async def _recording_connect(*a, **kw):
+        # Mandatory guard: a red or buggy run must never reach a real
+        # Temporal server from this test.
+        connect_calls.append((a, kw))
+        raise AssertionError("Client.connect reached: pre-flight did not run first")
+
+    monkeypatch.setattr("temporalio.client.Client.connect", _recording_connect)
+
+    with pytest.raises(SystemExit) as excinfo:
+        asyncio.run(_run_matrix(str(case)))
+    message = str(excinfo.value)
+    assert "rubric 'architect'" in message
+    assert "is missing" in message
+    assert "rubric-absent.md" in message
+    assert connect_calls == []
 
 
 def test_dispatch_score_case_degrades_without_tasks_yaml(tmp_path, monkeypatch):

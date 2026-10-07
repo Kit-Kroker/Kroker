@@ -197,6 +197,14 @@ async def _run_matrix(case_path: str, gate_policy: str | None = None) -> str:
     from temporalio.contrib.pydantic import pydantic_data_converter
 
     spec = load_case_spec(case_path)
+    # 012 (contract §1.3): a registered rubric or veto file that is missing
+    # or empty stops the run HERE — before any Temporal client exists and
+    # before any cell can spend model budget (SC-008).
+    from .paths import check_case_assets
+
+    problems = check_case_assets(spec.rubrics, spec.vetoes, Path(case_path).parent)
+    if problems:
+        raise SystemExit("\n".join(problems))
     # Refuse a colliding sweep before the matrix starts, not at each cell's
     # code stage (parent §5). expand_matrix already turned `crew:<harness>`
     # entries into cells, so this reads the same strings the arms will use.

@@ -30,3 +30,34 @@ def calibration_dir() -> Path:
     """The calibration root: the sibling of the cases directory, so the
     one override moves both trees together."""
     return cases_dir().parent / "calibration"
+
+
+# 012 (data-model §2.1): the `type` of the non-retryable ApplicationError
+# `load_case_assets` raises for a missing or empty registered file. No
+# exception class is added — the constant is the wire name.
+MISSING_CASE_ASSET = "MissingCaseAsset"
+
+
+def check_case_assets(rubrics: dict[str, str], vetoes: dict[str, str], case_dir: Path) -> list[str]:
+    """012 (contract §1.2): every file a case manifest registers must exist
+    and hold non-whitespace text. Returns one message per problem, in
+    registration order (the rubrics map first, then the vetoes map, each in
+    its own insertion order):
+
+        <kind> '<key>': <path> is missing
+        <kind> '<key>': <path> is empty
+
+    where kind is ``rubric`` or ``veto``. An absolute registered path is
+    checked as given; a relative one resolves against ``case_dir``. A case
+    with empty maps passes (contract §1.5). Reads the file system, nothing
+    else — the CLI calls it before contacting Temporal, and the corpus test
+    keeps the shipped manifests clean."""
+    problems: list[str] = []
+    for kind, mapping in (("rubric", rubrics), ("veto", vetoes)):
+        for key, rel in mapping.items():
+            p = Path(rel) if Path(rel).is_absolute() else case_dir / rel
+            if not p.exists():
+                problems.append(f"{kind} '{key}': {p} is missing")
+            elif not p.read_text(encoding="utf-8").strip():
+                problems.append(f"{kind} '{key}': {p} is empty")
+    return problems
