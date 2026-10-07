@@ -10,10 +10,15 @@ from __future__ import annotations
 from collections import defaultdict
 from statistics import mean
 
-from ..core.models import (
-    HarnessKind,
+from .models import (
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    BenchmarkSummary,
+    CompositeWeights,
+    cell_key,
+    is_pre012,
 )
-from .models import BenchmarkRecord, BenchmarkScope, BenchmarkSummary, CompositeWeights
 
 
 def _safe_mean(xs: list[float]) -> float | None:
@@ -29,25 +34,22 @@ def compute_summaries(
     # cell's harness/model with the case-level ORACLE record; they belong to
     # the task/error matrices, not this per-cell summary, so they're
     # excluded before grouping to avoid inflating n / blending mean_quality
-    # and composite into the oracle summary row.
-    records = [r for r in records if r.scope is not BenchmarkScope.ORACLE_TASK]
-    # group raw records by cell identity. lead_harness joins the key so a
-    # crew:<lead_harness> sweep doesn't blend different leads into one
-    # composite (spec §5) -- it's None for every non-crew record, so the
-    # key shape is unchanged there.
-    by_cell: dict[tuple[str, str, str | None, str | None, str], list[BenchmarkRecord]] = (
-        defaultdict(list)
-    )
+    # and composite into the oracle summary row. CELL records (012) are the
+    # one status record per cell, not a measurement — they enter no row and
+    # no count either (contract §7.3).
+    records = [
+        r
+        for r in records
+        if r.scope is not BenchmarkScope.ORACLE_TASK and r.scope is not BenchmarkScope.CELL
+    ]
+    # 012 (contract §7.3): group by (case, stage, cell_key, is_pre012) — the
+    # pre-012 key embeds harness/lead/model so those rows partition exactly
+    # as before; a 012 row is one cell (records of one cell_id), and no row
+    # ever mixes kinds (ruling R3: pre-012 aggregates are untrusted and are
+    # never averaged together with 012 ones).
+    by_cell: dict[tuple[str, str, str | None, bool], list[BenchmarkRecord]] = defaultdict(list)
     for r in records:
-        by_cell[
-            (
-                r.case_id,
-                r.stage,
-                r.harness.value if r.harness else None,
-                r.lead_harness.value if r.lead_harness else None,
-                r.model,
-            )
-        ].append(r)
+        by_cell[(r.case_id, r.stage, cell_key(r), is_pre012(r))].append(r)
 
     summaries: list[BenchmarkSummary] = []
     # normalization happens within (case_id, stage) across all cells in it
@@ -62,21 +64,28 @@ def compute_summaries(
         use_cost = len(costed) >= 2 and max_usd
         use_speed = len(timed) >= 2 and max_sec
 
-        for (_c, _s, h, lh, m), cell_recs in by_cell.items():
+        for (_c, _s, _key, pre), cell_recs in by_cell.items():
             if _c != case_id or _s != stage:
                 continue
-            scored = [r for r in cell_recs if r.quality.score is not None]
+            # No reader guesses (plan rule 3): a not_evaluated outcome
+            # enters no count and no mean. A score-None record under any
+            # other outcome still counts (it was attempted; only its
+            # quality is unknown).
+            counted = [r for r in cell_recs if r.outcome is not BenchmarkOutcome.NOT_EVALUATED]
+            scored = [r for r in counted if r.quality.score is not None]
             mean_q = _safe_mean([r.quality.score for r in scored if r.quality.score is not None])
-            mean_usd = _safe_mean([r.cost.usd for r in cell_recs if r.cost.usd is not None])
+            mean_usd = _safe_mean([r.cost.usd for r in counted if r.cost.usd is not None])
             mean_sec = _safe_mean(
-                [r.speed.wall_clock_s for r in cell_recs if r.speed.wall_clock_s is not None]
+                [r.speed.wall_clock_s for r in counted if r.speed.wall_clock_s is not None]
             )
 
             composite = _composite(
                 mean_q, mean_usd, mean_sec, max_usd, max_sec, use_cost, use_speed, w
             )
-            harness = HarnessKind(h) if h else None
-            lead_harness = HarnessKind(lh) if lh else None
+            harness = next((r.harness for r in cell_recs if r.harness is not None), None)
+            lead_harness = next(
+                (r.lead_harness for r in cell_recs if r.lead_harness is not None), None
+            )
             errors = [r.error for r in cell_recs if r.error]
             summaries.append(
                 BenchmarkSummary(
@@ -84,13 +93,20 @@ def compute_summaries(
                     stage=stage,
                     harness=harness,
                     lead_harness=lead_harness,
-                    model=m,
-                    n=len(cell_recs),
+                    # A 012 row spans the cell's records: the model column is
+                    # the sorted comma-joined distinct models (data-model
+                    # §1.4). A pre-012 row's key embeds one model, so the
+                    # join yields it unchanged.
+                    model=",".join(sorted({r.model for r in cell_recs})),
+                    n=len(counted),
                     mean_quality=mean_q,
                     mean_cost_usd=mean_usd,
                     mean_wall_clock_s=mean_sec,
                     composite=composite,
                     errors=errors,
+                    cell_id=next((r.cell_id for r in cell_recs if r.cell_id is not None), None),
+                    arm=next((r.arm for r in cell_recs if r.arm is not None), None),
+                    pre012=pre,
                 )
             )
     return summaries

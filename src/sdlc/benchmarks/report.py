@@ -8,7 +8,12 @@ import yaml
 from temporalio import activity
 
 from .heatmap import build_heatmap, render_heatmap_html, render_heatmap_json
-from .models import BenchmarkRecord, BenchmarkSummary, CompositeWeights
+from .models import (
+    BenchmarkRecord,
+    BenchmarkScope,
+    BenchmarkSummary,
+    CompositeWeights,
+)
 from .paths import cases_dir as _default_cases_dir
 from .recorder import RecordStore, _root
 from .scoring import compute_summaries
@@ -23,9 +28,14 @@ def aggregate(
     records = _records if _records is not None else _read_all(bench_run_id, root)
     return sorted(
         compute_summaries(records, weights),
+        # 012 (contract §7.4): 012 rows first within each (case, stage)
+        # (pre012 False sorts before True), then by cell, then the base
+        # ordering.
         key=lambda s: (
             s.case_id,
             s.stage,
+            s.pre012,
+            s.cell_id or "",
             s.harness.value if s.harness else "",
             s.lead_harness.value if s.lead_harness else "",
             s.model,
@@ -61,51 +71,118 @@ def scan_case_records(case_id: str, root: str | None = None) -> list[BenchmarkRe
     return out
 
 
-def render_markdown(summaries: list[BenchmarkSummary], calibration=None) -> str:
-    from .calibration import render_calibration_markdown, trust_for_stage
+_TABLE_HEADER = (
+    "| case | stage | harness | cell | model | n | quality | cost ($) | "
+    "wall (s) | composite | trust |",
+    "|---|---|---|---|---|---|---|---|---|---|---|",
+)
+
+
+def _fmt(x) -> str:
+    # ASCII only — a Windows console's default cp1252 codepage mangles the
+    # em dash into the replacement char when this gets printed, not just
+    # when written to the file.
+    return f"{x:.3f}" if isinstance(x, float) else "n/a"
+
+
+def _summary_row(s: BenchmarkSummary, calibration) -> str:
+    from .calibration import trust_for_stage
+
+    harness_col = s.harness.value if s.harness else "proposer"
+    if s.lead_harness:
+        harness_col = f"{harness_col}:{s.lead_harness.value}"
+    # 012 rows carry the cell's arm (ruling R1); pre-012 rows have no cell.
+    cell_col = s.arm if s.arm is not None else ""
+    return (
+        f"| {s.case_id} | {s.stage} | "
+        f"{harness_col} | {cell_col} | {s.model} | "
+        f"{s.n} | {_fmt(s.mean_quality)} | {_fmt(s.mean_cost_usd)} | "
+        f"{_fmt(s.mean_wall_clock_s)} | {_fmt(s.composite)} | "
+        f"{trust_for_stage(s.stage, calibration)} |"
+    )
+
+
+def _cells_section(records: list[BenchmarkRecord]) -> list[str]:
+    """contract §7.5: one line per grading state, built from the cell-scope
+    records (one per cell). Absent entirely when no cell record exists."""
+    cell_records = [r for r in records if r.scope is BenchmarkScope.CELL and r.cell is not None]
+    if not cell_records:
+        return []
+    statuses = [r.cell for r in cell_records if r.cell is not None]
+    graded = [s for s in statuses if s.grading == "graded"]
+    not_graded = [s for s in statuses if s.grading == "not_graded"]
+    failed = [s for s in statuses if s.grading == "grading_failed"]
+    by_last: dict[str, int] = {}
+    for s in not_graded:
+        by_last[s.last_stage or "none"] = by_last.get(s.last_stage or "none", 0) + 1
+    per_last = ", ".join(f"{k}: {v}" for k, v in sorted(by_last.items()))
+    lines = [
+        "## Cells",
+        "",
+        f"- cells started: {len(cell_records)}",
+        f"- completed: {sum(1 for s in statuses if s.completed)}",
+        f"- graded: {len(graded)}",
+        f"- not graded: {len(not_graded)}" + (f" (last stage: {per_last})" if per_last else ""),
+        f"- grading failed: {len(failed)}",
+    ]
+    return lines
+
+
+def render_markdown(
+    summaries: list[BenchmarkSummary],
+    calibration=None,
+    records: list[BenchmarkRecord] | None = None,
+) -> str:
+    from .calibration import render_calibration_markdown
 
     calibration = calibration or {}
     if not summaries:
         return "# Benchmark report\n\nNo records found.\n"
-    lines = [
-        "# Benchmark report",
-        "",
-        "| case | stage | harness | model | n | quality | cost ($) | "
-        "wall (s) | composite | trust |",
-        "|---|---|---|---|---|---|---|---|---|---|",
-    ]
-    for s in summaries:
+    # contract §7.4: the main table lists the 012 rows; pre-012 rows move to
+    # their own untrusted section below (absent when there are none). A
+    # summary list without any pre012 flag set (pre-012-only readers) all
+    # falls into the section, exactly as at base minus the heading.
+    rows_012 = [s for s in summaries if not s.pre012]
+    rows_pre = [s for s in summaries if s.pre012]
 
-        def fmt(x):
-            # ASCII only — a Windows console's default cp1252 codepage
-            # mangles the em dash into "�" (Unicode replacement char)
-            # when this gets printed, not just when written to the file.
-            return f"{x:.3f}" if isinstance(x, float) else "n/a"
+    lines = ["# Benchmark report", "", *_TABLE_HEADER]
+    lines += [_summary_row(s, calibration) for s in rows_012]
 
-        harness_col = s.harness.value if s.harness else "proposer"
-        if s.lead_harness:
-            harness_col = f"{harness_col}:{s.lead_harness.value}"
-        lines.append(
-            f"| {s.case_id} | {s.stage} | "
-            f"{harness_col} | {s.model} | "
-            f"{s.n} | {fmt(s.mean_quality)} | {fmt(s.mean_cost_usd)} | "
-            f"{fmt(s.mean_wall_clock_s)} | {fmt(s.composite)} | "
-            f"{trust_for_stage(s.stage, calibration)} |"
-        )
+    if rows_pre:
+        lines += [
+            "",
+            "## Pre-012 records (untrusted)",
+            "",
+            "These rows predate round 012: no kroker_commit provenance is"
+            " recorded on them, so their aggregates are never averaged"
+            " together with 012 rows.",
+            "",
+            *_TABLE_HEADER,
+        ]
+        lines += [_summary_row(s, calibration) for s in rows_pre]
+
     errored = [s for s in summaries if s.errors]
     if errored:
         lines += ["", "## Stage failures", ""]
         for s in errored:
             for err in s.errors:
                 lines.append(f"- **{s.case_id} / {s.stage}** ({s.model}): {err}")
+
+    if records is not None:
+        cells = _cells_section(records)
+        if cells:
+            lines += ["", *cells]
+
     return "\n".join(lines) + "\n" + render_calibration_markdown(calibration)
 
 
 def write_report_with_calibration(
-    summaries: list[BenchmarkSummary], out_path: str, calibration
+    summaries: list[BenchmarkSummary], out_path: str, calibration, records=None
 ) -> None:
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(out_path).write_text(render_markdown(summaries, calibration), encoding="utf-8")
+    Path(out_path).write_text(
+        render_markdown(summaries, calibration, records=records), encoding="utf-8"
+    )
 
 
 def resolve_language_map(case_ids: list[str], cases_dir: Path | None = None) -> dict[str, str]:
@@ -149,7 +226,9 @@ async def finalize_benchmark_report(bench_run_id: str) -> str:
     summaries = aggregate(bench_run_id, CompositeWeights(), _records=records)
     out_dir = Path(_root()) / bench_run_id
     calibration = load_calibration_reports()
-    write_report_with_calibration(summaries, str(out_dir / "report.md"), calibration)
+    write_report_with_calibration(
+        summaries, str(out_dir / "report.md"), calibration, records=records
+    )
     lang = resolve_language_map(sorted({r.case_id for r in records}))
     write_heatmap(records, out_dir, lang, render_calibration_html(calibration))
     return str(out_dir / "report.md")

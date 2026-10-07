@@ -4,6 +4,8 @@ from sdlc.benchmarks.models import (
     BenchmarkOutcome,
     BenchmarkRecord,
     BenchmarkScope,
+    BenchmarkSummary,
+    CellStatus,
     CompositeWeights,
     CostBag,
     QualityScore,
@@ -225,3 +227,169 @@ def test_scan_case_records_empty_root_returns_empty(tmp_path):
     from sdlc.benchmarks.report import scan_case_records
 
     assert scan_case_records("c1", root=str(tmp_path / "does-not-exist")) == []
+
+
+# --- 012 T009b (chaos seat): pre-012 section, Cells section, cell column ------
+
+
+def _summary(case, stage, model, *, pre012=False, cell_id=None, arm=None):
+    return BenchmarkSummary(
+        case_id=case,
+        stage=stage,
+        harness=HarnessKind.OPENCODE,
+        model=model,
+        n=3,
+        mean_quality=0.8,
+        mean_cost_usd=0.01,
+        mean_wall_clock_s=10.0,
+        composite=0.9,
+        cell_id=cell_id,
+        arm=arm,
+        pre012=pre012,
+    )
+
+
+def _cell_record(
+    *,
+    grading,
+    completed,
+    pipeline_finished=True,
+    code_finished=True,
+    last_stage="clarify",
+    bench="b1",
+    case="c1",
+    cell_id="c1#opencode#a1",
+    arm="a1",
+):
+    t = datetime(2026, 7, 4, 10)
+    return BenchmarkRecord(
+        run_id=f"{bench}/{cell_id}",
+        bench_run_id=bench,
+        case_id=case,
+        scope=BenchmarkScope.CELL,
+        stage="cell",
+        role="cell",
+        harness=HarnessKind.OPENCODE,
+        model="deterministic",
+        prompt_sha="none:deterministic",
+        quality=QualityScore(score=None, judge="contract"),
+        speed=SpeedBag(wall_clock_s=1.0, started_at=t, ended_at=t + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS if completed else BenchmarkOutcome.FAIL,
+        kroker_commit="abc",
+        tree_dirty=False,
+        arm=arm,
+        cell_id=cell_id,
+        cell=CellStatus(
+            pipeline_finished=pipeline_finished,
+            code_finished=code_finished,
+            completed=completed,
+            last_stage=last_stage,
+            grading=grading,
+            child_result=None if completed else "child failed",
+        ),
+    )
+
+
+# contract 7.4: 012 rows in the main table, pre-012 rows in their own section
+
+
+def test_render_markdown_lists_012_rows_then_pre012_section():
+    sums = [
+        _summary("c012", "code", "sonnet", pre012=False, cell_id="c012#opencode#a1", arm="a1"),
+        _summary("cold1", "code", "sonnet", pre012=True),
+        _summary("cold2", "qa", "sonnet", pre012=True),
+    ]
+    md = render_markdown(sums)
+    assert "## Pre-012 records (untrusted)" in md
+    title_at = md.index("## Pre-012 records (untrusted)")
+    # 012 rows live in the MAIN table, above the section
+    assert md.index("c012") < title_at
+    # the pre-012 rows render under the section, after it
+    assert md.index("cold1") > title_at and md.index("cold2") > title_at
+    # one sentence saying why: the reason is the missing commit provenance
+    section = md[title_at : md.index("cold1")]
+    assert "commit" in section.lower()
+
+
+def test_render_markdown_without_pre012_rows_omits_the_section():
+    sums = [_summary("c012", "code", "sonnet", pre012=False, cell_id="x", arm="a1")]
+    md = render_markdown(sums)
+    assert "## Pre-012 records (untrusted)" not in md
+
+
+def test_render_markdown_pre012_only_still_renders_rows_under_the_section():
+    sums = [_summary("cold1", "code", "sonnet", pre012=True)]
+    md = render_markdown(sums)
+    assert "## Pre-012 records (untrusted)" in md
+    assert md.index("## Pre-012 records (untrusted)") < md.index("cold1")
+
+
+# contract 7.5: the Cells section, built from cell-scope records
+
+
+def test_render_markdown_cells_section_counts_every_grading_state():
+    sums = [_summary("c1", "code", "sonnet")]
+    records = [
+        _cell_record(grading="graded", completed=True, last_stage="merge"),
+        _cell_record(
+            grading="not_graded", completed=False, last_stage="clarify", cell_id="c1#opencode#a1"
+        ),
+        _cell_record(
+            grading="not_graded",
+            completed=False,
+            last_stage="clarify",
+            cell_id="c1#opencode#a2",
+            arm="a2",
+        ),
+        _cell_record(
+            grading="not_graded",
+            completed=False,
+            last_stage="research",
+            cell_id="c1#opencode#a3",
+            arm="a3",
+        ),
+        _cell_record(
+            grading="grading_failed",
+            completed=False,
+            last_stage="code",
+            cell_id="c1#opencode#a4",
+            arm="a4",
+        ),
+    ]
+    md = render_markdown(sums, calibration=None, records=records)
+    assert "## Cells" in md
+    section = md[md.index("## Cells") :]
+    assert "5" in section  # cells started: one per cell record
+    assert "not graded" in section
+    assert "grading failed" in section or "grading_failed" in section
+    # the count per last_stage, rendered readably
+    assert ("clarify: 2" in section) or ("clarify=2" in section)
+    assert ("research: 1" in section) or ("research=1" in section)
+    assert "1" in section  # completed / graded / grading failed counts
+
+
+def test_render_markdown_without_cell_records_has_no_cells_section():
+    sums = [_summary("c1", "code", "sonnet")]
+    assert "## Cells" not in render_markdown(sums, calibration=None, records=None)
+    assert "## Cells" not in render_markdown(
+        sums, calibration=None, records=[_rec("sonnet", 0.9, 1.0, 100)]
+    )
+
+
+# contract 7.4: the main table's cell column carries the arm for 012 rows
+
+
+def test_render_markdown_012_rows_show_arm_in_cell_column():
+    sums = [
+        _summary("c012", "code", "sonnet", pre012=False, cell_id="c012#opencode#a1", arm="a1"),
+        _summary("cold1", "code", "sonnet", pre012=True),
+    ]
+    md = render_markdown(sums)
+    header = md[md.index("| case") : md.index("\n", md.index("| case"))]
+    assert "cell" in header
+    row_012 = next(line for line in md.splitlines() if "| c012" in line)
+    assert "a1" in row_012
+    # the pre-012 row keeps its model label and is not mislabelled with the arm
+    row_pre = next(line for line in md.splitlines() if "cold1" in line and line.startswith("|"))
+    assert "sonnet" in row_pre
+    assert "a1" not in row_pre
