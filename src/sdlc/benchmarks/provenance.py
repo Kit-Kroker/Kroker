@@ -19,6 +19,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from subprocess import CompletedProcess
+from typing import TYPE_CHECKING
 
 from temporalio import activity
 
@@ -26,9 +27,17 @@ from temporalio import activity
 # with it benchmarks.record_builder), which would make this module a cycle
 # once the record builder imports prompt_sha_for. The loader reads the
 # same agents/ tree roles.REGISTRY is built from.
-from ..agents.loader import load_registry
+from ..agents.loader import RoleConfig, load_registry
 
 UNKNOWN_COMMIT = "unknown"
+
+if TYPE_CHECKING:
+    # The real binding is the module __getattr__ below (lazy on first
+    # access): importing this module must stay cheap — the promptfoo
+    # provider's import chain reaches it through record_builder, and its
+    # 8-second worker-readiness budget has no room for a full registry
+    # load per import (tests/test_promptfoo_provider.py pins that).
+    PROMPTED_ROLES: frozenset[str]
 
 # The Kroker checkout this module ships in; a parameter so tests (and only
 # tests) can point resolution at a temp repository.
@@ -98,19 +107,37 @@ async def resolve_provenance(source_root: str | None = None) -> Provenance:
     return Provenance(kroker_commit=UNKNOWN_COMMIT, tree_dirty=None)
 
 
-# The shipped registry, loaded once at import (Names §2.2: import-time
-# data). The same agents/ tree roles.REGISTRY is built from.
-_REGISTRY = load_registry()
+# The shipped registry and the prompted-role set, built from the registry
+# on FIRST ACCESS (Names §2.2: registry-derived data, never hand-
+# maintained) and cached — importing this module must stay cheap, see the
+# TYPE_CHECKING note above.
+_REGISTRY: dict[str, RoleConfig] | None = None
+_PROMPTED_ROLES: frozenset[str] | None = None
 
-# Roles the registry gives a prompt. 012 orchestrator ruling: PROMPTED_ROLES
-# pins the REGISTRY-instruction set (prompt_sha_for branches on registry
-# presence — devops_planner, discover, merge_verdict and risk ship prompts
-# even though no record writer uses them today), while the 10-role
-# record-writer inventory is pinned separately as the CELL_STAGE_ORDER
-# check (T002).
-PROMPTED_ROLES: frozenset[str] = frozenset(
-    role for role, cfg in _REGISTRY.items() if cfg.instructions is not None
-)
+
+def _load_registry_cached() -> dict[str, RoleConfig]:
+    global _REGISTRY
+    if _REGISTRY is None:
+        _REGISTRY = load_registry()
+    return _REGISTRY
+
+
+def __getattr__(name: str) -> object:
+    # 012 orchestrator ruling: PROMPTED_ROLES is the REGISTRY-instruction
+    # set (prompt_sha_for branches on registry presence — devops_planner,
+    # discover, merge_verdict and risk ship prompts even though no record
+    # writer uses them today), while the 10-role record-writer inventory
+    # is pinned separately as the CELL_STAGE_ORDER check (T002).
+    if name == "PROMPTED_ROLES":
+        global _PROMPTED_ROLES
+        if _PROMPTED_ROLES is None:
+            _PROMPTED_ROLES = frozenset(
+                role
+                for role, cfg in _load_registry_cached().items()
+                if cfg.instructions is not None
+            )
+        return _PROMPTED_ROLES
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def prompt_sha_for(role: str, model: str) -> str:
@@ -121,7 +148,7 @@ def prompt_sha_for(role: str, model: str) -> str:
     Never an empty string from a 012 writer."""
     if model == "deterministic":
         return "none:deterministic"
-    cfg = _REGISTRY.get(role)
+    cfg = _load_registry_cached().get(role)
     if cfg is None or cfg.instructions is None:
         return "none:no-registry-prompt"
     return hashlib.sha256(cfg.instructions.encode()).hexdigest()

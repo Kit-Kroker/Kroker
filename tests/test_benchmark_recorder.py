@@ -114,3 +114,57 @@ def test_record_benchmark_sanitizes_colon_in_model_id(tmp_path, monkeypatch):
     recs = store.read_all()
     assert len(recs) == 1
     assert recs[0].model == "anthropic:claude-sonnet-4-6"
+
+
+# --- 012 T008 (RED): one file per cell (contract §2.6, data-model §2.3) -----
+# Built with this file's own _record helper + model_copy updates (the same
+# pattern the existing tests use) rather than importing a helper from
+# test_benchmark_models -- each test module stays self-contained.
+
+
+def test_cell_id_wins_for_proposer_and_harness_records_alike():
+    """A 012 record carries its cell's id; _cell_id_for must return it for
+    a proposer record (no harness) and a harness record alike, so both map
+    to the SAME file — one file per cell."""
+    from sdlc.benchmarks.recorder import _cell_id_for
+
+    shared = "add-login#opencode#a1"
+    proposer = _record(case="add-login").model_copy(update={"model": "m", "cell_id": shared})
+    harness = _record(case="add-login").model_copy(
+        update={"harness": HarnessKind.OPENCODE, "model": "m2", "cell_id": shared}
+    )
+    assert _cell_id_for(proposer) == shared
+    assert _cell_id_for(harness) == shared
+    assert records_path("b1", _cell_id_for(proposer)) == records_path("b1", _cell_id_for(harness))
+
+
+def test_derived_cell_id_unchanged_without_record_cell_id():
+    """PIN: a record without cell_id (pre-012 writer shape) keeps exactly
+    the base derivation — case#harness[:lead]#model, proposer when no
+    harness."""
+    from sdlc.benchmarks.recorder import _cell_id_for
+
+    harness = _record(case="c1").model_copy(update={"harness": HarnessKind.OPENCODE})
+    assert _cell_id_for(harness) == f"c1#{HarnessKind.OPENCODE.value}#{harness.model}"
+    crew = _record(case="c1").model_copy(
+        update={
+            "harness": HarnessKind.CREW,
+            "lead_harness": HarnessKind.CLAUDE_CODE,
+            "model": "glm",
+        }
+    )
+    assert _cell_id_for(crew) == (
+        f"c1#{HarnessKind.CREW.value}:{HarnessKind.CLAUDE_CODE.value}#glm"
+    )
+    proposer = _record(case="c1")
+    assert _cell_id_for(proposer) == f"c1#proposer#{proposer.model}"
+
+
+def test_drift_record_without_cell_id_maps_to_the_shared_run_file():
+    """PIN: a drift record (case_id _production) still maps to None — the
+    shared per-run records.jsonl via records_path's cell_id=None branch."""
+    from sdlc.benchmarks.recorder import _cell_id_for
+
+    drift = _record(run_id="r9", bench="_drift/2026-07-04", case="_production")
+    assert _cell_id_for(drift) is None
+    assert records_path("_drift/2026-07-04", _cell_id_for(drift)).name == "records.jsonl"

@@ -92,6 +92,11 @@ async def record_benchmark(record: BenchmarkRecord) -> None:
 
 
 def _cell_id_for(record: BenchmarkRecord) -> str | None:
+    # 012 (contract §2.6): a record carrying its cell id maps to that
+    # cell's one file — the proposer and harness records of one cell land
+    # together instead of splitting across per-model files.
+    if record.cell_id is not None:
+        return record.cell_id
     # drift records (case_id _production) go to one file per bench_run_id
     if record.case_id == "_production":
         return None
