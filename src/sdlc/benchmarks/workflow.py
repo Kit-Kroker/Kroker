@@ -46,6 +46,7 @@ with workflow.unsafe.imports_passed_through():
         SpeedBag,
     )
     from .oracle import OracleGrade, OracleInput, grade_oracle
+    from .provenance import Provenance
     from .recorder import record_benchmark
     from .report import finalize_benchmark_report
 
@@ -68,6 +69,7 @@ def _cell_config(
     bench_run_id: str,
     rubrics: dict[str, str] | None = None,
     vetoes: dict[str, str] | None = None,
+    provenance: Provenance | None = None,
 ) -> PipelineConfig:
     """Build a per-cell PipelineConfig from the cell's arm: each role in
     role_models is overridden to its model (harness roles carry the cell's
@@ -126,6 +128,15 @@ def _cell_config(
         rubrics=dict(rubrics or {}),
         vetoes=dict(vetoes or {}),
         judge_model=spec.judge_model,
+        # 012 (contract §2.3/§2.7): the cell identity and the run's
+        # provenance, resolved once (T013 wires resolve_provenance into the
+        # parent) so every record of the cell carries identical values.
+        # Without a provenance (tests, pre-T013 call sites) all four stay
+        # None and behaviour is exactly as at base.
+        arm=(cell.arm_name if provenance is not None else None),
+        cell_id=(cell.cell_id if provenance is not None else None),
+        kroker_commit=(provenance.kroker_commit if provenance is not None else None),
+        tree_dirty=(provenance.tree_dirty if provenance is not None else None),
     )
     # A benchmark matrix run is unattended by default, so every gate in the
     # child FeatureWorkflow runs under spec.gate_policy (SOFT unless the case

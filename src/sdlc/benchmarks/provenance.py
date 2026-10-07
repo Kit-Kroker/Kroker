@@ -22,7 +22,11 @@ from subprocess import CompletedProcess
 
 from temporalio import activity
 
-from ..agents.roles import REGISTRY
+# Via the loader, never agents.roles: roles pulls the clarify stage (and
+# with it benchmarks.record_builder), which would make this module a cycle
+# once the record builder imports prompt_sha_for. The loader reads the
+# same agents/ tree roles.REGISTRY is built from.
+from ..agents.loader import load_registry
 
 UNKNOWN_COMMIT = "unknown"
 
@@ -94,6 +98,10 @@ async def resolve_provenance(source_root: str | None = None) -> Provenance:
     return Provenance(kroker_commit=UNKNOWN_COMMIT, tree_dirty=None)
 
 
+# The shipped registry, loaded once at import (Names §2.2: import-time
+# data). The same agents/ tree roles.REGISTRY is built from.
+_REGISTRY = load_registry()
+
 # Roles the registry gives a prompt. 012 orchestrator ruling: PROMPTED_ROLES
 # pins the REGISTRY-instruction set (prompt_sha_for branches on registry
 # presence — devops_planner, discover, merge_verdict and risk ship prompts
@@ -101,7 +109,7 @@ async def resolve_provenance(source_root: str | None = None) -> Provenance:
 # record-writer inventory is pinned separately as the CELL_STAGE_ORDER
 # check (T002).
 PROMPTED_ROLES: frozenset[str] = frozenset(
-    role for role, cfg in REGISTRY.items() if cfg.instructions is not None
+    role for role, cfg in _REGISTRY.items() if cfg.instructions is not None
 )
 
 
@@ -113,7 +121,7 @@ def prompt_sha_for(role: str, model: str) -> str:
     Never an empty string from a 012 writer."""
     if model == "deterministic":
         return "none:deterministic"
-    cfg = REGISTRY.get(role)
+    cfg = _REGISTRY.get(role)
     if cfg is None or cfg.instructions is None:
         return "none:no-registry-prompt"
     return hashlib.sha256(cfg.instructions.encode()).hexdigest()

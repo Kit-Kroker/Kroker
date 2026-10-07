@@ -20,6 +20,7 @@ with workflow.unsafe.imports_passed_through():
         SpeedBag,
         WasteBag,
     )
+    from .provenance import UNKNOWN_COMMIT, prompt_sha_for
 
 
 def stage_record(
@@ -53,6 +54,24 @@ def stage_record(
     bench_cfg = cfg.benchmark
     bench_run_id = (bench_cfg.bench_run_id if bench_cfg else None) or "_unknown"
     case_id = (bench_cfg.case_id if bench_cfg else None) or "_unknown"
+    # 012 (contract §2): provenance and cell identity ride the config into
+    # every record of a benchmark run. Outside one (case_id None) the four
+    # stay None — the record is never persisted there (§2.8) — while
+    # prompt_sha is filled on the in-memory record in every run, so a 012
+    # writer never records an empty prompt hash. A benchmark run whose
+    # commit could not be determined records the explicit unknown, never
+    # None or "" (§2.1).
+    benchmarking = bench_cfg is not None and bench_cfg.case_id is not None
+    kroker_commit: str | None = None
+    tree_dirty: bool | None = None
+    arm: str | None = None
+    cell_id: str | None = None
+    if benchmarking:
+        assert bench_cfg is not None  # for mypy: narrowed above
+        kroker_commit = bench_cfg.kroker_commit or UNKNOWN_COMMIT
+        tree_dirty = bench_cfg.tree_dirty
+        arm = bench_cfg.arm
+        cell_id = bench_cfg.cell_id
     return BenchmarkRecord(
         run_id=run_id,
         bench_run_id=bench_run_id,
@@ -65,7 +84,7 @@ def stage_record(
         harness=harness,
         lead_harness=lead_harness,
         model=model,
-        prompt_sha="",
+        prompt_sha=prompt_sha_for(role, model),
         quality=QualityScore(score=quality_score, judge=cast(JudgeKind, judge)),
         cost=cost_bag_from_spend(spend, cost_usd),
         speed=SpeedBag(
@@ -76,4 +95,8 @@ def stage_record(
         outcome=outcome,
         fix_attempts=fix_attempts,
         error=error,
+        kroker_commit=kroker_commit,
+        tree_dirty=tree_dirty,
+        arm=arm,
+        cell_id=cell_id,
     )

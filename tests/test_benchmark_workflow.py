@@ -142,6 +142,32 @@ def test_cell_config_carries_lead_harness_for_crew_cells():
     assert all(rc.lead_harness is None for rc in plain.roles.values())
 
 
+# --- 012 T007 (RED): the cell config carries the run's provenance ------------
+
+
+def test_cell_config_given_provenance_sets_cell_identity_and_commit():
+    """_cell_config with a resolved Provenance stamps the benchmark config
+    with the cell identity and the commit (contract §2.3/§2.7); called
+    without one — every existing call site — all four stay None."""
+    from sdlc.benchmarks.provenance import Provenance
+
+    base = PipelineConfig()
+    idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
+    cell = _harness_cell("openai/gpt-5.2")
+    prov = Provenance(kroker_commit="abc", tree_dirty=False)
+    cfg = _cell_config(base, idea, _spec(), cell, bench_run_id="b1", provenance=prov)
+    assert cfg.benchmark.arm == cell.arm_name
+    assert cfg.benchmark.cell_id == cell.cell_id
+    assert cfg.benchmark.kroker_commit == "abc"
+    assert cfg.benchmark.tree_dirty is False
+
+    plain = _cell_config(base, idea, _spec(), cell, bench_run_id="b1")
+    assert plain.benchmark.kroker_commit is None
+    assert plain.benchmark.tree_dirty is None
+    assert plain.benchmark.arm is None
+    assert plain.benchmark.cell_id is None
+
+
 def test_benchmark_workflow_class_has_run():
     # the @workflow.run method exists
     assert hasattr(BenchmarkWorkflow, "run")
