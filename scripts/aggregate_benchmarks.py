@@ -109,6 +109,11 @@ def aggregate(runs_dir: Path) -> dict:
         records: list[dict] = []
         for jl in sorted(rd.glob("*.jsonl")):
             records.extend(load_jsonl(jl))
+        # 012 (contract §7.9): cell-scope records are status, not data —
+        # skipped in every sum and count (total wall-clock stays the sum
+        # over stage, task-attempt, oracle and oracle-task records, as at
+        # base). Skipped here once, before any derivation.
+        records = [r for r in records if r.get("scope") != "cell"]
         for rec in records:
             rec["_run_id"] = run_id
             rec["_run_ts"] = ts
@@ -149,11 +154,17 @@ def aggregate(runs_dir: Path) -> dict:
             if st:
                 stage_outcomes[st] = r.get("outcome")
 
-        # Overall run outcome: merge stage if present, else whether all code tasks passed.
-        if "merge" in stage_outcomes:
+        # Overall run outcome: merge stage if it decided, else whether all
+        # code tasks passed. 012 (contract §7.9): a merge outcome of
+        # not_evaluated is neither pass nor fail — the run's overall comes
+        # from the remaining stage outcomes; with no merge record, a
+        # not_evaluated stage outcome is left out of the all-passed test
+        # (it does not fail it). Either way the decided outcomes rule.
+        if "merge" in stage_outcomes and stage_outcomes["merge"] != "not_evaluated":
             overall = stage_outcomes["merge"]
         elif stage_outcomes:
-            overall = "pass" if all(o == "pass" for o in stage_outcomes.values()) else "fail"
+            decided = [o for o in stage_outcomes.values() if o != "not_evaluated"]
+            overall = "pass" if all(o == "pass" for o in decided) else "fail"
         elif code_total:
             overall = "pass" if code_tasks_passed == code_total else "fail"
         elif report_rows:
@@ -251,7 +262,9 @@ def aggregate(runs_dir: Path) -> dict:
                 "task_id": r.get("task_id"),
                 "attempt": r.get("attempt"),
                 "role": r.get("role"),
-                "model": r.get("model"),
+                # 012 (contract §7.9): labelled by arm when the record has
+                # one, else by model.
+                "model": r.get("arm") or r.get("model"),
                 "outcome": r.get("outcome"),
                 "quality": (r.get("quality") or {}).get("score"),
                 "judge": (r.get("quality") or {}).get("judge"),
@@ -274,6 +287,15 @@ def aggregate(runs_dir: Path) -> dict:
             "total_tasks": sum(r["task_count"] for r in runs_meta),
             "total_tasks_passed": sum(r["tasks_passed"] for r in runs_meta),
             "cases": len(by_case),
+            # 012 (contract §7.9, by §7.2's raw-field rule): records with
+            # no kroker_commit, drift records (case_id "_production")
+            # excepted — cell-scope records never reach here (skipped
+            # above).
+            "pre012_records": sum(
+                1
+                for r in all_records
+                if not r.get("kroker_commit") and r.get("case_id") != "_production"
+            ),
         },
         "by_case": {k: v for k, v in by_case.items()},
         "stage_matrix": {k: {s: d for s, d in v.items()} for k, v in stage_matrix.items()},
@@ -599,7 +621,17 @@ def build_html(data: dict) -> str:
     if not data:
         return EMPTY_STATE_HTML
     payload = json.dumps(data, default=str)
-    return HTML_TEMPLATE.replace("__DATA__", payload)
+    html = HTML_TEMPLATE.replace("__DATA__", payload)
+    # 012 (contract §7.9): one line, only when pre-012 records are included.
+    n = data.get("totals", {}).get("pre012_records", 0)
+    if n:
+        html = html.replace(
+            '<div class="sub" id="gen"></div>',
+            f'<div class="sub" id="gen"></div>\n'
+            f'  <div class="sub">includes {n} pre-012 records (untrusted)</div>',
+            1,
+        )
+    return html
 
 
 def main():
