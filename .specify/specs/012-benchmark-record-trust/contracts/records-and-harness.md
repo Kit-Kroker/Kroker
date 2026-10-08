@@ -181,6 +181,18 @@ return exactly as at base. Their tests at base pass unedited.
 `gate-diagnosis.md` and reported to the orchestrator before coding; this
 contract gains one line per gate at that point.
 
+Per-gate decision (gate-diagnosis.md, ruled on by the orchestrator
+2026-10-08 — "no code change for either gate"):
+
+- **Merge, absolute checks (tests, lint, security): stays a rejection.**
+  The diagnosis showed right-reasoned rejections of the produced code
+  (introduced lint findings; failing or uncollectable produced tests);
+  no benchmark-only condition. Not evaluated: never.
+- **Merge, advisory path (incl. the soft-verdict route) and analyze
+  traceability acting through it: stays a rejection.** Code-inspecting,
+  no benchmark-only dependency found; the visibility mechanism is the
+  §6.1/§6.2 error text, not a new outcome. Not evaluated: never.
+
 ## 7. Readers
 
 7.1 Every stored record file under `runs/benchmarks/` loads with no line
