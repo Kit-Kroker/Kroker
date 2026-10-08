@@ -373,3 +373,150 @@ async def test_grade_oracle_malformed_tasks_yaml_never_fails_case_grade(tmp_path
     # case-level grade unaffected; task grading just contributed nothing
     assert grade.total == 2
     assert grade.task_grades == []
+
+
+# --- 012 T015 (RED): the empty-diff guard (contract §4.5, data-model §1.6) ---
+# Fast tier: _bounded_shell is stubbed to record its calls and drop a junit
+# report into the worktree, so no real test run ever happens.
+
+from pathlib import Path
+
+import sdlc.benchmarks.oracle as oracle_mod
+
+_PASS_JUNIT = """<?xml version="1.0" encoding="utf-8"?>
+<testsuite tests="2" failures="1">
+  <testcase classname="oracle.test_x" name="test_ok"/>
+  <testcase classname="oracle.test_x" name="test_bad"><failure message="boom"/></testcase>
+</testsuite>
+"""
+
+
+def _fast_repo(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(["init", "-b", "main"], repo)
+    _git(["config", "user.email", "t@t"], repo)
+    _git(["config", "user.name", "t"], repo)
+    (repo / "pyproject.toml").write_text("[project]\nname='x'\nversion='0'\n")
+    (repo / "base.txt").write_text("v1\n")
+    _git(["add", "."], repo)
+    _git(["commit", "-m", "base"], repo)
+    return repo
+
+
+def _integration_branch(repo, run_id, files):
+    """Create sdlc/<run_id>/integration. With files=None the branch is cut at
+    the base commit and nothing is committed -- an empty diff vs base."""
+    branch = f"sdlc/{run_id}/integration"
+    _git(["checkout", "-b", branch], repo)
+    for name, content in (files or {}).items():
+        p = repo / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        _git(["add", "."], repo)
+    if files:
+        _git(["commit", "-m", "produced"], repo)
+    _git(["checkout", "main"], repo)
+    return branch
+
+
+async def _grade_with_stub(monkeypatch, tmp_path, repo, run_id, junit=_PASS_JUNIT):
+    """grade_oracle with a recorded _bounded_shell stub: the stub writes the
+    junit report the oracle then parses. Returns (grade, shell_calls)."""
+    calls: list = []
+
+    async def fake_shell(cmd, cwd, timeout_s):
+        calls.append(cmd)
+        Path(cwd, "oracle-report.xml").write_text(junit, encoding="utf-8")
+
+    monkeypatch.setattr(oracle_mod, "_bounded_shell", fake_shell)
+    cases = tmp_path / f"cases-{run_id.replace('/', '_').replace('#', '_')}"
+    (cases / "case" / "oracle").mkdir(parents=True)
+    (cases / "case" / "oracle" / "test_x.py").write_text("def test_x():\n    assert True\n")
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(cases))
+    grade = await grade_oracle(
+        OracleInput(
+            case_id="case", repo_url=str(repo), run_id=run_id, language="python", base_branch="main"
+        )
+    )
+    return grade, calls
+
+
+@pytest.mark.asyncio
+async def test_empty_diff_vs_base_scores_zero_without_running_the_suite(monkeypatch, tmp_path):
+    """contract §4.5: an integration branch with NO change against the base
+    returns the zero grade -- score 0.0, passed 0, changed_files 0, detail
+    exactly 'empty diff vs base' -- and the test command never runs."""
+    repo = _fast_repo(tmp_path)
+    run_id = "bench-x/case#opencode#m"
+    _integration_branch(repo, run_id, files=None)
+    grade, calls = await _grade_with_stub(monkeypatch, tmp_path, repo, run_id)
+    assert grade.score == 0.0
+    assert grade.passed == 0
+    assert grade.changed_files == 0
+    assert grade.detail == "empty diff vs base"
+    assert calls == [], "the test command must never run on an empty diff"
+
+
+@pytest.mark.asyncio
+async def test_changed_files_counts_the_diff_against_base(monkeypatch, tmp_path):
+    """data-model §1.6: the grade carries the number of files changed
+    against the base branch; the grade itself follows the stubbed junit."""
+    repo = _fast_repo(tmp_path)
+    run_id = "bench-y/case#opencode#m"
+    _integration_branch(
+        repo,
+        run_id,
+        files={
+            "base.txt": "v2\n",  # modified
+            "added.py": "x = 1\n",  # added
+            "pkg/second.py": "y = 2\n",  # added in a subdir
+        },
+    )
+    grade, calls = await _grade_with_stub(monkeypatch, tmp_path, repo, run_id)
+    assert grade.changed_files == 3
+    assert grade.passed == 1 and grade.total == 2 and grade.score == 0.5
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_passing_grade_then_empty_branch_in_one_process_scores_zero(monkeypatch, tmp_path):
+    """SC-005, fast: grade a passing branch, then an empty branch of the
+    SAME repository, in one process. The second is 0 passed with the
+    empty-diff detail, and the stubbed suite ran only for the first."""
+    repo = _fast_repo(tmp_path)
+    run_a = "bench-z/case#opencode#m"
+    _integration_branch(repo, run_a, files={"app.py": "x = 1\n"})
+
+    first_calls: list = []
+
+    async def fake_shell(cmd, cwd, timeout_s):
+        first_calls.append(cmd)
+        Path(cwd, "oracle-report.xml").write_text(_PASS_JUNIT, encoding="utf-8")
+
+    monkeypatch.setattr(oracle_mod, "_bounded_shell", fake_shell)
+    cases = tmp_path / "cases"
+    (cases / "case" / "oracle").mkdir(parents=True)
+    (cases / "case" / "oracle" / "test_x.py").write_text("def test_x():\n    assert True\n")
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(cases))
+
+    first = await grade_oracle(
+        OracleInput(
+            case_id="case", repo_url=str(repo), run_id=run_a, language="python", base_branch="main"
+        )
+    )
+    assert first.passed > 0
+    assert len(first_calls) == 1
+
+    run_b = "bench-z/empty#opencode#m"
+    _integration_branch(repo, run_b, files=None)
+    second = await grade_oracle(
+        OracleInput(
+            case_id="case", repo_url=str(repo), run_id=run_b, language="python", base_branch="main"
+        )
+    )
+    assert second.passed == 0
+    assert second.score == 0.0
+    assert second.changed_files == 0
+    assert second.detail == "empty diff vs base"
+    assert len(first_calls) == 1, "the empty branch must not run the suite"

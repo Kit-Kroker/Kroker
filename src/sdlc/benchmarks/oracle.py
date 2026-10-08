@@ -157,6 +157,9 @@ class OracleGrade:
     held_out_ok: bool
     detail: str
     task_grades: list[TaskGrade] = field(default_factory=list)
+    # 012 (data-model §1.6): files changed against the base branch.
+    # 0 with a zero score = the empty-diff guard fired (contract §4.5).
+    changed_files: int = 0
 
 
 def _grade(
@@ -208,6 +211,13 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
         diff = _git(["diff", "--name-only", f"{inp.base_branch}...HEAD"], wt)
         changed = [ln.strip() for ln in diff.stdout.splitlines() if ln.strip()]
         held = held_out_ok(changed)
+
+        # 012 (contract §4.5, FR-013): a branch with no change against the
+        # base produced no code to grade — a real zero by construction, at
+        # zero test-run cost. Return before the oracle is even copied in:
+        # nothing of the produced (empty) tree may execute.
+        if not changed:
+            return _grade(0.0, 0, 0, lang, detected, held, "empty diff vs base")
 
         shutil.copytree(oracle_src, os.path.join(wt, "oracle"))
         report = os.path.join(wt, "oracle-report.xml")
@@ -261,7 +271,11 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
             # a broken tasks.yaml or judge call never fails the case-level
             # oracle grade -- it just contributes no task grades.
             task_grades = []
-        return _grade(score, passed, total, lang, detected, held, detail, task_grades=task_grades)
+        grade_final = _grade(
+            score, passed, total, lang, detected, held, detail, task_grades=task_grades
+        )
+        grade_final.changed_files = len(changed)
+        return grade_final
     except Exception as e:  # fail-safe: a broken grader never fails a cell
         return _grade(None, 0, 0, lang, None, True, f"grade_oracle error: {e}")
     finally:
