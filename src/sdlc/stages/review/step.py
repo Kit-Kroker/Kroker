@@ -132,6 +132,9 @@ async def step(
     patch = _get_patch(diff)
     qa_raw_json = _get_qa_raw_json(qa_raw)
     model = reviewer_model or _role_model(cfg, "reviewer", reviewer_agent, default="unknown")
+    # 012 (contract §5.7): the review record carries the reviewer call's
+    # own tokens — the same spend-bag pattern run_adversary uses below.
+    reviewer_spend = RoleUsage(role="reviewer", model=model)
 
     role_res = await ctx.run_role(
         cfg,
@@ -139,6 +142,7 @@ async def step(
         model,
         reviewer_agent,
         reviewer_prompt(assertions, qa_raw_json, patch),
+        into=reviewer_spend,
     )
     review: ReviewReport = getattr(role_res, "output", role_res)
 
@@ -156,6 +160,7 @@ async def step(
                 judge="contract",
                 outcome=(BenchmarkOutcome.PASS if review.approve else BenchmarkOutcome.FAIL),
                 model=model,
+                spend=reviewer_spend,
                 task_id=getattr(task, "id", None),
                 attempt=attempt,
                 fix_attempts=0,

@@ -30,6 +30,11 @@ verifying accusations against transcript evidence and failing open on error. [E-
 
 ### REVIEW-1.5
 The slice exports `step`, `run_adversary`, `run_deep_review`, and `ACTIVITIES = []`. [FR-106]
+The primary's benchmark record spans the review work only (the caller's
+`started` argument to its own write, 012 §5.3) and carries the reviewer
+call's own input and output tokens in its cost bag (012 §5.7, the same
+spend-bag pattern as the adversary lens); no record is written when the
+reviewer is disabled or absent (012 §5.8).
 
 ### REVIEW-1.6
 Every lens in `GATING_LENSES` (`src/sdlc/stages/review/lenses.py`) yields a typed `LensOutcome` recording what it did: `PRESENT` with the report's verdict, or one of three absent states — `DECLARED_ABSENT` (the operator disabled it), `NOT_REACHED` (enabled, but its run site was never reached on this task), `UNDECLARED_ABSENT` (enabled and reached, but no report came back). `LensOutcome`'s validator makes an absent-and-approved outcome unconstructible, and every absent state carries a reason. `classify_lens` is the single producer, pure and derived from the same facts the runner's own pre-check consults, so a tombstone cannot disagree with the predicate that gated the run. Fail-open at the task layer is preserved and now explicit: `primary_admits` and `backstop_admits` admit every absent state, so absence never blocks delivery — it is graded at the merge gate instead (MERGE-1.8). [C8]
