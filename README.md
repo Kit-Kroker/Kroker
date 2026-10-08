@@ -74,6 +74,19 @@ python -m sdlc.cli benchmark score --bench <bench_run_id> --weights 0.7,0.2,0.1
 python -m sdlc.cli benchmark score --case cat-cafe-monitoring
 ```
 
+Two round-012 notes for `benchmark run`:
+
+- **Pre-flight:** a case manifest that registers a rubric or veto file it
+  does not ship stops the run immediately, before any Temporal client is
+  created and before any cell can spend model budget — the failure names
+  every missing file.
+- **Provenance (`KROKER_COMMIT`):** every record a run writes carries the
+  Kroker commit that produced it, resolved once per run from git. A worker
+  whose tree git cannot read (a bind-mounted worktree) should be started
+  with `KROKER_COMMIT=<sha>` (and `KROKER_TREE_DIRTY=0|1` for a clean or
+  dirty tree); the image defaults to the literal `unknown`, which no
+  success criterion accepts.
+
 ## Run
 
 ### Quickstart (Docker Compose)

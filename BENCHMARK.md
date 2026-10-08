@@ -104,6 +104,20 @@ Measurement pieces already in the tree, per `ROADMAP.md` and `SDLC-spec-v2.md`:
   side. The numbers are collected; they are not yet aggregated into run-level
   counters.
 - **CLI surface** — `sdlc ... benchmark` verb already exists (FR-603).
+- **The record (round 012).** Every record a benchmark run writes carries
+  its provenance and cell identity: `kroker_commit` (a commit id or the
+  literal `unknown` — resolved once per run, never empty), `tree_dirty`,
+  `arm` (the cell label; a cell is a case under an arm), `cell_id`, and a
+  real `prompt_sha` (sha256 of the role's `instructions.md`, or an explicit
+  `none:<reason>` — never empty). One **cell record** (scope `cell`,
+  stage/role `cell`) is written per cell after it ends and after any
+  grading: whether the pipeline completed, the last stage reached, and the
+  grading state — `graded`, `not_graded` (code stage did not finish; the
+  oracle never runs for it), `grading_failed` (the oracle could not run),
+  `no_oracle`. A 012 run writes **one record file per cell**
+  (`<run>/<cell_id>.jsonl`); pre-012 records (no `kroker_commit`) load
+  unchanged but are marked **pre-012 (untrusted)** by every report and are
+  never averaged together with 012 rows.
 - **Memoization that is eval-aware** — `content_key` keys on
   `prompt_sha + model_id + recall_snapshot` (FR-103, NFR-6), so a benchmark
   cell that changes a prompt or a role's model invalidates exactly the affected
@@ -173,12 +187,40 @@ mattered, or only what it chose to?).
 - **Unblocks on:** the coverage/test-execution seam (§1 limit 1). This is the
   single highest-leverage fix in the whole document — see §6.
 
+**Tier A grading, per round 012.** A cell is graded only when its code
+stage finished (a post-code stage record exists — never the mere
+existence of an integration branch); a cell that stopped early is
+`not_graded`, excluded from every quality mean and counted separately.
+Each grade runs in its **own clean environment**: a venv created inside
+that grade's temporary worktree (the produced project's declared
+dependencies, then the case's `oracle/requirements.txt` if it ships one,
+else pytest) and an allowlisted test environment with no `PYTHONPATH`/
+`PYTHONHOME` — nothing from one grade can influence another, and the
+worker's own site-packages are never the test environment (the round's
+F3 finding; measured cost ≈25 s per provision). An integration result
+with **no change against the base scores zero without running a test**
+(the empty-diff rule). A grade that could not run is `grading_failed`
+with the reason, distinct from both `not_graded` and a graded zero. For
+all of these reasons, **oracle scores from round 012 on are not
+comparable with pre-012 scores** (isolated environments; aborted cells
+no longer count as zero).
+
 ### Tier B — Rubric judging (subjective, already built)
 
 The E-27 mechanism: a rubric per stage, scored by the cross-family judge. This
 is the *only* way to grade non-code stages (clarify quality, architecture
 soundness, research grounding) where no oracle suite can exist. It is already
 wired for `clarifier/architect/planner` and, since E-27, `qa/research`.
+
+- **A registered rubric or veto file must exist (round 012).** A case
+  manifest that names a rubric or veto file it does not ship is a broken
+  manifest: `sdlc benchmark run` stops before contacting Temporal, and
+  the loader activity raises non-retryably — at zero model spend. Every
+  reader of case files (judge, report, calibration, task loader, oracle,
+  DevEval import, verify) resolves the cases location through one
+  function honouring `SDLC_CASES_ROOT`, so an override moves everything
+  together — including the judge, which before 012 ignored it and could
+  not find the rubrics the worker image had.
 
 - **Calibration requirement (non-negotiable, from the eval literature and
   Cursor's "decorrelated lenses"):** a rubric judge measures the judge unless
@@ -317,7 +359,11 @@ should emit a **row per run** with these fields, aggregated across the matrix.
 ### 4.1 Quality (the grade)
 
 - **Oracle pass rate** — fraction of the held-out Tier-A suite passing. The
-  primary number. Requires §6 priority 1.
+  primary number. Requires §6 priority 1. **Round 012:** the code stage's
+  quality is the share of *attempts that passed* (each attempt's three
+  records — code, qa, review — carry that role's own verdict, never a copy
+  of another's), so a cell that needed three attempts to land reads 1/3,
+  not 1.
 - **Grade-over-time** — Cursor grade the suite as a *rising curve*, because
   agents choose their own strategy (broad-foundation-then-spike vs
   deep-then-plateau) and *"trends matter more than exact scores at exact
@@ -335,6 +381,9 @@ should emit a **row per run** with these fields, aggregated across the matrix.
 ### 4.2 Economics (the cost)
 
 - **$ per run**, decomposed **per role** (not per token — §3.2).
+  **Round 012 limit:** dollars on harness records are not measured — a
+  subscription-billed harness run reports $0.00 by construction; tokens
+  are the usable volume figure on those records.
 - **Tokens per role**, with the planner/worker split Cursor highlight (workers
   carried ≥69%, often >90%, of tokens but a minority of cost).
 - **Context-ceiling events** — `input_tokens > fraction × context_window` and
@@ -415,6 +464,13 @@ no history to mine):
   corpus past the cold start — and it is exactly what the retro stage (14) +
   `RunSummary` are for. Closing that stage (§6 priority 2) turns production runs
   into eval intake automatically. Until then, cases are hand-authored only.
+
+**Case layout note (round 012).** A case's `oracle/` directory may ship a
+`requirements.txt` — the oracle's own test dependencies (e.g. `httpx`,
+`pytest-asyncio`), installed into the per-grade environment after the
+produced project's own. A file that the case does not need (oracle imports
+only pytest and the produced project) should not be added; every oracle in
+the corpus was audited and the two oracle cases ship one.
 
 **Field Guide vs Hindsight — a note, not a task.** Cursor's Field Guide (a
 line-budgeted, agent-curated `index.md` injected at every agent start) is a

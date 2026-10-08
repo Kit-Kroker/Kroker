@@ -138,6 +138,7 @@ def dispatch_experiment_compare(
         render_deltas_markdown,
         save_experiment,
     )
+    from .models import BenchmarkScope, is_pre012
     from .score import load_config_weights
 
     base = Path(exp_dir) if exp_dir else experiments_dir()
@@ -157,7 +158,18 @@ def dispatch_experiment_compare(
     exp.candidate = candidate
     exp.deltas = compute_deltas(baseline_ev, candidate_ev, load_config_weights())
     save_experiment(exp, path)
-    return render_deltas_markdown(exp.deltas) + f"\nWritten to {path}. Verdict is yours to write.\n"
+    # 012 (contract §7.6, the T010-deferred hook): is_pre012 over both
+    # evidence sets, cell-scope records excluded like every §7.6 view.
+    compared = [
+        r
+        for r in [*baseline_ev.records, *candidate_ev.records]
+        if r.scope is not BenchmarkScope.CELL
+    ]
+    pre012 = sum(1 for r in compared if is_pre012(r))
+    return (
+        render_deltas_markdown(exp.deltas, pre012_records=pre012)
+        + f"\nWritten to {path}. Verdict is yours to write.\n"
+    )
 
 
 def dispatch_calibrate(

@@ -271,3 +271,25 @@ def test_render_deltas_markdown_states_the_pre012_count_when_given():
     assert line in render_deltas_markdown(rows, pre012_records=2)
     assert "pre-012" not in render_deltas_markdown(rows)
     assert "pre-012" not in render_deltas_markdown(rows, pre012_records=0)
+
+
+def test_compare_output_states_the_pre012_count(tmp_path):
+    """The T010-deferred hook (contract §7.6): dispatch_experiment_compare
+    computes is_pre012 over both evidence sets and the rendered comparison
+    carries the untrusted line."""
+    from sdlc.benchmarks.cli import dispatch_experiment_compare
+    from sdlc.benchmarks.recorder import RecordStore
+
+    pre = _rec(q=0.5)  # no kroker_commit -> pre-012
+    new = _rec(q=0.9, bench="b2").model_copy(
+        update={"kroker_commit": "abc123", "tree_dirty": False}
+    )
+    RecordStore(root=str(tmp_path), bench_run_id="b1").append(pre)
+    RecordStore(root=str(tmp_path), bench_run_id="b2").append(new)
+
+    exp = new_experiment(name="x", axis="prompt", change="c", baseline="b1")
+    save_experiment(exp, tmp_path / f"{exp.id}.yaml")
+    out = dispatch_experiment_compare(
+        experiment=exp.id, candidate="b2", exp_dir=str(tmp_path), root=str(tmp_path)
+    )
+    assert "includes 1 pre-012 records (untrusted)" in out
