@@ -51,7 +51,7 @@ host.docker.internal:7234, worker in `kroker-dev` with cwd /app):
 | `kroker_commit` on every line | **MISS — `unknown` on all 41 lines** (identical, but not the branch head). Cause: the override was exported on the CLI shell; `resolve_provenance` runs as a worker-side activity (`benchmarks/workflow.py:306`), so it read the WORKER's environment, which did not carry `KROKER_COMMIT`. The quickstart's "the worker must know the commit" is the operative reading; the value is resolved once per run and memoized in workflow state, so this run could not recover it mid-flight |
 | `prompt_sha` on every line | **PASS** — 64-hex for every prompted role, `none:...` otherwise, no empty value |
 | `arm` and `cell_id` | **PASS** — one distinct pair on all 41 lines |
-| clarify / architecture `quality.score` | **MISS — `judge: "error"`, score null on both.** The cross-family judge (`google:gemini-3.5-flash`) failed transiently during the run; the judge never raises by design and recorded not-measured. A standalone probe after the run (same container, same key from /app/.env, resolve_model + Agent.run_sync) succeeds, and GEMINI_API_KEY was in the worker's env (worker.py `load_dotenv()`), so this is an environment-transient failure, not a 012 defect — but the criterion row is not met on this run |
+| clarify / architecture `quality.score` | **MISS — `judge: "error"`, score null on both.** The cross-family judge (`google:gemini-3.5-flash`) failed during the run; the judge never raises by design and recorded not-measured. A standalone probe after the run (same container, same key from /app/.env, resolve_model + Agent.run_sync) succeeds, and GEMINI_API_KEY was in the worker's env (worker.py `load_dotenv()`). First attributed to a transient environment failure — **refuted by the re-run (§3b): the failure is deterministic and 012-side (async activity calling the sync judge on the event loop); see §3b for the proof** |
 | code/qa/review `speed` per attempt | **PASS** — all 7 tasks: code.ended = qa.started, qa.ended = review.started (the T017 partition is exact on real data); every record inside its attempt |
 | review `cost.input_tokens` | **PASS** — present on every review record |
 | the cell record | **PASS** — `grading: graded`, `last_stage: merge`, `completed: true` |
@@ -72,9 +72,44 @@ the permitted change from `108 7d335188...`, exactly the new cell's one
 jsonl file (score outputs are not records). `git ls-files runs/` still
 prints nothing.
 
-**Verdict: the run completed and 8 of 10 rows pass; the exit criterion
-is NOT met** (SC-002's commit row missed on the worker-env placement,
-SC-001's rubric row missed on a transient judge failure). No second run
-started; per SG-7 both a re-run decision and the environment fixes
-(KROKER_COMMIT on the worker env, SDLC_MEMORY_BASE_URL to a reachable
-Hindsight, judge retry) belong to the orchestrator.
+**Verdict (first run): the run completed and 8 of 10 rows pass; the exit
+criterion is NOT met** (SC-002's commit row missed on the worker-env
+placement, SC-001's rubric row missed on what the first report called a
+transient judge failure). No second run started; per SG-7 the re-run
+decision went to the orchestrator.
+
+### §3b The re-run (orchestrator-cleared, SG-7 retry)
+
+Cleared with the environment fixed on the WORKER process:
+`KROKER_COMMIT=b3344416`, `KROKER_TREE_DIRTY=0`,
+`SDLC_MEMORY_BASE_URL=http://host.docker.internal:8888` (memory kept
+on, exercised through the real path — zero DNS errors this run, where
+the first run burned 35×5 retry attempts). Everything else identical.
+
+- run id: `bench-todo-api-greenfield-1791479569`, 17:12:49Z–18:37Z,
+  41 records, 7 tasks, gates off.
+
+| Check | Result |
+|---|---|
+| `*.jsonl` files | **PASS** — exactly 1 |
+| `kroker_commit` | **PASS — `b3344416` on all 41 lines**, `tree_dirty: false` |
+| `prompt_sha` | **PASS** — 64-hex / `none:<reason>`, no empty |
+| `arm` / `cell_id` | **PASS** — one pair on all lines |
+| clarify / architecture `quality.score` | **MISS — `judge: "error"` again, deterministically.** Root cause now PROVEN and it is 012-side, not transient: `judge_artifact` is an `async def` activity that calls the sync `_judge_sync` → `agent.run_sync` **on the running event loop** → `RuntimeError: This event loop is already running` (pydantic-ai run_sync wraps `run_until_complete`), swallowed by the judge's broad except into `judge="error"`. Reproduced standalone three ways: (1) the exact activity inputs recovered from Temporal history judge cleanly in a fresh process (clarify 1.0, architecture 0.94); (2) the same input through `_judge_sync` called from inside `asyncio.run` reproduces `judge='error'`; (3) a bare `agent.run_sync` inside a running loop raises the RuntimeError above. The path never executed pre-012 (the judge never found the case rubrics — the gap T003/T004 closed), which is why it was never seen. Candidate fix, one line: `judge_artifact` runs `_judge_sync` via `asyncio.to_thread`. Not applied: code changes need a task and the reviewer gate |
+| code/qa/review timings | **PASS** — exact partition on all 7 tasks |
+| review `input_tokens` | **PASS** |
+| cell record | **PASS** — `graded`, `last_stage: merge`, `completed: true` |
+| analyze / merge | **PASS** — analyze names 10 untraced criteria; merge names `lint_clean` (3 introduced) with details — code-inspecting causes, no benchmark-only condition |
+| `report.md` | **PASS** — one `## Cells` section, no pre-012 section |
+
+Oracle again **1.0** (full held-out pass in the per-grade venv). First
+run's directory kept as evidence (per the ruling). Fingerprint after
+the re-run: **`110
+8695b5956712df5aad4ecb0061a95934472c1debed8a0ddef400f1be7d1cfea1`** —
+the two permitted additions (one jsonl per run directory); `git ls-files
+runs/` empty.
+
+**Verdict (re-run): 9 of 10 rows pass. SC-002 met on the re-run.
+SC-001's rubric row is not met, and the miss is now a proven 012-side
+defect (async/sync judge seam), not an environment condition.** The
+fix and any third run belong to the orchestrator.
