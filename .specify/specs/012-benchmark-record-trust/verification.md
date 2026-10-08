@@ -35,5 +35,46 @@ plus the authorized pins-fix `378a2345`).
 
 ## §3 The validation smoke run
 
-Pending the orchestrator's go (SG-7). To be appended: run id, commit,
-each quickstart §3 row's result, and the changed fingerprint line.
+Run (the round's one permitted run, on the orchestrator's go of
+2026-10-08; dedicated Temporal `kroker-temporal-bench` at
+host.docker.internal:7234, worker in `kroker-dev` with cwd /app):
+
+- run id: `bench-todo-api-greenfield-1791472617`
+- cell: `todo-api-greenfield#opencode#zai-coding-plan-glm-5.2` (one arm)
+- started 15:16:57Z, finished ~17:04Z; 41 records, 7 tasks, all gates off
+- `KROKER_COMMIT=b3344416` was set on the run/CLI shell per the go; the
+  records came out `unknown` — see row 2.
+
+| Check | Result |
+|---|---|
+| number of `*.jsonl` files | **PASS — exactly 1** (`todo-api-greenfield#opencode#zai-coding-plan-glm-5.2.jsonl`) |
+| `kroker_commit` on every line | **MISS — `unknown` on all 41 lines** (identical, but not the branch head). Cause: the override was exported on the CLI shell; `resolve_provenance` runs as a worker-side activity (`benchmarks/workflow.py:306`), so it read the WORKER's environment, which did not carry `KROKER_COMMIT`. The quickstart's "the worker must know the commit" is the operative reading; the value is resolved once per run and memoized in workflow state, so this run could not recover it mid-flight |
+| `prompt_sha` on every line | **PASS** — 64-hex for every prompted role, `none:...` otherwise, no empty value |
+| `arm` and `cell_id` | **PASS** — one distinct pair on all 41 lines |
+| clarify / architecture `quality.score` | **MISS — `judge: "error"`, score null on both.** The cross-family judge (`google:gemini-3.5-flash`) failed transiently during the run; the judge never raises by design and recorded not-measured. A standalone probe after the run (same container, same key from /app/.env, resolve_model + Agent.run_sync) succeeds, and GEMINI_API_KEY was in the worker's env (worker.py `load_dotenv()`), so this is an environment-transient failure, not a 012 defect — but the criterion row is not met on this run |
+| code/qa/review `speed` per attempt | **PASS** — all 7 tasks: code.ended = qa.started, qa.ended = review.started (the T017 partition is exact on real data); every record inside its attempt |
+| review `cost.input_tokens` | **PASS** — present on every review record |
+| the cell record | **PASS** — `grading: graded`, `last_stage: merge`, `completed: true` |
+| analyze / merge records | **PASS** — analyze FAIL names its cause (`11 untraced criterion(s): TASK-1: ...`); merge FAIL names the absolute blockers with details (`build_integration_green`, `lint_clean`, head test run exit 4) — both code-inspecting causes exactly as gate-diagnosis.md predicted; no benchmark-only condition |
+| `report.md` | **PASS** — exactly one `## Cells` section, no pre-012 section |
+
+Also recorded: the oracle graded the cell **1.0** (6/6 oracle_task rows
+at 1.0 — full pass of the held-out suite in the per-grade isolated
+venv). `SDLC_MEMORY_BASE_URL` points at the compose hostname
+`http://hindsight:8888`, unresolvable in the standalone bench container:
+34 retain items and 1 reflect exhausted their retries on DNS errors —
+tolerated by design (the workflow continued; memory retention simply
+absent), no stage record affected.
+
+Fingerprint after the run: **`109
+bc953e00ec51b5715adc9bbc2a97e1979f121ff0da1d0e4c3e9ead707cc488ff`** —
+the permitted change from `108 7d335188...`, exactly the new cell's one
+jsonl file (score outputs are not records). `git ls-files runs/` still
+prints nothing.
+
+**Verdict: the run completed and 8 of 10 rows pass; the exit criterion
+is NOT met** (SC-002's commit row missed on the worker-env placement,
+SC-001's rubric row missed on a transient judge failure). No second run
+started; per SG-7 both a re-run decision and the environment fixes
+(KROKER_COMMIT on the worker env, SDLC_MEMORY_BASE_URL to a reachable
+Hindsight, judge retry) belong to the orchestrator.
