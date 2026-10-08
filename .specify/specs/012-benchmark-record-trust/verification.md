@@ -113,3 +113,60 @@ runs/` empty.
 SC-001's rubric row is not met, and the miss is now a proven 012-side
 defect (async/sync judge seam), not an environment condition.** The
 fix and any third run belong to the orchestrator.
+
+### §3c The third run (after T025; second and last SG-7 retry)
+
+T025 (authorized amendment, commit `7c1f05fa`, reviewer-approved)
+landed the judge fix — `judge_artifact` now runs the sync judge via
+`asyncio.to_thread` — with a RED-first test exercising the real async
+path. The third run then executed on the fixed code, worker env
+identical to the re-run per the ruling (`KROKER_COMMIT=b3344416`,
+`KROKER_TREE_DIRTY=0`,
+`SDLC_MEMORY_BASE_URL=http://host.docker.internal:8888`; the running
+tree also carried the T025 fix, whose commit the ruling's pinned
+provenance value does not name — noted for the record).
+
+- run id: `bench-todo-api-greenfield-1791488612`, 19:43:32Z.
+- **The judge fix is proven on live data:** clarify records
+  `judge: staged_rubric, score: 1.0` — the rubric path scored a real
+  artifact through the real activity, which both prior runs could not
+  do.
+- **The run ABORTED in architecture, an infrastructure flake:** the
+  shared Hindsight stopped answering recalls —
+  `recall_snapshot` → POST host.docker.internal:8888/.../recall →
+  `httpx.ReadTimeout` (a recall at 19:56 had succeeded) — exhausting
+  the activity's retries at ~20:00:50 and failing the child workflow.
+  No 012 code is involved; the same service answered every call in the
+  re-run.
+
+Rows on the third directory:
+
+| Check | Result |
+|---|---|
+| `*.jsonl` files | **PASS — exactly 1** |
+| `kroker_commit` | **PASS — `b3344416` on all 3 lines**, `tree_dirty: false` |
+| `prompt_sha` | **PASS** — 64-hex / `none:<reason>` |
+| `arm` / `cell_id` | **PASS** — one pair on all lines |
+| clarify `quality.score` | **PASS — `staged_rubric`, score 1.0** (the fixed judge, live). Architecture never ran (abort) — the row cannot complete on this run |
+| code/qa/review timings | **not exercised** — no task attempts (abort before code) |
+| review `input_tokens` | **not exercised** |
+| the cell record | **`grading: not_graded`, `last_stage: clarify`, `pipeline_finished: false`, `child_result: ChildWorkflowError`** — the correct US2 behaviour on a real abort, demonstrated live; the row's `graded` expectation does not apply to an aborted cell |
+| analyze / merge | **not exercised** — neither stage ran |
+| `report.md` | **PASS — one `## Cells` section, no pre-012 section** |
+
+Also recorded: this run's research stage took the hard-grounding FAIL
+path (`rejected:research.grounding: quote_not_found` on an asyncio-docs
+citation) — the designed OQ-B3 behaviour, unrelated to the abort.
+
+Fingerprint after the third run: **`111
+2a32da9727fb624601fed84172f1b595bb69476a86ee5b8e323edec0d0e56831`** —
+the three permitted additions; `git ls-files runs/` empty.
+
+**Verdict (third run): the run aborted before code on a Hindsight
+read-timeout; the judge fix is confirmed live (clarify scored
+`staged_rubric` 1.0), and the abort exercised `not_graded` end-to-end.
+SC-001's full row (clarify AND architecture scored) and the
+completed-run rows were not obtainable from this run. Per the ruling
+this was the last cleared run; the round's evidence stands at: SC-002
+met (§3b), SC-001's mechanism fixed and proven on a live stage (§3c)
+with the complete-row demonstration pending a completed run.**
