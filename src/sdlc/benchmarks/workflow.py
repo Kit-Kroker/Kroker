@@ -33,6 +33,7 @@ with workflow.unsafe.imports_passed_through():
         RoleConfig,
     )
     from ..workflows.pipeline_child import execute_pipeline_child
+    from .cell import cell_record, grading_status, summarize_cell
     from .judge import load_case_assets
     from .matrix import expand_matrix
     from .models import (
@@ -41,12 +42,13 @@ with workflow.unsafe.imports_passed_through():
         BenchmarkRecord,
         BenchmarkScope,
         CaseSpec,
+        CellStatus,
         GraphAttribution,
         QualityScore,
         SpeedBag,
     )
     from .oracle import OracleGrade, OracleInput, grade_oracle
-    from .provenance import Provenance
+    from .provenance import Provenance, resolve_provenance
     from .recorder import record_benchmark
     from .report import finalize_benchmark_report
 
@@ -158,20 +160,30 @@ def _oracle_record(
     ended: datetime,
     *,
     graph_sha: str | None = None,
+    provenance: Provenance | None = None,
 ) -> BenchmarkRecord:
     """Build the stage='oracle' record from a grade. An integrity breach
-    (held-out or language mismatch) sets .error so it surfaces in the report's
-    failure section -- loud, never silent. E-77 R-9: oracle records sit
-    outside any activation, so a known graph pins graph_sha only."""
+    (held-out or language mismatch) sets .error so it surfaces in the
+    report's failure section -- loud, never silent. 012 (contract §3,
+    last row): a grade without a score is NOT_EVALUATED carrying the
+    grade's detail — a grading failure, never a zero. E-77 R-9: oracle
+    records sit outside any activation, so a known graph pins graph_sha
+    only. 012 identity (contract §2.3-§2.5): model is deterministic (the
+    oracle is no model), the arm and cell id name the cell, provenance
+    rides the run's single resolution."""
     err = None
-    if not grade.held_out_ok:
-        err = "held-out breach: oracle path in produced diff"
-    elif not grade.language_match:
-        err = (
-            f"language mismatch: manifest={grade.language_manifest} "
-            f"detected={grade.language_detected}"
-        )
-    outcome = BenchmarkOutcome.PASS if (grade.score or 0.0) >= 1.0 else BenchmarkOutcome.FAIL
+    if grade.score is None:
+        outcome = BenchmarkOutcome.NOT_EVALUATED
+        err = grade.detail or None
+    else:
+        if not grade.held_out_ok:
+            err = "held-out breach: oracle path in produced diff"
+        elif not grade.language_match:
+            err = (
+                f"language mismatch: manifest={grade.language_manifest} "
+                f"detected={grade.language_detected}"
+            )
+        outcome = BenchmarkOutcome.PASS if grade.score >= 1.0 else BenchmarkOutcome.FAIL
     return BenchmarkRecord(
         run_id=run_id,
         bench_run_id=bench_run_id,
@@ -181,7 +193,12 @@ def _oracle_record(
         role="oracle",
         harness=base_cell.harness,
         lead_harness=base_cell.lead_harness,
-        model=base_cell.arm_name,
+        model="deterministic",
+        prompt_sha="none:deterministic",
+        arm=base_cell.arm_name,
+        cell_id=base_cell.cell_id,
+        kroker_commit=(provenance.kroker_commit if provenance is not None else None),
+        tree_dirty=(provenance.tree_dirty if provenance is not None else None),
         quality=QualityScore(
             score=grade.score,
             judge="oracle",
@@ -210,11 +227,14 @@ def _oracle_task_records(
     ended: datetime,
     *,
     graph_sha: str | None = None,
+    provenance: Provenance | None = None,
 ) -> list[BenchmarkRecord]:
     """One record per TaskGrade in grade.task_grades. error_class is not
     stored on the record -- task_matrix.py / error_matrix.py join it from
     tasks.yaml by (case_id, task_id) at aggregation time, so the write path
-    only needs the scope + the already-existing task_id field."""
+    only needs the scope + the already-existing task_id field. 012: written
+    only for a GRADED cell (contract §3 — a scoreless grade writes the one
+    not_evaluated oracle record and nothing here)."""
     out: list[BenchmarkRecord] = []
     for t in grade.task_grades:
         outcome = BenchmarkOutcome.PASS if (t.score or 0.0) >= 1.0 else BenchmarkOutcome.FAIL
@@ -229,7 +249,12 @@ def _oracle_task_records(
                 role="oracle",
                 harness=base_cell.harness,
                 lead_harness=base_cell.lead_harness,
-                model=base_cell.arm_name,
+                model="deterministic",
+                prompt_sha="none:deterministic",
+                arm=base_cell.arm_name,
+                cell_id=base_cell.cell_id,
+                kroker_commit=(provenance.kroker_commit if provenance is not None else None),
+                tree_dirty=(provenance.tree_dirty if provenance is not None else None),
                 quality=QualityScore(score=t.score, judge=t.judge),
                 speed=SpeedBag(
                     wall_clock_s=(ended - started).total_seconds(),
@@ -273,6 +298,12 @@ class BenchmarkWorkflow:
             if spec.vetoes
             else {}
         )
+        # 012 (contract §2.7): provenance resolved ONCE per benchmark run —
+        # every record of every cell carries the same commit and dirty flag
+        # even if the worker restarts mid-run.
+        provenance: Provenance | None = None
+        if workflow.patched("012-cell-record"):
+            provenance = await workflow.execute_activity(resolve_provenance, **RECORD_ACT)
         for cell in cells:
             child_id = f"{bench_run_id}/{cell.cell_id}"
             try:
@@ -284,6 +315,7 @@ class BenchmarkWorkflow:
                     bench_run_id=bench_run_id,
                     rubrics=rubrics,
                     vetoes=veto_assets,
+                    provenance=provenance,
                 )
             except Exception as e:
                 # an ADR-6-violating arm is rejected at the boundary — the cell
@@ -296,8 +328,11 @@ class BenchmarkWorkflow:
                 nonlocal arm_graph_sha
                 arm_graph_sha = sha
 
+            child_started = workflow.now()
+            child_result: str | None = None
+            child_failure: str | None = None
             try:
-                await execute_pipeline_child(
+                child_result = await execute_pipeline_child(
                     child_id=child_id,
                     idea=idea,
                     cfg=cfg,
@@ -307,9 +342,88 @@ class BenchmarkWorkflow:
                 )
             except Exception as e:
                 # a failed/escalated cell is a data point, not a crash
+                child_failure = f"{type(e).__name__}: {e}"
                 workflow.logger.warning("cell %s failed: %s", child_id, e)
+            pipeline_finished = child_failure is None
 
-            if spec.language:
+            if workflow.patched("012-cell-record"):
+                # 012 (contract §3): summarize first, grade only a cell whose
+                # code stage finished, then the one cell record — in that
+                # order. A cell rejected before it starts (above) writes no
+                # cell record, as at base (§3.5).
+                progress = await workflow.execute_activity(
+                    summarize_cell, args=[bench_run_id, cell.cell_id], **RECORD_ACT
+                )
+                has_oracle = spec.language is not None
+                grade: OracleGrade | None = None
+                if spec.language is not None and progress.code_finished:
+                    started = workflow.now()
+                    grade = await workflow.execute_activity(
+                        grade_oracle,
+                        OracleInput(
+                            case_id=spec.case_id,
+                            repo_url=spec.repo_url or "",
+                            run_id=child_id,
+                            language=spec.language,
+                            base_branch=idea.base_branch,
+                            author_model=cell.role_models.get("dev", ""),
+                            judge_model=spec.judge_model,
+                        ),
+                        **ORACLE_ACT,
+                    )
+                    ended = workflow.now()
+                    await workflow.execute_activity(
+                        record_benchmark,
+                        _oracle_record(
+                            cell,
+                            grade,
+                            bench_run_id,
+                            child_id,
+                            started,
+                            ended,
+                            graph_sha=arm_graph_sha,
+                            provenance=provenance,
+                        ),
+                        **RECORD_ACT,
+                    )
+                    # §3: oracle-task records only for a graded cell — a
+                    # scoreless grade writes the one not_evaluated record.
+                    if grade.score is not None:
+                        for rec in _oracle_task_records(
+                            cell,
+                            grade,
+                            bench_run_id,
+                            child_id,
+                            started,
+                            ended,
+                            graph_sha=arm_graph_sha,
+                            provenance=provenance,
+                        ):
+                            await workflow.execute_activity(record_benchmark, rec, **RECORD_ACT)
+                status = CellStatus(
+                    pipeline_finished=pipeline_finished,
+                    code_finished=progress.code_finished,
+                    completed=(pipeline_finished and progress.code_finished),
+                    last_stage=progress.last_stage,
+                    grading=grading_status(has_oracle, progress.code_finished, grade),
+                    child_result=(child_failure if child_failure is not None else child_result),
+                )
+                await workflow.execute_activity(
+                    record_benchmark,
+                    cell_record(
+                        cell,
+                        status,
+                        bench_run_id,
+                        child_id,
+                        child_started,
+                        workflow.now(),
+                        provenance,
+                        arm_graph_sha,
+                    ),
+                    **RECORD_ACT,
+                )
+            elif spec.language:
+                # pre-012 path, kept verbatim for replay of in-flight runs
                 started = workflow.now()
                 grade = await workflow.execute_activity(
                     grade_oracle,

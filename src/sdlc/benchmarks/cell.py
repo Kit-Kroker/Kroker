@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from temporalio import activity
 
@@ -67,7 +67,12 @@ async def summarize_cell(bench_run_id: str, cell_id: str) -> CellProgress:
     return CellProgress(last_stage=last_stage, code_finished=code_finished)
 
 
-def grading_status(has_oracle: bool, code_finished: bool, grade: OracleGrade | None) -> str:
+GradingStatus = Literal["graded", "not_graded", "grading_failed", "no_oracle"]
+
+
+def grading_status(
+    has_oracle: bool, code_finished: bool, grade: OracleGrade | None
+) -> GradingStatus:
     """The contract §3 table, total over its three input columns:
 
     no oracle                    -> no_oracle (whatever code_finished)

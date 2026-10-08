@@ -60,8 +60,10 @@ from .assessment.activities import (
     verify_discover_refs,
     verify_risk_refs,
 )
+from .benchmarks.cell import summarize_cell
 from .benchmarks.judge import judge_artifact, load_case_assets
 from .benchmarks.oracle import grade_oracle
+from .benchmarks.provenance import resolve_provenance
 from .benchmarks.recorder import record_benchmark
 from .benchmarks.report import finalize_benchmark_report
 from .benchmarks.workflow import BenchmarkWorkflow
@@ -177,6 +179,8 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         load_case_assets,
         finalize_benchmark_report,
         grade_oracle,
+        summarize_cell,
+        resolve_provenance,
         recall_snapshot,
         retain,
         capture_watermark,

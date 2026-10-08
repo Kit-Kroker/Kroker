@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 from sdlc.benchmarks.models import BenchmarkCell, BenchmarkOutcome, BenchmarkScope, CaseSpec
 from sdlc.benchmarks.oracle import OracleGrade
+from sdlc.benchmarks.provenance import Provenance
 from sdlc.benchmarks.tasks import TaskGrade
 from sdlc.benchmarks.workflow import (
     BenchmarkWorkflow,
@@ -21,6 +22,10 @@ from sdlc.core.models import (
     PipelineConfig,
     ProjectMode,
 )
+
+# 012 T013: the run's resolved provenance, required on every oracle record
+# builder call (contract §2.1-2.6).
+_PROV = Provenance(kroker_commit="abc123", tree_dirty=False)
 
 
 def _grade(**kw):
@@ -56,7 +61,7 @@ def _harness_cell(model, harness=HarnessKind.OPENCODE, arm_name="a"):
 def _rec(grade):
     t0 = datetime(2026, 7, 23, tzinfo=UTC)
     t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
-    return _oracle_record(_cell(), grade, "b1", "b1/todo-api#opencode#m", t0, t1)
+    return _oracle_record(_cell(), grade, "b1", "b1/todo-api#opencode#m", t0, t1, provenance=_PROV)
 
 
 def test_oracle_record_shape():
@@ -68,11 +73,25 @@ def test_oracle_record_shape():
     assert r.quality.components["total"] == 2.0
     assert r.harness is HarnessKind.OPENCODE
     assert r.error is None
+    # 012 (contract §2.3-2.5): the oracle itself did the work, so the record
+    # says so; the arm name moves to the arm field and the cell label rides
+    # along with the run's resolved provenance.
+    assert r.model == "deterministic"
+    assert r.prompt_sha == "none:deterministic"
+    assert r.arm == "m"
+    assert r.cell_id == _cell().cell_id
+    assert r.kroker_commit == "abc123"
+    assert r.tree_dirty is False
 
 
 def test_oracle_record_flags_held_out_breach():
     r = _rec(_grade(held_out_ok=False))
     assert r.error is not None and "held-out" in r.error
+    # the breach error rides on the score-driven outcome, as at base
+    assert r.outcome is BenchmarkOutcome.FAIL  # score 0.5
+    passing = _rec(_grade(score=1.0, held_out_ok=False))
+    assert passing.outcome is BenchmarkOutcome.PASS
+    assert passing.error is not None and "held-out" in passing.error
 
 
 def test_oracle_record_flags_language_mismatch():
@@ -80,12 +99,22 @@ def test_oracle_record_flags_language_mismatch():
     assert r.error is not None and "mismatch" in r.error
 
 
-def test_oracle_record_none_score_is_fail():
-    from sdlc.benchmarks.models import BenchmarkOutcome
-
-    r = _rec(_grade(score=None, passed=0))
-    assert r.outcome is BenchmarkOutcome.FAIL
+# 012 T013 (changed on purpose): a scoreless grade is not a zero — the
+# oracle could not run, so the case-level record is not_evaluated with the
+# grade's detail as its error, never FAIL.
+def test_oracle_record_none_score_is_not_evaluated():
+    r = _rec(_grade(score=None, passed=0, detail="oracle could not run: boom"))
+    assert r.outcome is BenchmarkOutcome.NOT_EVALUATED
     assert r.quality.score is None
+    assert r.error == "oracle could not run: boom"
+
+
+def test_oracle_record_zero_score_is_fail():
+    """A real zero (T015 adds the empty-diff guard that produces one) stays
+    a zero: outcome FAIL, not not_evaluated."""
+    r = _rec(_grade(score=0.0, passed=0))
+    assert r.outcome is BenchmarkOutcome.FAIL
+    assert r.quality.score == 0.0
 
 
 def _spec():
@@ -300,7 +329,9 @@ def test_oracle_task_records_one_per_task_grade():
             detail="rubric-graded",
         ),
     )
-    recs = _oracle_task_records(_cell(), grade, "b1", "b1/todo-api#opencode#m", t0, t1)
+    recs = _oracle_task_records(
+        _cell(), grade, "b1", "b1/todo-api#opencode#m", t0, t1, provenance=_PROV
+    )
     assert len(recs) == 2
     assert {r.task_id for r in recs} == {"t01", "t02"}
     r01 = next(r for r in recs if r.task_id == "t01")
@@ -312,6 +343,25 @@ def test_oracle_task_records_one_per_task_grade():
     assert r02.outcome is BenchmarkOutcome.FAIL
 
 
+def test_oracle_task_records_carry_provenance_and_deterministic_identity():
+    """012 (contract §2.3-2.5): every oracle-task record says the oracle did
+    the work, carries the cell label and the run's provenance."""
+    t0 = datetime(2026, 7, 23, tzinfo=UTC)
+    t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
+    grade = _grade_with_tasks(
+        TaskGrade(task_id="t01", error_class="functional", score=1.0, judge="oracle", detail="1/1")
+    )
+    recs = _oracle_task_records(_cell(), grade, "b1", "run1", t0, t1, provenance=_PROV)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.model == "deterministic"
+    assert r.prompt_sha == "none:deterministic"
+    assert r.arm == "m"
+    assert r.cell_id == _cell().cell_id
+    assert r.kroker_commit == "abc123"
+    assert r.tree_dirty is False
+
+
 def test_oracle_task_records_none_score_is_fail():
     from sdlc.benchmarks.models import BenchmarkOutcome as BO
 
@@ -320,7 +370,7 @@ def test_oracle_task_records_none_score_is_fail():
     grade = _grade_with_tasks(
         TaskGrade(task_id="t01", error_class="functional", score=None, judge="error", detail="oops")
     )
-    recs = _oracle_task_records(_cell(), grade, "b1", "run1", t0, t1)
+    recs = _oracle_task_records(_cell(), grade, "b1", "run1", t0, t1, provenance=_PROV)
     assert recs[0].outcome is BO.FAIL
     assert recs[0].quality.score is None
 
@@ -339,7 +389,14 @@ def test_oracle_record_with_a_sha_carries_a_bare_graph_attribution():
     t0 = datetime(2026, 7, 23, tzinfo=UTC)
     t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
     r = _oracle_record(
-        _cell(), _grade(), "b1", "b1/todo-api#opencode#m", t0, t1, graph_sha=_GRAPH_SHA
+        _cell(),
+        _grade(),
+        "b1",
+        "b1/todo-api#opencode#m",
+        t0,
+        t1,
+        provenance=_PROV,
+        graph_sha=_GRAPH_SHA,
     )
     assert r.graph == GraphAttribution(graph_sha=_GRAPH_SHA)
 
@@ -347,7 +404,7 @@ def test_oracle_record_with_a_sha_carries_a_bare_graph_attribution():
 def test_oracle_record_without_a_sha_leaves_graph_none():
     t0 = datetime(2026, 7, 23, tzinfo=UTC)
     t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
-    r = _oracle_record(_cell(), _grade(), "b1", "b1/todo-api#opencode#m", t0, t1)
+    r = _oracle_record(_cell(), _grade(), "b1", "b1/todo-api#opencode#m", t0, t1, provenance=_PROV)
     assert r.graph is None
 
 
@@ -360,7 +417,14 @@ def test_oracle_task_records_with_a_sha_stamp_every_record():
         TaskGrade(task_id="t01", error_class="functional", score=1.0, judge="oracle", detail="1/1")
     )
     recs = _oracle_task_records(
-        _cell(), grade, "b1", "b1/todo-api#opencode#m", t0, t1, graph_sha=_GRAPH_SHA
+        _cell(),
+        grade,
+        "b1",
+        "b1/todo-api#opencode#m",
+        t0,
+        t1,
+        provenance=_PROV,
+        graph_sha=_GRAPH_SHA,
     )
     assert [r.graph for r in recs] == [GraphAttribution(graph_sha=_GRAPH_SHA)]
 
@@ -371,12 +435,12 @@ def test_oracle_task_records_without_a_sha_leave_graph_none():
     grade = _grade_with_tasks(
         TaskGrade(task_id="t01", error_class="functional", score=None, judge="error", detail="oops")
     )
-    recs = _oracle_task_records(_cell(), grade, "b1", "run1", t0, t1)
+    recs = _oracle_task_records(_cell(), grade, "b1", "run1", t0, t1, provenance=_PROV)
     assert all(r.graph is None for r in recs)
 
 
 def test_oracle_task_records_empty_when_no_task_grades():
     t0 = datetime(2026, 7, 23, tzinfo=UTC)
     t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
-    recs = _oracle_task_records(_cell(), _grade(), "b1", "run1", t0, t1)
+    recs = _oracle_task_records(_cell(), _grade(), "b1", "run1", t0, t1, provenance=_PROV)
     assert recs == []
