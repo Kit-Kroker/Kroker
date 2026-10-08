@@ -11,6 +11,7 @@ The merge stage slice exports `step`, `prompt_digest`, `merge_verdict_prompt`, a
 
 ### MERGE-1.2
 On any absolute gate failure (`build_integration_green`, `lint_clean`, `security_scan_collected`, `security_no_critical`), the merge stage fails closed immediately with `rejected:merge:absolute-gate-failed:...`, retains gate feedback memory, records a failing benchmark record, and terminates without offering human override or consulting MergeVerdict. The absolute checks judge **the change, not the tree**. `build_integration_green`, `lint_clean` and `security_no_critical` fail only on what the change introduces relative to the run's pinned base commit. `security_scan_collected` fails when the security delta could not be computed at both points (MERGE-1.10). Findings pre-existing at the base are reported in each check's detail and never block. [SC-5, FR-106, FR-915; diff-scoped gates DS1]
+Every rejection is on the record with its cause (round 012 §6.2): the failing benchmark record's `error` names the blocking absolute checks and carries each one's detail; the advisory (MERGE-1.3) and soft-verdict (MERGE-1.4) rejection paths each write exactly one failing merge record — quality 0.0, outcome fail, `error` naming the rejection kind and the blocked checks — before returning their unchanged strings.
 An absolute check that is *absent* from the gate input is an absolute failure by this same route — see MERGE-1.6.
 
 ### MERGE-1.3

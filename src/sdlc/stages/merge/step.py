@@ -507,6 +507,15 @@ async def step(
                 judge="contract",
                 outcome=BenchmarkOutcome.FAIL,
                 model="deterministic",
+                error=(
+                    f"merge blocked (absolute): {','.join(absolute_blocking)}; "
+                    "details: "
+                    + "; ".join(
+                        f"{c.name}: {(c.detail or '')[:120]}"
+                        for c in gate_report.checks
+                        if c.name in absolute_blocking
+                    )
+                ),
             ),
         )
         return f"rejected:merge:absolute-gate-failed:{','.join(absolute_blocking)}"
@@ -523,6 +532,27 @@ async def step(
             "merge", cfg.gate_settings(), context=GateContext(checks=gate_report.checks)
         )
         if not gate.approved:
+            # 012 (contract §6.2): every rejection is on the record before
+            # it returns — one merge record naming the kind and the blocked
+            # advisory checks; the returned string is unchanged.
+            await ctx.record(
+                cfg,
+                stage_record(
+                    cfg,
+                    stage="merge",
+                    role="reviewer",
+                    started=_started,
+                    ended=_now(),
+                    quality_score=0.0,
+                    judge="contract",
+                    outcome=BenchmarkOutcome.FAIL,
+                    model="deterministic",
+                    error=(
+                        f"merge rejected (advisory): {','.join(advisory_blocking)}; "
+                        "override declined"
+                    ),
+                ),
+            )
             return "rejected:merge:advisory"
         reviewer = gate.reviewer or "human"
         reason = gate.comments or "advisory override"
@@ -588,6 +618,26 @@ async def step(
                     "merge", cfg.gate_settings(), context=GateContext(checks=gate_report.checks)
                 )
                 if not gate.approved:
+                    # 012 (contract §6.2): one record before the return,
+                    # naming the kind; the returned string is unchanged.
+                    await ctx.record(
+                        cfg,
+                        stage_record(
+                            cfg,
+                            stage="merge",
+                            role="reviewer",
+                            started=_started,
+                            ended=_now(),
+                            quality_score=0.0,
+                            judge="contract",
+                            outcome=BenchmarkOutcome.FAIL,
+                            model="deterministic",
+                            error=(
+                                "merge rejected (soft-verdict): "
+                                "merge verdict disapproved and gate declined"
+                            ),
+                        ),
+                    )
                     return "rejected:merge:soft-verdict"
 
     _ended = _now()

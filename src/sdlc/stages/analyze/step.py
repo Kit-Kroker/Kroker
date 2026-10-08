@@ -163,6 +163,15 @@ async def step(
             outcome=(BenchmarkOutcome.PASS if not untraced else BenchmarkOutcome.FAIL),
             model=resolved_model,
             spend=analyst_spend,
+            # 012 (contract §6.1): a failing record names the number of
+            # untraced criteria and up to three of them.
+            error=(
+                None
+                if not untraced
+                else f"{len(untraced)} untraced criterion(s): "
+                + "; ".join(untraced[:3])
+                + ("; ..." if len(untraced) > 3 else "")
+            ),
         ),
     )
 

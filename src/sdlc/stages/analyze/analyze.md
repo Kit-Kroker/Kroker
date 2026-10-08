@@ -22,6 +22,9 @@ and returns an `AnalysisReport` artifact. [FR-106]
 ### ANALYZE-1.3
 The analyze step records the stage benchmark outcome and retains a stage summary in episodic
 memory. [FR-106, E-32]
+Every rejection is on the record with its cause (round 012 §6.1): a failing record's `error`
+carries the number of untraced criteria and the first three `task_id: criterion` labels; a
+passing record's `error` is None.
 
 ### ANALYZE-1.4
 When acceptance criteria are untraced, the analyze step retains a GOTCHA memory for the
