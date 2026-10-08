@@ -569,3 +569,70 @@ def test_load_case_assets_empty_maps_return_empty_without_raising():
     """contract §1.5: a case registering no rubrics at all passes through
     load_case_assets untouched — no failure, empty dict."""
     assert asyncio.run(judge_mod.load_case_assets("ignored", {})) == {}
+
+
+# --- 012 T025 (RED): the async activity must run the sync judge OFF the loop
+#
+# judge_artifact is an async def activity whose body is ``return
+# _judge_sync(inp)``. _judge_sync -> _default_judge -> _run_judge_agent ->
+# ``agent.run_sync(...)`` — a bare run_sync on the RUNNING event loop
+# raises RuntimeError "This event loop is already running", which the
+# judge's broad except swallows, so every rubric-judged stage records
+# QualityScore(judge="error", score=None).
+#
+# Evidence (T024 smoke runs): bench-todo-api-greenfield-1791472617 and
+# -1791479569 both recorded judge=error on clarify and architecture, while
+# the recovered activity inputs re-judged in a FRESH process scored
+# clarify 1.0 and architecture 0.94 — the model call is fine, only the
+# loop seam is broken.
+
+
+def test_judge_artifact_runs_the_sync_judge_off_the_event_loop(monkeypatch):
+    """The REAL production path, exercised as the activity really runs:
+    ``judge_artifact`` awaited inside ``asyncio.run`` (an event loop is
+    running), no ``_judge_fn`` injected, no ``.sync`` shortcut. Today the
+    awaited call returns judge='error' (the swallowed
+    'This event loop is already running' RuntimeError), so the
+    staged_rubric assertion fails; the fix moves the sync judge off the
+    loop (to_thread-style) and this test must go green."""
+    from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart
+    from pydantic_ai.models.function import FunctionModel
+
+    def _handler(messages, info):
+        # phase 1 (step generation) user prompt starts "Rubric:"; phase 2
+        # (scoring) starts "Evaluation steps:". Serve each its JSON shape.
+        user_text = ""
+        for m in messages:
+            if isinstance(m, ModelRequest):
+                for part in m.parts:
+                    content = getattr(part, "content", None)
+                    if isinstance(content, str):
+                        user_text = content
+        if user_text.startswith("Rubric:"):
+            return ModelResponse(
+                parts=[TextPart('{"steps": ["does the artifact follow the rubric?"]}')]
+            )
+        return ModelResponse(parts=[TextPart('{"score": 0.5, "components": {}}')])
+
+    monkeypatch.setattr(judge_mod, "resolve_model", lambda _model: FunctionModel(_handler))
+    _set_judge_fn(None)  # the production default must run, no injected fn
+
+    inp = JudgeInput(
+        artifact_json='{"summary": "login"}',
+        rubric="score clarity 0..1",
+        author_model="anthropic:claude-sonnet-4-6",
+        judge_model="test-stub",  # non-empty; resolve_model is stubbed above
+        vetoes_yaml="",
+    )
+    judge_mod._clear_step_cache()  # generate_steps must really run the stub
+    try:
+        result = asyncio.run(judge_artifact(inp))
+    finally:
+        judge_mod._clear_step_cache()
+
+    assert result.judge == "staged_rubric", (
+        f"judge={result.judge!r} score={result.score!r}: the async activity "
+        "ran the sync judge ON the event loop; the RuntimeError was "
+        "swallowed into not-measured and the record lost its score"
+    )
+    assert result.score == 0.5

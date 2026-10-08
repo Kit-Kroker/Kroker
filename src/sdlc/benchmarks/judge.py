@@ -9,6 +9,7 @@ from the composite.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -209,7 +210,11 @@ def _judge_sync(inp: JudgeInput) -> QualityScore:
 
 @activity.defn
 async def judge_artifact(inp: JudgeInput) -> QualityScore:
-    return _judge_sync(inp)
+    """012 T025: the sync judge (agent.run_sync) must run OFF the event
+    loop — awaited inline it raised RuntimeError 'This event loop is
+    already running', swallowed by _judge_sync into judge='error' on
+    every rubric-judged stage (T024 smoke runs)."""
+    return await asyncio.to_thread(_judge_sync, inp)
 
 
 # test convenience
