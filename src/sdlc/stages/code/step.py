@@ -735,6 +735,7 @@ async def step(
         test_cmd = _contract_shell_cmd(
             contract.test_commands if contract else None, DEFAULT_TEST_CMD
         )
+        _code_ended = _now()  # 012 §5.1: code ends before the test run
         qa_raw = await workflow.execute_activity(
             run_test_suite,
             QAInput(worktree=worktree, test_cmd=test_cmd),
@@ -757,6 +758,7 @@ async def step(
             qa_raw=qa_raw,
             qa_spend=qa_spend,
         )
+        _qa_ended = _now()  # 012 §5.2/§5.3: qa spans qa only; review starts here
 
         review = await review_step(
             ctx,
@@ -769,7 +771,7 @@ async def step(
             qa_raw=qa_raw,
             reviewer_model=resolve_role_model(cfg, "review"),
             attempt=attempt - 1,
-            started=_attempt_started,
+            started=_qa_ended,
         )
 
         task_passed = bool(qa_raw.tests_passed and not qa.issues and not drift.found)
@@ -782,7 +784,7 @@ async def step(
                 stage="code",
                 role=task.role,
                 started=_attempt_started,
-                ended=_now(),
+                ended=_code_ended,
                 quality_score=(1.0 if task_passed else 0.0),
                 judge="contract",
                 outcome=(BenchmarkOutcome.PASS if task_passed else BenchmarkOutcome.FAIL),
@@ -808,11 +810,16 @@ async def step(
                 cfg,
                 stage="qa",
                 role="qa",
-                started=_attempt_started,
-                ended=_now(),
+                started=_code_ended,
+                ended=_qa_ended,
                 quality_score=_qa_quality.score,
                 judge=_qa_quality.judge,
-                outcome=(BenchmarkOutcome.PASS if task_passed else BenchmarkOutcome.FAIL),
+                # 012 §5.5: qa's OWN verdict (tests + no issues; drift is the task's).
+                outcome=(
+                    BenchmarkOutcome.PASS
+                    if qa_raw.tests_passed and not qa.issues
+                    else BenchmarkOutcome.FAIL
+                ),
                 model=resolve_role_model(cfg, "qa"),
                 spend=qa_spend,
                 task_id=task.id,

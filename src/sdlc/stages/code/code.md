@@ -16,7 +16,16 @@ The code stage step is pure over its inputs and contains no workflow lifecycle d
 The code stage executes the coding task inside an isolated worktree against the frozen contract, coordinates deterministic test suite and clean-context review, drives the bounded fix loop, and returns a schema-validated `TaskResult` indicating `done`, `failed`, or `quarantined`. [FR-802, FR-804]
 
 ### CODE-1.4
-The code stage records benchmark records for each attempt of the task, emitting `stage="code"` with `judge="contract"` derived from deterministic test runner results, and emitting `stage="qa"` with quality score evaluated against the rubric. [Finding 4, E-36, E-37]
+Each attempt writes three records that partition the attempt's time and
+carry only their own role's verdict: `stage="code"` spans the attempt
+start to the moment the deterministic test run begins (the
+tests/qa/drift combined verdict, judge `contract`); `stage="qa"` spans
+the test-run boundary to the qa step's return (quality scored against
+the rubric; outcome is qa's own — tests passed and no qa issues,
+regardless of containment drift or the reviewer); `stage="review"`
+spans from the qa boundary onward and carries the reviewer's own
+verdict (no review record when the reviewer is disabled). [Finding 4,
+E-36, E-37, round 012 §5]
 
 ### CODE-1.5
 When the bounded fix loop attempts are exhausted without passing both tests and review, the code stage escalates to the human gate `task:{task.id}`. If the operator grants revision, it resets session context and continues; otherwise it quarantines or completes according to operator decision. [FR-105]
