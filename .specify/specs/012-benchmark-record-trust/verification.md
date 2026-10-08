@@ -170,3 +170,13 @@ completed-run rows were not obtainable from this run. Per the ruling
 this was the last cleared run; the round's evidence stands at: SC-002
 met (§3b), SC-001's mechanism fixed and proven on a live stage (§3c)
 with the complete-row demonstration pending a completed run.**
+
+**Orchestrator acceptance (round close):** the evidence is ACCEPTED
+and the round closes on it. The one unproven row — architecture scored
+live in a full run — is blocked by an external infrastructure flake,
+not by 012 code: the same judge path scored clarify 1.0 live, and
+re-judged the recovered architecture inputs at 0.94 in a fresh process
+(§3b). A fourth run would add no evidence about this round; none is
+run, by ruling. SC-001 therefore stands recorded as: fix proven live
+on clarify, complete-row not obtained, the infra flake named, no
+fourth run. The T002 PIN amendment is accepted as reviewed.
