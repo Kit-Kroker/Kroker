@@ -470,7 +470,11 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   loop (E-4) judge per-stage artifacts with the cross-family judge. The
   design that folds them into an SC-1..6 measurement instrument —
   held-out oracles, per-role economics, the `case × stage` error
-  heatmap — is `BENCHMARK.md` (ROADMAP §9.8, E-30…E-37).
+  heatmap — is `BENCHMARK.md` (ROADMAP §9.8, E-30…E-37). Since round
+  012 every benchmark record carries its provenance and cell identity
+  (`benchmarks/provenance.py`, `cell.py`), one record file is written per
+  cell, and each oracle grade runs in its own clean environment; the
+  record contract is in `BENCHMARK.md`.
 - **Trajectory harvesting (P5 seam):** Temporal history + artifacts +
   handoffs + gate decisions already constitute complete trajectories
   (actions, tool calls, costs, outcomes, human feedback). The observability
@@ -824,6 +828,7 @@ Kroker/
 │   ├── board/                 # ADR-21: artifact versions, task lifecycle, events, API
 │   ├── benchmarks/            # eval harness: judge, scoring, sc_rollup, drift, oracle,
 │   │                          #   the matrices (error/task/waste/agreement), importers/
+│   │                          #   provenance.py, cell.py, paths.py  # record trust (012): commit/prompt hash, cell record, one cases root
 │   ├── assessment/            # Tier 2 EDCR: scan/ signals, discover/, risk/
 │   ├── triage/                # Tier 0: admission, signals/, delta, advisories
 │   ├── capability/            # CapabilityMap identity, fingerprint, corrections (E-47)
