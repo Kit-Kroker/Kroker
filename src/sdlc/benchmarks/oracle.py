@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,6 +20,7 @@ import defusedxml.ElementTree as DET
 from temporalio import activity
 
 from ..process import _bounded_shell
+from ..stages.qa.activities import _VENV_DIR_NAME, _ensure_python_env
 from ..toolchain.adapters import TOOLCHAINS, ToolchainKind, detect
 from ..vcs import _git
 from .judge import JudgeInput, _judge_sync
@@ -178,6 +180,75 @@ def _grade(
     )
 
 
+# 012 (contract §4.2, research R-6): the ONLY worker-environment names the
+# oracle's test command may see. Everything else — credentials, provider
+# vars, PYTHONPATH/PYTHONHOME — is dropped: the tests must not be able to
+# import from the worker's environment (the F3 channel). OS-essential
+# only, mirroring harness/base.py's allowlist discipline.
+_ORACLE_ENV_ALLOW: tuple[str, ...] = (
+    "PATH",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+)
+
+
+def _oracle_run_env(provisioned: dict[str, str]) -> dict[str, str]:
+    """The filtered environment the test command runs with (contract §4.2):
+    the allowlisted names from the provisioned venv environment, plus the
+    venv's script directory FIRST on PATH, VIRTUAL_ENV, and
+    PYTHONNOUSERSITE=1. PYTHONPATH and PYTHONHOME are absent by
+    construction — they are not allowlisted, whatever the worker carries."""
+    out = {k: provisioned[k] for k in _ORACLE_ENV_ALLOW if k in provisioned}
+    venv = provisioned.get("VIRTUAL_ENV")
+    if venv:
+        bin_dir = "Scripts" if sys.platform.startswith("win") else "bin"
+        venv_bin = os.path.join(venv, bin_dir)
+        out["PATH"] = venv_bin + os.pathsep + out.get("PATH", "")
+        out["VIRTUAL_ENV"] = venv
+    out["PYTHONNOUSERSITE"] = "1"
+    return out
+
+
+async def _provision_oracle_env(
+    worktree: str, oracle_dir: str, timeout_s: int
+) -> tuple[dict[str, str] | None, str | None]:
+    """The per-grade environment seam (data-model §2.5, contract §4.1/§4.3):
+    builds a venv INSIDE this grade's temporary worktree via
+    _ensure_python_env (the produced project's declared dependencies
+    first — the same provisioning the qa/merge slices use), then installs
+    the case's oracle/requirements.txt with the venv's interpreter, or
+    pytest alone when the case ships no file. A pre-existing .sdlc-venv
+    in the fresh worktree (never committed — verified in the T001
+    baseline — but untracked residue is cheap to clear) is removed first.
+    The venv dies with the worktree in grade_oracle's finally. Fast tests
+    replace this function; the real one is exercised by the slow tier.
+    """
+    stale = os.path.join(worktree, _VENV_DIR_NAME)
+    if os.path.isdir(stale):
+        shutil.rmtree(stale, ignore_errors=True)
+    env, setup_error = await _ensure_python_env(worktree, timeout_s)
+    if setup_error is not None or env is None:
+        return None, setup_error or "venv creation failed"
+    bin_dir = "Scripts" if sys.platform.startswith("win") else "bin"
+    exe = ".exe" if sys.platform.startswith("win") else ""
+    py_exe = os.path.join(env["VIRTUAL_ENV"], bin_dir, f"python{exe}")
+    req = os.path.join(oracle_dir, "requirements.txt")
+    if os.path.isfile(req):
+        install = f'"{py_exe}" -m pip install -q -r "{req}"'
+    else:
+        install = f'"{py_exe}" -m pip install -q pytest'
+    code, out = await _bounded_shell(install, worktree, timeout_s)
+    if code != 0:
+        return None, f"oracle requirements install failed: {out[-500:]}"
+    return env, None
+
+
 @activity.defn
 async def grade_oracle(inp: OracleInput) -> OracleGrade:
     """Run the case's held-out oracle against produced code through the
@@ -219,9 +290,22 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
         if not changed:
             return _grade(0.0, 0, 0, lang, detected, held, "empty diff vs base")
 
+        # 012 (contract §4.1/§4.3): the per-grade environment — venv inside
+        # this call's temporary worktree, project deps then the case's
+        # oracle/requirements.txt (or pytest). No detect() escape hatch:
+        # the worker's environment is never the test environment again.
+        prov_env, prov_err = await _provision_oracle_env(wt, str(oracle_src), inp.test_timeout_s)
+        if prov_env is None:
+            return _grade(
+                None, 0, 0, lang, detected, True, f"oracle environment failed: {prov_err}"
+            )
+        run_env = _oracle_run_env(prov_env)
+
         shutil.copytree(oracle_src, os.path.join(wt, "oracle"))
         report = os.path.join(wt, "oracle-report.xml")
-        await _bounded_shell(adapter.oracle_test_cmd("oracle", report), wt, inp.test_timeout_s)
+        await _bounded_shell(
+            adapter.oracle_test_cmd("oracle", report), wt, inp.test_timeout_s, env=run_env
+        )
         try:
             xml_text = Path(report).read_text(encoding="utf-8")
         except OSError:
@@ -272,7 +356,14 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
             # oracle grade -- it just contributes no task grades.
             task_grades = []
         grade_final = _grade(
-            score, passed, total, lang, detected, held, detail, task_grades=task_grades
+            score,
+            passed,
+            total,
+            lang,
+            detected,
+            held,
+            detail + "; oracle env: isolated",
+            task_grades=task_grades,
         )
         grade_final.changed_files = len(changed)
         return grade_final
