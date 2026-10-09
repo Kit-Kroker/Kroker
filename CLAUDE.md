@@ -18,5 +18,5 @@ the repo. `AGENTS.md` explains the distinction.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`.specify/specs/012-benchmark-record-trust/plan.md`
+`.specify/specs/013-benchmark-scoring-output/plan.md`
 <!-- SPECKIT END -->
