@@ -7,6 +7,7 @@ the reporter can recompute under different weights without re-running.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from enum import StrEnum
 from typing import Literal
@@ -321,6 +322,50 @@ CELL_STAGE_ORDER: tuple[str, ...] = (
 
 # 012: a post-code stage record is the "code stage finished" signal (R-4).
 POST_CODE_STAGES: frozenset[str] = frozenset({"analyze", "merge", "deploy"})
+
+# 013 (data-model §2): the per-task loop stages. The reader side uses them
+# to position a run lost inside the loop (its attrition position is `code`).
+TASK_LOOP_STAGES: frozenset[str] = frozenset(
+    {"code", "tool_approval", "qa", "review", "adversary", "deep_review", "handoff"}
+)
+
+# 013 (data-model §2): the judge kinds that produce a rubric SCORE on one
+# comparable scale. The lenses and the deterministic instruments are
+# excluded: they are different instruments, not two versions of one scale.
+# `score._SCORING_JUDGES` is an alias of this set.
+RUBRIC_JUDGES: frozenset[str] = frozenset({"llm_judge", "staged_rubric"})
+
+
+def cell_progress(records: Iterable[BenchmarkRecord]) -> tuple[str | None, bool]:
+    """013 (data-model §2): the body of `summarize_cell` (cell.py), moved so
+    the 012 writer and the 013 reader share one rule (research R-2).
+    ``last_stage`` is the latest stage by CELL_STAGE_ORDER among the records
+    — NOT the most recently written — and ``code_finished`` is true exactly
+    when a post-code stage (analyze, merge, deploy) wrote a record. Stages
+    outside CELL_STAGE_ORDER ("cell", "oracle", unknown names) never count."""
+    order = {stage: i for i, stage in enumerate(CELL_STAGE_ORDER)}
+    known = [r.stage for r in records if r.stage in order]
+    last_stage = max(known, key=lambda s: order[s], default=None)
+    code_finished = any(r.stage in POST_CODE_STAGES for r in records)
+    return last_stage, code_finished
+
+
+def grading_from_score(has_oracle: bool, code_finished: bool, score: float | None) -> str:
+    """013 (data-model §2): the body of `grading_status` (cell.py), moved.
+    The 012 contract §3 table, total over its three input columns:
+
+    no oracle                    -> no_oracle (whatever code_finished)
+    oracle, code not finished    -> not_graded (the oracle never runs)
+    oracle, code finished, score present -> graded
+    oracle, code finished, score None    -> grading_failed
+    """
+    if not has_oracle:
+        return "no_oracle"
+    if not code_finished:
+        return "not_graded"
+    if score is not None:
+        return "graded"
+    return "grading_failed"
 
 
 def cell_key(r: BenchmarkRecord) -> str | None:

@@ -420,3 +420,146 @@ def test_benchmark_summary_cell_row_fields_default():
     assert s.cell_id is None
     assert s.arm is None
     assert s.pre012 is False
+
+
+# --- 013 T002 (RED): shared status functions --------------------------------
+# Names: .specify/specs/013-benchmark-scoring-output/data-model.md §2. The
+# two functions move out of cell.py (summarize_cell / grading_status) into
+# models.py; imports stay function-local (the file's E-77 convention) so
+# each missing name fails its own test instead of breaking collection.
+
+
+def test_cell_progress_no_records_gives_none_and_false():
+    from sdlc.benchmarks.models import cell_progress
+
+    assert cell_progress([]) == (None, False)
+
+
+def test_cell_progress_research_clarify_last_stage_clarify_not_code_finished():
+    from sdlc.benchmarks.models import cell_progress
+
+    records = [_record(stage="research"), _record(stage="clarify")]
+    assert cell_progress(records) == ("clarify", False)
+
+
+def test_cell_progress_task_loop_without_post_code_gives_handoff():
+    """code..handoff with no post-code record: last stage is `handoff`,
+    code_finished stays False."""
+    from sdlc.benchmarks.models import cell_progress
+
+    records = [
+        _record(stage="code"),
+        _record(stage="qa"),
+        _record(stage="review"),
+        _record(stage="handoff"),
+    ]
+    assert cell_progress(records) == ("handoff", False)
+
+
+def test_cell_progress_ignores_cell_and_oracle_stage_records():
+    """The cell record (stage "cell") and oracle records are not in
+    CELL_STAGE_ORDER and never become the last stage (contract §3.2)."""
+    from sdlc.benchmarks.models import cell_progress
+
+    records = [
+        _record(stage="qa"),
+        _record(stage="cell"),
+        _record(stage="oracle"),
+    ]
+    assert cell_progress(records) == ("qa", False)
+
+
+def test_cell_progress_post_code_stage_record_finishes_code():
+    from sdlc.benchmarks.models import cell_progress
+
+    for stage in ("analyze", "merge", "deploy"):
+        assert cell_progress([_record(stage=stage)]) == (stage, True)
+
+
+def test_grading_from_score_no_oracle_regardless_of_code_finished():
+    from sdlc.benchmarks.models import grading_from_score
+
+    assert grading_from_score(False, True, 1.0) == "no_oracle"
+    assert grading_from_score(False, False, None) == "no_oracle"
+
+
+def test_grading_from_score_oracle_without_code_finished_is_not_graded():
+    from sdlc.benchmarks.models import grading_from_score
+
+    assert grading_from_score(True, False, 0.5) == "not_graded"
+
+
+def test_grading_from_score_graded_for_zero_and_one():
+    from sdlc.benchmarks.models import grading_from_score
+
+    assert grading_from_score(True, True, 0.0) == "graded"
+    assert grading_from_score(True, True, 1.0) == "graded"
+
+
+def test_grading_from_score_none_score_is_grading_failed():
+    from sdlc.benchmarks.models import grading_from_score
+
+    assert grading_from_score(True, True, None) == "grading_failed"
+
+
+# --- 013 T002 chaos (RED): stage-loop and judge constants -------------------
+# Names: .specify/specs/013-benchmark-scoring-output/data-model.md §2.
+# Edge-angle pins on the two new constants: exact membership (no silent
+# extra stage/judge slips in), subset relation, and exclusion of the
+# neighbouring stages and judge kinds they must NOT contain. Imports stay
+# function-local (the file's E-77 convention) so each missing name fails
+# its own tests with ImportError instead of breaking collection.
+
+
+def test_task_loop_stages_is_exactly_the_seven_loop_names():
+    """data-model §2: TASK_LOOP_STAGES holds exactly the seven task-loop
+    stage names — no more, no fewer."""
+    from sdlc.benchmarks.models import TASK_LOOP_STAGES
+
+    assert TASK_LOOP_STAGES == frozenset(
+        {"code", "tool_approval", "qa", "review", "adversary", "deep_review", "handoff"}
+    )
+
+
+def test_task_loop_stages_is_subset_of_cell_stage_order():
+    """data-model §2: every task-loop stage is a record-writing stage in
+    CELL_STAGE_ORDER, so cell_progress can always position a run by it."""
+    from sdlc.benchmarks.models import CELL_STAGE_ORDER, TASK_LOOP_STAGES
+
+    assert TASK_LOOP_STAGES <= set(CELL_STAGE_ORDER)
+
+
+def test_task_loop_stages_excludes_post_code_and_proposer_stages():
+    """Edge angle: the loop ends at handoff — the post-code stages
+    (analyze/merge/deploy) and the proposer stages (research/clarify/
+    architecture/plan) stay outside it, or "lost in the task loop" would
+    swallow runs the pipeline actually finished."""
+    from sdlc.benchmarks.models import TASK_LOOP_STAGES
+
+    assert not TASK_LOOP_STAGES & {"analyze", "merge", "deploy"}
+    assert not TASK_LOOP_STAGES & {"research", "clarify", "architecture", "plan"}
+
+
+def test_rubric_judges_is_exactly_the_two_rubric_kinds():
+    """data-model §2: RUBRIC_JUDGES is exactly {llm_judge, staged_rubric}."""
+    from sdlc.benchmarks.models import RUBRIC_JUDGES
+
+    assert RUBRIC_JUDGES == frozenset({"llm_judge", "staged_rubric"})
+
+
+def test_rubric_judges_excludes_the_non_rubric_judge_kinds():
+    """Edge angle: every judge kind that is not a rubric judge — oracle,
+    contract, the crew stages riding as judge labels, the human and error
+    escapes — stays out, or mean_quality would silently absorb
+    non-rubric scores."""
+    from sdlc.benchmarks.models import RUBRIC_JUDGES
+
+    assert not RUBRIC_JUDGES & {
+        "contract",
+        "oracle",
+        "adversary",
+        "deep_review",
+        "handoff",
+        "human_override",
+        "error",
+    }

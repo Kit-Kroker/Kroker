@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 
 from .evidence import Evidence
-from .models import CompositeWeights
+from .models import RUBRIC_JUDGES, CompositeWeights
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _BENCH_CONFIG = _REPO_ROOT / "benchmarks" / "config.yaml"
@@ -56,11 +56,12 @@ def default_out_dir(selector: str, root: str | None = None) -> Path:
     return base / selector / "score"
 
 
-# The judge kinds that produce a rubric SCORE on one comparable scale. The
-# lenses and the deterministic instruments are excluded: they are different
-# instruments, not two versions of one scale, and flagging them would raise
-# a warning on every corpus.
-_SCORING_JUDGES = {"llm_judge", "staged_rubric"}
+# 013 (data-model §2): alias of models.RUBRIC_JUDGES — the judge kinds that
+# produce a rubric SCORE on one comparable scale. The lenses and the
+# deterministic instruments are excluded: they are different instruments,
+# not two versions of one scale, and flagging them would raise a warning on
+# every corpus.
+_SCORING_JUDGES = RUBRIC_JUDGES
 
 
 def judge_mix_notes(records) -> list[str]:

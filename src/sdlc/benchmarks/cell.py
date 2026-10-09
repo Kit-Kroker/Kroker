@@ -13,13 +13,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 from temporalio import activity
 
 from .models import (
-    CELL_STAGE_ORDER,
-    POST_CODE_STAGES,
     BenchmarkOutcome,
     BenchmarkRecord,
     BenchmarkScope,
@@ -27,6 +25,8 @@ from .models import (
     GraphAttribution,
     QualityScore,
     SpeedBag,
+    cell_progress,
+    grading_from_score,
 )
 from .recorder import RecordStore
 
@@ -58,12 +58,11 @@ async def summarize_cell(bench_run_id: str, cell_id: str) -> CellProgress:
     merge, deploy) wrote a record (§3.1). The cell record itself carries
     stage "cell", which is not in CELL_STAGE_ORDER and so never counts:
     re-summarizing after the cell record lands is idempotent. Corrupt /
-    partial lines are skipped by the store's reader, never raised."""
+    partial lines are skipped by the store's reader, never raised.
+    The rule itself lives in `models.cell_progress` (013, research R-2):
+    one body serves the 012 writer and the 013 reader."""
     records = RecordStore(bench_run_id=bench_run_id, cell_id=cell_id).read_all()
-    order = {stage: i for i, stage in enumerate(CELL_STAGE_ORDER)}
-    known = [r.stage for r in records if r.stage in order]
-    last_stage = max(known, key=lambda s: order[s], default=None)
-    code_finished = any(r.stage in POST_CODE_STAGES for r in records)
+    last_stage, code_finished = cell_progress(records)
     return CellProgress(last_stage=last_stage, code_finished=code_finished)
 
 
@@ -79,14 +78,11 @@ def grading_status(
     oracle, code not finished    -> not_graded (the oracle never runs)
     oracle, code finished, grade present with a score -> graded
     oracle, code finished, grade None or scoreless    -> grading_failed
-    """
-    if not has_oracle:
-        return "no_oracle"
-    if not code_finished:
-        return "not_graded"
-    if grade is not None and grade.score is not None:
-        return "graded"
-    return "grading_failed"
+
+    The table itself lives in `models.grading_from_score` (013, research
+    R-2): one body serves the 012 writer and the 013 reader."""
+    score = grade.score if grade is not None else None
+    return cast(GradingStatus, grading_from_score(has_oracle, code_finished, score))
 
 
 def cell_record(
