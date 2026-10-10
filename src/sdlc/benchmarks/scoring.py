@@ -48,18 +48,48 @@ def _row_scope(r: BenchmarkRecord) -> bool:
     return r.scope in _ROW_SCOPES
 
 
-def _normalisation(records: list[BenchmarkRecord]) -> dict[tuple[str, str], tuple]:
-    """Per (case, stage) normalisation context for the composite — at this
-    task the base normalisation (record maxima across the case+stage);
-    R-10's arm means replace it in T005."""
+_RowKey = tuple[str, str, str, str, str]
+_RowMembers = list[tuple[Run, list[BenchmarkRecord]]]
+
+
+def _counted(records: list[BenchmarkRecord]) -> list[BenchmarkRecord]:
+    """No reader guesses (plan rule 3): a `not_evaluated` outcome enters
+    no count and no mean; any other record was attempted and counts."""
+    return [r for r in records if r.outcome is not BenchmarkOutcome.NOT_EVALUATED]
+
+
+def _means(counted: list[BenchmarkRecord]) -> tuple[float | None, float | None]:
+    """(mean usd, mean wall) of a row's counted records — one arm's axes."""
+    return (
+        _safe_mean([r.cost.usd for r in counted if r.cost.usd is not None]),
+        _safe_mean([r.speed.wall_clock_s for r in counted if r.speed.wall_clock_s is not None]),
+    )
+
+
+def _normalisation(
+    stage_rows: dict[_RowKey, _RowMembers],
+    oracle_rows: dict[_RowKey, list[Run]],
+) -> dict[tuple[str, str], tuple]:
+    """R-10 / contract §7.3: the composite's axes are the ARMS of the
+    (case, stage) — each row is one arm's mean cost and wall-clock; an
+    axis counts when two or more arms carry it and normalises against
+    the largest arm mean, never a record maximum."""
+    arm_means: dict[tuple[str, str], list[tuple[float | None, float | None]]] = defaultdict(list)
+    for (case_id, stage, *_rest), members in stage_rows.items():
+        counted = _counted([r for _run, recs in members for r in recs])
+        arm_means[(case_id, stage)].append(_means(counted))
+    for (case_id, _stage, *_rest), graded_runs in oracle_rows.items():
+        oracle_records = [
+            [r for r in run.records if r.scope is BenchmarkScope.ORACLE][-1] for run in graded_runs
+        ]
+        arm_means[(case_id, "oracle")].append(_means(_counted(oracle_records)))
     ctx: dict[tuple[str, str], tuple] = {}
-    for case_id, stage in {(r.case_id, r.stage) for r in records}:
-        group = [r for r in records if r.case_id == case_id and r.stage == stage]
-        usd_vals = [r.cost.usd for r in group if r.cost.usd is not None]
-        sec_vals = [r.speed.wall_clock_s for r in group if r.speed.wall_clock_s is not None]
+    for key, means in arm_means.items():
+        usd_vals = [u for u, _s in means if u is not None]
+        sec_vals = [s for _u, s in means if s is not None]
         max_usd = max(usd_vals) if usd_vals else None
         max_sec = max(sec_vals) if sec_vals else None
-        ctx[(case_id, stage)] = (
+        ctx[key] = (
             max_usd,
             max_sec,
             len(usd_vals) >= 2 and bool(max_usd),
@@ -93,8 +123,7 @@ def compute_summaries(
             okey = (run.case_id, "oracle", run.harness, run.arm, run.generation)
             oracle_rows[okey].append(run)
 
-    row_eligible = [r for r in records if _row_scope(r) or r.scope is BenchmarkScope.ORACLE]
-    ctx = _normalisation(row_eligible)
+    ctx = _normalisation(stage_rows, oracle_rows)
 
     summaries: list[BenchmarkSummary] = []
     summaries += [
@@ -154,10 +183,7 @@ def _stage_row(
 ) -> BenchmarkSummary:
     case_id, stage, _harness_s, arm, generation = key
     run_records = [r for _run, recs in members for r in recs]
-    # No reader guesses (plan rule 3): a not_evaluated outcome enters no
-    # count and no mean. A score-None record under any other outcome still
-    # counts (it was attempted; only its quality is unknown).
-    counted = [r for r in run_records if r.outcome is not BenchmarkOutcome.NOT_EVALUATED]
+    counted = _counted(run_records)
     rubric = [
         r for r in counted if r.quality.judge in RUBRIC_JUDGES and r.quality.score is not None
     ]
@@ -193,10 +219,7 @@ def _stage_row(
         after_repair = (sum(k for k, _n in lasts), sum(n for _k, n in lasts))
 
     per_run_tokens = [t for t in (_tokens_of(recs) for _run, recs in members) if t is not None]
-    mean_usd = _safe_mean([r.cost.usd for r in counted if r.cost.usd is not None])
-    mean_sec = _safe_mean(
-        [r.speed.wall_clock_s for r in counted if r.speed.wall_clock_s is not None]
-    )
+    mean_usd, mean_sec = _means(counted)
     harness = next((r.harness for r in run_records if r.harness is not None), None)
     lead_harness = next((r.lead_harness for r in run_records if r.lead_harness is not None), None)
     return BenchmarkSummary(
@@ -237,16 +260,13 @@ def _oracle_row(
     oracle_records = [
         [r for r in run.records if r.scope is BenchmarkScope.ORACLE][-1] for run in graded_runs
     ]
-    counted = [r for r in oracle_records if r.outcome is not BenchmarkOutcome.NOT_EVALUATED]
+    counted = _counted(oracle_records)
     # Contract §5.2: the oracle row's mean quality is the mean partial
     # credit of its graded runs, never a mean of oracle scores.
     mean_q = _safe_mean(
         [run.partial_credit for run in graded_runs if run.partial_credit is not None]
     )
-    mean_usd = _safe_mean([r.cost.usd for r in counted if r.cost.usd is not None])
-    mean_sec = _safe_mean(
-        [r.speed.wall_clock_s for r in counted if r.speed.wall_clock_s is not None]
-    )
+    mean_usd, mean_sec = _means(counted)
     harness = next((r.harness for r in counted if r.harness is not None), None)
     lead_harness = next((r.lead_harness for r in counted if r.lead_harness is not None), None)
     return BenchmarkSummary(
