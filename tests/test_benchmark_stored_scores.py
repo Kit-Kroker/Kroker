@@ -265,3 +265,20 @@ def test_stored_cat_cafe_qa_is_a_copy_row():
     )
     md = render_gate_oracle_markdown(build_gate_oracle(_runs_for(_stored_records(), CAT_CAFE)))
     assert "copy of code (pre-012)" in md
+
+
+# --- 013 T010: contract §9.3 — the summary count on the stored selection ------
+
+
+def test_stored_cat_cafe_sc_rollup_reads_zero_of_eighteen():
+    """§9.3 with the §12 selection: cat-cafe's 18 runs left no run summary
+    (baseline item (e): no cat-cafe summary exists under the export root),
+    so the rollup opens with `0 of 18 runs left a run summary`."""
+    from sdlc.benchmarks.evidence import load_evidence
+    from sdlc.benchmarks.sc_rollup import build_sc_rollup, render_sc_rollup_markdown
+
+    ev = load_evidence(case=CAT_CAFE)
+    assert ev.selection_runs == 18
+    rollup = build_sc_rollup(ev.summaries, ev.records, selection_runs=ev.selection_runs)
+    assert rollup.summary_runs == 0
+    assert "0 of 18 runs left a run summary" in render_sc_rollup_markdown(rollup)

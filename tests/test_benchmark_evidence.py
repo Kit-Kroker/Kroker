@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -146,3 +147,94 @@ def test_default_export_root_reads_runs_pipeline(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     ev = load_evidence(bench="b1", root=str(tmp_path))
     assert [s.run_id for s in ev.summaries] == ["r1"]
+
+
+# --- 013 T010 (RED): summaries by run id (contract §9, research R-12) --------
+
+
+def _selection_records(tmp_path, run_ids, case="c1", bench="b1"):
+    """One code record per run id, stored through the real RecordStore."""
+    store = RecordStore(root=str(tmp_path), bench_run_id=bench)
+    for run in run_ids:
+        store.append(_rec(bench, case, run))
+
+
+def test_summaries_are_read_by_run_id_for_the_selection(tmp_path):
+    """§9.1: `export_root / run_id / 'summary.json'` for each run of the
+    selection and nowhere else -- exact membership cannot admit a
+    `bf-e2e-*` summary sitting beside them (R-12)."""
+    exports = tmp_path / "exports"
+    _write_summary(exports, "r1")
+    _write_summary(exports, "r2")
+    _write_summary(exports, "bf-e2e-x")
+    _selection_records(tmp_path, ["r1", "r2"])
+    ev = load_evidence(case="c1", root=str(tmp_path), export_root_=str(exports))
+    assert {s.run_id for s in ev.summaries} == {"r1", "r2"}
+    assert ev.summary_runs == 2
+    assert ev.selection_runs == 2
+    assert ev.notes == []
+
+
+def test_summary_declaring_a_different_run_id_is_ignored_with_a_note(tmp_path):
+    """§9.1: the file lives at the run's path but claims another run --
+    ignored, noted, never counted."""
+    exports = tmp_path / "exports"
+    d = exports / "r1"
+    d.mkdir(parents=True)
+    other = RunSummary(
+        run_id="someone-else",
+        mode="greenfield",
+        outcome="deployed:pr",
+        terminal_stage="deploy",
+        started_at=T,
+        ended_at=T,
+        duration_s=0.0,
+    )
+    (d / "summary.json").write_text(other.model_dump_json(), encoding="utf-8")
+    _selection_records(tmp_path, ["r1"])
+    ev = load_evidence(case="c1", root=str(tmp_path), export_root_=str(exports))
+    assert ev.summaries == []
+    assert ev.summary_runs == 0
+    assert ev.selection_runs == 1
+    assert len(ev.notes) == 1 and "r1" in ev.notes[0]
+
+
+def test_missing_malformed_and_unopenable_summaries_are_no_summary_with_a_note(
+    tmp_path, monkeypatch
+):
+    """§9.2: a missing file, a malformed file and a path that cannot be
+    opened each degrade their one run to 'no summary'; nothing raises."""
+    exports = tmp_path / "exports"
+    _write_summary(exports, "r2")  # the good one
+    bad = exports / "r3"
+    bad.mkdir(parents=True)
+    (bad / "summary.json").write_text("{not json", encoding="utf-8")
+    _write_summary(exports, "r4")  # exists, but cannot be opened
+    real_read_text = Path.read_text
+
+    def _locked(self, *args, **kwargs):
+        if self.parent.name == "r4" and self.name == "summary.json":
+            raise PermissionError("locked")
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", _locked)
+    _selection_records(tmp_path, ["r1", "r2", "r3", "r4"])  # r1: no file at all
+    ev = load_evidence(case="c1", root=str(tmp_path), export_root_=str(exports))
+    assert [s.run_id for s in ev.summaries] == ["r2"]
+    assert ev.summary_runs == 1
+    assert ev.selection_runs == 4
+    assert len(ev.notes) == 3
+    assert any("r1" in n for n in ev.notes)
+    assert any("r3" in n for n in ev.notes)
+    assert any("r4" in n for n in ev.notes)
+
+
+def test_all_selector_reads_no_summary_outside_the_selections_run_ids(tmp_path):
+    exports = tmp_path / "exports"
+    _write_summary(exports, "r1")
+    _write_summary(exports, "bf-e2e-x")
+    _selection_records(tmp_path, ["r1"])
+    ev = load_evidence(all_=True, root=str(tmp_path), export_root_=str(exports))
+    assert {s.run_id for s in ev.summaries} == {"r1"}
+    assert ev.summary_runs == 1
+    assert ev.selection_runs == 1

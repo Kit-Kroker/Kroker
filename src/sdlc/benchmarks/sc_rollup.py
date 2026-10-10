@@ -18,10 +18,12 @@ from ..core.models import (
     RunSummary,
 )
 from .models import BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, is_pre012
+from .runs import MIN_OBSERVATIONS, attempt_sort_key
 
 # Below this many runs a percentage is noise dressed as a result. A single
-# green run rendering "100%" WILL be quoted; n/a cannot be.
-MIN_RUNS = 5
+# green run rendering "100%" WILL be quoted; n/a cannot be. One floor for
+# the whole round (research R-8): an alias of runs.MIN_OBSERVATIONS.
+MIN_RUNS = MIN_OBSERVATIONS
 
 # The merge gate's registered name (workflows/feature.py:1754).
 MERGE_GATE = "merge"
@@ -54,6 +56,10 @@ class SCRollup(BaseModel):
     # 012 (contract §7.6): pre-012 records among the input (cell-scope
     # records excluded); rendered as the untrusted line.
     pre012_records: int = 0
+    # 013 (contract §9.3): how many runs the selection covers and how many
+    # of them left a run summary; rendered as the opening line.
+    summary_runs: int = 0
+    selection_runs: int = 0
 
 
 def _rate(n_hits: int, n: int) -> float | None:
@@ -62,13 +68,20 @@ def _rate(n_hits: int, n: int) -> float | None:
     return n_hits / n
 
 
-def build_sc_rollup(summaries: list[RunSummary], records: list[BenchmarkRecord]) -> SCRollup:
+def build_sc_rollup(
+    summaries: list[RunSummary],
+    records: list[BenchmarkRecord],
+    *,
+    selection_runs: int = 0,
+) -> SCRollup:
     ordered = sorted(summaries, key=lambda s: (s.started_at, s.run_id))
     data = [r for r in records if r.scope is not BenchmarkScope.CELL]
     return SCRollup(
         rates=[_sc1(ordered), _sc3(data), _sc4(ordered), *_sc6(ordered)],
         sc4_series=_sc4_series(ordered),
         pre012_records=sum(1 for r in data if is_pre012(r)),
+        summary_runs=len(summaries),
+        selection_runs=selection_runs,
     )
 
 
@@ -111,7 +124,7 @@ def _sc3(records: list[BenchmarkRecord]) -> SCRate:
 
     loops = successes = 0
     for recs in attempts.values():
-        recs = sorted(recs, key=lambda r: (r.attempt or 0, r.speed.started_at))
+        recs = sorted(recs, key=attempt_sort_key)
         if not any(r.fix_attempts > 0 for r in recs):
             continue
         loops += 1
@@ -205,6 +218,8 @@ def render_sc_rollup_markdown(r: SCRollup) -> str:
         "",
         "## Success criteria",
         "",
+        f"{r.summary_runs} of {r.selection_runs} runs left a run summary",
+        "",
         f"Rates below n={MIN_RUNS} render n/a rather than a percentage.",
         "",
         "| criterion | measure | rate | n | target | |",
@@ -251,6 +266,7 @@ td,th{{border:1px solid #ccc;padding:.3rem .6rem;text-align:center}}
 th{{background:#f3f3f3}} li{{margin:.3rem 0}}
 </style></head><body>
 <h1>Success criteria</h1>
+<p>{r.summary_runs} of {r.selection_runs} runs left a run summary</p>
 <p>Rates below n={MIN_RUNS} render n/a rather than a percentage: a single
 run displaying 100% would be quoted as a result.</p>
 <table><tr><th>criterion</th><th>measure</th><th>rate</th><th>n</th>

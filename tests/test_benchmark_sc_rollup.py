@@ -357,3 +357,91 @@ def test_sc_rollup_markdown_and_html_state_the_pre012_count_when_present():
     plain = build_sc_rollup(summaries, only_012)
     assert "pre-012" not in render_sc_rollup_markdown(plain)
     assert "pre-012" not in render_sc_rollup_html(plain)
+
+
+# --- 013 T010 (RED): run-summary scoping and counts (contract §9) ------------
+
+
+def test_rollup_carries_the_counts_and_renders_the_line_first():
+    """§9.3: the section opens with `N of M runs left a run summary`, in
+    markdown and in HTML, before anything else the section says."""
+    rollup = build_sc_rollup(_n_summaries(3), [], selection_runs=7)
+    assert rollup.summary_runs == 3
+    assert rollup.selection_runs == 7
+    line = "3 of 7 runs left a run summary"
+    md = render_sc_rollup_markdown(rollup)
+    html = render_sc_rollup_html(rollup)
+    assert line in md and line in html
+    assert md.index(line) < md.index("Rates below")
+    assert html.index(line) < html.index("Rates below")
+
+
+def test_zero_summaries_leave_summary_criteria_na_but_sc3_from_records():
+    """§9.4: SC-1, SC-4 and SC-6 take only the loaded summaries (none here
+    -> n/a with n=0); SC-3 is still computed from the selection's
+    records."""
+    recs = []
+    for i in range(MIN_RUNS):
+        recs += _loop("r1", f"t{i}", BenchmarkOutcome.PASS)
+    rollup = build_sc_rollup([], recs, selection_runs=MIN_RUNS)
+    for criterion in ("SC-1", "SC-4", "SC-6", "SC-6-advisory"):
+        r = _rate(rollup, criterion)
+        assert r.rate is None and r.n == 0, criterion
+    sc3 = _rate(rollup, "SC-3")
+    assert sc3.n == MIN_RUNS and sc3.rate == 1.0
+    assert rollup.summary_runs == 0
+    assert rollup.selection_runs == MIN_RUNS
+
+
+def test_min_runs_is_the_one_under_five_threshold():
+    """Data-model §6: MIN_RUNS aliases runs.MIN_OBSERVATIONS -- one floor
+    for the round, not two that could drift."""
+    from sdlc.benchmarks.runs import MIN_OBSERVATIONS
+
+    assert MIN_RUNS is MIN_OBSERVATIONS
+
+
+def test_sc3_orders_attempts_with_the_shared_key():
+    """Data-model §1.2: `sc_rollup` uses `runs.attempt_sort_key`, not a
+    private lambda -- one attempt ordering for the round."""
+    import inspect
+
+    import sdlc.benchmarks.sc_rollup as m
+
+    src = inspect.getsource(m._sc3)
+    assert "attempt_sort_key" in src
+    assert "lambda" not in src
+
+
+def _unnumbered(run, task, outcome, started, fix):
+    """A code record whose attempt number is absent (pre-012 shape); the
+    loop marker rides on `fix_attempts` alone."""
+    return _code(run, task, outcome, fix).model_copy(
+        update={
+            "attempt": None,
+            "speed": SpeedBag(wall_clock_s=1.0, started_at=started, ended_at=started),
+        }
+    )
+
+
+def test_sc3_orders_unnumbered_attempts_by_start_time():
+    """The behaviour behind the shared key: with attempt numbers absent,
+    start time decides which attempt is last -- and the last one decides
+    the loop."""
+
+    def _corpus(first, last):
+        recs = []
+        for i in range(MIN_RUNS):
+            base = T + timedelta(hours=10 * i)
+            recs += [
+                _unnumbered("r1", f"t{i}", first, base, fix=0),
+                _unnumbered("r1", f"t{i}", last, base + timedelta(hours=1), fix=1),
+            ]
+        return recs
+
+    ok = _corpus(BenchmarkOutcome.FAIL, BenchmarkOutcome.PASS)
+    resolved = _rate(build_sc_rollup([], ok), "SC-3")
+    assert resolved.n == MIN_RUNS and resolved.rate == 1.0
+    bad = _corpus(BenchmarkOutcome.PASS, BenchmarkOutcome.FAIL)
+    broken = _rate(build_sc_rollup([], bad), "SC-3")
+    assert broken.n == MIN_RUNS and broken.rate == 0.0
