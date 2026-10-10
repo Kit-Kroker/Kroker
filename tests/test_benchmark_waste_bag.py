@@ -108,3 +108,35 @@ def _record(**kw):
     )
     base.update(kw)
     return BenchmarkRecord(**base)
+
+
+# --- 013 T014 (R-15): the capture mark and waste_measured ----------------------
+
+
+def test_from_digest_copies_capture_rev():
+    bag = WasteBag.from_digest(_digest(capture_rev=1))
+    assert bag.capture_rev == 1
+
+
+def test_stored_shape_bag_reads_capture_rev_none():
+    """A bag written before the field existed must keep parsing."""
+    bag = WasteBag.model_validate_json('{"tool_calls": 3, "model_turns": 5}')
+    assert bag.tool_calls == 3
+    assert bag.capture_rev is None
+
+
+def test_waste_measured_rule():
+    """Contract 10.1 / R-15: not measured when there is no bag, or when an
+    unmarked zero-tool bag comes from a harness whose old parser counted no
+    tool events -- opencode, and a crew cell, whose session is captured
+    under the role's opencode CLI (baseline (f))."""
+    from sdlc.benchmarks.models import waste_measured
+
+    assert waste_measured(_record()) is False  # no bag
+    assert waste_measured(_record(waste=WasteBag())) is False  # opencode, unmarked, 0 tools
+    assert waste_measured(_record(waste=WasteBag(tool_calls=3))) is True
+    assert waste_measured(_record(waste=WasteBag(capture_rev=1))) is True
+    assert waste_measured(_record(harness=HarnessKind.CLAUDE_CODE, waste=WasteBag())) is True
+    assert waste_measured(_record(harness=HarnessKind.CREW, waste=WasteBag())) is False
+    assert waste_measured(_record(harness=HarnessKind.CREW, waste=WasteBag(capture_rev=1))) is True
+    assert waste_measured(_record(harness=HarnessKind.CREW, waste=WasteBag(tool_calls=2))) is True

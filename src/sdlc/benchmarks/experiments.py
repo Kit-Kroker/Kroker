@@ -26,7 +26,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from .evidence import Evidence
-from .models import BenchmarkOutcome, CompositeWeights, arm_label
+from .models import BenchmarkOutcome, CompositeWeights, arm_label, waste_measured
 from .waste_matrix import WASTE_METRICS
 
 # Below this many observations of a cell, a delta IS noise. No p-values on
@@ -111,10 +111,12 @@ def _cells(ev: Evidence, weights: CompositeWeights):
         # 012 (contract §7.7/§7.8): the arm component is arm_label — the
         # arm for a 012 record, the bare model for a pre-012 record, so
         # pre-012 keys are unchanged; a not_evaluated record enters no mean.
+        # 013 (contract §10.2): an unmeasured waste bag (no session, or an
+        # unmarked zero-tool opencode/crew capture) enters no mean either.
         # A record with no harness keys by its label alone (a proposer-side
         # cell's identity is the label; an empty-harness prefix would only
         # add noise to the column name).
-        if r.waste is None or r.outcome is BenchmarkOutcome.NOT_EVALUATED:
+        if r.outcome is BenchmarkOutcome.NOT_EVALUATED or not waste_measured(r):
             continue
         label = arm_label(r)
         key = (

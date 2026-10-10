@@ -119,6 +119,11 @@ class WasteBag(BaseModel):
     denials: int = 0  # E-16: blocked tool calls
     escalations: int = 0  # E-17: tool calls that raised a gate
     compacted: bool = False
+    # 013 (R-15, contract §10.3): copied from SessionDigest.capture_rev by
+    # from_digest. None = the bag was captured before tool events were
+    # parsed; waste_measured reads it (an unmarked zero-tool opencode bag
+    # is not measured, a marked one is a measured zero).
+    capture_rev: int | None = None
 
     @classmethod
     def from_digest(cls, d: SessionDigest | None) -> WasteBag | None:
@@ -135,6 +140,7 @@ class WasteBag(BaseModel):
             denials=d.denials,
             escalations=d.escalations,
             compacted=d.compacted,
+            capture_rev=d.capture_rev,
         )
 
 
@@ -398,6 +404,29 @@ def is_pre012(r: BenchmarkRecord) -> bool:
     does not change, never carry a commit, and are not counted as
     pre-012 (contract §7.2)."""
     return r.kroker_commit is None and r.case_id != "_production"
+
+
+def waste_measured(record: BenchmarkRecord) -> bool:
+    """013 (R-15, contract §10.1): False when no session was captured
+    (bag None), or when an unmarked (`capture_rev is None`) zero-tool bag
+    comes from a harness whose old parser counted no tool events —
+    opencode, and a crew cell, whose session is captured under the role's
+    CLI (baseline (f): opencode for the coder role; `lead_harness=None`
+    on every stored crew record). A marked bag is a measured zero; a bag
+    with tool calls was measured whatever the mark."""
+    bag = record.waste
+    if bag is None:
+        return False
+    if bag.capture_rev is not None or bag.tool_calls > 0:
+        return True
+    h, lead = record.harness, record.lead_harness
+    if h is HarnessKind.OPENCODE or lead is HarnessKind.OPENCODE:
+        return False
+    # A crew cell's session is captured under the role's CLI — opencode
+    # for the coder role, and `lead_harness=None` on every stored crew
+    # record — so its unmarked zero-tool bag is not measured either,
+    # unless the lead is a harness whose parser already counted tools.
+    return not (h is HarnessKind.CREW and lead not in (HarnessKind.CLAUDE_CODE, HarnessKind.CURSOR))
 
 
 class BenchmarkSummary(BaseModel):

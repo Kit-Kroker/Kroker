@@ -357,3 +357,30 @@ def test_compare_passes_the_composite_decision_through(tmp_path):
         experiment=exp.id, candidate="b2", exp_dir=str(tmp_path), root=str(tmp_path)
     )
     assert "composite" in out.splitlines()[0]
+
+
+# --- 013 T014: unmeasured records leave the comparison (contract 10.2) ----------
+
+
+def test_unmeasured_record_drags_no_waste_mean_or_count():
+    """R-15: _cells skips records waste_measured is false for, so a
+    stored-shape zero-tool opencode bag moves no delta row -- not the
+    waste means, not the counts, not the note."""
+    base = _ev([_rec(waste=WasteBag(tool_calls=10, capture_rev=1))])
+    rows_a = compute_deltas(
+        base,
+        _ev([_rec(waste=WasteBag(tool_calls=48, capture_rev=1), bench="b2")], "b2"),
+        CompositeWeights(),
+    )
+    rows_b = compute_deltas(
+        base,
+        _ev(
+            [
+                _rec(waste=WasteBag(tool_calls=48, capture_rev=1), bench="b2"),
+                _rec(waste=WasteBag(), bench="b2", run="r2"),
+            ],
+            "b2",
+        ),
+        CompositeWeights(),
+    )
+    assert [r.model_dump() for r in rows_b] == [r.model_dump() for r in rows_a]

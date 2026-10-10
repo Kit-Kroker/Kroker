@@ -23,6 +23,7 @@ from .models import (
     BenchmarkScope,
     arm_label,
     is_pre012,
+    waste_measured,
 )
 from .tasks import TaskSuite
 
@@ -59,6 +60,10 @@ class WasteMatrix(BaseModel):
     # 012 (contract §7.6): pre-012 records among this case's input
     # (cell-scope records excluded); rendered as the untrusted line.
     pre012_records: int = 0
+    # 013 (contract §10.2): task attempts whose bag is not measured
+    # (no session, or an unmarked zero-tool opencode/crew capture);
+    # they enter no sum and render as their own line.
+    not_measured: int = 0
 
 
 def build_waste_matrix(
@@ -67,19 +72,25 @@ def build_waste_matrix(
     case_recs = [r for r in records if r.case_id == case_id and r.scope is not BenchmarkScope.CELL]
     # 012 (contract §7.8): a not_evaluated outcome is neither pass nor fail
     # nor rework — it enters no mean here either.
-    recs = [
-        r
-        for r in case_recs
-        if r.task_id and r.waste is not None and r.outcome is not BenchmarkOutcome.NOT_EVALUATED
+    attempts = [
+        r for r in case_recs if r.task_id and r.outcome is not BenchmarkOutcome.NOT_EVALUATED
     ]
+    # 013 (contract §10.1/§10.2): unmeasured attempts (no bag, or an
+    # unmarked zero-tool opencode/crew bag) are in no sum and no run
+    # count; not_measured counts them.
+    recs = [r for r in attempts if waste_measured(r)]
+    n_unmeasured = len(attempts) - len(recs)
     if not recs:
         return WasteMatrix(
             case_id=case_id,
             metrics=list(WASTE_METRICS),
             pre012_records=sum(1 for r in case_recs if is_pre012(r)),
+            not_measured=n_unmeasured,
         )
 
     # sum within a run-instance, then mean across run-instances
+    # (013 contract §10.2: runs are counted by run_id — two cells of one
+    # bench run are two runs).
     per_run: dict[tuple[str, str, str, str], float] = defaultdict(float)
     runs: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     for r in recs:
@@ -88,8 +99,8 @@ def build_waste_matrix(
         # bare model for a pre-012 record, so pre-012 keys are unchanged.
         arm = f"{r.harness.value if r.harness else ''}#{arm_label(r)}"
         for metric in WASTE_METRICS:
-            per_run[(r.bench_run_id, r.task_id, arm, metric)] += float(getattr(r.waste, metric))
-        runs[(r.task_id, arm, "")].add(r.bench_run_id)
+            per_run[(r.run_id, r.task_id, arm, metric)] += float(getattr(r.waste, metric))
+        runs[(r.task_id, arm, "")].add(r.run_id)
 
     totals: dict[tuple[str, str, str], float] = defaultdict(float)
     for (_bench, task_id, arm, metric), v in per_run.items():
@@ -120,6 +131,7 @@ def build_waste_matrix(
         cells=cells,
         max_by_metric=max_by_metric,
         pre012_records=sum(1 for r in case_recs if is_pre012(r)),
+        not_measured=n_unmeasured,
     )
 
 
@@ -170,6 +182,13 @@ def render_waste_matrix_html(wm: WasteMatrix) -> str:
         if wm.pre012_records
         else ""
     )
+    # 013 (contract §10.2): the line prints only when N > 0.
+    unmeasured = (
+        f"\n<p>{wm.not_measured} attempts not measured "
+        "(captured before tool events were parsed)</p>"
+        if wm.not_measured
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Harness waste - {escape(wm.case_id)}</title>
@@ -185,5 +204,5 @@ th{{background:#f3f3f3}} td.empty{{background:#fafafa}}
 Whiter is cleaner; redder is more waste. A blank cell was never measured --
 it is not a zero. Proposer stages (clarify, architect, planner, qa, reviewer,
 analyst) have no harness transcript at all and never appear here.</p>
-{body}{untrusted}
+{body}{untrusted}{unmeasured}
 </body></html>"""

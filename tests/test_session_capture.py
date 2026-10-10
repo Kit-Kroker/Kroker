@@ -63,3 +63,30 @@ def test_capture_sanitizes_task_id(tmp_path, monkeypatch):
         ClaudeCodeHarness(), STREAM, run_id="r1", task_id="T/1: setup", attempt=2
     )
     assert ref_to_path(ref).name == "T_1__setup-a2.jsonl"
+
+
+def test_capture_digest_carries_capture_rev_for_every_harness(tmp_path, monkeypatch):
+    """Contract 10.3: capture goes through digest_of for every harness, so
+    both the claude and the opencode stream yield a marked digest."""
+    from sdlc.harness.opencode import OpenCodeHarness
+
+    monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path))
+    _, claude_dig = capture_session(
+        ClaudeCodeHarness(), STREAM, run_id="r1", task_id="t1", attempt=1
+    )
+    assert claude_dig is not None and claude_dig.capture_rev == 1
+
+    oc_stream = "\n".join(
+        [
+            json.dumps({"type": "step_start", "sessionID": "oc1"}),
+            json.dumps(
+                {
+                    "type": "step_finish",
+                    "sessionID": "oc1",
+                    "part": {"tokens": {"input": 2, "output": 1}, "cost": 0.01},
+                }
+            ),
+        ]
+    )
+    _, oc_dig = capture_session(OpenCodeHarness(), oc_stream, run_id="r2", task_id="t1", attempt=1)
+    assert oc_dig is not None and oc_dig.capture_rev == 1

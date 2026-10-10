@@ -18,6 +18,11 @@ from .models import (
 
 SKELETON_MAX = 200
 
+# 013 (R-15, contract §10.3): the capture revision `digest_of` stamps on
+# every digest it writes. 1 = tool events are parsed (the parsers this
+# revision describes); None (absent) = a digest stored before that.
+CAPTURE_REV = 1
+
 _TOOL_KINDS = {"tool_call", "tool_result", "file_read", "file_write", "command"}
 
 
@@ -27,7 +32,11 @@ def digest_of(session: HarnessSession) -> SessionDigest:
     downgraded (OQ-B7)."""
     reads: Counter[str] = Counter()
     writes: Counter[str] = Counter()
-    d = SessionDigest(input_tokens=session.input_tokens, output_tokens=session.output_tokens)
+    d = SessionDigest(
+        input_tokens=session.input_tokens,
+        output_tokens=session.output_tokens,
+        capture_rev=CAPTURE_REV,
+    )
     skeleton: list[str] = []
     for ev in session.events:
         if ev.kind in _TOOL_KINDS:

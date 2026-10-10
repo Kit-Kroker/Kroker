@@ -66,6 +66,10 @@ class SessionDigest(BaseModel):
     input_tokens: int | None = None
     output_tokens: int | None = None
     decision_skeleton: list[str] = Field(default_factory=list)
+    # 013 (R-15, contract §10.3): capture revision. None = captured before
+    # tool events were parsed; waste readers treat an unmarked zero-tool
+    # opencode digest as not measured rather than as a clean zero.
+    capture_rev: int | None = None
 
 
 class ContainmentLayer(StrEnum):

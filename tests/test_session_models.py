@@ -139,3 +139,26 @@ def test_session_text_from_jsonl_skips_a_partial_trailing_line():
     text = session_text_from_jsonl(truncated)
     assert "file_read a.py" in text
     assert "file_write" not in text  # partial line dropped
+
+
+# --- 013 T014 (R-15): the capture mark on SessionDigest ------------------------
+
+
+def test_session_digest_capture_rev_defaults_none():
+    """Contract 10.3: the capture mark is optional -- a digest stored
+    before the field existed must keep parsing and read None."""
+    from sdlc.harness.models import SessionDigest
+
+    assert SessionDigest().capture_rev is None
+    stored = SessionDigest.model_validate_json('{"tool_calls": 1}')
+    assert stored.tool_calls == 1
+    assert stored.capture_rev is None
+
+
+def test_digest_of_writes_the_capture_rev():
+    """Contract 10.3: digest_of stamps CAPTURE_REV on every digest it
+    writes, whatever the harness."""
+    from sdlc.harness.session import CAPTURE_REV
+
+    assert CAPTURE_REV == 1
+    assert digest_of(_session([])).capture_rev == CAPTURE_REV

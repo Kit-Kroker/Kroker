@@ -75,7 +75,7 @@ def test_attempts_sum_within_a_run():
 def test_runs_are_averaged():
     recs = [
         _rec(task="t01", bench="b1", waste=WasteBag(tool_calls=10)),
-        _rec(task="t01", bench="b2", waste=WasteBag(tool_calls=20)),
+        _rec(task="t01", bench="b2", run="r2", waste=WasteBag(tool_calls=20)),
     ]
     wm = build_waste_matrix("c1", recs)
     c = _cell(wm, "t01", "opencode#m", "tool_calls")
@@ -272,3 +272,47 @@ def test_waste_matrix_has_no_pre012_line_when_count_is_zero():
     wm = build_waste_matrix("c1", [_rec012(task="t01")])
     assert "pre-012" not in render_waste_matrix_html(wm)
     assert json.loads(render_waste_matrix_json(wm))["pre012_records"] == 0
+
+
+# --- 013 T014 (R-15): the not-measured rule and runs by run_id -----------------
+
+
+def test_unmeasured_records_enter_no_sum_and_are_counted():
+    """Contract 10.2: a stored-shape bag (opencode, unmarked, zero tool
+    calls) enters no sum and no run count; not_measured counts it."""
+    recs = [
+        _rec(task="t01", waste=WasteBag(capture_rev=1)),
+        _rec(task="t01", waste=WasteBag(tool_calls=10, capture_rev=1)),
+        _rec(task="t01", waste=WasteBag()),
+    ]
+    wm = build_waste_matrix("c1", recs)
+    assert _cell(wm, "t01", "opencode#m", "tool_calls").value == 10.0
+    assert wm.not_measured == 1
+
+
+def test_all_unmeasured_case_renders_the_not_measured_line():
+    recs = [_rec(task="t01", waste=WasteBag())]
+    wm = build_waste_matrix("c1", recs)
+    assert wm.cells == []
+    assert wm.not_measured == 1
+    assert "1 attempts not measured (captured before tool events were parsed)" in (
+        render_waste_matrix_html(wm)
+    )
+
+
+def test_html_has_no_not_measured_line_when_all_measured():
+    recs = [_rec(task="t01", waste=WasteBag(tool_calls=1, capture_rev=1))]
+    html = render_waste_matrix_html(build_waste_matrix("c1", recs))
+    assert "not measured" not in html
+
+
+def test_runs_are_counted_by_run_id():
+    """Contract 10.2: two attempts of one bench run are two runs -- the
+    run count is by run_id, not bench_run_id."""
+    recs = [
+        _rec(task="t01", bench="b1", run="r1", waste=WasteBag(tool_calls=10, capture_rev=1)),
+        _rec(task="t01", bench="b1", run="r2", waste=WasteBag(tool_calls=20, capture_rev=1)),
+    ]
+    wm = build_waste_matrix("c1", recs)
+    c = _cell(wm, "t01", "opencode#m", "tool_calls")
+    assert c.value == 15.0 and c.n_runs == 2
