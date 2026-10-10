@@ -474,7 +474,10 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   012 every benchmark record carries its provenance and cell identity
   (`benchmarks/provenance.py`, `cell.py`), one record file is written per
   cell, and each oracle grade runs in its own clean environment; the
-  record contract is in `BENCHMARK.md`.
+  record contract is in `BENCHMARK.md`. Since round 013 the score path
+  reads records through a run model (`benchmarks/runs.py`) and renders
+  the run grid, the layered heatmap and the gate-versus-oracle view
+  (`grid.py`, `heatmap_render.py`, `gate_oracle.py`).
 - **Trajectory harvesting (P5 seam):** Temporal history + artifacts +
   handoffs + gate decisions already constitute complete trajectories
   (actions, tool calls, costs, outcomes, human feedback). The observability
@@ -826,8 +829,9 @@ Kroker/
 │   │                          #   store.py, start.py  # graphs/<sha>.yaml + client start (E-75); layouts + latest, registry snapshots, run pointers (E-77)
 │   ├── artifacts/             # claim-check store, capture, read, retention
 │   ├── board/                 # ADR-21: artifact versions, task lifecycle, events, API
-│   ├── benchmarks/            # eval harness: judge, scoring, sc_rollup, drift, oracle,
-│   │                          #   the matrices (error/task/waste/agreement), importers/
+│   ├── benchmarks/            # eval harness: judge, scoring, runs, grid, gate_oracle,
+│   │                          #   sc_rollup, drift, oracle, heatmap_render; the matrices
+│   │                          #   (error/task/waste/agreement); importers/
 │   │                          #   provenance.py, cell.py, paths.py  # record trust (012): commit/prompt hash, cell record, one cases root
 │   ├── assessment/            # Tier 2 EDCR: scan/ signals, discover/, risk/
 │   ├── triage/                # Tier 0: admission, signals/, delta, advisories

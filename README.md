@@ -74,6 +74,14 @@ python -m sdlc.cli benchmark score --bench <bench_run_id> --weights 0.7,0.2,0.1
 python -m sdlc.cli benchmark score --case cat-cafe-monitoring
 ```
 
+The score writes `report.md` — it opens with the run-by-run grid — plus
+`grid.{html,json}`, `heatmap.{html,json}`, `gate-oracle.{html,json}` (each
+gate against the oracle) and `sc-rollup.{html,json}`, and per case the
+waste, reviewer-versus-adversary, task and error matrix files.
+`--weights` is unused without two arms: it applies only to a case with two
+arms that each have a graded run, and the report says so when it is not
+used.
+
 Two round-012 notes for `benchmark run`:
 
 - **Pre-flight:** a case manifest that registers a rubric or veto file it
@@ -310,8 +318,10 @@ not be evaluated is `errored` and never counts as a pass.
   the same weights don't count as independent. Off by default.
 - Every terminal run emits a `RunSummary` (retro stage) and exports
   `events.jsonl` / `report.html` / `summary.json`; `sdlc benchmark score`
-  aggregates across runs into the SC-rollup + heatmap/task/error/waste
-  matrices, plus an `agreement_matrix` for the adversary lens.
+  reads the stored records into runs and writes the run grid (the report's
+  opening view), the layered heatmap, the gate-versus-oracle view and the
+  SC-rollup, plus the task/error/waste matrices and the
+  reviewer-versus-adversary split per case.
 - Memory (Hindsight) defaults to a fake in-process backend; the real client
   (`memory/hindsight_client.py`) talks to a live Hindsight container (see
   Docker Compose above).

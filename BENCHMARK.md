@@ -71,7 +71,10 @@ And the **factory's own state**: `ROADMAP.md` marks SC-1 through SC-6 as
 either not-measurable or mechanism-exists-no-metric. The pipeline can ship a
 feature end-to-end (P1 done), but it cannot yet tell you *how well* or *how
 cheaply* it does so across a fleet. The benchmark is the missing instrument,
-and it is the precondition for P3's exit and everything in P4.
+and it is the precondition for P3's exit and everything in P4. Since round
+013 the SC figures `sdlc benchmark score` prints are computed from the
+scored runs' own summaries — the rollup opens with `N of M runs left a run
+summary` and takes only those — never from every summary on disk.
 
 **Design stance carried from the architecture.** ADR-11 already commits the
 factory to a deterministic DAG *contra* the Bitter Lesson. The benchmark
@@ -359,11 +362,13 @@ should emit a **row per run** with these fields, aggregated across the matrix.
 ### 4.1 Quality (the grade)
 
 - **Oracle pass rate** — fraction of the held-out Tier-A suite passing. The
-  primary number. Requires §6 priority 1. **Round 012:** the code stage's
-  quality is the share of *attempts that passed* (each attempt's three
-  records — code, qa, review — carry that role's own verdict, never a copy
-  of another's), so a cell that needed three attempts to land reads 1/3,
-  not 1.
+  primary number. Requires §6 priority 1. **Round 013:** the code stage
+  carries two task scores — *first attempt* and *after repair*, each `k/n`
+  over the tasks with a record at the stage — and no quality mean. The
+  oracle row shows the mean partial credit of graded runs beside the
+  all-pass rate `k/n`. A verdict stage prints a pass rate over its own
+  gate decisions, never a quality score. The composite is shown only when
+  the case has two arms with a graded run each.
 - **Grade-over-time** — Cursor grade the suite as a *rising curve*, because
   agents choose their own strategy (broad-foundation-then-spike vs
   deep-then-plateau) and *"trends matter more than exact scores at exact
@@ -420,23 +425,48 @@ measure work that didn't advance the goal.
   `benchmarks/waste_matrix.py`. Six gridded metrics; volume metrics and
   `compacted` ride on the record without a grid. Coding tasks only --
   proposer stages have no transcript by construction.
+- *Round 013:* the stored opencode counters are **not measured** — their
+  streams were captured before tool events were parsed, so a bag with no
+  capture mark and zero tool calls cannot be told apart from an unparsed
+  stream and reads as not measured (counted as such, never scored as a
+  zero); claude and cursor counts were always measured. New digests carry
+  the capture mark (`capture_rev`), so a marked bag's zero is a measured
+  zero. Tool events are parsed from opencode streams pending a captured
+  stream — round 013's parser task waits on one.
 
 ### 4.4 The error heatmap (Abdullin's prioritisation instrument)
 
 Aggregate the above — including the session-derived waste (§4.3) and the
-anti-cheat findings (below) — into a **case × stage** grid: rows are benchmark cases,
-columns are the 15 stages, cell colour is failure/rework density (gate
-rejections, fix-loop iterations, oracle failures attributable to that stage).
-This is Abdullin's `error heatmap` and it answers the only question that matters
+anti-cheat findings (below) — into a **case × stage** grid. This is
+Abdullin's `error heatmap` and it answers the only question that matters
 between iterations: *which stage, on which class of case, is costing the most —
 and therefore what do I fix next.* It is strictly more useful than a scalar and
 it is the natural home for every §4.1–4.3 metric.
 
-*Status (2026-08-03):* the case x stage heatmap is one of five grids written
-by `sdlc benchmark score` (`heatmap`, `task-matrix`, `error-matrix`,
-`waste-matrix`, `sc-rollup`), each emitted as `{.html,.json}` into the score
-directory. The session-derived waste that feeds it landed in the same pass
-(see §4.3).
+*Status (2026-10-10, round 013):* the heatmap is **four layers on identical
+stage columns** — rows are `(case, harness, arm, generation)` groups, columns
+the pipeline stages in order plus `oracle`:
+
+| Layer | Unit / denominator | Colour steps (0→4) |
+|---|---|---|
+| attrition | lost runs positioned at a stage / runs that reached it | 0, ≤.05, ≤.10, ≤.25, above |
+| first attempt | units whose first verdict failed / units with a verdict | 0, ≤.10, ≤.25, ≤.50, above |
+| wasted tokens | tokens on superseded or lost work / all tokens at the stage | 0, ≤.10, ≤.25, ≤.50, above |
+| oracle | one `passed/total` mark per graded run | 1, ≥.90, ≥.75, ≥.50, below |
+
+Colour steps are fixed per layer, one hue at five lightness levels, so the
+same value always gets the same class in any report; a cell under five
+observations is grey, and every cell prints its own `num/den`. Known limit:
+a stage record is written when the stage ends, so a run that stopped inside
+a stage shows the stage before it as its last. The **run grid** — one row
+per run, grouped by arm and commit, with mean and spread per group — is the
+main view and opens `report.md`; `gate-oracle` puts each gate against the
+oracle (agreement, escape rate, false-reject rate, mean partial credit per
+side). A score writes `report.md`, `grid.*`, `heatmap.*`, `gate-oracle.*`,
+`sc-rollup.*` and, per case, the waste, reviewer-versus-adversary, task and
+error matrix files. The E-77 `fail_reentry` axis and the per-task maximum
+of `fix_attempts` are superseded by the first-attempt layer's
+per-`(run, task)` units.
 
 ---
 
