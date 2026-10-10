@@ -139,6 +139,7 @@ def dispatch_experiment_compare(
         save_experiment,
     )
     from .models import BenchmarkScope, is_pre012
+    from .runs import build_runs, composite_shown
     from .score import load_config_weights
 
     base = Path(exp_dir) if exp_dir else experiments_dir()
@@ -166,8 +167,18 @@ def dispatch_experiment_compare(
         if r.scope is not BenchmarkScope.CELL
     ]
     pre012 = sum(1 for r in compared if is_pre012(r))
+    # 013 (contract 7.2): the composite column prints only when a compared
+    # case shows one -- the decision from composite_shown, true when either
+    # side's case has two graded arms in one generation.
+    show_composite = any(
+        d.shown
+        for d in (
+            *composite_shown(build_runs(baseline_ev.records)).values(),
+            *composite_shown(build_runs(candidate_ev.records)).values(),
+        )
+    )
     return (
-        render_deltas_markdown(exp.deltas, pre012_records=pre012)
+        render_deltas_markdown(exp.deltas, pre012_records=pre012, show_composite=show_composite)
         + f"\nWritten to {path}. Verdict is yours to write.\n"
     )
 

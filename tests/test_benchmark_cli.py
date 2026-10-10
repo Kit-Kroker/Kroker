@@ -99,6 +99,14 @@ def test_dispatch_score_also_writes_heatmap(tmp_path, monkeypatch):
     assert (out_dir / "heatmap.html").exists()
     assert (out_dir / "heatmap.json").exists()
     assert "heatmap.html" in out and "heatmap.json" in out
+    # 013 (contract 11.1): the run grid and the gate-versus-oracle view are
+    # part of the score directory.
+    assert (out_dir / "grid.html").exists()
+    assert (out_dir / "grid.json").exists()
+    assert (out_dir / "gate-oracle.html").exists()
+    assert (out_dir / "gate-oracle.json").exists()
+    assert "grid.html" in out and "grid.json" in out
+    assert "gate-oracle.html" in out and "gate-oracle.json" in out
 
 
 def test_parser_run_gate_policy_defaults_to_none():

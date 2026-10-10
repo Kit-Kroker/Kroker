@@ -304,3 +304,56 @@ def test_compare_output_states_the_pre012_count(tmp_path):
         experiment=exp.id, candidate="b2", exp_dir=str(tmp_path), root=str(tmp_path)
     )
     assert "includes 1 pre-012 records (untrusted)" in out
+
+
+# --- 013 T012: the composite column behind the decision (contract 7.2) ---------
+
+
+def test_render_deltas_markdown_composite_column_behind_the_decision():
+    """No composite column unless the decision says a compared case shows
+    one; show_composite=True prints it."""
+    rows = compute_deltas(
+        _ev([_rec(q=0.5)]), _ev([_rec(q=0.9, bench="b2")], "b2"), CompositeWeights()
+    )
+    header = render_deltas_markdown(rows).splitlines()[0]
+    assert "composite" not in header
+    header_shown = render_deltas_markdown(rows, show_composite=True).splitlines()[0]
+    assert "composite" in header_shown
+
+
+def _graded_arm(arm, bench):
+    """One graded 012 run under a stored-shape run id: a stage record, a
+    merge record and an oracle record (the shape composite_shown needs)."""
+    rid = f"{bench}/c1#opencode#{arm}"
+    base = _rec(bench=bench).model_copy(update={"run_id": rid, "task_id": None})
+    merge = base.model_copy(update={"stage": "merge"})
+    oracle = base.model_copy(
+        update={
+            "scope": BenchmarkScope.ORACLE,
+            "stage": "oracle",
+            "role": "oracle",
+            "quality": QualityScore(
+                score=1.0, judge="oracle", components={"passed": 5.0, "total": 5.0}
+            ),
+        }
+    )
+    return [r.model_copy(update={"kroker_commit": "abc123"}) for r in (base, merge, oracle)]
+
+
+def test_compare_passes_the_composite_decision_through(tmp_path):
+    """dispatch_experiment_compare shows the composite column exactly when
+    a case on either side has two graded arms in one generation."""
+    from sdlc.benchmarks.cli import dispatch_experiment_compare
+    from sdlc.benchmarks.recorder import RecordStore
+
+    for r in _graded_arm("a1", "b1") + _graded_arm("a2", "b1"):
+        RecordStore(root=str(tmp_path), bench_run_id="b1").append(r)
+    for r in _graded_arm("a1", "b2"):
+        RecordStore(root=str(tmp_path), bench_run_id="b2").append(r)
+
+    exp = new_experiment(name="x", axis="prompt", change="c", baseline="b1")
+    save_experiment(exp, tmp_path / f"{exp.id}.yaml")
+    out = dispatch_experiment_compare(
+        experiment=exp.id, candidate="b2", exp_dir=str(tmp_path), root=str(tmp_path)
+    )
+    assert "composite" in out.splitlines()[0]

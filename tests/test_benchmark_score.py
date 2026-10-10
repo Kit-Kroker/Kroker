@@ -138,3 +138,140 @@ def test_sc_rollup_written_and_appended_to_report(tmp_path):
     md = (tmp_path / "report.md").read_text(encoding="utf-8")
     assert "Success criteria" in md
     assert "SC-1" in md
+
+
+# --- 013 T012: one writer for both paths (contract 11) -------------------------
+
+
+def _cases_root_with_tasks(tmp_path, case="c1"):
+    cases = tmp_path / "cases"
+    (cases / case).mkdir(parents=True)
+    (cases / case / "tasks.yaml").write_text(
+        'tasks:\n  - id: t01\n    error_class: functional\n    oracle_tests: ["x::y"]\n',
+        encoding="utf-8",
+    )
+    return cases
+
+
+def _arm_records(arm, q=0.9, commit="abc123"):
+    """One graded 012 run under a stored-shape run id: a rubric-judged
+    architecture record, a merge record and an oracle record."""
+    rid = f"b1/c1#opencode#{arm}"
+    recs = [
+        _rec(stage="architecture").model_copy(
+            update={"run_id": rid, "quality": QualityScore(score=q, judge="llm_judge")}
+        ),
+        _rec(stage="merge", usd=None).model_copy(update={"run_id": rid}),
+        _rec().model_copy(
+            update={
+                "run_id": rid,
+                "scope": BenchmarkScope.ORACLE,
+                "stage": "oracle",
+                "role": "oracle",
+                "quality": QualityScore(
+                    score=1.0, judge="oracle", components={"passed": 5.0, "total": 5.0}
+                ),
+            }
+        ),
+    ]
+    if commit is None:
+        return recs
+    return [r.model_copy(update={"kroker_commit": commit}) for r in recs]
+
+
+_SCORE_FILES = {
+    "report.md",
+    "grid.html",
+    "grid.json",
+    "heatmap.html",
+    "heatmap.json",
+    "gate-oracle.html",
+    "gate-oracle.json",
+    "sc-rollup.html",
+    "sc-rollup.json",
+    "waste-matrix.html",
+    "waste-matrix.json",
+    "agreement-matrix.html",
+    "agreement-matrix.json",
+    "task-matrix.html",
+    "task-matrix.json",
+    "error-matrix.html",
+    "error-matrix.json",
+}
+
+
+def test_write_score_writes_exactly_the_files_of_contract_11_1(tmp_path, monkeypatch):
+    """One case: every file of contract 11.1 lands flat in the output
+    directory, and nothing else is written anywhere."""
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(_cases_root_with_tasks(tmp_path)))
+    ev = Evidence(records=_arm_records("a1"), selector="b1")
+    written = write_score(ev, tmp_path / "out", CompositeWeights())
+    assert {p.name for p in written} == _SCORE_FILES
+    assert {p.name for p in (tmp_path / "out").iterdir()} == _SCORE_FILES
+
+
+def test_write_score_report_sections_in_contract_order(tmp_path, monkeypatch):
+    """The report the score command writes carries the contract-8 sections
+    in order, each heading exactly once."""
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(_cases_root_with_tasks(tmp_path)))
+    recs = (
+        _arm_records("a1") + _arm_records("a2", commit="def456") + _arm_records("a3", commit=None)
+    )
+    ev = Evidence(records=recs, selector="b1")
+    write_score(ev, tmp_path / "out", CompositeWeights())
+    md = (tmp_path / "out" / "report.md").read_text(encoding="utf-8")
+    headings = [
+        "# Benchmark report",
+        "## Runs",
+        "## Stages",
+        "## Pre-012 records (untrusted)",
+        "## Gate versus oracle",
+        "## Success criteria",
+        "## Notes",
+    ]
+    positions = [md.index(h) for h in headings]
+    assert positions == sorted(positions)
+    for h in headings:
+        assert md.count(h) == 1
+
+
+def test_weights_note_when_no_composite_shown(tmp_path, monkeypatch):
+    """--weights on a one-arm selection: the command succeeds and the
+    report says the weights were not used (contract 7.4)."""
+    from sdlc.benchmarks.cli import dispatch_score
+    from sdlc.benchmarks.recorder import RecordStore
+
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(_cases_root_with_tasks(tmp_path)))
+    export = tmp_path / "export"
+    export.mkdir()
+    monkeypatch.setenv("SDLC_EXPORT_ROOT", str(export))
+    for rec in _arm_records("a1"):
+        RecordStore(root=str(tmp_path), bench_run_id="b1").append(rec)
+
+    dispatch_score(bench="b1", root=str(tmp_path), weights="0.5,0.3,0.2")  # exits 0
+    md = (tmp_path / "b1" / "score" / "report.md").read_text(encoding="utf-8")
+    assert "weights not used: no composite shown" in md
+
+
+def test_weights_note_absent_when_composite_shown(tmp_path, monkeypatch):
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(_cases_root_with_tasks(tmp_path)))
+    ev = Evidence(records=_arm_records("a1") + _arm_records("a2", commit="def456"), selector="b1")
+    write_score(ev, tmp_path / "out", parse_weights("0.5,0.3,0.2"))
+    md = (tmp_path / "out" / "report.md").read_text(encoding="utf-8")
+    assert "weights not used" not in md
+
+
+def test_view_modules_leave_temporalio_out_of_sys_modules():
+    """Contract 11.4, in a fresh interpreter: importing the five view
+    modules pulls in no Temporal client (the score path runs offline)."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys\n"
+        "import sdlc.benchmarks.runs, sdlc.benchmarks.grid, "
+        "sdlc.benchmarks.gate_oracle, sdlc.benchmarks.heatmap, "
+        "sdlc.benchmarks.heatmap_render\n"
+        "sys.exit(0 if 'temporalio' not in sys.modules else 1)\n"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True)

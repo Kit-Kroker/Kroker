@@ -91,10 +91,16 @@ def judge_mix_notes(records) -> list[str]:
 
 
 def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[Path]:
-    """Write every grid the evidence supports. Returns the paths written."""
+    """Write every grid the evidence supports (contract 11.1: report.md,
+    grid.*, heatmap.*, gate-oracle.*, sc-rollup.*, and per case the waste,
+    agreement, task and error matrices). Returns the paths written."""
     from .calibration import load_calibration_reports, render_calibration_html
-    from .gate_oracle import build_gate_oracle
-    from .grid import build_grid
+    from .gate_oracle import (
+        build_gate_oracle,
+        render_gate_oracle_html,
+        render_gate_oracle_json,
+    )
+    from .grid import build_grid, render_grid_html, render_grid_json
     from .report import aggregate, render_markdown, resolve_language_map, write_heatmap
     from .runs import build_runs, composite_shown
     from .sc_rollup import (
@@ -107,20 +113,44 @@ def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
-    notes = list(ev.notes)
-    notes += judge_mix_notes(ev.records)
+    # contract 8 item 8 order: weights line, judge-mix notes, evidence notes
+    # (the composite lines are rendered by render_markdown ahead of these).
+    notes = judge_mix_notes(ev.records) + list(ev.notes)
 
     calibration = load_calibration_reports()
     summaries = aggregate("", weights, _records=ev.records)
     runs = build_runs(ev.records)
+    decisions = composite_shown(runs)
+    # contract 7.4: with no case showing a composite the weights (wherever
+    # they came from) weight nothing; the report says so instead of failing.
+    if decisions and not any(d.shown for d in decisions.values()):
+        notes.insert(0, "weights not used: no composite shown")
 
     lang = resolve_language_map(sorted({r.case_id for r in ev.records}))
     html_p, json_p = write_heatmap(runs, out_dir, lang, render_calibration_html(calibration))
     written += [html_p, json_p]
 
+    grid = build_grid(runs)
+    for name, text in (
+        ("grid.html", render_grid_html(grid)),
+        ("grid.json", render_grid_json(grid)),
+    ):
+        p = out_dir / name
+        p.write_text(text, encoding="utf-8")
+        written.append(p)
+
+    gate_oracle = build_gate_oracle(runs)
+    for name, text in (
+        ("gate-oracle.html", render_gate_oracle_html(gate_oracle)),
+        ("gate-oracle.json", render_gate_oracle_json(gate_oracle)),
+    ):
+        p = out_dir / name
+        p.write_text(text, encoding="utf-8")
+        written.append(p)
+
     written += _write_case_matrices(ev, out_dir, notes)
 
-    rollup = build_sc_rollup(ev.summaries, ev.records)
+    rollup = build_sc_rollup(ev.summaries, ev.records, selection_runs=ev.selection_runs)
     for name, text in (
         ("sc-rollup.html", render_sc_rollup_html(rollup)),
         ("sc-rollup.json", render_sc_rollup_json(rollup)),
@@ -129,15 +159,12 @@ def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[
         p.write_text(text, encoding="utf-8")
         written.append(p)
 
-    # 013 (T011, contract 8): render_markdown emits every section itself;
-    # nothing is appended after it (the grid.* and gate-oracle.* files
-    # arrive in T012).
     md = render_markdown(
         summaries,
         calibration=calibration,
-        grid=build_grid(runs),
-        gate_oracle=build_gate_oracle(runs),
-        decisions=composite_shown(runs),
+        grid=grid,
+        gate_oracle=gate_oracle,
+        decisions=decisions,
         sc_rollup=render_sc_rollup_markdown(rollup),
         notes=notes,
     )

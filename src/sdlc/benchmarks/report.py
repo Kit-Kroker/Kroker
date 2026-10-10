@@ -302,18 +302,13 @@ def write_heatmap(
 
 @activity.defn
 async def finalize_benchmark_report(bench_run_id: str) -> str:
-    """Activity: read all records, aggregate, write report.md AND the
-    heatmap.{html,json} beside it. All file I/O lives here."""
-    from .calibration import load_calibration_reports, render_calibration_html
-    from .runs import build_runs
+    """Activity: the end-of-run report IS the score command's writer aimed
+    at the bench directory (013 contract 11.2): same evidence loading, same
+    files, same figures. All file I/O lives in score.write_score."""
+    from .evidence import load_evidence
+    from .score import load_config_weights, write_score
 
-    records = _read_all(bench_run_id, None)
-    summaries = aggregate(bench_run_id, CompositeWeights(), _records=records)
+    ev = load_evidence(bench=bench_run_id)
     out_dir = Path(_root()) / bench_run_id
-    calibration = load_calibration_reports()
-    write_report_with_calibration(
-        summaries, str(out_dir / "report.md"), calibration, records=records
-    )
-    lang = resolve_language_map(sorted({r.case_id for r in records}))
-    write_heatmap(build_runs(records), out_dir, lang, render_calibration_html(calibration))
+    write_score(ev, out_dir, load_config_weights())
     return str(out_dir / "report.md")

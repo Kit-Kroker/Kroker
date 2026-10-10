@@ -637,3 +637,73 @@ def test_success_criteria_and_notes_once_before_calibration():
     assert md.index("## Rubric calibration") > md.index("## Notes")
     assert "evidence note" in md
     assert "1 of 1 runs left a run summary" in md
+
+
+# --- 013 T012: one writer for both paths (contract 11.1 to 11.3) ---------------
+
+_SCORE_FILE_NAMES = {
+    "report.md",
+    "grid.html",
+    "grid.json",
+    "heatmap.html",
+    "heatmap.json",
+    "gate-oracle.html",
+    "gate-oracle.json",
+    "sc-rollup.html",
+    "sc-rollup.json",
+    "waste-matrix.html",
+    "waste-matrix.json",
+    "agreement-matrix.html",
+    "agreement-matrix.json",
+    "task-matrix.html",
+    "task-matrix.json",
+    "error-matrix.html",
+    "error-matrix.json",
+}
+
+
+def test_finalize_benchmark_report_uses_the_shared_writer(tmp_path, monkeypatch):
+    """finalize_benchmark_report is the score command's writer aimed at the
+    bench directory (contract 11.2): same files, byte-identical report, and
+    no record file touched (11.3)."""
+    import asyncio
+
+    from sdlc.benchmarks.evidence import load_evidence
+    from sdlc.benchmarks.report import finalize_benchmark_report
+    from sdlc.benchmarks.score import load_config_weights, write_score
+
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("SDLC_BENCHMARKS_ROOT", str(runs_root))
+    export = tmp_path / "export"
+    export.mkdir()
+    monkeypatch.setenv("SDLC_EXPORT_ROOT", str(export))
+    cases = tmp_path / "cases"
+    (cases / "c1").mkdir(parents=True)
+    (cases / "c1" / "tasks.yaml").write_text(
+        'tasks:\n  - id: t01\n    error_class: functional\n    oracle_tests: ["x::y"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(cases))
+
+    store = RecordStore(root=str(runs_root), bench_run_id="b1")
+    for rec in _012(_graded("sonnet", 0.9, 1.0, 100, arm="a1")):
+        store.append(rec)
+
+    bench_dir = runs_root / "b1"
+    jsonls = sorted(bench_dir.rglob("*.jsonl"))
+    before = {p: (p.stat().st_mtime_ns, p.read_bytes()) for p in jsonls}
+
+    result = asyncio.run(finalize_benchmark_report("b1"))
+
+    assert result == str(bench_dir / "report.md")
+    # the contract 11.1 file set, beside report.md
+    assert _SCORE_FILE_NAMES <= {p.name for p in bench_dir.iterdir()}
+    # contract 11.3: no .jsonl file's bytes or mtime change
+    for p in jsonls:
+        assert (p.stat().st_mtime_ns, p.read_bytes()) == before[p]
+
+    # contract 11.2: the same writer gives the same report
+    ev = load_evidence(bench="b1", root=str(runs_root), export_root_=str(export))
+    out2 = tmp_path / "score-out"
+    write_score(ev, out2, load_config_weights())
+    assert (bench_dir / "report.md").read_bytes() == (out2 / "report.md").read_bytes()

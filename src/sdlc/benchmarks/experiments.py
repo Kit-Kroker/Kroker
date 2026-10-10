@@ -182,26 +182,34 @@ def compute_deltas(
     return rows
 
 
-def render_deltas_markdown(rows: list[DeltaRow], pre012_records: int = 0) -> str:
+def render_deltas_markdown(
+    rows: list[DeltaRow], pre012_records: int = 0, *, show_composite: bool = False
+) -> str:
     """ASCII only (report.py:70-74). The pre-012 count is the caller's to
     compute over its evidence records (contract §7.6): the line renders
-    only when pre-012 records are included."""
+    only when pre-012 records are included. `show_composite` carries the
+    composite decision (013 contract §7.2): the column prints only when a
+    compared case shows one, never inferred from empty columns."""
     if not rows:
         return "No overlapping cells between baseline and candidate.\n"
 
     def f(x: float | None) -> str:
         return "n/a" if x is None else f"{x:+.3f}"
 
+    cols = ["case", "stage", "arm", "quality", "cost", "wall"]
+    if show_composite:
+        cols.append("composite")
+    cols += ["tool_calls", "n", ""]
     lines = [
-        "| case | stage | arm | quality | cost | wall | composite | tool_calls | n | |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| " + " | ".join(cols) + " |",
+        "|" + "---|" * len(cols),
     ]
     for r in rows:
-        lines.append(
-            f"| {r.case} | {r.stage} | {r.arm} | {f(r.quality)} | "
-            f"{f(r.cost_usd)} | {f(r.wall_s)} | {f(r.composite)} | "
-            f"{f(r.waste.get('tool_calls'))} | {r.n} | {r.note} |"
-        )
+        cells = [r.case, r.stage, r.arm, f(r.quality), f(r.cost_usd), f(r.wall_s)]
+        if show_composite:
+            cells.append(f(r.composite))
+        cells += [f(r.waste.get("tool_calls")), str(r.n), r.note]
+        lines.append("| " + " | ".join(cells) + " |")
     if pre012_records:
         lines += ["", f"includes {pre012_records} pre-012 records (untrusted)"]
     return "\n".join(lines) + "\n"
