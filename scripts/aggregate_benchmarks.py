@@ -44,18 +44,34 @@ def ts_to_iso(ts: int) -> str:
 
 
 def parse_report(path: Path) -> list[dict]:
-    """Parse a report.md table into rows. Empty / 'No records' -> []."""
+    """Parse a report.md's stage table into rows. Empty / 'No records' -> [].
+
+    013 (contract 11.5): the stage table is the first pipe table whose
+    header has a cell exactly ``case`` and one exactly ``stage``. The run
+    grid's header (contract 2.5) has neither, so a table before the stage
+    table is skipped, not parsed, and the scan continues.
+    """
     rows: list[dict] = []
     if not path.exists():
         return rows
-    in_table = False
     headers: list[str] = []
+    skipping = False
+    in_table = False
     for line in path.read_text(encoding="utf-8").splitlines():
         s = line.strip()
         if s.startswith("|") and "---" in s:
-            in_table = True
+            # A separator row opens the table whose header is the last
+            # pipe line seen; without `case`/`stage` header cells it is
+            # not the stage table (the run grid), so its rows are
+            # skipped and the scan continues past it.
+            if not skipping and not in_table:
+                if "case" in headers and "stage" in headers:
+                    in_table = True
+                else:
+                    skipping = True
+                    headers = []
             continue
-        if not in_table and s.startswith("|"):
+        if not in_table and not skipping and s.startswith("|"):
             headers = [h.strip() for h in s.strip("|").split("|")]
             continue
         if in_table and s.startswith("|"):
@@ -64,6 +80,8 @@ def parse_report(path: Path) -> list[dict]:
             rows.append(row)
         elif in_table and not s.startswith("|"):
             break
+        elif skipping and not s.startswith("|"):
+            skipping = False
     return rows
 
 

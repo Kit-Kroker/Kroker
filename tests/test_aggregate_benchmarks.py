@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.aggregate_benchmarks import aggregate, build_html
+from scripts.aggregate_benchmarks import aggregate, build_html, parse_report
 
 _TS = 1791000001
 
@@ -270,3 +270,143 @@ def test_stored_pre012_runs_carry_only_the_pre012_line_difference(tmp_path):
 
     data = aggregate(tmp_path)
     assert "includes 126 pre-012 records (untrusted)" in build_html(data)
+
+
+# --- 013 T013 (contract 11.5): the script reads the stage table, not the grid ---
+
+# The run grid's header (contract 2.5): no cell is exactly `case` or
+# exactly `stage`. _GRID_TABLE carries a separator row so it is a real
+# markdown table the parser has to skip past; _GRID_BLOCK is the writer's
+# real shape, a pipe block with no separator row (grid.py renders none).
+_GRID_TABLE = [
+    "| run | status | last | s:research | s:merge | oracle "
+    "| first attempt | after repair | tokens | wall (s) | flags |",
+    "|" + "---|" * 11,
+    "| bench-c1-1791000001/c1#opencode#a1 | graded | merge | first | first "
+    "| 5/5 | 3/3 | 3/3 | 1200 | 101.0 |  |",
+]
+_STAGE_HEADER = (
+    "| case | stage | harness | arm | model | n | quality | pass rate "
+    "| first attempt | after repair | tokens | cost ($) | wall (s) | trust |"
+)
+
+
+def test_parse_report_reads_the_stage_table_past_the_run_grid(tmp_path):
+    """013 (contract 11.5): a report whose first table is the run grid
+    (header per contract 2.5) and whose second is the stage table parses
+    to the stage table's rows; the grid's rows never come back."""
+    report = "\n".join(
+        [
+            "# Benchmark report",
+            "",
+            "## Runs",
+            "",
+            "- runs started: 1, graded: 1, lost: 0, grading failed: 0,"
+            " no oracle: 0, discarded oracle records: 0, statuses derived: 1",
+            "",
+            *_GRID_TABLE,
+            "",
+            "## Stages",
+            "",
+            _STAGE_HEADER,
+            "|" + "---|" * 14,
+            "| c1 | research | opencode | a1 | m1 | 1 | n/a | n/a | n/a"
+            " | n/a | 100 | 0.100 | 10.000 | uncalibrated |",
+            "| c1 | merge | opencode | a1 | m1 | 1 | n/a | 1/1 | n/a"
+            " | n/a | n/a | n/a | 1.000 | - |",
+            "",
+        ]
+    )
+    p = tmp_path / "report.md"
+    p.write_text(report, encoding="utf-8")
+    rows = parse_report(p)
+    assert rows and "case" in rows[0], rows  # not the grid's `run`-keyed row
+    assert [r["stage"] for r in rows] == ["research", "merge"]
+    assert all("run" not in r for r in rows)
+
+
+def test_parse_report_on_a_base_shaped_report_returns_the_base_rows(tmp_path):
+    """PIN: a base-shaped report (one table, the 012 header with its
+    `composite` column) parses exactly as it did before the round."""
+    report = "\n".join(
+        [
+            "# Benchmark report",
+            "",
+            "| case | stage | harness | model | n | quality | cost ($)"
+            " | wall (s) | composite | trust |",
+            "|" + "---|" * 10,
+            "| c1 | research | proposer | m1 | 1 | n/a | 0.100 | 10.000 | n/a | uncalibrated |",
+            "| c1 | code | opencode | m1 | 2 | 0.824 | 0.000 | 414.092 | 0.749 | - |",
+            "",
+        ]
+    )
+    p = tmp_path / "report.md"
+    p.write_text(report, encoding="utf-8")
+    assert parse_report(p) == [
+        {
+            "case": "c1",
+            "stage": "research",
+            "harness": "proposer",
+            "model": "m1",
+            "n": "1",
+            "quality": "n/a",
+            "cost ($)": "0.100",
+            "wall (s)": "10.000",
+            "composite": "n/a",
+            "trust": "uncalibrated",
+        },
+        {
+            "case": "c1",
+            "stage": "code",
+            "harness": "opencode",
+            "model": "m1",
+            "n": "2",
+            "quality": "0.824",
+            "cost ($)": "0.000",
+            "wall (s)": "414.092",
+            "composite": "0.749",
+            "trust": "-",
+        },
+    ]
+
+
+def test_report_without_composite_column_leaves_the_run_overall_unchanged(tmp_path):
+    """013 (contract 11.5): the new stage table carries no `composite`
+    column unless a case shows one, so `composite` reads as None; and a
+    directory that has records keeps the overall its records decide --
+    the report is not an input there. The grid block here is the
+    writer's real separator-less shape."""
+    records = [
+        _rec(stage="research", outcome="pass"),
+        _rec(stage="merge", outcome="pass"),
+    ]
+    report = "\n".join(
+        [
+            "# Benchmark report",
+            "",
+            "## Runs",
+            "",
+            "- runs started: 1, graded: 1, lost: 0, grading failed: 0,"
+            " no oracle: 0, discarded oracle records: 0, statuses derived: 1",
+            "",
+            _GRID_TABLE[0],
+            _GRID_TABLE[2],
+            "",
+            "## Stages",
+            "",
+            _STAGE_HEADER,
+            "|" + "---|" * 14,
+            "| c1 | research | opencode | a1 | m1 | 1 | n/a | n/a | n/a"
+            " | n/a | 100 | 0.100 | 10.000 | uncalibrated |",
+            "",
+        ]
+    )
+    with_report = _write_run(tmp_path / "with-report", f"bench-c1-{_TS}", records)
+    _write_run(tmp_path / "without-report", f"bench-c1-{_TS}", records)
+    (with_report / f"bench-c1-{_TS}" / "report.md").write_text(report, encoding="utf-8")
+
+    rows = parse_report(with_report / f"bench-c1-{_TS}" / "report.md")
+    assert rows and all(rr.get("composite") is None for rr in rows)
+    got = _run(aggregate(tmp_path / "with-report"))
+    control = _run(aggregate(tmp_path / "without-report"))
+    assert got["overall"] == control["overall"] == "pass"
