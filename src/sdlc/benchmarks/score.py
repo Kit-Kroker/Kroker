@@ -94,6 +94,7 @@ def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[
     """Write every grid the evidence supports. Returns the paths written."""
     from .calibration import load_calibration_reports, render_calibration_html
     from .report import aggregate, render_markdown, resolve_language_map, write_heatmap
+    from .runs import build_runs
     from .sc_rollup import (
         build_sc_rollup,
         render_sc_rollup_html,
@@ -111,7 +112,9 @@ def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[
     summaries = aggregate("", weights, _records=ev.records)
 
     lang = resolve_language_map(sorted({r.case_id for r in ev.records}))
-    html_p, json_p = write_heatmap(ev.records, out_dir, lang, render_calibration_html(calibration))
+    html_p, json_p = write_heatmap(
+        build_runs(ev.records), out_dir, lang, render_calibration_html(calibration)
+    )
     written += [html_p, json_p]
 
     written += _write_case_matrices(ev, out_dir, notes)

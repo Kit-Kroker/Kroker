@@ -1,588 +1,741 @@
-import json
-from datetime import datetime, timedelta
+"""013 T007 (RED): the layered heatmap, `sdlc.benchmarks.heatmap`.
 
-from sdlc.benchmarks.heatmap import (
-    ORACLE_STAGE,
-    build_heatmap,
-    render_heatmap_html,
-    render_heatmap_json,
-)
+Contract section 3 (`.specify/specs/013-benchmark-scoring-output/
+contracts/scoring-output.md`): rows and columns (3.1), the attrition layer
+(3.2), the first-attempt layer (3.3), the wasted-tokens layer (3.4), oracle
+marks (3.5), the no-double-count invariant (3.6). Names are in
+`data-model.md` section 3. The `CANONICAL_STAGES` pin (contract 11.6)
+copies the 18 base names and passes on first run. Every test imports its
+`sdlc.benchmarks.heatmap` symbol function-local (the repo's RED
+convention) so each missing name fails its own test instead of breaking
+collection. The record factories copy `tests/test_benchmark_grid.py`.
+"""
+
+from datetime import datetime
+
+from pytest import approx
+
 from sdlc.benchmarks.models import (
     BenchmarkOutcome,
     BenchmarkRecord,
     BenchmarkScope,
+    CellStatus,
+    CostBag,
     QualityScore,
     SpeedBag,
 )
-from sdlc.core.models import (
-    HarnessKind,
-)
+
+_T0 = datetime(2026, 7, 4, 10, 0)
+_T1 = datetime(2026, 7, 4, 10, 30)
+_T2 = datetime(2026, 7, 4, 11, 0)
 
 
-def _rec(
-    *,
-    case="c1",
-    run="r1",
-    stage="code",
-    scope=None,
-    outcome=BenchmarkOutcome.PASS,
-    fix=0,
-    task_id=None,
-    attempt=None,
-):
-    # scope=None derives TASK_ATTEMPT iff task_id is set, mirroring
-    # benchmarks/record_builder.py:47; an explicit scope still wins (the
-    # oracle tests below rely on that).
-    if scope is None:
-        scope = BenchmarkScope.TASK_ATTEMPT if task_id is not None else BenchmarkScope.STAGE
-    t = datetime(2026, 7, 24, 10)
-    return BenchmarkRecord(
-        run_id=run,
+def _record(**kw):
+    base = dict(
+        run_id="b1/c1#opencode#a1",
         bench_run_id="b1",
-        case_id=case,
-        scope=scope,
+        case_id="c1",
+        scope=BenchmarkScope.STAGE,
+        stage="architecture",
+        role="architect",
+        model="anthropic:claude-sonnet-4-6",
+        prompt_sha="abc",
+        quality=QualityScore(score=0.8, judge="llm_judge"),
+        cost=CostBag(usd=0.1, input_tokens=100, output_tokens=50),
+        speed=SpeedBag(
+            wall_clock_s=12.0,
+            started_at=_T0,
+            ended_at=_T0.replace(minute=12),
+        ),
+        outcome=BenchmarkOutcome.PASS,
+    )
+    base.update(kw)
+    return BenchmarkRecord(**base)
+
+
+def _stage(run_id, stage, start, outcome=BenchmarkOutcome.PASS, wall=12.0, **kw):
+    """A run-level (no task) stage record."""
+    return _record(
+        run_id=run_id,
         stage=stage,
+        role=stage,
+        scope=BenchmarkScope.STAGE,
+        outcome=outcome,
+        speed=SpeedBag(wall_clock_s=wall, started_at=start, ended_at=start),
+        **kw,
+    )
+
+
+def _task(run_id, stage, task_id, attempt, start, outcome, wall=10.0, **kw):
+    """A task-attempt record (code attempts, per-task qa)."""
+    return _record(
+        run_id=run_id,
+        stage=stage,
+        role=stage,
+        scope=BenchmarkScope.TASK_ATTEMPT,
         task_id=task_id,
         attempt=attempt,
-        role="dev",
-        harness=HarnessKind.CLAUDE_CODE,
-        model="m",
-        quality=QualityScore(score=None, judge="contract"),
-        speed=SpeedBag(wall_clock_s=1.0, started_at=t, ended_at=t + timedelta(seconds=1)),
         outcome=outcome,
-        fix_attempts=fix,
+        speed=SpeedBag(wall_clock_s=wall, started_at=start, ended_at=start),
+        **kw,
     )
 
 
-def test_density_blends_rejects_fixes_and_oracle_over_runs():
-    recs = [
-        _rec(run="r1", stage="code", outcome=BenchmarkOutcome.REVISED, fix=2),
-        _rec(run="r2", stage="code", outcome=BenchmarkOutcome.FAIL, fix=3),
-        # oracle failure for the same case, distinct synthetic column
-        _rec(run="r1", stage="oracle", scope=BenchmarkScope.ORACLE, outcome=BenchmarkOutcome.FAIL),
-    ]
-    hm = build_heatmap(recs)
-    by = {(c.case, c.stage): c for c in hm.cells}
-    code = by[("c1", "code")]
-    # 2 rework outcomes (REVISED + FAIL) + 5 fix attempts = 7 over 2 runs
-    assert code.gate_rejects == 2
-    assert code.fix_attempts == 5
-    assert code.n_runs == 2
-    assert code.density == 3.5
-    oracle = by[("c1", ORACLE_STAGE)]
-    assert oracle.oracle_fails == 1
-    assert oracle.gate_rejects == 0
-    assert oracle.density == 0.5  # 1 oracle fail / 2 runs
-
-
-def test_n_runs_dedups_distinct_run_ids_per_case():
-    recs = [
-        _rec(run="r1", stage="qa", outcome=BenchmarkOutcome.FAIL),
-        _rec(run="r1", stage="code", outcome=BenchmarkOutcome.FAIL),
-    ]
-    hm = build_heatmap(recs)
-    assert all(c.n_runs == 1 for c in hm.cells)
-
-
-def test_unknown_stage_appended_before_oracle_not_dropped():
-    recs = [
-        _rec(stage="clarify", outcome=BenchmarkOutcome.FAIL),
-        _rec(stage="mystery", outcome=BenchmarkOutcome.FAIL),
-        _rec(stage="oracle", scope=BenchmarkScope.ORACLE, outcome=BenchmarkOutcome.FAIL),
-    ]
-    hm = build_heatmap(recs)
-    assert hm.stages == ["clarify", "mystery", "oracle"]
-
-
-def test_language_map_recorded_per_case():
-    recs = [
-        _rec(case="py", stage="code", outcome=BenchmarkOutcome.FAIL),
-        _rec(case="go", stage="code", outcome=BenchmarkOutcome.FAIL),
-    ]
-    hm = build_heatmap(recs, language_by_case={"py": "python"})
-    assert hm.language_by_case == {"py": "python", "go": ""}
-
-
-def test_empty_records_give_empty_heatmap():
-    hm = build_heatmap([])
-    assert hm.cells == [] and hm.cases == [] and hm.stages == []
-    assert hm.max_density == 0.0
-
-
-def test_oracle_task_records_excluded_from_rework_density():
-    # a case-level ORACLE record plus several ORACLE_TASK records (E-31 task
-    # matrix) for the same case/run must produce the SAME heatmap cell as if
-    # the ORACLE_TASK records were entirely absent -- there is no gate on the
-    # oracle stage, so task-level fails/revises must not be double-counted
-    # as gate_rejects.
-    without_tasks = [
-        _rec(run="r1", stage="oracle", scope=BenchmarkScope.ORACLE, outcome=BenchmarkOutcome.FAIL),
-    ]
-    with_tasks = without_tasks + [
-        _rec(
-            run="r1",
-            stage="oracle",
-            scope=BenchmarkScope.ORACLE_TASK,
-            outcome=BenchmarkOutcome.FAIL,
-            fix=1,
-        ),
-        _rec(
-            run="r1",
-            stage="oracle",
-            scope=BenchmarkScope.ORACLE_TASK,
-            outcome=BenchmarkOutcome.REVISED,
-            fix=2,
-        ),
-        _rec(
-            run="r1",
-            stage="oracle",
-            scope=BenchmarkScope.ORACLE_TASK,
-            outcome=BenchmarkOutcome.ESCALATED,
-        ),
-    ]
-    hm_without = build_heatmap(without_tasks)
-    hm_with = build_heatmap(with_tasks)
-    cell_without = next(c for c in hm_without.cells if c.stage == ORACLE_STAGE)
-    cell_with = next(c for c in hm_with.cells if c.stage == ORACLE_STAGE)
-    assert cell_with.gate_rejects == cell_without.gate_rejects == 0
-    assert cell_with.oracle_fails == cell_without.oracle_fails == 1
-    assert cell_with.fix_attempts == cell_without.fix_attempts == 0
-    assert cell_with.density == cell_without.density
-
-
-def test_oracle_non_fail_rework_not_counted_as_oracle_failure():
-    recs = [
-        _rec(
-            run="r1",
-            stage="oracle",
-            scope=BenchmarkScope.ORACLE,
-            outcome=BenchmarkOutcome.ESCALATED,
-        ),
-        _rec(run="r1", stage="oracle", scope=BenchmarkScope.ORACLE, outcome=BenchmarkOutcome.FAIL),
-    ]
-    hm = build_heatmap(recs)
-    cell = next(c for c in hm.cells if c.stage == ORACLE_STAGE)
-    assert cell.oracle_fails == 1  # only the FAIL, not the ESCALATED
-
-
-def test_unknown_stage_renders_in_trailing_bucket_before_oracle():
-    """E-77 T028 pin (existing behaviour): records stamped stage='unknown'
-    (unmapped/unregistered node types, FR-004/FR-005) aggregate into the
-    trailing non-canonical bucket like any other stage -- never dropped, never
-    folded into a canonical column -- and render before the synthetic oracle
-    column. Pinned now so E-77's heatmap pass (T033) keeps it byte-stable."""
-    recs = [
-        _rec(stage="code", outcome=BenchmarkOutcome.REVISED, fix=1),
-        _rec(stage="unknown", outcome=BenchmarkOutcome.FAIL, fix=2),
-        _rec(stage="unknown", outcome=BenchmarkOutcome.PASS, fix=3),
-        _rec(stage="oracle", scope=BenchmarkScope.ORACLE, outcome=BenchmarkOutcome.FAIL),
-    ]
-    hm = build_heatmap(recs)
-    assert hm.stages == ["code", "unknown", "oracle"]
-    by = {(c.case, c.stage): c for c in hm.cells}
-    bucket = by[("c1", "unknown")]
-    assert bucket.gate_rejects == 1  # the FAIL; PASS is not rework
-    assert bucket.fix_attempts == 5  # 2 + 3, summed like any other stage
-    assert bucket.n_runs == 1
-    assert bucket.density == 6.0  # (1 gate + 5 fix) over 1 run
-    rendered = json.loads(render_heatmap_json(hm))
-    assert rendered["stages"] == ["code", "unknown", "oracle"]
-    unknown_cells = [c for c in rendered["cells"] if c["stage"] == "unknown"]
-    assert len(unknown_cells) == 1
-    assert unknown_cells[0]["gate_rejects"] == 1
-    assert unknown_cells[0]["fix_attempts"] == 5
-    assert unknown_cells[0]["density"] == 6.0
-
-
-# --- E-77 T032 (RED): the once-per-activation fix pass (FR-017 / R-12) -------
-
-_PIN_RECORDS = [
-    _rec(case="pin", run="p1", stage="clarify", outcome=BenchmarkOutcome.REVISED, fix=1),
-    _rec(case="pin", run="p1", stage="code", outcome=BenchmarkOutcome.FAIL, fix=2),
-    _rec(case="pin", run="p2", stage="code", outcome=BenchmarkOutcome.PASS, fix=0),
-    _rec(
-        case="pin",
-        run="p1",
+def _oracle(run_id, passed, total, start=_T2, **kw):
+    """An oracle-scope record; `passed`/`total` ride quality.components."""
+    kw.setdefault("scope", BenchmarkScope.ORACLE)
+    return _record(
+        run_id=run_id,
         stage="oracle",
-        scope=BenchmarkScope.ORACLE,
-        outcome=BenchmarkOutcome.FAIL,
-    ),
-    _rec(case="pin", run="p1", stage="mystery", outcome=BenchmarkOutcome.FAIL, fix=1),
-]
-
-_PINNED_JSON = """{
-  "cells": [
-    {
-      "case": "pin",
-      "stage": "clarify",
-      "gate_rejects": 1,
-      "fix_attempts": 1,
-      "oracle_fails": 0,
-      "n_runs": 2,
-      "density": 1.0
-    },
-    {
-      "case": "pin",
-      "stage": "code",
-      "gate_rejects": 1,
-      "fix_attempts": 2,
-      "oracle_fails": 0,
-      "n_runs": 2,
-      "density": 1.5
-    },
-    {
-      "case": "pin",
-      "stage": "oracle",
-      "gate_rejects": 0,
-      "fix_attempts": 0,
-      "oracle_fails": 1,
-      "n_runs": 2,
-      "density": 0.5
-    },
-    {
-      "case": "pin",
-      "stage": "mystery",
-      "gate_rejects": 1,
-      "fix_attempts": 1,
-      "oracle_fails": 0,
-      "n_runs": 2,
-      "density": 1.0
-    }
-  ],
-  "cases": [
-    "pin"
-  ],
-  "stages": [
-    "clarify",
-    "code",
-    "mystery",
-    "oracle"
-  ],
-  "max_density": 1.5,
-  "language_by_case": {
-    "pin": ""
-  },
-  "pre012_records": 5
-}"""
-
-
-def test_current_records_render_byte_identical_to_the_pinned_literal():
-    """T032(a): captured on the pre-T033 code over fixed current-shape
-    records (varied stages, an oracle record, no graph field). No record
-    carries fail_reentry == 1, so T033's extra pass must be a no-op here --
-    byte-identical forever. 012 T010 regenerated the literal ONCE, on
-    purpose: contract 7.6 adds the pre012_records count (all five pin
-    records are pre-012); every other byte is unchanged, and the pin
-    holds from here on."""
-    assert render_heatmap_json(build_heatmap(_PIN_RECORDS)) == _PINNED_JSON
-
-
-def _stamped(rec, activation_id, node_id, round_, node_stage, fail_reentry):
-    from sdlc.benchmarks.models import GraphAttribution
-
-    return rec.model_copy(
-        update={
-            "graph": GraphAttribution(
-                graph_sha="a" * 64,
-                activation_id=activation_id,
-                node_id=node_id,
-                round=round_,
-                node_stage=node_stage,
-                fail_reentry=fail_reentry,
-            )
-        }
+        role="oracle",
+        model="openai/gpt-5.2",
+        quality=QualityScore(
+            score=passed / total, judge="oracle", components={"passed": passed, "total": total}
+        ),
+        speed=SpeedBag(wall_clock_s=1.0, started_at=start, ended_at=start),
+        **kw,
     )
 
 
-def test_fail_reentry_adds_exactly_one_per_reentered_activation():
-    """FR-017 / R-12, as written: "add 1 to the fix count of (case_id,
-    graph.node_stage) once per distinct (run_id, graph.activation_id) where
-    graph.fail_reentry == 1". The distinct key is (run_id, activation_id)
-    alone, so an activation counts ONCE however many records it emitted, on
-    the cell of its node_stage. Records of one activation share that stage
-    (it is the activation's node's stage), so the fixture keeps node_stage
-    uniform per activation: code#2 (fail_reentry=1) and qa#1 (fail_reentry=1)
-    each add 1 to their own stage cell; code#1 (fail_reentry=0) adds nothing.
-    Expected delta: (fx, code) +1 and (fx, qa) +1 -- exactly 2 in total,
-    and no other cell moves."""
-    plain = [
-        _rec(case="fx", run="r1", stage="code", outcome=BenchmarkOutcome.PASS, fix=1),
-        _rec(case="fx", run="r1", stage="code", outcome=BenchmarkOutcome.FAIL, fix=2),
-        _rec(case="fx", run="r1", stage="code", outcome=BenchmarkOutcome.REVISED, fix=1),
-        _rec(case="fx", run="r1", stage="code", outcome=BenchmarkOutcome.PASS, fix=0),
-        _rec(case="fx", run="r1", stage="qa", outcome=BenchmarkOutcome.PASS, fix=3),
-        _rec(case="fx", run="r1", stage="qa", outcome=BenchmarkOutcome.FAIL, fix=1),
-    ]
-    stamped = [
-        _stamped(plain[0], "code#1", "code", 1, "code", 0),
-        _stamped(plain[1], "code#1", "code", 1, "code", 0),
-        _stamped(plain[2], "code#2", "code", 2, "code", 1),
-        _stamped(plain[3], "code#2", "code", 2, "code", 1),
-        _stamped(plain[4], "qa#1", "qa", 1, "qa", 1),
-        _stamped(plain[5], "qa#1", "qa", 1, "qa", 1),
-    ]
-    base = {(c.case, c.stage): c.fix_attempts for c in build_heatmap(plain).cells}
-    got = {(c.case, c.stage): c.fix_attempts for c in build_heatmap(stamped).cells}
-    assert got == {
-        ("fx", "code"): base[("fx", "code")] + 1,  # code#2: two records, one add
-        ("fx", "qa"): base[("fx", "qa")] + 1,  # qa#1: two records, one add
-    }
-
-
-def test_duplicate_records_of_one_reentered_activation_add_one_not_two():
-    plain = [
-        _rec(case="dupe", run="r1", stage="code", outcome=BenchmarkOutcome.FAIL, fix=0),
-        _rec(case="dupe", run="r1", stage="code", outcome=BenchmarkOutcome.FAIL, fix=0),
-    ]
-    stamped = [
-        _stamped(plain[0], "code#3", "code", 3, "code", 1),
-        _stamped(plain[1], "code#3", "code", 3, "code", 1),
-    ]
-    base = {(c.case, c.stage): c.fix_attempts for c in build_heatmap(plain).cells}
-    got = {(c.case, c.stage): c.fix_attempts for c in build_heatmap(stamped).cells}
-    assert got == {("dupe", "code"): base[("dupe", "code")] + 1}  # once per activation
-
-
-def test_fail_reentry_none_everywhere_is_byte_identical_to_no_graph():
-    """FR-017's other half: when no record carries fail_reentry == 1, the
-    output is byte-identical to main -- even with full graph attribution
-    (activation, round, node stage) present on every record."""
-    plain = [
-        _rec(case="absent", run="r1", stage="code", outcome=BenchmarkOutcome.FAIL, fix=1),
-        _rec(case="absent", run="r1", stage="qa", outcome=BenchmarkOutcome.REVISED, fix=2),
-    ]
-    axis_absent = [
-        _stamped(plain[0], "code#1", "code", 1, "code", None),
-        _stamped(plain[1], "qa#1", "qa", 1, "qa", None),
-    ]
-    assert render_heatmap_json(build_heatmap(axis_absent)) == render_heatmap_json(
-        build_heatmap(plain)
+def _cell(
+    run_id, start, last_stage, *, code_finished=True, pipeline_finished=True, grading="graded"
+):
+    """A 012 cell record carrying the recorded status."""
+    return _record(
+        run_id=run_id,
+        stage="cell",
+        role="cell",
+        scope=BenchmarkScope.CELL,
+        model="deterministic",
+        quality=QualityScore(score=None, judge="contract"),
+        speed=SpeedBag(wall_clock_s=1.0, started_at=start, ended_at=start),
+        cell=CellStatus(
+            pipeline_finished=pipeline_finished,
+            code_finished=code_finished,
+            completed=pipeline_finished and code_finished,
+            last_stage=last_stage,
+            grading=grading,
+        ),
     )
 
 
-# --- heatmap-fix-inflation (E77-OQ-1, Direction A): RED regression contracts --
-#
-# src/sdlc/stages/code/step.py:784 stamps fix_attempts = attempt - 1 (a
-# running counter 0..n-1, strictly monotone within (run_id, task_id)) on
-# EVERY code attempt record, and build_heatmap SUMS the field record-by-
-# record, so a task needing n attempts reports n(n-1)/2 instead of n-1
-# (n=4 -> 6 shown). Ruled semantics (cause gate, Direction A,
-# .specify/bugs/heatmap-fix-inflation/assessment.md): the fix axis groups
-# records by (case_id, stage, run_id, task_id) where task_id is not None,
-# each group contributes MAX(fix_attempts) over its records, and the cell
-# sums the group maxima. task_id=None records pass through per-record (no
-# real producer emits task_id=None with fix > 0). Everything else is
-# unchanged: gate rejects, oracle fails, n_runs, the density formula, and
-# the E-77 fail_reentry pass stays additive/separate. Every test in this
-# section is RED on the pre-fix sum-aggregation.
+def _graded(run_id, start, passed=3, total=4, commit=None, arm="a1"):
+    """A minimal derived graded run: analyze (code finished) + oracle."""
+    extra = {}
+    if commit is not None:
+        extra["kroker_commit"] = commit
+    if arm is not None:
+        extra["arm"] = arm
+    return [
+        _stage(run_id, "analyze", start, wall=12.0, **extra),
+        _oracle(run_id, passed, total, start, **extra),
+    ]
 
 
-def _fix_task_records(case, run, task, stamps):
-    """Producer-shaped code records for ONE task that needed len(stamps)
-    attempts: one record per attempt stamped fix_attempts = attempt = k
-    (code/step.py:784-786). Non-final attempts FAIL, the final one PASSES --
-    so gate_rejects also comes out producer-shaped (one per FAILED attempt).
-    """
-    recs = []
-    for k in stamps:
-        final = k == stamps[-1]
-        recs.append(
-            _rec(
-                case=case,
-                run=run,
-                stage="code",
-                outcome=BenchmarkOutcome.PASS if final else BenchmarkOutcome.FAIL,
-                fix=k,
-                task_id=task,
-                attempt=k,
-            )
+def _ids(commit="x", arm="a1"):
+    """Extra record fields pinning the run to one generation and arm."""
+    extra = {}
+    if commit is not None:
+        extra["kroker_commit"] = commit
+    if arm is not None:
+        extra["arm"] = arm
+    return extra
+
+
+def _lost(run_id, start, last_stage, stage_records):
+    """A lost run: a cell record says code did not finish (contract 1.2)."""
+    return stage_records + [
+        _cell(
+            run_id,
+            start,
+            last_stage,
+            code_finished=False,
+            pipeline_finished=False,
+            grading="not_graded",
         )
-    return recs
-
-
-def test_fix_axis_counts_n_minus_one_for_a_task_needing_four_attempts():
-    recs = _fix_task_records("c1", "r1", "T01", (0, 1, 2, 3))
-    by = {(c.case, c.stage): c for c in build_heatmap(recs).cells}
-    assert by[("c1", "code")].fix_attempts == 3  # max of the group, not 0+1+2+3
-
-
-def test_fix_axis_counts_n_minus_one_for_a_task_needing_three_attempts():
-    recs = _fix_task_records("c1", "r1", "T01", (0, 1, 2))
-    by = {(c.case, c.stage): c for c in build_heatmap(recs).cells}
-    assert by[("c1", "code")].fix_attempts == 2  # not 0+1+2
-
-
-def test_fix_axis_groups_by_run_id_because_task_ids_repeat_across_runs():
-    """The group key MUST carry run_id: the same task id appears in every
-    run, and each run's loop is its own counter. Two runs of T01, each
-    needing 3 attempts, contribute one group max of 2 apiece: 4 total, not
-    one group of six records (max 2) and not the pre-fix sum 6."""
-    recs = _fix_task_records("c1", "r1", "T01", (0, 1, 2)) + _fix_task_records(
-        "c1", "r2", "T01", (0, 1, 2)
-    )
-    by = {(c.case, c.stage): c for c in build_heatmap(recs).cells}
-    assert by[("c1", "code")].fix_attempts == 4
-
-
-def test_fix_axis_sums_group_maxima_across_tasks_in_one_run():
-    recs = _fix_task_records("c1", "r1", "T01", (0, 1, 2)) + _fix_task_records(
-        "c1", "r1", "T02", (0, 1)
-    )
-    by = {(c.case, c.stage): c for c in build_heatmap(recs).cells}
-    assert by[("c1", "code")].fix_attempts == 3  # 2 + 1, not a cell-wide max
-
-
-def test_adjacent_zero_fix_qa_records_leave_the_code_cell_untouched():
-    """The qa records of the same loop (step.py:793-808) never carry
-    fix_attempts; their presence must not change the code cell -- neither by
-    diluting a group max nor by adding one of their own."""
-    code_only = _fix_task_records("c1", "r1", "T01", (0, 1, 2, 3))
-    with_qa = code_only + [
-        _rec(
-            case="c1",
-            run="r1",
-            stage="qa",
-            outcome=BenchmarkOutcome.PASS if k == 3 else BenchmarkOutcome.FAIL,
-            task_id="T01",
-            attempt=k,
-        )
-        for k in range(4)
     ]
-    without = {(c.case, c.stage): c for c in build_heatmap(code_only).cells}[("c1", "code")]
-    with_ = {(c.case, c.stage): c for c in build_heatmap(with_qa).cells}[("c1", "code")]
-    assert with_.fix_attempts == without.fix_attempts == 3
 
 
-def test_fix_axis_deflation_leaves_gate_runs_and_density_formula_unchanged():
-    """Direction A touches ONLY the fix axis: one task, one run, n=4 keeps
-    its three gate rejections (a per-event count of FAILED records, not a
-    re-stamped counter), n_runs=1, and the density formula recomputes from
-    the deflated total: (3 gate + 3 fix) / 1 run = 6.0."""
-    recs = _fix_task_records("c1", "r1", "T01", (0, 1, 2, 3))
-    cell = {(c.case, c.stage): c for c in build_heatmap(recs).cells}[("c1", "code")]
-    assert cell.fix_attempts == 3
-    assert cell.gate_rejects == 3
-    assert cell.n_runs == 1
-    assert cell.density == 6.0
-
-
-def test_fail_reentry_pass_stays_additive_on_top_of_the_grouped_max():
-    """FR-016/FR-017 interplay under Direction A: the once-per-activation
-    fail_reentry +1 remains a SEPARATE axis added on top of the grouped
-    handler count -- never folded into the max, never swallowed. A task
-    needing 3 attempts (group max 2) whose third attempt rode a re-entered
-    activation reports 2 + 1 = 3, not the pre-fix 3 + 1 = 4."""
-    plain = _fix_task_records("fx", "r1", "T01", (0, 1, 2))
-    stamped = []
-    for r in plain:
-        reentered = r.attempt == 2
-        stamped.append(
-            _stamped(
-                r,
-                "code#2" if reentered else "code#1",
-                "code",
-                2 if reentered else 1,
-                "code",
-                1 if reentered else 0,
-            )
-        )
-    by = {(c.case, c.stage): c for c in build_heatmap(stamped).cells}
-    assert by[("fx", "code")].fix_attempts == 3
-
-
-# --- 012 T010 (RED): readers are immune to cell/not-evaluated records -------
-# contract §7.6/§7.8: a cell record is status, not data; a not_evaluated
-# outcome is neither pass nor fail. Nothing they say may move a count,
-# density, or the run denominator.
-
-_CELL_STATUS_CACHE = {}
-
-
-def _cell_status():
-    from sdlc.benchmarks.models import CellStatus
-
-    if not _CELL_STATUS_CACHE:
-        _CELL_STATUS_CACHE["v"] = CellStatus(
-            pipeline_finished=True,
-            code_finished=True,
-            completed=True,
-            last_stage="merge",
-            grading="graded",
-            child_result="ok",
-        )
-    return _CELL_STATUS_CACHE["v"]
-
-
-def _cell_scope_rec(case="c1", run="r-cell-9", cell_id="c1#opencode#a1", arm="a1"):
-    r = _rec(case=case, run=run, stage="cell")
-    return r.model_copy(
-        update={
-            "scope": BenchmarkScope.CELL,
-            "role": "cell",
-            "quality": QualityScore(score=None, judge="contract"),
-            "cell": _cell_status(),
-            "kroker_commit": "abc123",
-            "cell_id": cell_id,
-            "arm": arm,
-        }
-    )
-
-
-def _not_evaluated_rec(case="c1", run="r1", stage="merge"):
-    r = _rec(case=case, run=run, stage=stage)
-    return r.model_copy(
-        update={
-            "outcome": BenchmarkOutcome.NOT_EVALUATED,
-            "quality": QualityScore(score=None, judge="contract"),
-        }
-    )
-
-
-def _cells_by_key(hm):
-    return {
-        (c.case, c.stage): (c.gate_rejects, c.fix_attempts, c.oracle_fails, c.n_runs, c.density)
-        for c in hm.cells
-    }
-
-
-def test_cell_and_not_evaluated_records_change_no_heatmap_cell():
-    """The cell record carries a run_id NOT among the measured runs on
-    purpose: it must not join the case's run set (n_runs) either -- a
-    status record is not a run."""
-    base = [
-        _rec(run="r1", stage="code", outcome=BenchmarkOutcome.REVISED, fix=2),
-        _rec(run="r2", stage="code", outcome=BenchmarkOutcome.FAIL, fix=3),
+def _row_a():
+    """One 012 row of case c1: lost at research, lost at clarify, lost at
+    code, two graded runs -- the contract 3.2 walkthrough."""
+    x = _ids()
+    return [
+        *_lost(
+            "b1/c1#opencode#a1",
+            _T0,
+            "research",
+            [_stage("b1/c1#opencode#a1", "research", _T0, BenchmarkOutcome.FAIL, 1.0, **x)],
+        ),
+        *_lost(
+            "b2/c1#opencode#a1",
+            _T1,
+            "clarify",
+            [_stage("b2/c1#opencode#a1", "clarify", _T1, BenchmarkOutcome.FAIL, 1.0, **x)],
+        ),
+        *_lost(
+            "b3/c1#opencode#a1",
+            _T1,
+            "code",
+            [_task("b3/c1#opencode#a1", "code", "t1", 1, _T1, BenchmarkOutcome.FAIL, 1.0, **x)],
+        ),
+        *_graded("b4/c1#opencode#a1", _T1, commit="x"),
+        *_graded("b5/c1#opencode#a1", _T2, commit="x"),
     ]
-    with_extra = base + [_cell_scope_rec(), _not_evaluated_rec()]
-    assert _cells_by_key(build_heatmap(with_extra)) == _cells_by_key(build_heatmap(base))
 
 
-# --- 012 T010 (RED): the pre-012 line (contract §7.6) -----------------------
+def _one(hm, layer, stage):
+    """The single cell of one layer and stage on a one-row heatmap."""
+    got = [c for c in hm.cells if c.layer == layer and c.stage == stage]
+    assert len(got) == 1, f"expected one {layer}/{stage} cell, got {len(got)}"
+    return got[0]
 
 
-def _012_rec(case="c1", run="r1", stage="code"):
-    r = _rec(case=case, run=run, stage=stage)
-    return r.model_copy(
-        update={
-            "kroker_commit": "abc123",
-            "cell_id": "c1#opencode#a1",
-            "arm": "a1",
-        }
-    )
+# --- 3.1 rows and columns --------------------------------------------------------
 
 
-def test_heatmap_html_states_the_pre012_count_when_present():
-    pre = [
-        _rec(run="r1", stage="code", outcome=BenchmarkOutcome.FAIL, fix=1),
-        _rec(run="r2", stage="qa", outcome=BenchmarkOutcome.FAIL),
-        _rec(run="r2", stage="clarify", outcome=BenchmarkOutcome.FAIL),
+def test_layers_and_oracle_column_constants():
+    from sdlc.benchmarks.heatmap import LAYERS, ORACLE_COLUMN
+
+    assert LAYERS == ("attrition", "first_attempt", "wasted_tokens", "oracle")
+    assert ORACLE_COLUMN == "oracle"
+
+
+def test_canonical_stages_pinned_byte_for_byte():
+    from sdlc.benchmarks.heatmap import CANONICAL_STAGES
+
+    assert CANONICAL_STAGES == [
+        "intake",
+        "constitution",
+        "context",
+        "requirements",
+        "research",
+        "clarify",
+        "architecture",
+        "planning",
+        "code",
+        "review",
+        "adversary",
+        "handoff",
+        "deep_review",
+        "analyze",
+        "qa",
+        "quality_gate",
+        "deploy",
+        "retro",
     ]
-    hm = build_heatmap(pre + [_012_rec()])
-    html = render_heatmap_html(hm)
-    line = "includes 3 pre-012 records (untrusted)"
-    assert html.count(line) == 1
 
 
-def test_heatmap_html_drops_the_pre012_line_when_none():
-    hm = build_heatmap([_012_rec(), _012_rec(run="r2", stage="qa")])
-    assert "pre-012" not in render_heatmap_html(hm)
+def test_columns_are_only_the_stages_some_layer_fills():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    hm = build_layers(build_runs(_row_a()))
+
+    # present: research, clarify, code, analyze (records + attrition) and
+    # oracle (marks); architecture and plan were written by no run -> blank
+    # in every layer -> no column
+    assert hm.stages == ("research", "clarify", "code", "analyze", "oracle")
+    assert "plan" not in hm.stages
+    assert "tool_approval" not in hm.stages
+
+
+def test_one_row_per_case_harness_arm_generation_commits_merge():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    records = (
+        _graded("b1/c1#opencode#a1", _T0, commit="aaa")
+        + _graded("b2/c1#opencode#a1", _T1, commit="bbb")  # other commit, same row
+        + _graded("b3/c2#opencode#a1", _T0, commit="aaa")  # other case, other row
+    )
+    hm = build_layers(build_runs(records))
+
+    assert len(hm.rows) == 2
+    by_case = {r.case_id: r for r in hm.rows}
+    assert by_case["c1"].started == 2  # both commits, one (case, harness, arm, generation)
+    assert by_case["c1"].generation == "012"
+    assert by_case["c2"].started == 1
+
+
+def test_extra_stages_trail_by_name_then_the_oracle_column():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    run_id = "b1/c1#opencode#a1"
+    records = _graded(run_id, _T0, commit="x") + [
+        _stage(run_id, "zed", _T1, wall=1.0, **_ids()),
+        _stage(run_id, "alpha", _T1, wall=1.0, **_ids()),
+    ]
+    hm = build_layers(build_runs(records))
+
+    assert hm.stages == ("analyze", "alpha", "zed", "oracle")
+
+
+def test_language_by_case_sets_the_row_language():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    hm = build_layers(build_runs(_graded("b1/c1#opencode#a1", _T0, commit="x")), {"c1": "python"})
+
+    assert len(hm.rows) == 1
+    assert hm.rows[0].language == "python"
+
+
+# --- 3.2 attrition ---------------------------------------------------------------
+
+
+def test_attrition_positions_reached_and_the_row_header():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    hm = build_layers(build_runs(_row_a()))
+    assert len(hm.rows) == 1
+    row = hm.rows[0]
+
+    # lost at research 1/5; lost at clarify 1/4 (the research run never got
+    # there); lost inside the task loop 1/3; no lost run at analyze 0/2
+    research = _one(hm, "attrition", "research")
+    assert (research.num, research.den, research.observations) == (1.0, 5.0, 5)
+    assert research.value == approx(0.2)
+
+    clarify = _one(hm, "attrition", "clarify")
+    assert (clarify.num, clarify.den, clarify.observations) == (1.0, 4.0, 4)
+    assert clarify.value == approx(0.25)
+
+    code = _one(hm, "attrition", "code")
+    assert (code.num, code.den, code.observations) == (1.0, 3.0, 3)
+    assert code.value == approx(1 / 3)
+
+    analyze = _one(hm, "attrition", "analyze")
+    assert (analyze.num, analyze.den, analyze.observations) == (0.0, 2.0, 2)
+    assert analyze.value == approx(0.0)
+
+    assert row.started == 5
+    assert row.lost_before_code == 2  # research and clarify; the code one sits at code
+    assert row.no_stage_recorded == 0
+    assert row.lost_tokens == 900  # three lost runs x (stage record + cell record) x 150
+
+
+def test_attrition_code_cell_non_blank_when_a_lost_run_is_positioned_there():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    # lost inside the task loop at handoff, but it never wrote a code record
+    run_id = "b1/c1#opencode#a1"
+    x = _ids()
+    records = _lost(
+        run_id,
+        _T1,
+        "handoff",
+        [
+            _stage(run_id, "research", _T0, wall=1.0, **x),
+            _stage(run_id, "handoff", _T1, BenchmarkOutcome.FAIL, 1.0, **x),
+        ],
+    )
+    hm = build_layers(build_runs(records))
+
+    # the exception of 3.2: code is non-blank although no run recorded there
+    assert hm.stages == ("research", "code", "handoff")  # no oracle: nothing is graded
+    code = _one(hm, "attrition", "code")
+    assert (code.num, code.den, code.observations) == (1.0, 1.0, 1)
+
+    research = _one(hm, "attrition", "research")
+    assert (research.num, research.den, research.observations) == (0.0, 1.0, 1)
+
+    handoff = _one(hm, "first_attempt", "handoff")  # the column lives through this cell
+    assert (handoff.num, handoff.den) == (1.0, 1.0)
+
+
+def test_a_lost_run_with_no_stage_record_counts_only_in_the_header():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    records = _graded("b1/c1#opencode#a1", _T0, commit="x") + [
+        _oracle("b2/c1#opencode#a1", 4, 4, _T1, kroker_commit="x", arm="a1")
+    ]
+    hm = build_layers(build_runs(records))
+    assert len(hm.rows) == 1
+    row = hm.rows[0]
+
+    assert row.started == 2
+    assert row.no_stage_recorded == 1
+    assert row.lost_before_code == 1  # the no-stage-record run is lost before code
+    # the bare run reached nothing: analyze is the graded sibling only
+    analyze = _one(hm, "attrition", "analyze")
+    assert (analyze.num, analyze.den) == (0.0, 1.0)
+
+
+# --- 3.3 first-attempt failure ---------------------------------------------------
+
+
+def test_first_attempt_task_units_first_by_attempt_not_evaluated_left_out():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    a = "b1/c1#opencode#a1"
+    b = "b2/c1#opencode#a1"
+    c = "b3/c1#opencode#a1"
+    records = [
+        _task(a, "code", "t1", 1, _T0, BenchmarkOutcome.FAIL, 1.0),
+        _task(a, "code", "t1", 2, _T1, BenchmarkOutcome.PASS, 1.0),  # repair: still a failed unit
+        _task(b, "code", "t1", 1, _T1, BenchmarkOutcome.PASS, 1.0),
+        _task(b, "code", "t2", 1, _T1, BenchmarkOutcome.FAIL, 1.0),
+        _task(c, "code", "t1", 1, _T1, BenchmarkOutcome.NOT_EVALUATED, 1.0),  # left out
+        *_graded(a, _T2, commit="x", arm=None),
+        *_graded(b, _T2, commit="x", arm=None),
+        *_graded(c, _T2, commit="x", arm=None),
+    ]
+    hm = build_layers(build_runs(records))
+
+    cell = _one(hm, "first_attempt", "code")
+    assert (cell.num, cell.den, cell.observations) == (2.0, 3.0, 3)
+    assert cell.value == approx(2 / 3)
+
+
+def test_first_attempt_run_stage_units_first_by_start_not_evaluated_left_out():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    a = "b1/c1#opencode#a1"
+    b = "b2/c1#opencode#a1"
+    records = [
+        _stage(a, "research", _T0, BenchmarkOutcome.FAIL, 1.0),
+        _stage(a, "research", _T1, BenchmarkOutcome.PASS, 1.0),  # later pass: unit stays failed
+        _stage(b, "research", _T1, BenchmarkOutcome.NOT_EVALUATED, 1.0),  # left out
+        *_graded(a, _T2, commit="x", arm=None),
+        *_graded(b, _T2, commit="x", arm=None),
+    ]
+    hm = build_layers(build_runs(records))
+
+    cell = _one(hm, "first_attempt", "research")
+    assert (cell.num, cell.den, cell.observations) == (1.0, 1.0, 1)
+
+
+def test_first_attempt_qa_cell_of_an_all_copy_row_is_copy():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    run_id = "b0/c1#opencode#m"  # pre-012: no record carries kroker_commit
+    records = [
+        _task(run_id, "code", "t1", 1, _T0, BenchmarkOutcome.PASS, wall=1.0),
+        _task(run_id, "qa", "t1", 1, _T1, BenchmarkOutcome.PASS, wall=1.0),  # copies code
+        _stage(run_id, "analyze", _T2, wall=1.0),
+        _oracle(run_id, 4, 4),
+    ]
+    hm = build_layers(build_runs(records))
+
+    assert _one(hm, "first_attempt", "qa").state == "copy"
+    code = _one(hm, "first_attempt", "code")  # the copy state is qa's alone
+    assert code.state != "copy"
+    assert (code.num, code.den) == (0.0, 1.0)
+
+
+# --- 3.4 wasted tokens -----------------------------------------------------------
+
+
+def _waste_run():
+    """A graded-by-cell run: t1 repaired, t2 never passed, analyze, oracle."""
+    run_id = "b1/c1#opencode#a1"
+    x = _ids()
+    return [
+        _task(run_id, "code", "t1", 1, _T0, BenchmarkOutcome.FAIL, 1.0, **x),
+        _task(run_id, "code", "t1", 2, _T1, BenchmarkOutcome.PASS, 1.0, **x),
+        _task(run_id, "code", "t2", 1, _T1, BenchmarkOutcome.FAIL, 1.0, **x),
+        _stage(run_id, "analyze", _T2, wall=1.0, **x),
+        _oracle(run_id, 3, 4, _T2, **x),
+        _cell(run_id, _T2, "analyze"),
+    ]
+
+
+def test_wasted_tokens_superseded_attempt_and_task_that_never_passed():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    hm = build_layers(build_runs(_waste_run()))
+
+    # t1 attempt 1 (a later code attempt exists) and all of t2 (its last
+    # code attempt did not pass) are wasted; t1 attempt 2 is not
+    cell = _one(hm, "wasted_tokens", "code")
+    assert (cell.num, cell.den, cell.observations, cell.not_measured) == (300.0, 450.0, 3, 0)
+
+    analyze = _one(hm, "wasted_tokens", "analyze")
+    assert (analyze.num, analyze.den, analyze.observations) == (0.0, 150.0, 1)
+
+    # the cell-scope and oracle records (150 tokens each) are in no cell
+    assert _one(hm, "wasted_tokens", "code").den == 450.0
+
+
+def test_wasted_tokens_a_lost_run_wastes_every_measured_record():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    run_id = "b1/c1#opencode#a1"
+    x = _ids()
+    records = _lost(
+        run_id,
+        _T2,
+        "code",
+        [
+            _stage(run_id, "research", _T0, wall=1.0, **x),  # no task: only the lost rule hits it
+            _task(run_id, "code", "t1", 1, _T1, BenchmarkOutcome.FAIL, 1.0, **x),
+        ],
+    )
+    hm = build_layers(build_runs(records))
+
+    research = _one(hm, "wasted_tokens", "research")
+    assert (research.num, research.den, research.observations) == (150.0, 150.0, 1)
+
+    code = _one(hm, "wasted_tokens", "code")
+    assert (code.num, code.den, code.observations) == (150.0, 150.0, 1)  # cell record stays out
+
+
+def test_wasted_tokens_unmeasured_records_count_as_not_measured():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    run_id = "b1/c1#opencode#a1"
+    x = _ids()
+    records = [
+        _task(run_id, "code", "t1", 1, _T0, BenchmarkOutcome.PASS, 1.0, **x),
+        _task(
+            run_id,
+            "code",
+            "t1",
+            2,
+            _T1,
+            BenchmarkOutcome.PASS,
+            1.0,
+            cost=CostBag(),  # no tokens: present at the stage, not measured
+            **x,
+        ),
+        _stage(run_id, "analyze", _T2, wall=1.0, **x),
+        _oracle(run_id, 3, 4, _T2, **x),
+    ]
+    hm = build_layers(build_runs(records))
+
+    cell = _one(hm, "wasted_tokens", "code")
+    assert (cell.num, cell.den, cell.observations, cell.not_measured) == (150.0, 150.0, 1, 1)
+
+
+# --- 3.5 oracle marks ------------------------------------------------------------
+
+
+def test_oracle_marks_one_per_graded_run_in_start_order_other_layers_blank():
+    from sdlc.benchmarks.heatmap import LAYERS, ORACLE_COLUMN, OracleMark, build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    x = _ids()
+    records = [
+        *_graded("b1/c1#opencode#a1", _T0, passed=3, total=4, commit="x"),
+        *[_task("b2/c1#opencode#a1", "code", "t1", 1, _T1, BenchmarkOutcome.FAIL, 1.0, **x)],
+        *[_oracle("b2/c1#opencode#a1", 4, 4, _T1, **x)],  # lost run: no mark
+        *_graded("b3/c1#opencode#a1", _T2, passed=4, total=4, commit="x"),
+    ]
+    hm = build_layers(build_runs(records))
+
+    marks = [m for m in hm.oracle_marks if isinstance(m, OracleMark)]
+    assert [m.run_id for m in marks] == ["b1/c1#opencode#a1", "b3/c1#opencode#a1"]
+    assert [(m.passed, m.total) for m in marks] == [(3, 4), (4, 4)]
+
+    for layer in LAYERS[:3]:
+        assert _one(hm, layer, ORACLE_COLUMN).state == "blank"
+
+
+# --- 3.6 one record, one cell ----------------------------------------------------
+
+
+def test_each_layer_counts_its_own_base_and_no_number_is_shared():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    # one run, three code records, two tasks: attrition counts runs (1),
+    # first_attempt counts task-units (2), wasted_tokens counts records'
+    # tokens (3 records, 450) -- each record and unit counted exactly once
+    hm = build_layers(build_runs(_waste_run()))
+
+    attrition = _one(hm, "attrition", "code")
+    assert (attrition.num, attrition.den, attrition.observations) == (0.0, 1.0, 1)
+
+    first = _one(hm, "first_attempt", "code")
+    assert (first.num, first.den, first.observations) == (2.0, 2.0, 2)
+    assert first.value == approx(1.0)
+
+    wasted = _one(hm, "wasted_tokens", "code")
+    assert (wasted.num, wasted.den, wasted.observations) == (300.0, 450.0, 3)
+
+
+# --- chaos: no runs --------------------------------------------------------------
+
+
+def test_no_runs_give_an_empty_layered_heatmap():
+    from sdlc.benchmarks.heatmap import LayeredHeatmap, build_layers
+
+    hm = build_layers([])
+    assert isinstance(hm, LayeredHeatmap)
+    assert hm.rows == ()
+    assert hm.stages == ()
+    assert len(hm.cells) == 0
+    assert len(hm.oracle_marks) == 0
+
+
+# --- T007 gap closes: the six contract cases the first pass did not pin ------
+
+
+def test_blank_in_every_layer_for_a_stage_no_run_of_the_row_wrote():
+    """Contract 3.2: a stage at which no run of the row wrote a record has
+    no value (amendment A3) -- the column exists because the OTHER row
+    wrote research, but the research-disabled row's research cell is blank
+    in each of the three counting layers."""
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    records = [
+        _stage("b1/c1#opencode#a1", "research", _T0, wall=1.0, **_ids()),
+        *_graded("b1/c1#opencode#a1", _T1, commit="x"),
+        # case c2 runs with research disabled: its first record is analyze
+        *_graded("b1/c2#opencode#a1", _T1, commit="x"),
+    ]
+    hm = build_layers(build_runs(records))
+
+    assert len(hm.rows) == 2
+    assert "research" in hm.stages  # the writing row filled the column
+    keys = {r.case_id: r.key for r in hm.rows}
+    for layer in ("attrition", "first_attempt", "wasted_tokens"):
+        got = [c for c in hm.cells if c.layer == layer and c.stage == "research"]
+        assert len(got) == 2, f"{layer}: expected one research cell per row"
+        by_row = {c.row: c for c in got}
+        assert by_row[keys["c2"]].state == "blank", layer
+        assert by_row[keys["c1"]].state != "blank", layer
+
+
+def test_first_attempt_merge_revise_is_not_a_failure():
+    """Contract 3.3 + R-9: merge `revise` is a pass, so the first-attempt
+    layer counts no failure for a revise-only merge record."""
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    run_id = "b1/c1#opencode#a1"
+    records = [
+        _stage(run_id, "merge", _T1, BenchmarkOutcome.REVISED, 1.0, **_ids()),
+        *_graded(run_id, _T2, commit="x"),
+    ]
+    hm = build_layers(build_runs(records))
+
+    cell = _one(hm, "first_attempt", "merge")
+    assert (cell.num, cell.den) == (0.0, 1.0)
+
+
+def test_wasted_tokens_qa_and_review_records_of_superseded_and_never_passed_tasks():
+    """Contract 3.4: a task record with an attempt is wasted when a later
+    code attempt of the task exists (t1: repaired) or when the task's last
+    code attempt did not pass (t2: never passed) -- so both tasks' qa and
+    review records land in their stage cells' numerators."""
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    run_id = "b1/c1#opencode#a1"
+    x = _ids()
+    records = [
+        # t1: repaired -- the later code attempt makes attempt-1 qa/review wasted
+        _task(run_id, "code", "t1", 1, _T0, BenchmarkOutcome.FAIL, 1.0, **x),
+        _task(run_id, "qa", "t1", 1, _T0, BenchmarkOutcome.PASS, 1.0, **x),
+        _task(run_id, "review", "t1", 1, _T0, BenchmarkOutcome.PASS, 1.0, **x),
+        _task(run_id, "code", "t1", 2, _T1, BenchmarkOutcome.PASS, 1.0, **x),
+        # t2: its last code attempt never passed -- its qa/review are wasted
+        _task(run_id, "code", "t2", 1, _T1, BenchmarkOutcome.FAIL, 1.0, **x),
+        _task(run_id, "qa", "t2", 1, _T1, BenchmarkOutcome.FAIL, 1.0, **x),
+        _task(run_id, "review", "t2", 1, _T1, BenchmarkOutcome.FAIL, 1.0, **x),
+        _stage(run_id, "analyze", _T2, wall=1.0, **x),
+        _oracle(run_id, 3, 4, _T2, **x),
+    ]
+    hm = build_layers(build_runs(records))
+
+    # every record carries 150 tokens: two qa records, two review records
+    qa = _one(hm, "wasted_tokens", "qa")
+    assert (qa.num, qa.den, qa.observations) == (300.0, 300.0, 2)
+    review = _one(hm, "wasted_tokens", "review")
+    assert (review.num, review.den, review.observations) == (300.0, 300.0, 2)
+
+
+def test_wasted_tokens_handoff_without_attempt_wasted_only_when_task_never_passed():
+    """Contract 3.4: a task record with no attempt number (handoff) is
+    wasted only by the lost rule or the never-passed rule -- the task that
+    passed first try keeps its handoff tokens, the never-passed task's
+    handoff tokens are wasted."""
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    a, b = "b1/c1#opencode#a1", "b2/c1#opencode#a1"
+    x = _ids()
+    records = [
+        # task passed first try: its handoff record is not wasted
+        _task(a, "code", "t1", 1, _T0, BenchmarkOutcome.PASS, 1.0, **x),
+        _task(a, "handoff", "t1", None, _T1, BenchmarkOutcome.PASS, 1.0, **x),
+        *_graded(a, _T2, commit="x"),
+        # the task's last code attempt did not pass: its handoff is wasted
+        _task(b, "code", "t1", 1, _T0, BenchmarkOutcome.FAIL, 1.0, **x),
+        _task(b, "handoff", "t1", None, _T1, BenchmarkOutcome.FAIL, 1.0, **x),
+        *_graded(b, _T2, commit="x"),
+    ]
+    hm = build_layers(build_runs(records))
+
+    cell = _one(hm, "wasted_tokens", "handoff")
+    assert (cell.num, cell.den, cell.observations) == (150.0, 300.0, 2)
+
+
+def test_wasted_tokens_oracle_task_records_are_in_no_cell():
+    """Contract 3.4: cell-scope, oracle and oracle-task records are in no
+    cell -- an oracle-task record's tokens appear in no wasted_tokens den,
+    and the oracle column of the three counting layers stays blank."""
+    from sdlc.benchmarks.heatmap import LAYERS, build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    run_id = "b1/c1#opencode#a1"
+    x = _ids()
+    records = [
+        _task(run_id, "code", "t1", 1, _T0, BenchmarkOutcome.PASS, 1.0, **x),
+        _stage(run_id, "analyze", _T2, wall=1.0, **x),
+        _oracle(run_id, 4, 4, _T2, **x),
+        _oracle(run_id, 1, 1, _T2, scope=BenchmarkScope.ORACLE_TASK, task_id="t1", **x),
+    ]
+    hm = build_layers(build_runs(records))
+
+    # only the code and analyze records' tokens (2 x 150) reach any den
+    wasted = [c for c in hm.cells if c.layer == "wasted_tokens"]
+    assert sum(c.den for c in wasted) == 300.0
+    for layer in LAYERS[:3]:
+        assert _one(hm, layer, "oracle").state == "blank"
+
+
+def test_us3_scenario_one_failed_then_repaired_attempt():
+    """Spec US3 scenario 1 as one test (contract 3.6): one task that fails
+    its first attempt and passes its second appears as one failed first
+    attempt, as the first attempt's tokens in the wasted layer, and
+    nowhere else."""
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    run_id = "b1/c1#opencode#a1"
+    x = _ids()
+    records = [
+        _task(run_id, "code", "t1", 1, _T0, BenchmarkOutcome.FAIL, 1.0, **x),  # 150 tokens
+        _task(run_id, "code", "t1", 2, _T1, BenchmarkOutcome.PASS, 1.0, **x),  # 150 tokens
+        _stage(run_id, "analyze", _T2, wall=1.0, **x),
+        _oracle(run_id, 3, 4, _T2, **x),
+    ]
+    hm = build_layers(build_runs(records))
+
+    first = _one(hm, "first_attempt", "code")
+    assert (first.num, first.den) == (1.0, 1.0)
+
+    wasted = _one(hm, "wasted_tokens", "code")
+    assert (wasted.num, wasted.den) == (150.0, 300.0)  # attempt 1 only
+
+    attrition = _one(hm, "attrition", "code")
+    assert (attrition.num, attrition.den, attrition.observations) == (0.0, 1.0, 1)
+
+    # and the failure appears in no other cell of any layer
+    hot = [c for c in hm.cells if c.num > 0 and c is not first and c is not wasted]
+    assert hot == []
+    assert len(hm.oracle_marks) == 1

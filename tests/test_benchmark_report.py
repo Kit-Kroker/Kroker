@@ -140,9 +140,10 @@ def test_resolve_language_map_reads_case_manifests(tmp_path):
 
 def test_write_heatmap_emits_both_files(tmp_path):
     from sdlc.benchmarks.report import write_heatmap
+    from sdlc.benchmarks.runs import build_runs
 
     recs = [_rec("sonnet", 0.9, 1.0, 100)]
-    html_p, json_p = write_heatmap(recs, tmp_path, {"c1": "python"})
+    html_p, json_p = write_heatmap(build_runs(recs), tmp_path, {"c1": "python"})
     assert html_p.exists() and json_p.exists()
     assert html_p.name == "heatmap.html" and json_p.name == "heatmap.json"
     assert "<!doctype html>" in html_p.read_text(encoding="utf-8")

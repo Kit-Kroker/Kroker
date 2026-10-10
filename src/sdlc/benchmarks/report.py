@@ -7,7 +7,6 @@ from pathlib import Path
 import yaml
 from temporalio import activity
 
-from .heatmap import build_heatmap, render_heatmap_html, render_heatmap_json
 from .models import (
     BenchmarkRecord,
     BenchmarkScope,
@@ -205,9 +204,14 @@ def resolve_language_map(case_ids: list[str], cases_dir: Path | None = None) -> 
 
 
 def write_heatmap(
-    records, out_dir: Path, language_by_case: dict[str, str], calibration_html: str = ""
+    runs, out_dir: Path, language_by_case: dict[str, str], calibration_html: str = ""
 ) -> tuple[Path, Path]:
-    hm = build_heatmap(records, language_by_case)
+    """013 (T008): the layered heatmap over `build_runs` output (contract
+    3); the renderers live in `B/heatmap_render.py`."""
+    from .heatmap import build_layers, render_heatmap_json
+    from .heatmap_render import render_heatmap_html
+
+    hm = build_layers(runs, language_by_case)
     out_dir.mkdir(parents=True, exist_ok=True)
     html_p = out_dir / "heatmap.html"
     json_p = out_dir / "heatmap.json"
@@ -221,6 +225,7 @@ async def finalize_benchmark_report(bench_run_id: str) -> str:
     """Activity: read all records, aggregate, write report.md AND the
     heatmap.{html,json} beside it. All file I/O lives here."""
     from .calibration import load_calibration_reports, render_calibration_html
+    from .runs import build_runs
 
     records = _read_all(bench_run_id, None)
     summaries = aggregate(bench_run_id, CompositeWeights(), _records=records)
@@ -230,5 +235,5 @@ async def finalize_benchmark_report(bench_run_id: str) -> str:
         summaries, str(out_dir / "report.md"), calibration, records=records
     )
     lang = resolve_language_map(sorted({r.case_id for r in records}))
-    write_heatmap(records, out_dir, lang, render_calibration_html(calibration))
+    write_heatmap(build_runs(records), out_dir, lang, render_calibration_html(calibration))
     return str(out_dir / "report.md")

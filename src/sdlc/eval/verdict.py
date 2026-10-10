@@ -222,9 +222,10 @@ def decide(results: dict, *, delta_min: float = 0.05) -> PromptGateResult:
 
 def write_result(result: PromptGateResult, out_dir: Path) -> Path:
     """Prompt-gate results live in runs/prompt_evals/ and are joined to
-    BenchmarkRecord ONLY by prompt_sha. They must never be written into the
-    benchmark record stream -- build_heatmap divides by distinct run_id, so
-    runless records would deflate real cases' rework density (design doc 2)."""
+    BenchmarkRecord ONLY by prompt_sha. They must never be written into
+    the benchmark record stream -- B/runs.py keys runs by run_id, so
+    runless records would invent phantom runs and skew every heatmap
+    layer (design doc 2)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     ts = result.created_at.strftime("%Y%m%dT%H%M%SZ")
     path = out_dir / f"{ts}-{result.role or 'role'}-{result.case or 'case'}.json"
