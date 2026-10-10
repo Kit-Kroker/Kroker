@@ -242,6 +242,17 @@ class OpenCodeHarness(CodingHarness):
         "bash": ("command", "command"),
     }
 
+    @staticmethod
+    def _tool_exit_code(state: dict) -> int | None:
+        """A failed bash call reports state.status "completed" with the real
+        code in state.metadata.exit (verified on a 1.18.35 capture); the
+        "error" status spelling carries no code, so it maps to a bare 1."""
+        meta = state.get("metadata") or {}
+        raw = meta.get("exit")
+        if isinstance(raw, int) and not isinstance(raw, bool):
+            return raw
+        return 1 if state.get("status") == "error" else None
+
     def normalise_session(self, stdout: str) -> HarnessSession:
         events: list[SessionEvent] = []
         session_id = None
@@ -263,7 +274,10 @@ class OpenCodeHarness(CodingHarness):
             etype = ev.get("type")
             if etype == "text" and part.get("text"):
                 events.append(SessionEvent(kind="model_turn", text=part["text"][:2000]))
-            elif etype == "tool":
+            # Top-level "tool" is the older spelling kept for back-compat;
+            # streams from 1.18.x emit "tool_use" with part.type "tool" and
+            # the tool name in part.tool (verified on a 1.18.35 capture).
+            elif etype in ("tool", "tool_use"):
                 name = (part.get("tool") or "tool").lower()
                 kind, field = self._TOOL_MAP.get(name, ("tool_call", ""))
                 state = part.get("state") or {}
@@ -274,7 +288,7 @@ class OpenCodeHarness(CodingHarness):
                         kind=kind,
                         tool=name,
                         target=target,
-                        exit_code=1 if state.get("status") == "error" else None,
+                        exit_code=self._tool_exit_code(state),
                     )
                 )
             elif etype == "step_finish":
