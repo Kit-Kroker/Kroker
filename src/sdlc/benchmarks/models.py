@@ -422,3 +422,13 @@ class BenchmarkSummary(BaseModel):
     cell_id: str | None = None
     arm: str | None = None
     pre012: bool = False
+    # 013 (data-model §2): optional figures keyed by the run model
+    # (research R-11). Defaults keep every existing construction valid.
+    generation: str = ""  # "pre012" or "012"; `pre012` stays and agrees
+    pass_n: int | None = None  # verdict stages: passes over counted records
+    pass_d: int | None = None
+    first_attempt: tuple[int, int] | None = None  # code row only
+    after_repair: tuple[int, int] | None = None  # code row only
+    all_pass: tuple[int, int] | None = None  # oracle row only
+    tokens: int | None = None  # mean tokens per run at the stage
+    qa_is_copy: bool = False  # qa row built only from copy runs

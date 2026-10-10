@@ -563,3 +563,58 @@ def test_rubric_judges_excludes_the_non_rubric_judge_kinds():
         "human_override",
         "error",
     }
+
+
+# --- 013 T004 (RED): BenchmarkSummary optional fields ------------------------
+# Names: .specify/specs/013-benchmark-scoring-output/data-model.md §2. All
+# additions are optional with defaults; existing constructions stay valid.
+
+
+def _summary_012_shape(**kw):
+    base = dict(
+        case_id="add-login",
+        stage="code",
+        harness=HarnessKind.CLAUDE_CODE,
+        model="anthropic:claude-sonnet-4-6",
+        n=1,
+        mean_quality=None,
+        mean_cost_usd=None,
+        mean_wall_clock_s=None,
+        composite=None,
+    )
+    base.update(kw)
+    return BenchmarkSummary(**base)
+
+
+def test_benchmark_summary_013_optional_fields_default():
+    """data-model §2: every 013 addition is optional with its default, so
+    every construction that is valid today stays valid."""
+    s = _summary_012_shape()
+    assert s.generation == ""
+    assert s.pass_n is None
+    assert s.pass_d is None
+    assert s.first_attempt is None
+    assert s.after_repair is None
+    assert s.all_pass is None
+    assert s.tokens is None
+    assert s.qa_is_copy is False
+
+
+def test_benchmark_summary_013_optional_fields_set_and_read_back():
+    s = _summary_012_shape(
+        generation="pre012",
+        pass_n=2,
+        pass_d=4,
+        first_attempt=(1, 3),
+        after_repair=(2, 3),
+        all_pass=(0, 2),
+        tokens=150,
+        qa_is_copy=True,
+    )
+    assert s.generation == "pre012"
+    assert (s.pass_n, s.pass_d) == (2, 4)
+    assert s.first_attempt == (1, 3)
+    assert s.after_repair == (2, 3)
+    assert s.all_pass == (0, 2)
+    assert s.tokens == 150
+    assert s.qa_is_copy is True

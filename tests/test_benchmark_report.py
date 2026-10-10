@@ -18,18 +18,20 @@ from sdlc.core.models import (
 )
 
 
-def _rec(model, q, usd, secs):
+def _rec(model, q, usd, secs, *, arm="a1", stage="code", judge="contract"):
+    # 013 (R-11): stored-shape run id per arm, so records of two arms are
+    # two runs and form two rows.
     return BenchmarkRecord(
-        run_id="r",
+        run_id=f"b1/c1#claude_code#{arm}",
         bench_run_id="b1",
         case_id="c1",
         scope=BenchmarkScope.STAGE,
-        stage="code",
+        stage=stage,
         role="dev",
         harness=HarnessKind.CLAUDE_CODE,
         model=model,
         prompt_sha="",
-        quality=QualityScore(score=q, judge="contract"),
+        quality=QualityScore(score=q, judge=judge),
         cost=CostBag(usd=usd),
         speed=SpeedBag(
             wall_clock_s=secs,
@@ -40,13 +42,33 @@ def _rec(model, q, usd, secs):
     )
 
 
+def _graded(model, q, usd, secs, *, arm):
+    """A graded pre-012 run (013 FR-034): a rubric-judged stage record, a
+    post-code (merge) record and an oracle record -- the shape a case
+    needs on two arms for composites to be shown and rankable."""
+    oracle = _rec(model, 1.0, None, 1.0, arm=arm).model_copy(
+        update={
+            "scope": BenchmarkScope.ORACLE,
+            "stage": "oracle",
+            "role": "oracle",
+            "quality": QualityScore(
+                score=1.0, judge="oracle", components={"passed": 5.0, "total": 5.0}
+            ),
+        }
+    )
+    return [
+        _rec(model, q, usd, secs, arm=arm, stage="architecture", judge="llm_judge"),
+        _rec(model, None, None, 1.0, arm=arm, stage="merge"),
+        oracle,
+    ]
+
+
 def test_aggregate_reads_store_and_returns_summaries(tmp_path):
     store = RecordStore(root=str(tmp_path), bench_run_id="b1")
-    store.append(_rec("sonnet", 0.9, 1.0, 100))
-    store.append(_rec("opus", 0.5, 0.5, 50))
+    for rec in _graded("sonnet", 0.9, 1.0, 100, arm="a1") + _graded("opus", 0.5, 0.5, 50, arm="a2"):
+        store.append(rec)
     sums = aggregate("b1", CompositeWeights(), root=str(tmp_path))
-    assert len(sums) == 2
-    by_model = {s.model: s for s in sums}
+    by_model = {s.model: s for s in sums if s.stage == "architecture"}
     assert by_model["sonnet"].composite > by_model["opus"].composite
 
 
@@ -69,7 +91,10 @@ def test_render_markdown_handles_empty():
 
 
 def test_aggregate_sort_is_deterministic_on_model_tie():
-    recs = [_rec("beta", None, 1.0, 100), _rec("alpha", None, 1.0, 100)]
+    recs = [
+        _rec("beta", None, 1.0, 100, arm="a2"),
+        _rec("alpha", None, 1.0, 100, arm="a1"),
+    ]
     sums = aggregate("b1", CompositeWeights(), _records=recs)
     assert [s.model for s in sums] == ["alpha", "beta"]
 

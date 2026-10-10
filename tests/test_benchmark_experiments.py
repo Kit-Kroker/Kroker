@@ -29,17 +29,20 @@ T = datetime(2026, 8, 3, 10, tzinfo=UTC)
 
 
 def _rec(*, q=1.0, usd=1.0, secs=10.0, waste=None, bench="b1", run="r1"):
+    # 013 (R-11): the judge must be a rubric judge and the stage a
+    # quality-bearing one -- a `contract` verdict is no longer a quality
+    # score and the code row shows task scores, not quality.
     return BenchmarkRecord(
         run_id=run,
         bench_run_id=bench,
         case_id="c1",
         scope=BenchmarkScope.STAGE,
-        stage="code",
+        stage="review",
         task_id="t01",
         role="dev",
         harness=HarnessKind.OPENCODE,
         model="m",
-        quality=QualityScore(score=q, judge="contract"),
+        quality=QualityScore(score=q, judge="llm_judge"),
         cost=CostBag(usd=usd),
         speed=SpeedBag(wall_clock_s=secs, started_at=T, ended_at=T + timedelta(seconds=secs)),
         outcome=BenchmarkOutcome.PASS,
@@ -204,6 +207,10 @@ def _cell_scope_rec(bench="b2"):
             "kroker_commit": "abc123",
             "cell_id": "c1#opencode#a1",
             "arm": "a1",
+            # 013 (R-11, orchestrator-cleared): the cell record rides its
+            # own stored-shape run id, not the id of a pre-012 record -- a
+            # shared id would flip that run to generation 012.
+            "run_id": f"{bench}/c1#opencode#a1",
         }
     )
 
@@ -247,6 +254,10 @@ def test_012_cells_label_by_arm_and_pre012_cells_keep_the_model_key():
                     "kroker_commit": "abc123",
                     "cell_id": "c1#opencode#a1",
                     "arm": "a1",
+                    # 013 (R-11, orchestrator-cleared): its own stored-shape
+                    # run id, so the 012 cell is its own run beside the
+                    # pre-012 one instead of merging with it.
+                    "run_id": "b2/c1#opencode#a1",
                 }
             ),
             _rec(q=0.7, bench="b2"),
