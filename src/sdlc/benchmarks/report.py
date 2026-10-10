@@ -3,19 +3,26 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 from temporalio import activity
 
 from .models import (
     BenchmarkRecord,
-    BenchmarkScope,
     BenchmarkSummary,
     CompositeWeights,
 )
 from .paths import cases_dir as _default_cases_dir
 from .recorder import RecordStore, _root
 from .scoring import compute_summaries
+
+if TYPE_CHECKING:
+    # 013 (import discipline): the new view modules are imported inside the
+    # functions, never at module scope.
+    from .gate_oracle import GateOracle
+    from .grid import Grid
+    from .runs import CompositeDecision, Totals
 
 
 def aggregate(
@@ -70,11 +77,31 @@ def scan_case_records(case_id: str, root: str | None = None) -> list[BenchmarkRe
     return out
 
 
-_TABLE_HEADER = (
-    "| case | stage | harness | cell | model | n | quality | cost ($) | "
-    "wall (s) | composite | trust |",
-    "|---|---|---|---|---|---|---|---|---|---|---|",
-)
+def _table_header(show_composite: bool) -> tuple[str, str]:
+    """013 (contract 8 item 3): the stage table's columns in order; the
+    `composite` column is emitted only when a selected case shows one."""
+    cols = [
+        "case",
+        "stage",
+        "harness",
+        "arm",
+        "model",
+        "n",
+        "quality",
+        "pass rate",
+        "first attempt",
+        "after repair",
+        "tokens",
+        "cost ($)",
+        "wall (s)",
+    ]
+    if show_composite:
+        cols.append("composite")
+    cols.append("trust")
+    return (
+        "| " + " | ".join(cols) + " |",
+        "|" + "---|" * len(cols),
+    )
 
 
 def _fmt(x) -> str:
@@ -84,69 +111,118 @@ def _fmt(x) -> str:
     return f"{x:.3f}" if isinstance(x, float) else "n/a"
 
 
-def _summary_row(s: BenchmarkSummary, calibration) -> str:
+def _pair(p: tuple[int, int] | None) -> str:
+    return f"{p[0]}/{p[1]}" if p is not None else "n/a"
+
+
+def _summary_row(s: BenchmarkSummary, calibration, show_composite: bool) -> str:
     from .calibration import trust_for_stage
 
     harness_col = s.harness.value if s.harness else "proposer"
     if s.lead_harness:
         harness_col = f"{harness_col}:{s.lead_harness.value}"
     # 012 rows carry the cell's arm (ruling R1); pre-012 rows have no cell.
-    cell_col = s.arm if s.arm is not None else ""
-    return (
-        f"| {s.case_id} | {s.stage} | "
-        f"{harness_col} | {cell_col} | {s.model} | "
-        f"{s.n} | {_fmt(s.mean_quality)} | {_fmt(s.mean_cost_usd)} | "
-        f"{_fmt(s.mean_wall_clock_s)} | {_fmt(s.composite)} | "
-        f"{trust_for_stage(s.stage, calibration)} |"
-    )
-
-
-def _cells_section(records: list[BenchmarkRecord]) -> list[str]:
-    """contract §7.5: one line per grading state, built from the cell-scope
-    records (one per cell). Absent entirely when no cell record exists."""
-    cell_records = [r for r in records if r.scope is BenchmarkScope.CELL and r.cell is not None]
-    if not cell_records:
-        return []
-    statuses = [r.cell for r in cell_records if r.cell is not None]
-    graded = [s for s in statuses if s.grading == "graded"]
-    not_graded = [s for s in statuses if s.grading == "not_graded"]
-    failed = [s for s in statuses if s.grading == "grading_failed"]
-    by_last: dict[str, int] = {}
-    for s in not_graded:
-        by_last[s.last_stage or "none"] = by_last.get(s.last_stage or "none", 0) + 1
-    per_last = ", ".join(f"{k}: {v}" for k, v in sorted(by_last.items()))
-    lines = [
-        "## Cells",
-        "",
-        f"- cells started: {len(cell_records)}",
-        f"- completed: {sum(1 for s in statuses if s.completed)}",
-        f"- graded: {len(graded)}",
-        f"- not graded: {len(not_graded)}" + (f" (last stage: {per_last})" if per_last else ""),
-        f"- grading failed: {len(failed)}",
+    arm_col = s.arm if s.arm is not None else ""
+    if s.qa_is_copy:
+        pass_col = "copy of code"
+    elif s.all_pass is not None:
+        pass_col = _pair(s.all_pass)
+    elif s.pass_n is not None and s.pass_d is not None:
+        pass_col = f"{s.pass_n}/{s.pass_d}"
+    else:
+        pass_col = "n/a"
+    tokens_col = str(s.tokens) if s.tokens is not None else "n/a"
+    cells = [
+        s.case_id,
+        s.stage,
+        harness_col,
+        arm_col,
+        s.model,
+        str(s.n),
+        _fmt(s.mean_quality),
+        pass_col,
+        _pair(s.first_attempt),
+        _pair(s.after_repair),
+        tokens_col,
+        _fmt(s.mean_cost_usd),
+        _fmt(s.mean_wall_clock_s),
     ]
-    return lines
+    if show_composite:
+        cells.append(_fmt(s.composite))
+    cells.append(trust_for_stage(s.stage, calibration))
+    return "| " + " | ".join(cells) + " |"
+
+
+def _totals_line(t: Totals) -> str:
+    """013 (contract 8 item 2): the seven figures that replace the old
+    `## Cells` section. `lost` carries the count per last stage."""
+    per_stage = ", ".join(f"{stage}: {n}" for stage, n in sorted(t.lost_by_stage.items()))
+    lost = f"{t.lost} ({per_stage})" if per_stage else str(t.lost)
+    return (
+        f"- runs started: {t.started}, graded: {t.graded}, lost: {lost}, "
+        f"grading failed: {t.grading_failed}, no oracle: {t.no_oracle}, "
+        f"discarded oracle records: {t.discarded_oracle_records}, "
+        f"statuses derived: {t.derived_statuses}"
+    )
 
 
 def render_markdown(
     summaries: list[BenchmarkSummary],
     calibration=None,
     records: list[BenchmarkRecord] | None = None,
+    *,
+    grid: Grid | None = None,
+    gate_oracle: GateOracle | None = None,
+    decisions: dict[str, CompositeDecision] | None = None,
+    sc_rollup: str | None = None,
+    notes: list[str] | None = None,
 ) -> str:
+    """013 (contract 8): every section of report.md, in order, each heading
+    exactly once. `write_score` passes the grid, the gate view, the
+    composite decisions, the success-criteria markdown and the notes in and
+    appends nothing after the result; callers with only records get the
+    views derived here. Sections without content are omitted."""
     from .calibration import render_calibration_markdown
+    from .runs import build_runs, composite_shown
 
     calibration = calibration or {}
-    if not summaries:
-        return "# Benchmark report\n\nNo records found.\n"
-    # contract §7.4: the main table lists the 012 rows; pre-012 rows move to
+    runs = build_runs(records) if records else []
+    if grid is None and runs:
+        from .grid import build_grid
+
+        grid = build_grid(runs)
+    if gate_oracle is None and runs:
+        from .gate_oracle import build_gate_oracle
+
+        gate_oracle = build_gate_oracle(runs)
+    if decisions is None and runs:
+        decisions = composite_shown(runs)
+
+    # contract 7.2: the not-shown decision prints as a note line.
+    note_lines = [
+        f"composite not shown for {case}: {d.reason}"
+        for case, d in sorted((decisions or {}).items())
+        if not d.shown
+    ]
+    note_lines += list(notes or [])
+    show_composite = any(d.shown for d in (decisions or {}).values())
+
+    lines = ["# Benchmark report"]
+    if not summaries and not (grid is not None and grid.groups):
+        lines += ["", "No records found."]
+    if grid is not None and grid.groups:
+        from .grid import render_grid_markdown
+
+        lines += ["", "## Runs", "", _totals_line(grid.totals), "", render_grid_markdown(grid)]
+    # contract 7.4: the main table lists the 012 rows; pre-012 rows move to
     # their own untrusted section below (absent when there are none). A
     # summary list without any pre012 flag set (pre-012-only readers) all
     # falls into the section, exactly as at base minus the heading.
     rows_012 = [s for s in summaries if not s.pre012]
     rows_pre = [s for s in summaries if s.pre012]
-
-    lines = ["# Benchmark report", "", *_TABLE_HEADER]
-    lines += [_summary_row(s, calibration) for s in rows_012]
-
+    if rows_012:
+        lines += ["", "## Stages", "", *_table_header(show_composite)]
+        lines += [_summary_row(s, calibration, show_composite) for s in rows_012]
     if rows_pre:
         lines += [
             "",
@@ -156,22 +232,26 @@ def render_markdown(
             " recorded on them, so their aggregates are never averaged"
             " together with 012 rows.",
             "",
-            *_TABLE_HEADER,
+            *_table_header(show_composite),
         ]
-        lines += [_summary_row(s, calibration) for s in rows_pre]
+        lines += [_summary_row(s, calibration, show_composite) for s in rows_pre]
+    if gate_oracle is not None and gate_oracle.rows:
+        from .gate_oracle import render_gate_oracle_markdown
 
+        gate_md = render_gate_oracle_markdown(gate_oracle)
+        if gate_md:
+            lines += ["", "## Gate versus oracle", "", gate_md]
     errored = [s for s in summaries if s.errors]
     if errored:
         lines += ["", "## Stage failures", ""]
         for s in errored:
             for err in s.errors:
                 lines.append(f"- **{s.case_id} / {s.stage}** ({s.model}): {err}")
-
-    if records is not None:
-        cells = _cells_section(records)
-        if cells:
-            lines += ["", *cells]
-
+    if sc_rollup:
+        lines += ["", sc_rollup.strip("\n")]
+    if note_lines:
+        lines += ["", "## Notes", ""]
+        lines += [f"- {n}" for n in note_lines]
     return "\n".join(lines) + "\n" + render_calibration_markdown(calibration)
 
 

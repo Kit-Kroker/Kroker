@@ -93,8 +93,10 @@ def judge_mix_notes(records) -> list[str]:
 def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[Path]:
     """Write every grid the evidence supports. Returns the paths written."""
     from .calibration import load_calibration_reports, render_calibration_html
+    from .gate_oracle import build_gate_oracle
+    from .grid import build_grid
     from .report import aggregate, render_markdown, resolve_language_map, write_heatmap
-    from .runs import build_runs
+    from .runs import build_runs, composite_shown
     from .sc_rollup import (
         build_sc_rollup,
         render_sc_rollup_html,
@@ -110,11 +112,10 @@ def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[
 
     calibration = load_calibration_reports()
     summaries = aggregate("", weights, _records=ev.records)
+    runs = build_runs(ev.records)
 
     lang = resolve_language_map(sorted({r.case_id for r in ev.records}))
-    html_p, json_p = write_heatmap(
-        build_runs(ev.records), out_dir, lang, render_calibration_html(calibration)
-    )
+    html_p, json_p = write_heatmap(runs, out_dir, lang, render_calibration_html(calibration))
     written += [html_p, json_p]
 
     written += _write_case_matrices(ev, out_dir, notes)
@@ -128,22 +129,22 @@ def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[
         p.write_text(text, encoding="utf-8")
         written.append(p)
 
-    md = render_markdown(summaries, calibration=calibration)
-    md += render_sc_rollup_markdown(rollup)
-    md += _render_notes(notes)
+    # 013 (T011, contract 8): render_markdown emits every section itself;
+    # nothing is appended after it (the grid.* and gate-oracle.* files
+    # arrive in T012).
+    md = render_markdown(
+        summaries,
+        calibration=calibration,
+        grid=build_grid(runs),
+        gate_oracle=build_gate_oracle(runs),
+        decisions=composite_shown(runs),
+        sc_rollup=render_sc_rollup_markdown(rollup),
+        notes=notes,
+    )
     report_p = out_dir / "report.md"
     report_p.write_text(md, encoding="utf-8")
     written.append(report_p)
     return written
-
-
-def _render_notes(notes: list[str]) -> str:
-    """ASCII only (report.py:70-74)."""
-    if not notes:
-        return ""
-    lines = ["", "## Notes", ""]
-    lines += [f"- {n}" for n in notes]
-    return "\n".join(lines) + "\n"
 
 
 def _write_case_matrices(ev: Evidence, out_dir: Path, notes: list[str]) -> list[Path]:

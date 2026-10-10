@@ -73,16 +73,16 @@ def test_aggregate_reads_store_and_returns_summaries(tmp_path):
 
 
 def test_render_markdown_has_headers_and_rows(tmp_path):
-    sums = aggregate(
-        "b1",
-        CompositeWeights(),
-        root=str(tmp_path),
-        _records=[_rec("sonnet", 0.9, 1.0, 100), _rec("opus", 0.5, 0.5, 50)],
-    )
-    md = render_markdown(sums)
-    assert "| case" in md or "case" in md
-    assert "sonnet" in md and "opus" in md
-    assert "composite" in md.lower()
+    recs = _graded("sonnet", 0.9, 1.0, 100, arm="a1")
+    sums = aggregate("b1", CompositeWeights(), root=str(tmp_path), _records=recs)
+    md = render_markdown(sums, records=recs)
+    assert "| case" in md
+    assert "sonnet" in md
+    # 013 (contract 7.2): one graded arm -> no composite column; the
+    # decision prints as a line in ## Notes instead.
+    header = next(line for line in md.splitlines() if line.startswith("| case"))
+    assert "composite" not in header
+    assert "composite not shown for c1: 1 arm(s) with a graded run; it needs two" in md
 
 
 def test_render_markdown_handles_empty():
@@ -350,13 +350,15 @@ def test_render_markdown_pre012_only_still_renders_rows_under_the_section():
     assert md.index("## Pre-012 records (untrusted)") < md.index("cold1")
 
 
-# contract 7.5: the Cells section, built from cell-scope records
+# contract 8: ## Cells is replaced by the totals line of ## Runs
 
 
-def test_render_markdown_cells_section_counts_every_grading_state():
+def test_runs_totals_line_counts_every_grading_state():
     sums = [_summary("c1", "code", "sonnet")]
     records = [
-        _cell_record(grading="graded", completed=True, last_stage="merge"),
+        _cell_record(
+            grading="graded", completed=True, last_stage="merge", cell_id="c1#opencode#a0", arm="a0"
+        ),
         _cell_record(
             grading="not_graded", completed=False, last_stage="clarify", cell_id="c1#opencode#a1"
         ),
@@ -383,39 +385,255 @@ def test_render_markdown_cells_section_counts_every_grading_state():
         ),
     ]
     md = render_markdown(sums, calibration=None, records=records)
-    assert "## Cells" in md
-    section = md[md.index("## Cells") :]
-    assert "5" in section  # cells started: one per cell record
-    assert "not graded" in section
-    assert "grading failed" in section or "grading_failed" in section
-    # the count per last_stage, rendered readably
-    assert ("clarify: 2" in section) or ("clarify=2" in section)
-    assert ("research: 1" in section) or ("research=1" in section)
-    assert "1" in section  # completed / graded / grading failed counts
+    assert "## Cells" not in md
+    section = md[md.index("## Runs") :]
+    assert "runs started: 5" in section
+    assert "graded: 1" in section
+    # the three not_graded cells are lost (R-2: whatever the label), with
+    # the count per last stage
+    assert "lost: 3" in section
+    assert "clarify: 2" in section and "research: 1" in section
+    assert "grading failed: 1" in section
+    assert "discarded oracle records: 0" in section
+    # every status came from a cell record, so none was derived
+    assert "statuses derived: 0" in section
 
 
-def test_render_markdown_without_cell_records_has_no_cells_section():
+def test_render_markdown_has_no_cells_heading():
     sums = [_summary("c1", "code", "sonnet")]
     assert "## Cells" not in render_markdown(sums, calibration=None, records=None)
     assert "## Cells" not in render_markdown(
         sums, calibration=None, records=[_rec("sonnet", 0.9, 1.0, 100)]
     )
+    assert "## Cells" not in render_markdown(
+        sums,
+        calibration=None,
+        records=[_cell_record(grading="graded", completed=True, last_stage="merge")],
+    )
 
 
-# contract 7.4: the main table's cell column carries the arm for 012 rows
+# contract 8 item 3: the main table's fourth column is headed `arm`
 
 
-def test_render_markdown_012_rows_show_arm_in_cell_column():
+def test_render_markdown_012_rows_show_arm_column():
     sums = [
         _summary("c012", "code", "sonnet", pre012=False, cell_id="c012#opencode#a1", arm="a1"),
         _summary("cold1", "code", "sonnet", pre012=True),
     ]
     md = render_markdown(sums)
     header = md[md.index("| case") : md.index("\n", md.index("| case"))]
-    assert "cell" in header
+    cells = [c.strip() for c in header.strip("|").split("|")]
+    assert cells[3] == "arm"
     row_012 = next(line for line in md.splitlines() if "| c012" in line)
     assert "a1" in row_012
     # the pre-012 row keeps its model label and is not mislabelled with the arm
     row_pre = next(line for line in md.splitlines() if "cold1" in line and line.startswith("|"))
     assert "sonnet" in row_pre
     assert "a1" not in row_pre
+
+
+# --- 013 T011: the report's nine sections (contract 8) -----------------------
+
+
+def _012(recs, commit="abc123"):
+    """kroker_commit on every record: the run becomes generation 012."""
+    return [r.model_copy(update={"kroker_commit": commit}) for r in recs]
+
+
+def _failed_research():
+    return BenchmarkRecord(
+        run_id="b1/c1#claude_code#a1",
+        bench_run_id="b1",
+        case_id="c1",
+        scope=BenchmarkScope.STAGE,
+        stage="research",
+        role="research",
+        harness=HarnessKind.CLAUDE_CODE,
+        model="google:gemini-3.5-flash",
+        prompt_sha="",
+        quality=QualityScore(score=None, judge="error"),
+        speed=SpeedBag(
+            wall_clock_s=1.0,
+            started_at=datetime(2026, 7, 4, 10),
+            ended_at=datetime(2026, 7, 4, 10) + timedelta(seconds=1),
+        ),
+        outcome=BenchmarkOutcome.FAIL,
+        error="rejected:research.grounding: quote_not_found: https://x/1: 'q'",
+    )
+
+
+def _calib():
+    from sdlc.benchmarks.calibration import CalibrationReport
+
+    return {
+        "architect": CalibrationReport(
+            rubric="architect",
+            judge_model="j",
+            n_fixtures=10,
+            epsilon=0.15,
+            threshold=0.75,
+            agreement_rate=0.8,
+            mae=0.1,
+            spearman=0.7,
+            verdict="calibrated",
+            computed_at=datetime(2026, 7, 24, tzinfo=UTC),
+        )
+    }
+
+
+def _full_fixture():
+    """Records that light up every section of contract 8: two graded 012
+    arms (composite shown), a pre-012 arm, and a failed research stage."""
+    recs = (
+        _012(_graded("sonnet", 0.9, 1.0, 100, arm="a1"))
+        + _012(_graded("opus", 0.5, 0.5, 50, arm="a2"), commit="def456")
+        + _graded("old", 0.4, 0.2, 20, arm="a3")
+        + _012([_failed_research()])
+    )
+    return recs, aggregate("b1", CompositeWeights(), _records=recs)
+
+
+_SECTIONS = [
+    "# Benchmark report",
+    "## Runs",
+    "## Stages",
+    "## Pre-012 records (untrusted)",
+    "## Gate versus oracle",
+    "## Stage failures",
+    "## Success criteria",
+    "## Notes",
+    "## Rubric calibration",
+]
+
+
+def test_render_markdown_orders_every_section_per_contract():
+    recs, sums = _full_fixture()
+    md = render_markdown(
+        sums,
+        calibration=_calib(),
+        records=recs,
+        sc_rollup="## Success criteria\n\n2 of 2 runs left a run summary",
+        notes=["evidence note"],
+    )
+    positions = [md.index(h) for h in _SECTIONS]
+    assert positions == sorted(positions)
+    for heading in _SECTIONS:
+        assert md.count(heading) == 1
+
+
+def test_runs_section_opens_with_totals_line_then_grid():
+    recs = _012(_graded("sonnet", 0.9, 1.0, 100, arm="a1"))
+    sums = aggregate("b1", CompositeWeights(), _records=recs)
+    md = render_markdown(sums, records=recs)
+    section = md[md.index("## Runs") : md.index("## Stages")]
+    # the totals line carries all seven figures (contract 8 item 2)
+    assert "runs started: 1" in section
+    assert "graded: 1" in section
+    assert "lost: 0" in section
+    assert "grading failed: 0" in section
+    assert "no oracle: 0" in section
+    assert "discarded oracle records: 0" in section
+    assert "statuses derived: 1" in section
+    # then the grid markdown (contract 2.5 header cells)
+    assert section.index("runs started:") < section.index("| run | status | last |")
+
+
+def test_stage_table_columns_in_contract_order():
+    recs = _012(_graded("sonnet", 0.9, 1.0, 100, arm="a1"))
+    sums = aggregate("b1", CompositeWeights(), _records=recs)
+    md = render_markdown(sums, records=recs)
+    header = next(line for line in md.splitlines() if line.startswith("| case"))
+    cells = [c.strip() for c in header.strip("|").split("|")]
+    assert cells == [
+        "case",
+        "stage",
+        "harness",
+        "arm",
+        "model",
+        "n",
+        "quality",
+        "pass rate",
+        "first attempt",
+        "after repair",
+        "tokens",
+        "cost ($)",
+        "wall (s)",
+        "trust",
+    ]
+    # one graded arm: no composite column, the line sits in ## Notes
+    assert "composite not shown for c1: 1 arm(s) with a graded run; it needs two" in md
+    assert md.index("composite not shown for c1") > md.index("## Notes")
+
+
+def test_stage_table_composite_column_when_a_case_shows_one():
+    recs = _012(_graded("sonnet", 0.9, 1.0, 100, arm="a1")) + _012(
+        _graded("opus", 0.5, 0.5, 50, arm="a2"), commit="def456"
+    )
+    sums = aggregate("b1", CompositeWeights(), _records=recs)
+    md = render_markdown(sums, records=recs)
+    header = next(line for line in md.splitlines() if line.startswith("| case"))
+    cells = [c.strip() for c in header.strip("|").split("|")]
+    assert cells.index("composite") == 13
+    assert cells[12] == "wall (s)" and cells[14] == "trust"
+    assert "composite not shown" not in md
+
+
+def test_pre012_section_uses_the_same_header():
+    recs = _012(_graded("sonnet", 0.9, 1.0, 100, arm="a1")) + _graded("old", 0.4, 0.2, 20, arm="a3")
+    sums = aggregate("b1", CompositeWeights(), _records=recs)
+    md = render_markdown(sums, records=recs)
+    headers = [line for line in md.splitlines() if line.startswith("| case")]
+    assert len(headers) == 2
+    assert headers[0] == headers[1]
+
+
+def test_qa_copy_row_prints_copy_of_code():
+    s = _summary("c1", "qa", "sonnet").model_copy(update={"qa_is_copy": True})
+    md = render_markdown([s])
+    row = next(line for line in md.splitlines() if line.startswith("| c1") and "| qa |" in line)
+    cells = [c.strip() for c in row.strip("|").split("|")]
+    assert cells[7] == "copy of code"
+
+
+def test_gate_versus_oracle_section_requires_graded_runs():
+    graded = _012(_graded("sonnet", 0.9, 1.0, 100, arm="a1"))
+    md = render_markdown(aggregate("b1", CompositeWeights(), _records=graded), records=graded)
+    assert "## Gate versus oracle" in md
+    lost = [_rec("sonnet", 0.9, 1.0, 100, stage="research")]
+    md2 = render_markdown(aggregate("b1", CompositeWeights(), _records=lost), records=lost)
+    assert "## Gate versus oracle" not in md2
+
+
+def test_render_markdown_is_ascii_with_every_section():
+    recs, sums = _full_fixture()
+    md = render_markdown(
+        sums,
+        calibration=_calib(),
+        records=recs,
+        sc_rollup="## Success criteria\n\n2 of 2 runs left a run summary",
+        notes=["evidence note"],
+    )
+    md.encode("ascii")
+
+
+def test_render_markdown_with_no_records_returns_no_records_report():
+    assert render_markdown([]) == "# Benchmark report\n\nNo records found.\n"
+    assert "No records found." in render_markdown([], records=[])
+
+
+def test_success_criteria_and_notes_once_before_calibration():
+    recs = _012(_graded("sonnet", 0.9, 1.0, 100, arm="a1"))
+    sums = aggregate("b1", CompositeWeights(), _records=recs)
+    md = render_markdown(
+        sums,
+        calibration=_calib(),
+        records=recs,
+        sc_rollup="## Success criteria\n\n1 of 1 runs left a run summary",
+        notes=["evidence note"],
+    )
+    assert md.count("## Success criteria") == 1
+    assert md.count("## Notes") == 1
+    assert md.index("## Notes") > md.index("## Success criteria")
+    assert md.index("## Rubric calibration") > md.index("## Notes")
+    assert "evidence note" in md
+    assert "1 of 1 runs left a run summary" in md
