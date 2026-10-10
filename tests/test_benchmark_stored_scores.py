@@ -169,3 +169,38 @@ def test_stored_started_invariant_holds_for_every_case():
         assert t.started == t.graded + t.lost + t.grading_failed + t.no_oracle, (
             f"§1.7 invariant broken for case {case_id!r}"
         )
+
+
+def test_stored_cat_cafe_attrition_layer():
+    """§12 attrition on the stored cat-cafe row: research 4/18, clarify
+    4/14, 8/18 lost before code (one row: pre-012, one arm)."""
+    from sdlc.benchmarks.heatmap import build_layers
+
+    hm = build_layers(_runs_for(_stored_records(), CAT_CAFE))
+    (row,) = hm.rows
+    assert row.started == 18
+    assert row.lost_before_code == 8
+
+    cells = {(c.layer, c.stage): c for c in hm.cells if c.row == row.key}
+    research = cells[("attrition", "research")]
+    assert (research.num, research.den, research.observations) == (4.0, 18.0, 18)
+    clarify = cells[("attrition", "clarify")]
+    assert (clarify.num, clarify.den, clarify.observations) == (4.0, 14.0, 14)
+
+
+def test_stored_todo_api_pre012_lost_run_positions_at_code():
+    """§12: todo-api's pre-012 lost run (code records, no post-code stage
+    record, stored full-pass oracle) is positioned at `code` by the
+    task-loop fold — 1 of the row's 5 runs, none lost before code."""
+    from sdlc.benchmarks.heatmap import build_layers
+
+    hm = build_layers(_runs_for(_stored_records(), TODO_API))
+    pre_rows = [r for r in hm.rows if r.generation == "pre012"]
+    assert len(pre_rows) == 1
+    row = pre_rows[0]
+    assert row.started == 5
+    assert row.lost_before_code == 0  # the one lost run sits AT code, not before
+
+    cells = {(c.layer, c.stage): c for c in hm.cells if c.row == row.key}
+    code = cells[("attrition", "code")]
+    assert (code.num, code.den, code.observations) == (1.0, 5.0, 5)
