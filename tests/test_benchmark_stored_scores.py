@@ -204,3 +204,64 @@ def test_stored_todo_api_pre012_lost_run_positions_at_code():
     cells = {(c.layer, c.stage): c for c in hm.cells if c.row == row.key}
     code = cells[("attrition", "code")]
     assert (code.num, code.den, code.observations) == (1.0, 5.0, 5)
+
+
+# --- 013 T009: contract §12 gate-versus-oracle rows (SC-009) --------------------
+
+
+def _stored_gate_rows(case_id):
+    from sdlc.benchmarks.gate_oracle import build_gate_oracle
+
+    go = build_gate_oracle(_runs_for(_stored_records(), case_id))
+    return {r.gate: r for r in go.rows}
+
+
+def test_stored_cat_cafe_analyze_vs_oracle():
+    """§12: analyze rejected 10, of which oracle pass 1; passed 0; escape
+    n/a (zero denominator)."""
+    row = _stored_gate_rows(CAT_CAFE)["analyze"]
+    assert (row.pass_pass, row.pass_fail, row.reject_pass, row.reject_fail) == (
+        0,
+        0,
+        1,
+        9,
+    )
+    assert row.n == 10
+    assert row.escape_rate is None
+    assert row.agree_rate == 9 / 10
+    assert row.mean_credit_passed is None
+    assert abs(row.mean_credit_rejected - 85 / 120) < 1e-9
+
+
+def test_stored_cat_cafe_merge_vs_oracle():
+    """§12: merge rejected 7, of which oracle pass 1; passed 3, of which
+    oracle fail 3; escape 3/3 low n (SC-009: merge revise is a pass)."""
+    row = _stored_gate_rows(CAT_CAFE)["merge"]
+    assert (row.pass_pass, row.pass_fail, row.reject_pass, row.reject_fail) == (
+        0,
+        3,
+        1,
+        6,
+    )
+    assert row.n == 10
+    assert row.escape_rate == 1.0  # 3/3
+    assert row.false_reject_rate == 1 / 7
+    assert row.low_n["escape_rate"] is True
+
+
+def test_stored_cat_cafe_qa_is_a_copy_row():
+    """§12: the qa gate over cat-cafe's all-copy pre-012 runs reads
+    `copy of code` and carries no counts."""
+    from sdlc.benchmarks.gate_oracle import build_gate_oracle, render_gate_oracle_markdown
+
+    row = _stored_gate_rows(CAT_CAFE)["qa"]
+    assert row.is_copy is True
+    assert (row.pass_pass, row.pass_fail, row.reject_pass, row.reject_fail, row.n) == (
+        0,
+        0,
+        0,
+        0,
+        0,
+    )
+    md = render_gate_oracle_markdown(build_gate_oracle(_runs_for(_stored_records(), CAT_CAFE)))
+    assert "copy of code (pre-012)" in md

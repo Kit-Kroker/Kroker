@@ -1,11 +1,17 @@
-"""task x arm reviewer-agreement matrix (spec 4.4).
+"""task x arm reviewer-vs-adversary split matrix (spec 4.4; 013 FR-033).
 
 Rows are tasks, columns are harness#model arms, one grid per metric.
 Pure aggregation + rendering, no I/O -- mirrors waste_matrix.py.
 
-Agreement is NOT rework density, so it does not belong in the heatmap: a
-split is a cause, and the retry it triggers is already counted as
-fix_attempts on the code/qa rows.
+This is the reviewer-adversary SPLIT view, not the gate-versus-oracle
+agreement view (`B/gate_oracle.py`, 013): it shows where the adversary
+disagreed with the primary reviewer, task by task, and says nothing about
+the oracle. The page is titled "Reviewer vs adversary split" so the two
+cannot be mistaken for each other.
+
+Agreement with the oracle is NOT rework density either, so none of it
+belongs in the heatmap: a split is a cause, and the retry it triggers is
+already counted as fix_attempts on the code/qa rows.
 
 What this matrix deliberately cannot tell you is whether the adversary was
 RIGHT. Split rate is descriptive. "Was the extra call worth it" is a
@@ -190,7 +196,7 @@ def render_agreement_matrix_html(am: AgreementMatrix) -> str:
     )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
-<title>Reviewer agreement - {escape(am.case_id)}</title>
+<title>Reviewer vs adversary split - {escape(am.case_id)}</title>
 <style>
 body{{font:14px system-ui,sans-serif;margin:2rem;color:#111}}
 h1{{font-size:1.3rem}} h2{{font-size:1rem;margin-top:1.5rem}}
@@ -199,6 +205,6 @@ th,td{{border:1px solid #ddd;padding:.3rem .5rem;text-align:right}}
 th{{background:#f5f5f5;text-align:left}}
 td.empty{{background:repeating-linear-gradient(45deg,#fafafa,#fafafa 4px,#f0f0f0 4px,#f0f0f0 8px)}}
 </style></head><body>
-<h1>Reviewer agreement - {escape(am.case_id)}</h1>
+<h1>Reviewer vs adversary split - {escape(am.case_id)}</h1>
 {body}{untrusted}
 </body></html>"""

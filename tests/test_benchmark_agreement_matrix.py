@@ -197,3 +197,25 @@ def test_agreement_matrix_has_no_pre012_line_when_count_is_zero():
     am = build_agreement_matrix("c1", [_rec012("adversary", BenchmarkOutcome.FAIL)])
     assert "pre-012" not in render_agreement_matrix_html(am)
     assert json.loads(render_agreement_matrix_json(am))["pre012_records"] == 0
+
+
+# --- 013 T009 (FR-033): the split view is named so it cannot be mistaken for
+# --- the gate-versus-oracle view ------------------------------------------------
+
+
+def test_title_and_heading_read_reviewer_vs_adversary_split():
+    """013 FR-033: the reviewer-agreement view keeps its figures but is
+    titled "Reviewer vs adversary split - <case>", never "agreement"
+    alone, so it cannot be mistaken for the gate-versus-oracle view."""
+    from sdlc.benchmarks.agreement_matrix import (
+        build_agreement_matrix,
+        render_agreement_matrix_html,
+    )
+
+    am = build_agreement_matrix(
+        "c1",
+        [_rec("adversary", BenchmarkOutcome.FAIL)],
+    )
+    html = render_agreement_matrix_html(am)
+    assert "<title>Reviewer vs adversary split - c1</title>" in html
+    assert "<h1>Reviewer vs adversary split - c1</h1>" in html
