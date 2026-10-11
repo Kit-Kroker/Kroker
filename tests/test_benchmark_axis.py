@@ -154,6 +154,14 @@ def _inp(repo: Path, **kw) -> AxisInput:
     return AxisInput(**base)
 
 
+def _measure(inp: AxisInput):
+    # the activity is async like every other benchmark activity; the
+    # unit tests drive it synchronously
+    import asyncio
+
+    return asyncio.run(measure_code_axis(inp))
+
+
 _CLEAN_MODULE = '''"""Produced by the run under test."""
 
 
@@ -165,7 +173,7 @@ def twice(x):
 
 def test_activity_measures_the_python_diff_at_the_branch_head(tmp_path):
     repo = _repo(tmp_path, {"mod.py": _CLEAN_MODULE, "notes.md": "docs\n"})
-    bag = measure_code_axis(_inp(repo))
+    bag = _measure(_inp(repo))
     assert bag.reason is None
     assert bag.erosion == 0.0  # one clean function, a real measured zero
     assert bag.files == 1  # only the *.py in the diff, never notes.md
@@ -176,14 +184,14 @@ def test_activity_measures_the_python_diff_at_the_branch_head(tmp_path):
 
 def test_activity_diff_without_python_files_is_not_measured(tmp_path):
     repo = _repo(tmp_path, {"notes.md": "docs\n"})
-    bag = measure_code_axis(_inp(repo))
+    bag = _measure(_inp(repo))
     assert bag.erosion is None
     assert bag.reason == "no python files in diff"
 
 
 def test_activity_without_the_integration_branch_is_not_measured(tmp_path):
     repo = _repo(tmp_path, None)  # the branch was never created
-    bag = measure_code_axis(_inp(repo))
+    bag = _measure(_inp(repo))
     assert bag.erosion is None
     assert bag.reason == "integration branch absent"
 
@@ -191,16 +199,16 @@ def test_activity_without_the_integration_branch_is_not_measured(tmp_path):
 def test_activity_preconditions_gate_before_any_checkout(tmp_path):
     # code not finished: reasons out even though the repo path is nonsense —
     # the checkout never runs (contract §2.3's order).
-    lost = measure_code_axis(_inp(tmp_path, code_finished=False))
+    lost = _measure(_inp(tmp_path, code_finished=False))
     assert lost.reason == "code stage did not finish"
-    other = measure_code_axis(_inp(tmp_path, language="typescript"))
+    other = _measure(_inp(tmp_path, language="typescript"))
     assert other.reason == "language not python"
-    unrecorded = measure_code_axis(_inp(tmp_path, language=None))
+    unrecorded = _measure(_inp(tmp_path, language=None))
     assert unrecorded.reason == "language not python"  # covers not recorded
 
 
 def test_activity_never_raises_on_a_broken_repo(tmp_path):
-    bag = measure_code_axis(_inp(tmp_path / "does-not-exist"))
+    bag = _measure(_inp(tmp_path / "does-not-exist"))
     assert bag.erosion is None
     assert bag.reason is not None
     assert bag.reason.startswith("integration branch absent") or bag.reason.startswith(

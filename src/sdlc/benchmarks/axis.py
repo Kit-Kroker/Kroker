@@ -196,13 +196,14 @@ def _git(args: list[str], cwd: str) -> subprocess.CompletedProcess[str]:
 
 
 @activity.defn
-def measure_code_axis(inp: AxisInput) -> AxisBag:
+async def measure_code_axis(inp: AxisInput) -> AxisBag:
     """The fail-safe writer (contract §2): measures the produced diff at the
     integration branch head. NEVER raises — every failure path returns a bag
     with its reason, so the run's grade and records are unaffected (FR-006).
     Preconditions short-circuit in order, each before any checkout (§2.3);
     its own detached worktree mirrors the oracle's pattern and is removed
-    in a finally (§2.6). Needs no network (FR-007)."""
+    in a finally (§2.6). Needs no network (FR-007). Async like every other
+    benchmark activity — the worker runs no sync-activity executor."""
 
     def _reason(reason: str) -> AxisBag:
         return AxisBag(reason=reason)
