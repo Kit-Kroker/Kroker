@@ -25,3 +25,21 @@ async def test_calm_resting_cat_is_not_risk(client):
     x, y = await zone(client, "rest_area")
     await feed(client, "c-calm", stationary(x, y, bpm=25))
     assert (await cat(client, "c-calm"))["at_risk"] is False
+
+
+@pytest.mark.asyncio
+async def test_risk_is_independent_per_cat(client):
+    """risk_flag: Task 2. Monitoring: and a risk analysis for each cat's life or health based on collar data."""
+    x, y = await zone(client, "rest_area")
+    await feed(client, "c-tachy-pair", stationary(x, y, bpm=180))
+    await feed(client, "c-calm-pair", stationary(x, y, bpm=25))
+    assert (await cat(client, "c-tachy-pair"))["at_risk"] is True
+    assert (await cat(client, "c-calm-pair"))["at_risk"] is False
+
+
+@pytest.mark.asyncio
+async def test_single_reading_cat_has_boolean_at_risk(client):
+    """risk_flag: Task 2. Monitoring: Cats with a detected life or health risk must be marked in red."""
+    await feed(client, "c-single-risk", [(0, 1.0, 1.0, 40)])
+    row = await cat(client, "c-single-risk")
+    assert isinstance(row["at_risk"], bool)

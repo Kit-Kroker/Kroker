@@ -70,3 +70,35 @@ async def cat(client, cat_id):
 def stationary(x, y, bpm, n=5, step=5):
     """n readings step seconds apart, not moving (collar cadence is 5s)."""
     return [(i * step, x, y, bpm) for i in range(n)]
+
+
+async def cats(client):
+    """All cat rows from GET /cats."""
+    r = await client.get("/cats")
+    assert r.status_code == 200
+    return r.json()
+
+
+async def detail(client, cat_id):
+    """Response from GET /cats/{id}."""
+    return await client.get(f"/cats/{cat_id}")
+
+
+async def floorplan(client):
+    """Response from GET /floorplan."""
+    return await client.get("/floorplan")
+
+
+async def post_reading(client, cat_id, x, y, bpm, offset_s=0):
+    """POST a single telemetry reading at offset_s from BASE."""
+    ts = (BASE + timedelta(seconds=offset_s)).isoformat()
+    return await client.post(
+        "/telemetry",
+        json={
+            "cat_id": cat_id,
+            "x": x,
+            "y": y,
+            "breathing_rate": bpm,
+            "timestamp": ts,
+        },
+    )

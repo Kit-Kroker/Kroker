@@ -1,39 +1,67 @@
-# cat-cafe-monitoring task definitions (T012, Phase 8).
-# Maps the 12 existing oracle tests across the approved requirements
-# from cat-cafe-requirements.md that have tests today.
+# cat-cafe-monitoring task definitions (T013, Phase 8).
+# Maps all 36 oracle tests across the 15 approved requirements
+# from cat-cafe-requirements.md.
 tasks:
 - id: act_eating
   error_class: functional
   oracle_tests:
   - test_activity.py::test_stationary_at_food_bowl_is_eating
+  - test_activity.py::test_two_cats_different_zones_one_eating
 - id: act_drinking
   error_class: functional
   oracle_tests:
   - test_activity.py::test_stationary_at_water_bowl_is_drinking
+  - test_activity.py::test_two_cats_different_zones_one_drinking
 - id: act_sleeping
   error_class: functional
   oracle_tests:
   - test_activity.py::test_resting_low_bpm_is_sleeping
+  - test_activity.py::test_two_cats_different_zones_one_sleeping
 - id: act_litter_box
   error_class: functional
   oracle_tests:
   - test_activity.py::test_stationary_at_litter_box_is_litter_box
+  - test_activity.py::test_two_cats_different_zones_one_litter_box
 - id: act_playing_fighting
   error_class: functional
   oracle_tests:
   - test_activity.py::test_colocated_fast_high_bpm_is_playing_or_fighting
+  - test_activity.py::test_second_cat_in_colocated_pair_is_playing_or_fighting
+  - test_activity.py::test_colocated_fast_high_bpm_pair_at_offset_is_playing_or_fighting
+- id: act_vocabulary
+  error_class: api_contract
+  oracle_tests:
+  - test_activity.py::test_lone_cat_away_from_zones_has_vocabulary_activity
+  - test_activity.py::test_all_tracked_cats_have_vocabulary_activity
 - id: mon_movement
   error_class: functional
   oracle_tests:
   - test_monitoring.py::test_post_moves_cat_on_cats_view
+  - test_monitoring.py::test_latest_reading_wins_cat_position
+  - test_monitoring.py::test_two_cats_move_independently
+- id: mon_floorplan
+  error_class: api_contract
+  oracle_tests:
+  - test_monitoring.py::test_floorplan_returns_200_and_zones_list
+  - test_monitoring.py::test_floorplan_coordinates_are_numbers
+  - test_monitoring.py::test_floorplan_contains_all_four_zone_kinds
+- id: mon_cats_shape
+  error_class: api_contract
+  oracle_tests:
+  - test_monitoring.py::test_cats_row_contains_all_five_fields
+  - test_monitoring.py::test_cats_row_at_risk_is_boolean
 - id: mon_detail
   error_class: functional
   oracle_tests:
   - test_monitoring.py::test_history_contains_injected_readings
+  - test_monitoring.py::test_detail_contains_latest_reading_fields
+  - test_monitoring.py::test_detail_history_is_isolated_to_that_cat
 - id: mon_history_window
   error_class: data_integrity
   oracle_tests:
   - test_monitoring.py::test_history_window_is_24h_from_newest_reading
+  - test_monitoring.py::test_history_window_includes_reading_inside_24h
+  - test_monitoring.py::test_history_window_is_relative_to_cat_newest_reading_not_other_cats
 - id: mon_unknown_cat
   error_class: error_handling
   oracle_tests:
@@ -44,3 +72,14 @@ tasks:
   - test_risk.py::test_sustained_180_bpm_at_rest_is_risk
   - test_risk.py::test_sustained_5_bpm_is_risk
   - test_risk.py::test_calm_resting_cat_is_not_risk
+  - test_risk.py::test_risk_is_independent_per_cat
+  - test_risk.py::test_single_reading_cat_has_boolean_at_risk
+- id: telemetry_ingest
+  error_class: api_contract
+  oracle_tests:
+  - test_monitoring.py::test_telemetry_post_returns_2xx_and_begins_tracking
+  - test_monitoring.py::test_telemetry_posted_reading_visible_in_detail_view
+- id: import_no_autostart
+  error_class: api_contract
+  oracle_tests:
+  - test_monitoring.py::test_import_no_autostart_leaves_untracked_cats_static
