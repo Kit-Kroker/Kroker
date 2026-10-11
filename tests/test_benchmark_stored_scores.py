@@ -139,12 +139,14 @@ def test_stored_cat_cafe_first_attempt_and_after_repair():
 
 def test_stored_todo_api_three_groups():
     """§12: pre-012 group (5 started, 4 graded, 1 lost); 012 commit
-    `unknown` (1 graded); 012 commit `b3344416` (1 graded, 1 lost)."""
+    `unknown` (1 graded); 012 commit `b3344416` (1 graded, 1 lost);
+    015 smoke group commit `58871313` (1 graded — round 015's live
+    proof run, added to the corpus 2026-10-11)."""
     from sdlc.benchmarks.runs import group_runs
 
     runs = _runs_for(_stored_records(), TODO_API)
     groups = {(g.generation, g.commit): g for g in group_runs(runs)}
-    assert len(groups) == 3
+    assert len(groups) == 4
 
     pre = groups[("pre012", None)]
     assert (pre.started, pre.graded, pre.lost) == (5, 4, 1)
@@ -154,6 +156,9 @@ def test_stored_todo_api_three_groups():
 
     commit = groups[("012", "b3344416")]
     assert (commit.started, commit.graded, commit.lost) == (2, 1, 1)
+
+    smoke = groups[("012", "58871313114b1fe422b9531c5d73223ab143a7e6")]
+    assert (smoke.started, smoke.graded, smoke.lost) == (1, 1, 0)
 
 
 def test_stored_started_invariant_holds_for_every_case():
@@ -323,13 +328,19 @@ def test_stored_cat_cafe_reads_not_measured_on_the_axis_everywhere():
 
 
 def test_stored_todo_api_reads_not_measured_on_the_axis_everywhere():
+    """§4.1 for the pre-015 corpus; the 015 smoke run (2026-10-11) is the
+    one measured exception, pinned beside the negative rows."""
     from sdlc.benchmarks.runs import totals
 
     runs = _runs_for(_stored_records(), TODO_API)
     t = totals(runs)
-    assert all(r.axis is None for r in runs)
-    assert t.axis_measured == 0
-    assert t.axis_not_measured == t.started
+    measured = [r for r in runs if r.axis is not None]
+    assert all(r.axis is None for r in runs if r not in measured)
+    assert t.axis_measured == len(measured) == 1  # the smoke run
+    assert t.axis_not_measured == t.started - 1
+    bag = measured[0].axis
+    assert bag is not None and bag.erosion == 0.0 and bag.verbosity == 0.0
+    assert bag.head is not None and bag.tools["radon"] == "6.0.1"
 
 
 def test_stored_totals_line_carries_the_axis_clause_with_those_numbers():
@@ -344,16 +355,22 @@ def test_stored_totals_line_carries_the_axis_clause_with_those_numbers():
 
 
 def test_stored_rows_render_no_record_and_no_group_mean_on_the_axis():
-    """§4.1 rendered: every row reads n/m(no record) in both columns, every
-    group header reads erosion n/a (0) — absence, never a zero mean."""
+    """§4.1 rendered for the pre-015 corpus: every row without an axis bag
+    reads n/m(no record) in both columns and its group header reads
+    erosion n/a (0) — absence, never a zero mean. The 015 smoke run is
+    the one measured row: real figures, its own group mean."""
     from sdlc.benchmarks.grid import build_grid, render_grid_markdown
     from sdlc.benchmarks.runs import build_runs
 
     md = render_grid_markdown(build_grid(build_runs(_stored_records())))
+    smoke_prefix = "| bench-todo-api-greenfield-1791746672/"
     rows = [ln for ln in md.splitlines() if ln.startswith("| ") and not ln.startswith("| run ")]
     assert rows, "no run rows in the stored grid"
-    for row in rows:
+    smoke_rows = [ln for ln in rows if ln.startswith(smoke_prefix)]
+    pre015_rows = [ln for ln in rows if not ln.startswith(smoke_prefix)]
+    assert len(smoke_rows) == 1
+    assert "| 0.00 | 0.00 |" in smoke_rows[0]  # the measured live figures
+    for row in pre015_rows:
         assert "| n/m(no record) | n/m(no record) |" in row
-    assert md.count("erosion n/a (0)") == md.count("### ")
-    assert "erosion 0." not in md
-    assert "verbosity 0." not in md
+    assert md.count("erosion n/a (0)") == md.count("### ") - 1
+    assert "erosion 0.00 (1)" in md  # the smoke group's mean, with count
