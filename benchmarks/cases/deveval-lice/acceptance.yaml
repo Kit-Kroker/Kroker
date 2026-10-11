@@ -1,0 +1,22 @@
+case_id: deveval-lice
+verdict: rejected
+reason: reference
+note: '30/31 oracle tests passed; failed: oracle/unit_tests/test_lice.py::test_package_template'
+oracle_id: sha256:31d9154a2bf518c9f3b35dad0f57cad750e1e73e6b8213edb678ae23a54a8f8e
+oracle_tests: 31
+reference:
+  passed: false
+  tests_passed: 30
+  tests_total: 31
+  detail: '30/31 oracle tests passed; failed: oracle/unit_tests/test_lice.py::test_package_template'
+floor:
+  passed: true
+  tests_passed: 0
+  tests_total: 1
+  detail: '0/1 oracle tests passed; failed: oracle/unit_tests/test_lice.py::oracle.unit_tests.test_lice'
+separation: null
+role: corpus
+visibility: public
+exposure: repo_public
+kroker_commit: unknown
+updated: '2026-10-11T20:03:57.637302+00:00'

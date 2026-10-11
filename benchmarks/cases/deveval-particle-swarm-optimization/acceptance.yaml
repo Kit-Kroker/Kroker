@@ -1,0 +1,24 @@
+case_id: deveval-particle-swarm-optimization
+verdict: not_assessed
+reason: null
+note: null
+oracle_id: sha256:b4555d5c2c03e1e55dd23f7beba81d1b2dcd7afeb63e2571cfd0d922e8770d58
+oracle_tests: 6
+reference:
+  passed: true
+  tests_passed: 6
+  tests_total: 6
+  detail: 6/6 oracle tests passed
+floor:
+  passed: true
+  tests_passed: 0
+  tests_total: 3
+  detail: '0/3 oracle tests passed; failed: oracle/acceptance_tests/test_pso.py::oracle.acceptance_tests.test_pso,
+    oracle/unit_tests/test_cost_functions.py::oracle.unit_tests.test_cost_functions,
+    oracle/unit_tests/test_pso_simple.py::oracle.unit_tests.test_pso_simple'
+separation: null
+role: corpus
+visibility: public
+exposure: repo_public
+kroker_commit: unknown
+updated: '2026-10-11T20:06:24.564692+00:00'

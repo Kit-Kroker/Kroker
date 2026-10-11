@@ -1,0 +1,23 @@
+case_id: deveval-geotext
+verdict: not_assessed
+reason: null
+note: null
+oracle_id: sha256:4d3ae74ac105a1c078a68c4344ddd53d45b19234f0a1667e8cf2f4e0821c2d87
+oracle_tests: 9
+reference:
+  passed: true
+  tests_passed: 9
+  tests_total: 9
+  detail: 9/9 oracle tests passed
+floor:
+  passed: true
+  tests_passed: 0
+  tests_total: 2
+  detail: '0/2 oracle tests passed; failed: oracle/acceptance_tests/test_acceptance.py::oracle.acceptance_tests.test_acceptance,
+    oracle/unit_tests/test_geotext.py::oracle.unit_tests.test_geotext'
+separation: null
+role: corpus
+visibility: public
+exposure: repo_public
+kroker_commit: unknown
+updated: '2026-10-11T20:01:23.497604+00:00'

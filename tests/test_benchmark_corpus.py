@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+import yaml
 
 from sdlc.benchmarks.corpus import load_corpus, smoke_case
 from sdlc.benchmarks.matrix import expand_matrix
@@ -299,3 +300,31 @@ def test_corpus_status_and_render_on_tmp_path_corpus(tmp_path: Path):
     # Total accepted or provisional non-stale = 2.
     # Private accepted or provisional non-stale = 1 (c-corp1).
     assert "2 of 8 accepted or provisional, 1 of 2 private" in rendered
+
+
+def test_committed_records_match_their_cases():
+    """SC-007: Every corpus case has an acceptance.yaml whose oracle_id
+    equals oracle_identity of its oracle/."""
+    from sdlc.benchmarks.acceptance import load_acceptance
+    from sdlc.benchmarks.models import CaseRole
+    from sdlc.benchmarks.oracle_id import oracle_identity
+    from sdlc.benchmarks.paths import cases_dir
+
+    root = cases_dir()
+    for case_dir in sorted(root.iterdir()):
+        if not case_dir.is_dir() or not (case_dir / "case.yaml").exists():
+            continue
+        spec_text = (case_dir / "case.yaml").read_text(encoding="utf-8")
+        raw = yaml.safe_load(spec_text)
+        if raw.get("role") != CaseRole.CORPUS.value:
+            continue
+
+        rec = load_acceptance(case_dir)
+        assert rec is not None, f"missing acceptance.yaml in corpus case {case_dir.name}"
+
+        oracle_dir = case_dir / "oracle"
+        assert oracle_dir.is_dir(), f"missing oracle/ in corpus case {case_dir.name}"
+        expected_oid = oracle_identity(oracle_dir)
+        assert rec.oracle_id == expected_oid, (
+            f"mismatched oracle_id in {case_dir.name}: {rec.oracle_id} != {expected_oid}"
+        )

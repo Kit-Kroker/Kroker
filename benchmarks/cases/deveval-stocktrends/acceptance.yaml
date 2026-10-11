@@ -1,0 +1,24 @@
+case_id: deveval-stocktrends
+verdict: not_assessed
+reason: null
+note: null
+oracle_id: sha256:5f9285b290465db9f7089612ef7012ca45e17c031706e6042a9fc93858d9c5a9
+oracle_tests: 9
+reference:
+  passed: true
+  tests_passed: 9
+  tests_total: 9
+  detail: 9/9 oracle tests passed
+floor:
+  passed: true
+  tests_passed: 0
+  tests_total: 4
+  detail: '0/4 oracle tests passed; failed: oracle/acceptance_tests/test_indicators.py::oracle.acceptance_tests.test_indicators,
+    oracle/unit_tests/test_instrument.py::oracle.unit_tests.test_instrument, oracle/unit_tests/test_pnf.py::oracle.unit_tests.test_pnf,
+    oracle/unit_tests/test_renko.py::oracle.unit_tests.test_renko'
+separation: null
+role: corpus
+visibility: public
+exposure: repo_public
+kroker_commit: unknown
+updated: '2026-10-11T20:09:08.656579+00:00'

@@ -1,0 +1,23 @@
+case_id: deveval-hone
+verdict: not_assessed
+reason: null
+note: null
+oracle_id: sha256:ef8df118bef3343bbadac78cc645bac452049e09b77e5cb6b3ac61109cd78df9
+oracle_tests: 12
+reference:
+  passed: true
+  tests_passed: 12
+  tests_total: 12
+  detail: 12/12 oracle tests passed
+floor:
+  passed: true
+  tests_passed: 0
+  tests_total: 3
+  detail: '0/3 oracle tests passed; failed: oracle/acceptance_tests/test_acceptance.py::oracle.acceptance_tests.test_acceptance,
+    oracle/unit_tests/test_csv_utils.py::oracle.unit_tests.test_csv_utils, oracle/unit_tests/test_hone.py::oracle.unit_tests.test_hone'
+separation: null
+role: corpus
+visibility: public
+exposure: repo_public
+kroker_commit: unknown
+updated: '2026-10-11T20:02:34.886830+00:00'

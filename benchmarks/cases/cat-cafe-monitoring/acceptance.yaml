@@ -1,0 +1,43 @@
+case_id: cat-cafe-monitoring
+verdict: not_assessed
+reason: null
+note: null
+oracle_id: sha256:f9a25268b472a6c0f0c4a475082b19b0e63e3450fbeb12519b537defc2643f28
+oracle_tests: 36
+reference:
+  passed: true
+  tests_passed: 36
+  tests_total: 36
+  detail: 36/36 oracle tests passed
+floor:
+  passed: true
+  tests_passed: 0
+  tests_total: 36
+  detail: '0/36 oracle tests passed; failed: oracle/test_activity.py::test_stationary_at_food_bowl_is_eating,
+    oracle/test_activity.py::test_stationary_at_water_bowl_is_drinking, oracle/test_activity.py::test_resting_low_bpm_is_sleeping,
+    oracle/test_activity.py::test_stationary_at_litter_box_is_litter_box, oracle/test_activity.py::test_colocated_fast_high_bpm_is_playing_or_fighting,
+    oracle/test_activity.py::test_two_cats_different_zones_one_eating, oracle/test_activity.py::test_two_cats_different_zones_one_drinking,
+    oracle/test_activity.py::test_two_cats_different_zones_one_sleeping, oracle/test_activity.py::test_two_cats_different_zones_one_litter_box,
+    oracle/test_activity.py::test_second_cat_in_colocated_pair_is_playing_or_fighting,
+    oracle/test_activity.py::test_colocated_fast_high_bpm_pair_at_offset_is_playing_or_fighting,
+    oracle/test_activity.py::test_lone_cat_away_from_zones_has_vocabulary_activity,
+    oracle/test_activity.py::test_all_tracked_cats_have_vocabulary_activity, oracle/test_monitoring.py::test_post_moves_cat_on_cats_view,
+    oracle/test_monitoring.py::test_history_contains_injected_readings, oracle/test_monitoring.py::test_history_window_is_24h_from_newest_reading,
+    oracle/test_monitoring.py::test_unknown_cat_is_404, oracle/test_monitoring.py::test_latest_reading_wins_cat_position,
+    oracle/test_monitoring.py::test_two_cats_move_independently, oracle/test_monitoring.py::test_floorplan_returns_200_and_zones_list,
+    oracle/test_monitoring.py::test_floorplan_coordinates_are_numbers, oracle/test_monitoring.py::test_floorplan_contains_all_four_zone_kinds,
+    oracle/test_monitoring.py::test_cats_row_contains_all_five_fields, oracle/test_monitoring.py::test_cats_row_at_risk_is_boolean,
+    oracle/test_monitoring.py::test_detail_contains_latest_reading_fields, oracle/test_monitoring.py::test_detail_history_is_isolated_to_that_cat,
+    oracle/test_monitoring.py::test_history_window_includes_reading_inside_24h, oracle/test_monitoring.py::test_history_window_is_relative_to_cat_newest_reading_not_other_cats,
+    oracle/test_monitoring.py::test_telemetry_post_returns_2xx_and_begins_tracking,
+    oracle/test_monitoring.py::test_telemetry_posted_reading_visible_in_detail_view,
+    oracle/test_monitoring.py::test_import_no_autostart_leaves_untracked_cats_static,
+    oracle/test_risk.py::test_sustained_180_bpm_at_rest_is_risk, oracle/test_risk.py::test_sustained_5_bpm_is_risk,
+    oracle/test_risk.py::test_calm_resting_cat_is_not_risk, oracle/test_risk.py::test_risk_is_independent_per_cat,
+    oracle/test_risk.py::test_single_reading_cat_has_boolean_at_risk'
+separation: null
+role: corpus
+visibility: private
+exposure: repo_public
+kroker_commit: unknown
+updated: '2026-10-11T19:59:57.327301+00:00'

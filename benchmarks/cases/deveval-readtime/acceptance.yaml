@@ -1,0 +1,24 @@
+case_id: deveval-readtime
+verdict: not_assessed
+reason: null
+note: null
+oracle_id: sha256:0c758d2b7acb55184faa8ca04d45e77aae606a4b39dac6236662bd81f6b8248a
+oracle_tests: 12
+reference:
+  passed: true
+  tests_passed: 12
+  tests_total: 12
+  detail: 12/12 oracle tests passed
+floor:
+  passed: true
+  tests_passed: 0
+  tests_total: 4
+  detail: '0/4 oracle tests passed; failed: oracle/acceptance_tests/test_readtime.py::oracle.acceptance_tests.test_readtime,
+    oracle/unit_tests/test_check_data.py::oracle.unit_tests.test_check_data, oracle/unit_tests/test_custom_wpm.py::oracle.unit_tests.test_custom_wpm,
+    oracle/unit_tests/test_transitions.py::oracle.unit_tests.test_transitions'
+separation: null
+role: corpus
+visibility: public
+exposure: repo_public
+kroker_commit: unknown
+updated: '2026-10-11T20:07:40.677992+00:00'
