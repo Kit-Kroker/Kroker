@@ -23,6 +23,7 @@ from typing import Literal, cast
 from pydantic import BaseModel, Field
 
 from .models import (
+    AxisBag,
     BenchmarkOutcome,
     BenchmarkRecord,
     BenchmarkScope,
@@ -80,6 +81,9 @@ class Run(BaseModel):
     qa_is_copy: bool
     tokens: int | None
     wall_clock_s: float | None
+    # 015 (contract §3.1): the run's last AXIS record's bag; None = not
+    # measured, reason "no axis record" — every stored run, forever.
+    axis: AxisBag | None = None
     records: tuple[BenchmarkRecord, ...] = Field(exclude=True)
     oracle_id: str | None = None
 
@@ -139,6 +143,12 @@ class Group(BaseModel):
     hi: float | None
     all_pass: tuple[int, int]
     low_n: bool
+    # 015 (contract §3.3): means over the group's measured runs of one
+    # rule-set version; mixed versions withhold the means and name them.
+    mean_erosion: float | None
+    mean_verbosity: float | None
+    axis_n: int
+    axis_versions: tuple[str, ...]
 
 
 class Totals(BaseModel):
@@ -154,6 +164,10 @@ class Totals(BaseModel):
     lost_by_stage: dict[str, int]
     discarded_oracle_records: int
     derived_statuses: int
+    # 015 (contract §3.4's counts): measured means a bag with figures; an
+    # absent record or a reason bag is not measured.
+    axis_measured: int
+    axis_not_measured: int
 
 
 class CompositeDecision(BaseModel):
@@ -372,6 +386,7 @@ def _build_run(run_id: str, records: list[BenchmarkRecord]) -> Run:
 
     arm, arm_recovered = _arm_of(records, run_id)
     parsed = parse_run_id(run_id)
+    axis_records = [r for r in records if r.scope is BenchmarkScope.AXIS]
     return Run(
         run_id=run_id,
         bench_run_id=first.bench_run_id,
@@ -394,6 +409,7 @@ def _build_run(run_id: str, records: list[BenchmarkRecord]) -> Run:
         qa_is_copy=_qa_is_copy(records, generation),
         tokens=_tokens(records),
         wall_clock_s=_wall_clock(records),
+        axis=(axis_records[-1].axis if axis_records else None),
         records=tuple(records),
         oracle_id=oracle_id,
     )
@@ -442,6 +458,23 @@ def group_runs(runs: list[Run]) -> list[Group]:
             counts[r.status] = counts.get(r.status, 0) + 1
         mean = sum(credits) / len(credits) if credits else None
         sd = stdev(credits) if len(credits) >= 2 else None
+        # 015 (contract §3.3): means over measured runs of ONE rule-set
+        # version; mixed versions withhold both means and name themselves.
+        measured_axis = [
+            bag for r in members if (bag := r.axis) is not None and bag.erosion is not None
+        ]
+        axis_versions = tuple(sorted({b.ruleset_version for b in measured_axis}))
+        one_version = len(axis_versions) == 1
+        mean_erosion = (
+            sum(b.erosion or 0.0 for b in measured_axis) / len(measured_axis)
+            if one_version and measured_axis
+            else None
+        )
+        mean_verbosity = (
+            sum(b.verbosity or 0.0 for b in measured_axis) / len(measured_axis)
+            if one_version and measured_axis
+            else None
+        )
         groups.append(
             Group(
                 case_id=case_id,
@@ -462,6 +495,10 @@ def group_runs(runs: list[Run]) -> list[Group]:
                 hi=max(credits) if credits else None,
                 all_pass=(sum(1 for r in graded if r.all_pass), len(graded)),
                 low_n=len(graded) < MIN_OBSERVATIONS,
+                mean_erosion=mean_erosion,
+                mean_verbosity=mean_verbosity,
+                axis_n=len(measured_axis),
+                axis_versions=axis_versions,
             )
         )
     groups.sort(
@@ -494,6 +531,10 @@ def totals(runs: list[Run]) -> Totals:
         lost_by_stage=dict(lost_by_stage),
         discarded_oracle_records=sum(r.discarded_oracle_records for r in runs),
         derived_statuses=sum(1 for r in runs if r.status_derived),
+        axis_measured=sum(1 for r in runs if r.axis is not None and r.axis.erosion is not None),
+        axis_not_measured=sum(
+            1 for r in runs if not (r.axis is not None and r.axis.erosion is not None)
+        ),
     )
 
 
