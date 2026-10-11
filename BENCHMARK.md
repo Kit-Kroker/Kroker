@@ -463,10 +463,21 @@ per run, grouped by arm and commit, with mean and spread per group — is the
 main view and opens `report.md`; `gate-oracle` puts each gate against the
 oracle (agreement, escape rate, false-reject rate, mean partial credit per
 side). A score writes `report.md`, `grid.*`, `heatmap.*`, `gate-oracle.*`,
-`sc-rollup.*` and, per case, the waste, reviewer-versus-adversary, task and
-error matrix files. The E-77 `fail_reentry` axis and the per-task maximum
-of `fix_attempts` are superseded by the first-attempt layer's
-per-`(run, task)` units.
+`sc-rollup.*` and, per case, the waste, reviewer-versus-adversary, task,
+root-cause (`root-cause.html`, `root-cause.json`), and error matrix files.
+The E-77 `fail_reentry` axis and the per-task maximum of `fix_attempts` are
+superseded by the first-attempt layer's per-`(run, task)` units.
+
+**Root cause (round 015, report 3.5).** Aggregates failure modes into four
+standard buckets: `planning`, `execution`, `verification`, and `unattributed`.
+Lost runs are classified deterministically by their last recorded stage:
+before `code` counts under `planning`; `code` or any task-loop stage (including
+analyze, merge, deploy) counts under `execution`. Graded runs count failed
+requirements (score below 1.0) under `unattributed` unless a person applies a
+label file under `benchmarks/labels/<case>/<bench_run_id>.yaml` attributing it.
+No cause is assigned automatically to a graded run. Graded runs without
+requirement results (no requirement mapping) are tracked separately under
+`no_requirement_results` and never falsely attributed.
 
 ---
 
@@ -478,22 +489,55 @@ no history to mine):
 - **Spec-authored katas (primary).** A case is a feature spec + a held-out
   oracle suite, authored together. The bar E-27 set is the right one: *"large
   enough to require decomposition and small enough to specify completely."* The
-  cat-café case meets the "specifiable" half but not the "decomposition" half —
-  **the top corpus gap is one case that forces genuine planner decomposition**
-  (multiple vertical slices, real inter-task contracts), because that is the
-  load-bearing variable Cursor's entire result turns on and the one the current
-  suite cannot see.
+  cat-café case meets the "specifiable" half and now features a grown 36-test
+  oracle across 15 requirements, plus a verified reference solution.
 - **Public anchors (external validity).** A handful of SWE-bench-Verified-style
   tasks (issue → PR with hidden tests) give an external, task-independent
   reference point that doesn't move when you change your own prompts. Use them
   to tell "my change regressed *my* cases" from "my change regressed
-  *everything*". These grade purely on Tier A.
+  *everything*". These grade purely on Tier A. Six DevEval cases (`deveval-*`)
+  anchor Python kata validity.
 - **Distilled production incidents (the second loop).** Abdullin's loop B and
   Cursor's Field Guide are the same idea: every time the factory fails in real
   use, that failure becomes a case. This is *the* mechanism that grows the
   corpus past the cold start — and it is exactly what the retro stage (14) +
   `RunSummary` are for. Closing that stage (§6 priority 2) turns production runs
   into eval intake automatically. Until then, cases are hand-authored only.
+
+### 5.1 Acceptance rule and corpus status (round 015)
+
+Every case on disk declares `role` (`corpus`, `smoke`, `probe`, `parked`),
+`visibility` (`private`, `public`), and held-out `exposure` (`repo_public`, `isolated`).
+Corpus cases specify a `strong_arm` and `weak_arm`.
+
+Acceptance into the corpus is determined by `sdlc benchmark accept --case <id>`:
+1. **Reference check**: the reference solution in `reference/` must pass 100% of oracle tests.
+2. **Floor check**: an empty tree must pass strictly fewer tests than the reference.
+3. **Separation check**: on graded runs sharing the current oracle identity, the strong
+   arm must beat the weak arm by at least `SEPARATION_MARGIN = 0.15` (with 1e-9 tolerance).
+   Verdicts:
+   - `accepted`: all checks pass with ≥3 graded runs per arm.
+   - `provisional`: all checks pass with <3 runs per arm.
+   - `rejected`: with reason `reference`, `floor`, `saturated` (strong arm 1.0 on all runs),
+     `degenerate` (strong arm 0.0 on all runs), or `no_separation`.
+   - `not_assessed`: separation has no runs yet or case has no oracle.
+
+**Corpus table:**
+Run `sdlc benchmark corpus` to display status across all cases:
+- `cat-cafe-monitoring`: `corpus`, `private`, `not_assessed` (reference 36/36, floor 0/36)
+- `deveval-geotext`: `corpus`, `public`, `not_assessed` (reference 9/9, floor 0/2)
+- `deveval-hone`: `corpus`, `public`, `not_assessed` (reference 12/12, floor 0/3)
+- `deveval-lice`: `corpus`, `public`, `rejected` (`reference`, 30/31 passed, failed `test_package_template` due to upstream template mismatch; excluded from R1 screen)
+- `deveval-particle-swarm-optimization`: `corpus`, `public`, `not_assessed` (reference 6/6, floor 0/3)
+- `deveval-readtime`: `corpus`, `public`, `not_assessed` (reference 12/12, floor 0/4)
+- `deveval-stocktrends`: `corpus`, `public`, `not_assessed` (reference 9/9, floor 0/4)
+- `todo-api-greenfield`: `smoke`, `private`
+- `add-login-greenfield`: `probe`, `private`
+- `crew-probe`: `probe`, `private`
+
+Cases parked by screening runs keep role `parked` and their reason; they enter neither
+the active corpus count nor the exit tally. Rounds 016 and 017 will expand the corpus
+with private multi-step decomposition katas and brownfield anchors.
 
 **Case layout note (round 012).** A case's `oracle/` directory may ship a
 `requirements.txt` — the oracle's own test dependencies (e.g. `httpx`,
@@ -565,7 +609,16 @@ undercut, not by size.
    |---|---|---|---|
    | Prompt A/B, one stage | `sdlc eval <role>` | seconds | did this prompt edit help on a captured fixture |
    | Re-score stored evidence | `sdlc benchmark score` | seconds | what do the runs I already have say, under these weights |
-   | Full matrix | `sdlc benchmark run` | hours | what does this architecture change do end-to-end |
+   | Smoke test | `sdlc benchmark smoke` | minutes | verify four smoke conditions and write commit stamp |
+   | Full matrix / arm run | `sdlc benchmark run --arm <arm>` | hours | what does this architecture change do end-to-end |
+
+   **Run gate (round 015).** Starting a `corpus` case with `sdlc benchmark run`
+   is gated on a passing smoke stamp (`<ops root>/smoke/<commit>.json`) for the
+   current Kroker commit and a clean working tree. Running with `--skip-smoke`
+   explicitly overrides the gate and is logged. `parked` cases refuse to run
+   unless overridden with `--allow-parked`. For multi-cell cases, `--arm <name>`
+   selects a specific named arm (e.g. `zai-coding-plan-glm-5.2` or
+   `zai-coding-plan-glm-5.3-flash`), or `--all-arms` runs the entire matrix.
 
 6. **Per-role model sweep** — resolve `cfg.roles` at the benchmark boundary
    (**E-37**, folds E-26) so each cell overrides role→model and satisfies

@@ -269,7 +269,11 @@ not be evaluated is `errored` and never counts as a pass.
   and the deterministic gate, and
   [`docs/reference/architecture-review-2026-07.md`](docs/reference/architecture-review-2026-07.md)
   for the design decisions and implementation status.
-- See [`BENCHMARK.md`](BENCHMARK.md) for the benchmark & evaluation design — the four measurement axes (harness / model×role / memory / case), how success criteria SC-1..6 get their numbers, and the E-30…E-37 increments.
+- See [`BENCHMARK.md`](BENCHMARK.md) for the benchmark & evaluation design — the four measurement axes (harness / model×role / memory / case), how success criteria SC-1..6 get their numbers, and the E-30…E-37 increments. Subcommands:
+  - `python -m sdlc.cli benchmark smoke`: executes the smoke test case, verifies smoke conditions, and writes a commit stamp.
+  - `python -m sdlc.cli benchmark accept --case <id> [--offline]`: evaluates reference, floor, and separation checks, persisting `<case>/acceptance.yaml`.
+  - `python -m sdlc.cli benchmark corpus`: displays current corpus case status, roles, exposure, verdicts, stale state, and Phase 3 exit tally.
+  - `python -m sdlc.cli benchmark run --case <id> [--arm <arm> | --all-arms]`: runs matrix execution gated on a valid smoke stamp.
 - Generated documentation site — built from the living sources on every push
   (`mkdocs build --strict` in CI, published to GitHub Pages at
   https://kit-kroker.github.io/Kroker/). Local preview: `pip install -e ".[docs]"`
