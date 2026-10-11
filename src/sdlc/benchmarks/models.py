@@ -35,6 +35,9 @@ JudgeKind = Literal[
     "adversary",
     "handoff",
     "staged_rubric",
+    # 015: the deterministic quality axis. score=None always -- the figures
+    # ride the record's AxisBag payload, never QualityScore (FR-011).
+    "axis",
 ]
 
 
@@ -63,6 +66,9 @@ class BenchmarkScope(StrEnum):
     ORACLE_TASK = "oracle_task"
     # 012: the one cell record per cell (stage "cell", role "cell").
     CELL = "cell"
+    # 015: the erosion-verbosity measurement record per started cell
+    # (stage "axis", role "axis"); figures ride the AxisBag payload.
+    AXIS = "axis"
 
 
 class BenchmarkOutcome(StrEnum):
@@ -186,6 +192,37 @@ class CellStatus(BaseModel):
     child_result: str | None = None
 
 
+class AxisBag(BaseModel):
+    """015 (data-model §1): one run's erosion-verbosity measurement or its
+    measured absence, carried only on the axis record (`BenchmarkRecord.axis`,
+    scope `AXIS`). Exactly one of figures (erosion not None) or a reason
+    holds. Writer reasons (FR-006): `code stage did not finish`,
+    `integration branch absent`, `language not python` (covers language not
+    recorded), `no python files in diff`, `no functions`,
+    `measurement failed: <detail>`; the reader's is `no axis record` — every
+    stored run. Verbosity is None whenever erosion is."""
+
+    erosion: float | None = None  # mass(CC>10)/mass(all); None = not measured
+    verbosity: float | None = None  # flagged/LLOC; None when erosion is None
+    reason: str | None = None  # why not measured; None when figures present
+    functions_total: int = 0  # functions in the measured files
+    functions_over: int = 0  # functions with CC above 10
+    mass_total: float = 0.0  # sum of CC*sqrt(SLOC) over all functions
+    mass_over: float = 0.0  # the same sum over the CC>10 functions only
+    flagged_lines: int = 0  # union of rule-match spans, lines
+    loc: int = 0  # non-blank lines of the measured files
+    files: int = 0  # measured *.py files (changed vs base)
+    head: str | None = None  # the integration branch head measured
+    ruleset_version: str = "1"  # the aggregation boundary (research R-6)
+    tools: dict[str, str] = Field(default_factory=dict)  # radon + ast-grep ids
+
+    @model_validator(mode="after")
+    def _figures_or_reason_exactly_one(self) -> AxisBag:
+        if (self.erosion is None) == (self.reason is None):
+            raise ValueError("exactly one of figures or a reason must be set")
+        return self
+
+
 class BenchmarkRecord(BaseModel):
     # identity
     run_id: str
@@ -229,6 +266,9 @@ class BenchmarkRecord(BaseModel):
     cell: CellStatus | None = None
     # 015 (Phase 3, US4): identity of the oracle that graded this run.
     oracle_id: str | None = None
+    # 015: set only on the axis record (scope AXIS). None = no axis record —
+    # every stored run, read as not measured with reason "no axis record".
+    axis: AxisBag | None = None
 
 
 class CompositeWeights(BaseModel):

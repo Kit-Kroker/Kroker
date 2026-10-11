@@ -25,6 +25,9 @@ EMITTED_JUDGES = [
     # record written before E-83 carries it, and that is exactly what makes
     # the measurement discontinuity queryable rather than silent.
     "staged_rubric",
+    # 015: the deterministic quality axis. score=None always -- the figures
+    # ride the record's AxisBag payload, never QualityScore (FR-011).
+    "axis",
 ]
 
 

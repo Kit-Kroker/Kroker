@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from sdlc.benchmarks.models import (
     Arm,
+    AxisBag,
     BenchmarkCell,
     BenchmarkOutcome,
     BenchmarkRecord,
@@ -736,3 +737,74 @@ def test_stored_shape_record_without_oracle_id_loads_with_none():
     data.pop("oracle_id", None)
     loaded = BenchmarkRecord.model_validate(data)
     assert loaded.oracle_id is None
+# --- 015: the axis bag and the axis record shape (data-model §1-§2) ---
+
+
+def _axis_bag(**kw):
+    base = dict(
+        erosion=0.5,
+        verbosity=0.25,
+        functions_total=6,
+        functions_over=2,
+        mass_total=48.0,
+        mass_over=24.0,
+        flagged_lines=3,
+        loc=12,
+        files=2,
+        head="abc123",
+        ruleset_version="1",
+        tools={"radon": "6.0.1", "ast-grep": "0.50.0"},
+    )
+    base.update(kw)
+    return AxisBag(**base)
+
+
+def test_axis_bag_figures_round_trip():
+    bag = _axis_bag()
+    bag2 = AxisBag.model_validate_json(bag.model_dump_json())
+    assert bag2 == bag
+    assert bag2.erosion == 0.5
+    assert bag2.reason is None
+
+
+def test_axis_bag_reason_form_round_trips():
+    # 015 FR-006: a bag with no figures carries the writer's reason instead;
+    # head/tools stay empty (nothing was measured).
+    bag = _axis_bag(erosion=None, verbosity=None, reason="language not python", head=None, tools={})
+    bag2 = AxisBag.model_validate_json(bag.model_dump_json())
+    assert bag2.reason == "language not python"
+    assert bag2.erosion is None and bag2.verbosity is None
+
+
+def test_axis_bag_rejects_figures_and_reason_together():
+    with pytest.raises(ValidationError):
+        _axis_bag(reason="no functions")
+
+
+def test_axis_bag_rejects_neither_figures_nor_reason():
+    with pytest.raises(ValidationError):
+        _axis_bag(erosion=None, verbosity=None, reason=None)
+
+
+def test_axis_record_validates_and_round_trips():
+    bag = _axis_bag()
+    r = _record(
+        scope=BenchmarkScope.AXIS,
+        stage="axis",
+        role="axis",
+        model="deterministic",
+        prompt_sha="none:deterministic",
+        quality=QualityScore(score=None, judge="axis"),
+        outcome=BenchmarkOutcome.NOT_EVALUATED,
+        axis=bag,
+    )
+    assert r.scope is BenchmarkScope.AXIS
+    assert r.axis == bag
+    r2 = BenchmarkRecord.model_validate_json(r.model_dump_json())
+    assert r2.axis == bag
+    assert r2.quality.score is None and r2.quality.judge == "axis"
+
+
+def test_record_axis_defaults_none():
+    # pre-015 records (and every record of another scope) parse unchanged.
+    assert _record().axis is None
