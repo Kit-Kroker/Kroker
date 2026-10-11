@@ -36,6 +36,7 @@ from .models import (
     BenchmarkScope,
 )
 from .runs import (
+    MIN_OBSERVATIONS,
     Group,
     Run,
     Totals,
@@ -97,6 +98,12 @@ class _GridGroup(BaseModel):
     hi: float | None
     all_pass: tuple[int, int]
     low_n: bool
+    # 015 (contract §3.3): the group's axis figures — means withheld (None)
+    # when the measured runs mix rule-set versions.
+    mean_erosion: float | None
+    mean_verbosity: float | None
+    axis_n: int
+    axis_versions: tuple[str, ...]
     rows: tuple[GridRow, ...]
 
 
@@ -203,6 +210,10 @@ def _grid_group(g: Group, rows: tuple[GridRow, ...]) -> _GridGroup:
         hi=g.hi,
         all_pass=g.all_pass,
         low_n=g.low_n,
+        mean_erosion=g.mean_erosion,
+        mean_verbosity=g.mean_verbosity,
+        axis_n=g.axis_n,
+        axis_versions=g.axis_versions,
         rows=rows,
     )
 
@@ -244,6 +255,10 @@ _STATIC_HEADER = (
     "oracle",
     "first attempt",
     "after repair",
+    # 015 (contract §3.5): the axis columns sit after the code-score
+    # columns, before the cost figures.
+    "erosion",
+    "verbosity",
     "tokens",
     "wall (s)",
     "flags",
@@ -252,6 +267,10 @@ _STATIC_HEADER = (
 
 def _fmt3(x: float | None) -> str:
     return f"{x:.3f}" if x is not None else "n/a"
+
+
+def _fmt2(x: float | None) -> str:
+    return f"{x:.2f}" if x is not None else "n/a"
 
 
 def _header_cells(stages: tuple[str, ...]) -> list[str]:
@@ -280,9 +299,12 @@ def _figure(text: str, low: bool) -> str:
 
 def _figures_pairs(g: _GridGroup) -> list[tuple[str, bool]]:
     """The header figures as (text, low_n) pairs — started/graded/lost are
-    exact counts and never grey; the statistical figures all are."""
+    exact counts and never grey; the statistical figures all are. The 015
+    axis figures follow the all-pass figure: `erosion 0.42 (3)` with its
+    measured count, grey under five measured runs; mixed rule-set versions
+    withhold the means and name the versions (FR-010, FR-014)."""
     lo_hi = f"{_fmt3(g.lo)} to {_fmt3(g.hi)}"
-    return [
+    pairs = [
         (f"started {g.started}", False),
         (f"graded {g.graded}", False),
         (f"lost {g.lost}", False),
@@ -291,6 +313,17 @@ def _figures_pairs(g: _GridGroup) -> list[tuple[str, bool]]:
         (lo_hi, g.low_n),
         (f"all-pass {g.all_pass[0]}/{g.all_pass[1]}", g.low_n),
     ]
+    if len(g.axis_versions) > 1:
+        versions = ", ".join(g.axis_versions)
+        pairs.append((f"erosion n/a (versions {versions})", False))
+        pairs.append((f"verbosity n/a (versions {versions})", False))
+    else:
+        # grey only when a mean exists and sits under five measured runs;
+        # n/a (0) is an absence, not a low-confidence mean
+        axis_low = 0 < g.axis_n < MIN_OBSERVATIONS
+        pairs.append((f"erosion {_fmt2(g.mean_erosion)} ({g.axis_n})", axis_low))
+        pairs.append((f"verbosity {_fmt2(g.mean_verbosity)} ({g.axis_n})", axis_low))
+    return pairs
 
 
 def _figures_text(g: _GridGroup, *, html: bool) -> str:
@@ -321,6 +354,15 @@ def _row_texts(row: GridRow, stages: tuple[str, ...]) -> list[str]:
         oracle = f"{run.oracle_passed}/{run.oracle_total}"
     else:
         oracle = "n/a"
+    # 015 (contract §3.2, data-model §6): a figure prints 0.42; an absence
+    # prints its short reason — n/m(no record) for a run with no axis bag.
+    if run.axis is None:
+        erosion = verbosity = "n/m(no record)"
+    elif run.axis.erosion is None:
+        erosion = verbosity = f"n/m({run.axis.reason})"
+    else:
+        erosion = f"{run.axis.erosion:.2f}"
+        verbosity = f"{run.axis.verbosity:.2f}" if run.axis.verbosity is not None else "n/a"
     first_k, first_n = run.first_attempt
     repair_k, repair_n = run.after_repair
     tokens = str(run.tokens) if run.tokens is not None else "n/a"
@@ -344,6 +386,8 @@ def _row_texts(row: GridRow, stages: tuple[str, ...]) -> list[str]:
         oracle,
         f"{first_k}/{first_n}",
         f"{repair_k}/{repair_n}",
+        erosion,
+        verbosity,
         tokens,
         wall,
         flags,

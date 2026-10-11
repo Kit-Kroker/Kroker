@@ -295,9 +295,12 @@ def test_row_shows_derived_status_last_stage_scores_tokens_and_wall():
     assert cells[6] == "3/4"  # oracle passed/total
     assert cells[7] == "1/1"  # first attempt
     assert cells[8] == "1/1"  # after repair
-    assert cells[9] == "600"  # tokens: 4 records x (100+50)
-    assert cells[10] == "36.0"  # wall: 12 + 10 + 14
-    assert cells[11] == ""  # flags
+    # 015: the two axis columns sit here (no axis record on this run)
+    assert cells[9] == "n/m(no record)"  # erosion
+    assert cells[10] == "n/m(no record)"  # verbosity
+    assert cells[11] == "600"  # tokens: 4 records x (100+50)
+    assert cells[12] == "36.0"  # wall: 12 + 10 + 14
+    assert cells[13] == ""  # flags
 
 
 def test_row_flags_dirty_and_unfinished_and_never_unfinished_on_a_lost_run():
@@ -435,7 +438,7 @@ def test_header_cells_exactly_and_no_separator_row_and_ascii_only():
 
     assert _header(md) == (
         "| run | status | last | s:research | s:code | s:analyze | oracle | "
-        "first attempt | after repair | tokens | wall (s) | flags |"
+        "first attempt | after repair | erosion | verbosity | tokens | wall (s) | flags |"
     )
     header_cells = [c.strip() for c in _header(md).strip("|").split("|")]
     assert "case" not in header_cells
@@ -593,3 +596,151 @@ def test_group_header_oracle_identity():
     with_id = build_grid(build_runs(rec_with_id))
     header_line = render_grid_markdown(with_id).splitlines()[0]
     assert "oracle abcdef01" in header_line
+# --- 015 T008: the axis columns and the group's axis figures ---------------------
+
+
+def _axis_bag(erosion=0.42, verbosity=0.18, **kw):
+    from sdlc.benchmarks.models import AxisBag
+
+    base = dict(
+        erosion=erosion,
+        verbosity=verbosity,
+        functions_total=9,
+        functions_over=2,
+        mass_total=90.0,
+        mass_over=37.8,
+        flagged_lines=4,
+        loc=22,
+        files=3,
+        head="f00dcafe",
+        ruleset_version="1",
+        tools={"radon": "6.0.1", "ast-grep": "0.50.0"},
+    )
+    base.update(kw)
+    return AxisBag(**base)
+
+
+def _axis(run_id, bag, start=_T2):
+    return _record(
+        run_id=run_id,
+        stage="axis",
+        role="axis",
+        scope=BenchmarkScope.AXIS,
+        model="deterministic",
+        prompt_sha="none:deterministic",
+        quality=QualityScore(score=None, judge="axis"),
+        outcome=BenchmarkOutcome.NOT_EVALUATED,
+        axis=bag,
+        speed=SpeedBag(wall_clock_s=1.0, started_at=start, ended_at=start),
+    )
+
+
+def _measured(run_id, erosion=0.42, verbosity=0.18):
+    return [
+        _task(run_id, "code", "t1", 1, _T0, BenchmarkOutcome.PASS),
+        _cell(run_id, _T1, "merge"),
+        _oracle(run_id, 3, 4),
+        _axis(run_id, _axis_bag(erosion, verbosity)),
+    ]
+
+
+def _figures(md):
+    for i, line in enumerate(md.splitlines()):
+        if line.startswith("### "):
+            return md.splitlines()[i + 2]  # blank line, then the figures
+    raise AssertionError("no group header in grid markdown")
+
+
+def test_row_carries_both_axis_columns_after_the_score_columns():
+    from sdlc.benchmarks.grid import build_grid, render_grid_markdown
+    from sdlc.benchmarks.runs import build_runs
+
+    records = _measured("b1/c1#opencode#a1") + [
+        _task("b2/c1#opencode#a1", "code", "t1", 1, _T0, BenchmarkOutcome.PASS),
+        _cell("b2/c1#opencode#a1", _T1, "merge"),
+        _oracle("b2/c1#opencode#a1", 3, 4),
+    ]
+    md = render_grid_markdown(build_grid(build_runs(records)))
+    header = _header(md).strip("|").split("|")
+    header = [h.strip() for h in header]
+    assert header.index("after repair") < header.index("erosion")
+    assert header.index("erosion") < header.index("verbosity")
+    assert header.index("verbosity") < header.index("tokens")
+    measured = _cells_by_stage(md, "b1/c1#opencode#a1")
+    assert measured["erosion"] == "0.42"
+    assert measured["verbosity"] == "0.18"
+    unmeasured = _cells_by_stage(md, "b2/c1#opencode#a1")
+    assert unmeasured["erosion"] == "n/m(no record)"  # never a zero (US2)
+    assert unmeasured["verbosity"] == "n/m(no record)"
+
+
+def test_row_axis_reason_renders_short_form():
+    from sdlc.benchmarks.grid import build_grid, render_grid_markdown
+    from sdlc.benchmarks.runs import build_runs
+
+    records = [
+        _task("b1/c1#opencode#a1", "code", "t1", 1, _T0, BenchmarkOutcome.PASS),
+        _cell("b1/c1#opencode#a1", _T1, "merge"),
+        _oracle("b1/c1#opencode#a1", 3, 4),
+        _axis(
+            "b1/c1#opencode#a1",
+            _axis_bag(erosion=None, verbosity=None, reason="no functions", head=None, tools={}),
+        ),
+    ]
+    md = render_grid_markdown(build_grid(build_runs(records)))
+    cells = _cells_by_stage(md, "b1/c1#opencode#a1")
+    assert cells["erosion"] == "n/m(no functions)"
+    assert cells["verbosity"] == "n/m(no functions)"
+
+
+def test_group_header_carries_axis_means_with_counts_after_all_pass():
+    from sdlc.benchmarks.grid import build_grid, render_grid_markdown
+    from sdlc.benchmarks.runs import build_runs
+
+    records = (
+        _measured("b1/c1#opencode#a1", 0.3, 0.1)
+        + _measured("b2/c1#opencode#a1", 0.5, 0.3)
+        + _measured("b3/c1#opencode#a1", 0.4, 0.2)
+    )
+    figures = _figures(render_grid_markdown(build_grid(build_runs(records))))
+    assert figures.index("all-pass") < figures.index("erosion")
+    assert "erosion 0.40 (3)" in figures
+    assert "verbosity 0.20 (3)" in figures
+    assert "(low n)" in figures  # three measured runs is under five (FR-014)
+
+
+def test_group_header_at_five_measured_runs_is_not_grey():
+    from sdlc.benchmarks.grid import build_grid, render_grid_markdown
+    from sdlc.benchmarks.runs import build_runs
+
+    records = []
+    for i in range(5):
+        records += _measured(f"b{i}/c1#opencode#a1", 0.4, 0.2)
+    figures = _figures(render_grid_markdown(build_grid(build_runs(records))))
+    assert "erosion 0.40 (5)" in figures
+    assert "verbosity 0.20 (5)" in figures
+    assert "erosion 0.40 (5) (low n)" not in figures
+
+
+def test_group_header_withholds_means_across_ruleset_versions():
+    from sdlc.benchmarks.grid import build_grid, render_grid_markdown
+    from sdlc.benchmarks.runs import build_runs
+
+    records = _measured("b1/c1#opencode#a1") + [
+        *_measured("b2/c1#opencode#a1", 0.5, 0.3)[:-1],
+        _axis("b2/c1#opencode#a1", _axis_bag(0.5, 0.3, ruleset_version="2")),
+    ]
+    figures = _figures(render_grid_markdown(build_grid(build_runs(records))))
+    assert "erosion n/a (versions 1, 2)" in figures  # withheld, versions named
+    assert "verbosity n/a (versions 1, 2)" in figures
+    assert "erosion 0." not in figures
+
+
+def test_group_with_zero_measured_runs_reads_na_with_zero_counts():
+    from sdlc.benchmarks.grid import build_grid, render_grid_markdown
+    from sdlc.benchmarks.runs import build_runs
+
+    records = _graded("b1/c1#opencode#a1", _T0) + _graded("b2/c1#opencode#a1", _T1)
+    figures = _figures(render_grid_markdown(build_grid(build_runs(records))))
+    assert "erosion n/a (0)" in figures
+    assert "verbosity n/a (0)" in figures

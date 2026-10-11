@@ -566,6 +566,77 @@ def test_stage_table_columns_in_contract_order():
     assert md.index("composite not shown for c1") > md.index("## Notes")
 
 
+# --- 015 T008: the totals clause; erosion nowhere outside the grid section ---
+
+
+def _axis_rec(arm="a1", erosion=0.42, verbosity=0.18):
+    from sdlc.benchmarks.models import AxisBag
+
+    return _rec("deterministic", None, None, 1.0, arm=arm).model_copy(
+        update={
+            "scope": BenchmarkScope.AXIS,
+            "stage": "axis",
+            "role": "axis",
+            "prompt_sha": "none:deterministic",
+            "quality": QualityScore(score=None, judge="axis"),
+            "outcome": BenchmarkOutcome.NOT_EVALUATED,
+            "axis": AxisBag(
+                erosion=erosion,
+                verbosity=verbosity,
+                functions_total=9,
+                functions_over=2,
+                mass_total=90.0,
+                mass_over=37.8,
+                flagged_lines=4,
+                loc=22,
+                files=3,
+                head="f00dcafe",
+                ruleset_version="1",
+                tools={"radon": "6.0.1", "ast-grep": "0.50.0"},
+            ),
+        }
+    )
+
+
+def test_totals_line_gains_the_axis_clause_and_changes_no_other_word():
+    recs = _012(_graded("sonnet", 0.9, 1.0, 100, arm="a1")) + _012(
+        _graded("sonnet", 0.9, 1.0, 100, arm="a2")
+    )
+    recs = recs + [_axis_rec(arm="a1")]
+    sums = aggregate("b1", CompositeWeights(), _records=recs)
+    md = render_markdown(sums, records=recs)
+    line = next(ln for ln in md.splitlines() if ln.startswith("- runs started:"))
+    # the seven 013 figures keep their words and order; the clause appends
+    assert line.startswith(
+        "- runs started: 2, graded: 2, lost: 0, grading failed: 0, no oracle: 0, "
+        "discarded oracle records: 0, statuses derived: 2"
+    )
+    assert line.endswith("axis: 1 measured, 1 not measured")
+
+
+def test_totals_line_counts_absent_axis_as_not_measured():
+    recs = _012(_graded("sonnet", 0.9, 1.0, 100, arm="a1"))
+    sums = aggregate("b1", CompositeWeights(), _records=recs)
+    md = render_markdown(sums, records=recs)
+    line = next(ln for ln in md.splitlines() if ln.startswith("- runs started:"))
+    assert line.endswith("axis: 0 measured, 1 not measured")
+
+
+def test_report_mentions_erosion_nowhere_outside_the_runs_section():
+    recs = _012(_graded("sonnet", 0.9, 1.0, 100, arm="a1")) + [
+        _axis_rec(arm="a1"),
+    ]
+    sums = aggregate("b1", CompositeWeights(), _records=recs)
+    md = render_markdown(sums, records=recs)
+    runs = md.index("## Runs")
+    stages = md.index("## Stages")
+    grid_section = md[runs:stages]
+    assert "erosion" in grid_section  # the row and the group header carry it
+    assert "erosion" not in md[:runs]  # nothing before ## Runs
+    assert "erosion" not in md[stages:]  # and nothing after it (FR-011)
+    assert "verbosity" not in md[:runs] + md[stages:]
+
+
 def test_stage_table_composite_column_when_a_case_shows_one():
     recs = _012(_graded("sonnet", 0.9, 1.0, 100, arm="a1")) + _012(
         _graded("opus", 0.5, 0.5, 50, arm="a2"), commit="def456"

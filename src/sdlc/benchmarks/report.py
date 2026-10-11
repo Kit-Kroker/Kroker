@@ -155,14 +155,16 @@ def _summary_row(s: BenchmarkSummary, calibration, show_composite: bool) -> str:
 
 def _totals_line(t: Totals) -> str:
     """013 (contract 8 item 2): the seven figures that replace the old
-    `## Cells` section. `lost` carries the count per last stage."""
+    `## Cells` section. `lost` carries the count per last stage. 015 adds
+    exactly one clause at the end — the axis counts; no other word moves."""
     per_stage = ", ".join(f"{stage}: {n}" for stage, n in sorted(t.lost_by_stage.items()))
     lost = f"{t.lost} ({per_stage})" if per_stage else str(t.lost)
     return (
         f"- runs started: {t.started}, graded: {t.graded}, lost: {lost}, "
         f"grading failed: {t.grading_failed}, no oracle: {t.no_oracle}, "
         f"discarded oracle records: {t.discarded_oracle_records}, "
-        f"statuses derived: {t.derived_statuses}"
+        f"statuses derived: {t.derived_statuses}, "
+        f"axis: {t.axis_measured} measured, {t.axis_not_measured} not measured"
     )
 
 

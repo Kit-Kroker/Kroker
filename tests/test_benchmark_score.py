@@ -124,6 +124,84 @@ def test_report_markdown_is_ascii_only(tmp_path):
     md.encode("ascii")
 
 
+# --- 015 T008: grid.json carries the axis; no other output mentions it ---
+
+
+def _axis_score_rec(run_id="r1"):
+    from sdlc.benchmarks.models import AxisBag
+
+    return _rec().model_copy(
+        update={
+            "run_id": run_id,
+            "scope": BenchmarkScope.AXIS,
+            "stage": "axis",
+            "role": "axis",
+            "model": "deterministic",
+            "prompt_sha": "none:deterministic",
+            "quality": QualityScore(score=None, judge="axis"),
+            "outcome": BenchmarkOutcome.NOT_EVALUATED,
+            "axis": AxisBag(
+                erosion=0.42,
+                verbosity=0.18,
+                functions_total=9,
+                functions_over=2,
+                mass_total=90.0,
+                mass_over=37.8,
+                flagged_lines=4,
+                loc=22,
+                files=3,
+                head="f00dcafe",
+                ruleset_version="1",
+                tools={"radon": "6.0.1", "ast-grep": "0.50.0"},
+            ),
+        }
+    )
+
+
+def test_grid_json_carries_the_axis_figures_and_absences(tmp_path):
+    import json
+
+    records = [_rec(), _rec().model_copy(update={"run_id": "r2"}), _axis_score_rec()]
+    ev = Evidence(records=records, selector="b1")
+    write_score(ev, tmp_path, CompositeWeights())
+    grid = json.loads((tmp_path / "grid.json").read_text(encoding="utf-8"))
+    rows = [row for g in grid["groups"] for row in g["rows"]]
+    by_run = {row["run"]["run_id"]: row["run"] for row in rows}
+    assert by_run["r1"]["axis"]["erosion"] == 0.42
+    assert by_run["r1"]["axis"]["verbosity"] == 0.18
+    assert by_run["r1"]["axis"]["head"] == "f00dcafe"
+    assert by_run["r2"]["axis"] is None  # absence is data, never a zero
+    # every group carries the axis aggregate fields
+    for g in grid["groups"]:
+        assert {"mean_erosion", "mean_verbosity", "axis_n", "axis_versions"} <= set(g)
+
+
+def test_no_output_outside_the_grid_mentions_erosion(tmp_path):
+    """FR-011 by absence: the figures live in the grid (grid.json, grid.html
+    and the report's ## Runs section, which embeds the grid) and nowhere
+    else -- not the heatmap, the gate view, the matrices, the composite."""
+    records = [_rec(), _axis_score_rec()]
+    ev = Evidence(records=records, selector="b1")
+    written = write_score(ev, tmp_path, CompositeWeights())
+    for p in written:
+        if p.suffix not in {".json", ".html", ".md"}:
+            continue
+        text = p.read_text(encoding="utf-8")
+        if p.name in {"grid.json", "grid.html"}:
+            continue
+        if p.name == "report.md":
+            lines = text.splitlines()
+            runs_i = next(i for i, ln in enumerate(lines) if ln == "## Runs")
+            later = [i for i, ln in enumerate(lines) if ln.startswith("## ") and i > runs_i]
+            end_i = min(later) if later else len(lines)
+            outside = "\n".join(lines[:runs_i] + lines[end_i:])
+            assert "erosion" not in outside
+            assert "verbosity" not in outside
+            continue
+        assert "erosion" not in text, f"{p.name} mentions erosion"
+        assert "verbosity" not in text, f"{p.name} mentions verbosity"
+
+
 def test_waste_matrix_written_even_without_tasks_yaml(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_CASES_ROOT", str(tmp_path / "no-cases"))
     ev = Evidence(records=[_rec(task="t01", waste=WasteBag(tool_calls=9))], selector="b1")
