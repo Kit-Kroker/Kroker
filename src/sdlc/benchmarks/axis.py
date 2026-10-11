@@ -8,12 +8,16 @@ else in src/ (plan import discipline).
 
 from __future__ import annotations
 
+import importlib.metadata as importlib_metadata
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 import radon
+import yaml
+from ast_grep_py import SgRoot
 from radon.complexity import cc_visit
 from radon.visitors import Function as RadonFunction
 
@@ -27,6 +31,11 @@ AXIS_EROSION_THRESHOLD = 10
 # Data-model §4: the pinned verbosity rule set's version — the aggregation
 # boundary (FR-010). A changed rule set ships under a new version.
 RULESET_VERSION = "1"
+
+# The pinned rule set lives beside this module (data-model §4). Module
+# relative so an editable install (every deployment today) resolves it;
+# a frozen wheel would need *.yml added to the package data first.
+RULES_DIR = Path(__file__).parent / "rules" / "verbosity"
 
 
 @dataclass
@@ -47,27 +56,87 @@ def _mass(complexity: int, sloc: int) -> float:
     return complexity * math.sqrt(sloc)
 
 
+class _RuleError(Exception):
+    """A rule that cannot be loaded or compiled — the measurement fails
+    with the rule's id in the reason, never a silent zero (data-model §4)."""
+
+    def __init__(self, rule_id: str, detail: str):
+        super().__init__(f"{rule_id}: {detail}")
+        self.rule_id = rule_id
+
+
+def _load_rules() -> list[tuple[str, dict]]:
+    """The pinned verbosity rules, sorted by id (determinism, R-7).
+
+    Each file is ast-grep's rule-document shape: id, language, rule.
+    Anything unreadable, unparsable or off-shape fails the load with
+    the rule's id. RULES_DIR is read at call time, never bound as a
+    default argument (the broken-rule test swaps it).
+    """
+    rules: list[tuple[str, dict]] = []
+    for path in sorted(RULES_DIR.glob("*.yml")):
+        rule_id = path.stem
+        try:
+            doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except Exception as e:  # unreadable or invalid YAML
+            raise _RuleError(rule_id, str(e)) from e
+        if (
+            not isinstance(doc, dict)
+            or doc.get("id") != rule_id
+            or doc.get("language") != "python"
+            or not isinstance(doc.get("rule"), dict)
+        ):
+            raise _RuleError(rule_id, "not an (id, language, rule) document")
+        rules.append((rule_id, doc["rule"]))
+    rules.sort(key=lambda pair: pair[0])
+    if not rules:
+        raise _RuleError("", "rule set directory is empty")
+    return rules
+
+
+def _apply_rules(texts: list[tuple[Path, str]], rules: list[tuple[str, dict]]) -> int:
+    """Flagged lines: the union of every rule match's whole line span over
+    every file (contract §1.2). ast-grep lines are 0-based inclusive."""
+    flagged: set[tuple[str, int]] = set()
+    for path, text in texts:
+        node = SgRoot(text, "python").root()
+        for rule_id, rule in rules:
+            try:
+                # the YAML rule document is data; the binding's TypedDict
+                # cannot prove its shape, so the config rides a cast
+                matches = node.find_all(cast(Any, {"rule": rule}))
+            except Exception as e:  # a rule that cannot compile
+                raise _RuleError(rule_id, str(e)) from e
+            for match in matches:
+                span = match.range()
+                for line in range(span.start.line, span.end.line + 1):
+                    flagged.add((str(path), line))
+    return len(flagged)
+
+
 def measure_files(paths: Iterable[Path]) -> AxisBag:
     """The pure measurement over already-collected files (contract §1).
 
-    Files are visited in sorted path order (determinism, research R-7).
-    Erosion per §1.1: mass = CC * sqrt(SLOC) per radon function block,
-    SLOC = endline - lineno + 1 (radon spells the span end `endline`);
-    the share of mass in blocks with CC above AXIS_EROSION_THRESHOLD.
-    The verbosity rule application joins in T005; until then flagged
-    lines read zero and verbosity is flagged/loc.
+    Files are visited in sorted path order, rules in sorted id order
+    (determinism, research R-7). Erosion per §1.1: mass = CC * sqrt(SLOC)
+    per radon function block, SLOC = endline - lineno + 1 (radon spells
+    the span end `endline`); the share of mass in blocks with CC above
+    AXIS_EROSION_THRESHOLD. Verbosity per §1.2: the union of the rule
+    matches' line spans over the files' non-blank lines. A rule that
+    cannot be loaded or compiled fails the whole measurement with its id
+    in the reason — never a silently clean tree.
 
     Raises on unreadable or unparseable files — the fail-safe wrapper
     (the activity, T006) turns any raise into `measurement failed`.
     """
     files = sorted(Path(p) for p in paths)
+    texts = [(path, path.read_text(encoding="utf-8")) for path in files]
     loc = 0
     functions_total = 0
     functions_over = 0
     mass_total = 0.0
     mass_over = 0.0
-    for path in files:
-        text = path.read_text(encoding="utf-8")
+    for _path, text in texts:
         loc += sum(1 for line in text.splitlines() if line.strip())
         for block in cc_visit(text):
             if not isinstance(block, RadonFunction):
@@ -82,17 +151,25 @@ def measure_files(paths: Iterable[Path]) -> AxisBag:
     if functions_total == 0:
         # No denominator: an honest absence, never 0.0 (contract §1.1).
         return AxisBag(reason="no functions", files=len(files), loc=loc)
+    try:
+        flagged = _apply_rules(texts, _load_rules())
+    except _RuleError as e:
+        detail = f"rule {e.rule_id}" if e.rule_id else "empty rule set"
+        return AxisBag(reason=f"measurement failed: {detail}", files=len(files), loc=loc)
     return AxisBag(
         erosion=(mass_over / mass_total),
-        verbosity=0.0,  # the rule application lands in T005
+        verbosity=(flagged / loc if loc else 0.0),
         functions_total=functions_total,
         functions_over=functions_over,
         mass_total=mass_total,
         mass_over=mass_over,
-        flagged_lines=0,
+        flagged_lines=flagged,
         loc=loc,
         files=len(files),
         head=None,  # the activity fills the branch head
         ruleset_version=RULESET_VERSION,
-        tools={"radon": radon.__version__},
+        tools={
+            "radon": radon.__version__,
+            "ast-grep": importlib_metadata.version("ast-grep-py"),
+        },
     )

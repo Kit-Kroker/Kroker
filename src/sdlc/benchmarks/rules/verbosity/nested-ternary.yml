@@ -1,0 +1,10 @@
+# 015 verbosity rule set v1 (data-model §4).
+# A conditional expression inside another conditional expression; the
+# inner expression's span is flagged.
+id: nested-ternary
+language: python
+rule:
+  kind: conditional_expression
+  inside:
+    stopBy: end
+    kind: conditional_expression

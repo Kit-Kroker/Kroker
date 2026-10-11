@@ -1,0 +1,9 @@
+# 015 verbosity rule set v1 (data-model §4).
+# Debug leftover printing in produced code.
+id: print-call
+language: python
+rule:
+  kind: call
+  has:
+    field: function
+    pattern: print

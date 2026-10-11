@@ -1,0 +1,13 @@
+# 015 verbosity rule set v1 (data-model §4).
+# breakpoint() or pdb.set_trace() left in the code.
+id: debugger-call
+language: python
+rule:
+  kind: call
+  any:
+    - has:
+        field: function
+        pattern: breakpoint
+    - has:
+        field: function
+        pattern: pdb.set_trace

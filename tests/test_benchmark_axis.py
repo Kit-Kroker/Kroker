@@ -8,6 +8,7 @@ docstring carries the full hand count.
 import shutil
 from pathlib import Path
 
+import sdlc.benchmarks.axis as axis_module
 from sdlc.benchmarks.axis import AXIS_EROSION_THRESHOLD, RULESET_VERSION, measure_files
 
 FIXTURES = Path(__file__).parent / "fixtures" / "axis"
@@ -67,3 +68,36 @@ def test_path_order_does_not_change_figures(tmp_path):
     for p in src:
         shutil.copy(p, renamed / ("zzz_" + p.name))
     assert measure_files(_py(renamed)) == measure_files(src)
+
+
+def test_slop_fixture_verbosity_is_the_hand_count():
+    # slop/mod.py docstring: 9 flagged lines (one marker per rule, no
+    # overlaps) over 28 non-blank lines.
+    bag = measure_files(_py(FIXTURES / "slop"))
+    assert bag.flagged_lines == 9
+    assert bag.loc == 28
+    assert bag.verbosity == 9 / 28
+    assert bag.reason is None
+    assert bag.ruleset_version == RULESET_VERSION
+
+
+def test_plain_tree_flags_no_lines():
+    bag = measure_files(_py(FIXTURES / "plain"))
+    assert bag.flagged_lines == 0
+    assert bag.verbosity == 0.0
+
+
+def test_broken_rule_fails_the_measurement_not_the_run(tmp_path, monkeypatch):
+    # A rule that cannot compile must fail the whole measurement with its
+    # id in the reason -- never silently flag nothing (data-model §4).
+    (tmp_path / "broken-rule.yml").write_text(
+        # an unknown rule key: ast-grep refuses to compile the rule
+        # (an unknown kind would match nothing and stay silent)
+        "id: broken-rule\nlanguage: python\nrule:\n  kindZ: call\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(axis_module, "RULES_DIR", tmp_path)
+    bag = measure_files(_py(FIXTURES / "slop"))
+    assert bag.erosion is None
+    assert bag.verbosity is None
+    assert bag.reason == "measurement failed: rule broken-rule"

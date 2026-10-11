@@ -1,0 +1,7 @@
+# 015 verbosity rule set v1 (data-model §4).
+# A handler that catches everything without naming what it catches.
+id: bare-except
+language: python
+rule:
+  kind: except_clause
+  regex: '^except\s*:'

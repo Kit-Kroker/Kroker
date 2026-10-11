@@ -1,0 +1,8 @@
+# 015 verbosity rule set v1 (data-model §4).
+# A handler whose body reduces to pass: swallows the error and does
+# nothing with it. The handler node's whole span is flagged.
+id: except-pass
+language: python
+rule:
+  kind: except_clause
+  regex: ':\s*pass\s*$'
