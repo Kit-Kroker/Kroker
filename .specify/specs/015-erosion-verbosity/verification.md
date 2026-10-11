@@ -78,8 +78,9 @@ copy; no value was read into any transcript):
   quality, composite or gate figure changes.
 - **SC-005** — proven: §3.3, 5.43 s on a tree far larger than any
   case diff, no network (the tools are pinned local dependencies).
-- **SC-006** — **open, pending T012** (the live smoke run, SG-4: the
-  orchestrator's go first). FR-017's smoke half is open with it.
+- **SC-006** — **closed** by the smoke run (the addendum below): the
+  run row and the group header show both figures with tool
+  identifications, beside the oracle. FR-017's smoke half closed.
 
 ## §5 Deviations and disclosures
 
@@ -115,3 +116,74 @@ copy; no value was read into any transcript):
   fails closed without `EXA_API_KEY` — the container needs the env
   file although scoring itself touches no network (FR-013 holds for
   the scoring path; the check is loader-side, not score-side).
+
+## §6 Addendum — the smoke run (T012, SC-006 closed)
+
+**Run `bench-todo-api-greenfield-1791746672`**, cell
+`todo-api-greenfield#opencode#zai-coding-plan-glm-5.2` (one cell, the
+case's only arm), launched on the orchestrator's go of 2026-10-11 with
+`--gate-policy off` (the 012 smoke precedent; the case's research gate
+is SOFT without calibration data and would otherwise wait for a human
+— see the incidents below). Environment: the compose project
+`kroker-bench` (built per the orchestrator's directive after two
+ad-hoc attempts): a dedicated temporal dev server on 127.0.0.1:7234
+(UI 8234) and a worker on the branch worktree with the branch-synced
+venv (radon/ast-grep are branch-only dependencies), the production
+stack's binds (runs/, D:/own/sdlc-scratch-repos, the host opencode
+auth/models), git identity, and `KROKER_COMMIT=58871313` on the worker
+(012's lesson: provenance resolves worker-side — every record of the
+run carries the branch head).
+
+Results (the acceptance checks of quickstart §4):
+
+| Check | Result |
+|---|---|
+| axis record with figures | erosion **0.0**, verbosity **0.0** — a real measured zero: 107 functions, none over CC 10 (mass 546.76 total, 0 over), 0 flagged lines over 921 non-blank LOC of 6 changed `*.py` files; `head=28df0560…`, `ruleset_version "1"`, `tools {radon 6.0.1, ast-grep 0.50.0}`; the measurement itself took 9.49 s (SC-005 live) |
+| the score shows them | the regenerated report's totals clause reads `axis: 1 measured, 0 not measured`; the group header carries `erosion 0.00 (1)`, `verbosity 0.00 (1)` after the all-pass figure; the run row carries `0.00 \| 0.00` in the two columns after the code-score columns |
+| oracle and code figures in envelope | oracle **1.0 (6/6)**, `held_out_ok`, language match — exactly the 012 smoke's envelope; the cell completed (`graded`, last stage deploy); first attempt 6/7 |
+| opencode waste counters (013's live-parser follow-up) | 9 of 9 waste-carrying records with non-zero `tool_calls`, `capture_rev=1` on all — the 014 parser reads real opencode streams |
+| corpus integrity | the records fingerprint over everything EXCEPT the new bench dir is byte-identical to the baseline (`111 2a32da97…`); the corpus delta is exactly the one new bench directory; `git ls-files runs/` empty |
+
+**Incidents on the way (all disclosed).**
+
+1. **The sync-activity defect, caught live.** The worker refused to
+   boot: `measure_code_axis` was a sync def and the worker runs no
+   sync-activity executor (the sequence tests' stub is async, so the
+   unit tier never saw it). Fixed in commit `58871313` (async def; the
+   unit tests drive it through an asyncio.run wrapper).
+2. **Attempt 1 parked at the research stage gate.** `research_enabled:
+   true` on this case is newer than 012's smoke (whose research leg was
+   4 s); a SOFT gate without a calibrated (gate, model) verdict waits
+   for a human decision (48 h deadline). Terminated per the 012
+   precedent resolution, relaunched with `--gate-policy off`. The
+   aborted dir was removed; the fingerprint returned to baseline.
+   (Bonus live proof: the aborted run's axis record — reason
+   `code stage did not finish`, figures None, 0.21 s — the fail-safe
+   path exercised for real.)
+3. **Attempt 2 terminated and its records deleted by an external
+   actor.** The child workflow was terminated at 18:36 local via
+   temporal-cli executed inside the bench temporal container (identity
+   `temporal-cli:temporal@431d580733fe`), and `runs/benchmarks/<id>/`
+   was deleted from the host in the same minute. Not this session (its
+   two terminate calls were 80 minutes earlier, for attempt 1 only)
+   and not the web UI (the identity is the CLI). The parallel
+   `015-corpus-acceptance` session was actively editing the benchmarks
+   package in that window. All 33 records of that attempt were
+   recovered from the temporal histories (evidence file
+   `wf015-recovered-records.json`, temp).
+4. **Attempt 3's records dir deleted mid-run (22:28) — the same
+   external pattern.** The worker self-healed (the recorder mkdirs its
+   path on append), losing the four stage records written before the
+   deletion (research, clarify, architecture, plan). After the run
+   completed, the complete 48-record file was reconstructed in event
+   order from the two workflow histories (the payloads ARE the records;
+   the reconstruction is byte-faithful) and the bench-dir score was
+   regenerated over the complete file — the finalize had scored the
+   incomplete one.
+5. **Retain DNS noise, tolerated.** 49 `retain` failures on
+   `hindsight:8888` unresolvable inside the bench project — the exact
+   012-documented tolerance; no stage record affected, the run
+   continued.
+
+The compose project was torn down after verification; the run's
+records and score outputs remain the corpus's one new directory.
