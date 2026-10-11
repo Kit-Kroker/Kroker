@@ -290,6 +290,28 @@ def build_parser() -> argparse.ArgumentParser:
         dest="gate_policy",
         help="override the case's gate_policy for every gate in the child FeatureWorkflow",
     )
+    br.add_argument("--arm", default=None, help="run only cells for this arm name")
+    br.add_argument(
+        "--all-arms",
+        action="store_true",
+        default=False,
+        dest="all_arms",
+        help="allow running all arms on a corpus case",
+    )
+    br.add_argument(
+        "--skip-smoke",
+        action="store_true",
+        default=False,
+        dest="skip_smoke",
+        help="skip smoke check before starting",
+    )
+    br.add_argument(
+        "--allow-parked",
+        action="store_true",
+        default=False,
+        dest="allow_parked",
+        help="allow running a parked case",
+    )
     bd = bsub.add_parser("drift")
     bd.add_argument("--since", type=int, default=168)
     bi = bsub.add_parser("import-deveval")
@@ -559,7 +581,16 @@ async def main() -> None:
         if args.bench_cmd == "run":
             from .benchmarks.cli import _run_matrix
 
-            print(await _run_matrix(args.case, args.gate_policy))
+            print(
+                await _run_matrix(
+                    args.case,
+                    gate_policy=args.gate_policy,
+                    arm=getattr(args, "arm", None),
+                    all_arms=getattr(args, "all_arms", False),
+                    skip_smoke=getattr(args, "skip_smoke", False),
+                    allow_parked=getattr(args, "allow_parked", False),
+                )
+            )
             return
         if args.bench_cmd == "import-deveval":
             from .benchmarks.cli import dispatch_import_deveval

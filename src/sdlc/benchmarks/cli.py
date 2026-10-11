@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import concurrent.futures
 import os
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -22,8 +25,26 @@ from ..core.models import (
 from ..crew.loader import preflight_crew
 from ..worker import TASK_QUEUE
 from .matrix import expand_matrix
-from .models import CaseSpec
+from .models import CaseRole, CaseSpec
+from .smoke import (
+    SmokeStamp,
+    check_smoke,
+    passing_stamp,
+    resolve_repo_status,
+    write_stamp,
+)
 from .workflow import BenchmarkWorkflow
+
+
+def _run_sync[T](coro: Coroutine[Any, Any, T]) -> T:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        with concurrent.futures.ThreadPoolExecutor() as ex:
+            return ex.submit(asyncio.run, coro).result()
+    return asyncio.run(coro)
 
 
 def load_case_spec(path: str) -> CaseSpec:
@@ -51,6 +72,28 @@ def build_parser() -> argparse.ArgumentParser:
         "in the child FeatureWorkflow (default: use the "
         "case's own setting, SOFT unless the case file "
         "says otherwise)",
+    )
+    run.add_argument("--arm", default=None, help="run only cells for this arm name")
+    run.add_argument(
+        "--all-arms",
+        action="store_true",
+        default=False,
+        dest="all_arms",
+        help="allow running all arms on a corpus case",
+    )
+    run.add_argument(
+        "--skip-smoke",
+        action="store_true",
+        default=False,
+        dest="skip_smoke",
+        help="skip smoke check before starting",
+    )
+    run.add_argument(
+        "--allow-parked",
+        action="store_true",
+        default=False,
+        dest="allow_parked",
+        help="allow running a parked case",
     )
 
     drift = bsub.add_parser("drift")
@@ -218,7 +261,14 @@ def dispatch_calibrate(
     )
 
 
-async def _run_matrix(case_path: str, gate_policy: str | None = None) -> str:
+async def _run_matrix(
+    case_path: str,
+    gate_policy: str | None = None,
+    arm: str | None = None,
+    all_arms: bool = False,
+    skip_smoke: bool = False,
+    allow_parked: bool = False,
+) -> str:
     from temporalio.client import Client
     from temporalio.contrib.pydantic import pydantic_data_converter
 
@@ -231,6 +281,44 @@ async def _run_matrix(case_path: str, gate_policy: str | None = None) -> str:
     problems = check_case_assets(spec.rubrics, spec.vetoes, Path(case_path).parent)
     if problems:
         raise SystemExit("\n".join(problems))
+
+    # 1. Parked case refusal
+    if spec.role == CaseRole.PARKED and not allow_parked:
+        raise SystemExit(f"case '{spec.case_id}' is parked; use --allow-parked to run")
+
+    # 2. Smoke check & dirty tree refusal for corpus cases
+    commit, dirty = resolve_repo_status()
+    if spec.role == CaseRole.CORPUS:
+        if skip_smoke:
+            print("smoke check skipped")
+        else:
+            if dirty:
+                raise SystemExit(
+                    f"tree is dirty; smoke check refuses uncommitted changes (commit: {commit})"
+                )
+            stamp = passing_stamp(commit)
+            if stamp is None:
+                raise SystemExit(
+                    f"no passing smoke stamp for commit {commit}; run `sdlc benchmark smoke` first"
+                )
+
+    # 3. Arm filtering and multi-cell refusal
+    from .matrix import _arms_for
+
+    known_arms = [a.name for a in (spec.arms or _arms_for(spec))]
+    if arm is not None:
+        matching = [a for a in (spec.arms or _arms_for(spec)) if a.name == arm]
+        if not matching:
+            raise SystemExit(f"unknown arm '{arm}'; known arms: {', '.join(known_arms)}")
+        spec = spec.model_copy(update={"arms": matching})
+    else:
+        cells = expand_matrix(spec)
+        if spec.role == CaseRole.CORPUS and len(cells) > 1 and not all_arms:
+            raise SystemExit(
+                f"corpus case '{spec.case_id}' has {len(cells)} cells; "
+                f"specify --arm or --all-arms. Available arms: {', '.join(known_arms)}"
+            )
+
     # Refuse a colliding sweep before the matrix starts, not at each cell's
     # code stage (parent §5). expand_matrix already turned `crew:<harness>`
     # entries into cells, so this reads the same strings the arms will use.
@@ -265,7 +353,18 @@ def main_async(args: argparse.Namespace) -> None:
     if args.cmd != "benchmark":
         return
     if args.bench_cmd == "run":
-        print(asyncio.run(_run_matrix(args.case, args.gate_policy)))
+        print(
+            asyncio.run(
+                _run_matrix(
+                    args.case,
+                    gate_policy=args.gate_policy,
+                    arm=getattr(args, "arm", None),
+                    all_arms=getattr(args, "all_arms", False),
+                    skip_smoke=getattr(args, "skip_smoke", False),
+                    allow_parked=getattr(args, "allow_parked", False),
+                )
+            )
+        )
     elif args.bench_cmd == "drift":
         print(asyncio.run(_run_drift(args.since)))
     elif args.bench_cmd == "score":
@@ -283,23 +382,8 @@ def main_async(args: argparse.Namespace) -> None:
 
 
 def _resolve_kroker_commit() -> str:
-    import subprocess
-
-    root = Path(__file__).resolve().parents[3]
-    try:
-        res = subprocess.run(
-            ["git", "-c", "safe.directory=*", "rev-parse", "HEAD"],
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if res.returncode == 0 and res.stdout.strip():
-            return res.stdout.strip()
-    except (FileNotFoundError, OSError):
-        pass
-    return os.environ.get("KROKER_COMMIT") or "unknown"
+    commit, _ = resolve_repo_status()
+    return commit
 
 
 def register_benchmark_subparsers(bsub: argparse._SubParsersAction) -> None:
@@ -313,14 +397,25 @@ def register_benchmark_subparsers(bsub: argparse._SubParsersAction) -> None:
         help="run only offline reference and floor checks",
     )
 
+    bsmoke = bsub.add_parser("smoke")
+    bsmoke.add_argument("--cases-root", default=None, help="override cases directory")
+    bsmoke.add_argument("--ops-root", default=None, help="override ops directory")
+
 
 def dispatch_benchmark_cmd(args: argparse.Namespace) -> bool:
     """Dispatches registered benchmark subcommands. Returns True if handled."""
-    if getattr(args, "bench_cmd", None) == "accept":
+    cmd = getattr(args, "bench_cmd", None)
+    if cmd == "accept":
         dispatch_accept(
             case=args.case,
             offline=getattr(args, "offline", False),
             cases_root=getattr(args, "cases_root", None),
+        )
+        return True
+    if cmd == "smoke":
+        dispatch_smoke(
+            cases_root=getattr(args, "cases_root", None),
+            ops_dir=getattr(args, "ops_root", None),
         )
         return True
     return False
@@ -392,6 +487,62 @@ def dispatch_accept(
     line = f"{spec.case_id}: {verdict.value}{reason_suffix}"
     print(line)
     return line
+
+
+def dispatch_smoke(
+    *,
+    cases_root: str | None = None,
+    ops_dir: str | None = None,
+    run_fn: Callable[[str], str] | None = None,
+) -> str:
+    """Run the smoke test case, verify smoke conditions, and record stamp."""
+    from .corpus import smoke_case
+    from .matrix import expand_matrix
+    from .paths import cases_dir
+    from .report import _read_all
+    from .report import _root as benchmarks_root
+
+    root_path = Path(cases_root) if cases_root else cases_dir()
+    spec = smoke_case(root_path)
+    case_file = root_path / spec.case_id / "case.yaml"
+
+    if run_fn is not None:
+        bench_run_id = run_fn(str(case_file))
+    else:
+        bench_run_id = _run_sync(_run_matrix(str(case_file), skip_smoke=True))
+
+    records = _read_all(bench_run_id, None)
+    bench_path = Path(benchmarks_root()) / bench_run_id
+    record_files = sorted(bench_path.rglob("*.jsonl")) if bench_path.is_dir() else []
+
+    n_cells = len(expand_matrix(spec))
+    commit = records[0].kroker_commit if (records and records[0].kroker_commit) else "unknown"
+
+    failed = check_smoke(records, record_files, n_cells)
+    if not failed:
+        stamp = SmokeStamp(
+            kroker_commit=commit,
+            bench_run_id=bench_run_id,
+            passed=True,
+            failed_conditions=[],
+            written=datetime.now(UTC).isoformat(),
+        )
+        write_stamp(stamp, root=ops_dir)
+        line = f"smoke: PASS {commit}"
+        print(line)
+        return line
+
+    stamp = SmokeStamp(
+        kroker_commit=commit,
+        bench_run_id=bench_run_id,
+        passed=False,
+        failed_conditions=failed,
+        written=datetime.now(UTC).isoformat(),
+    )
+    write_stamp(stamp, root=ops_dir)
+    for cond in failed:
+        print(f"smoke: FAIL condition {cond}")
+    raise SystemExit(f"smoke check failed: {', '.join(failed)}")
 
 
 def dispatch_import_deveval(

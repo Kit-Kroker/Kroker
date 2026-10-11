@@ -1,3 +1,6 @@
+import asyncio
+from pathlib import Path
+
 import pytest
 
 from sdlc.benchmarks.cli import build_parser, dispatch_score, load_case_spec
@@ -127,6 +130,7 @@ def test_run_matrix_overrides_spec_gate_policy(tmp_path, monkeypatch):
     case = tmp_path / "case.yaml"
     case.write_text(
         "case_id: add-login\nidea_summary: add login\nmode: greenfield\n"
+        "role: probe\n"
         "harnesses: [opencode]\nmodels: [anthropic:claude-sonnet-4-6]\n"
         "judge_model: openai/gpt-5.2\nrubrics: {}\n",
         encoding="utf-8",
@@ -505,3 +509,460 @@ def test_dispatch_accept_runs_inside_running_asyncio_event_loop(tmp_path, monkey
     assert rec is not None
     assert rec.verdict == Verdict.REJECTED
     assert rec.reason == Reason.REFERENCE
+
+
+# --- benchmark run gate and smoke command (T008) -------------------------------
+
+
+def _write_test_case(
+    tmp_path: Path,
+    case_id: str,
+    *,
+    role: str = "corpus",
+    visibility: str = "public",
+    arms: list[dict] | None = None,
+    models: list[str] | None = None,
+) -> Path:
+    import yaml
+
+    c_dir = tmp_path / "cases" / case_id
+    c_dir.mkdir(parents=True, exist_ok=True)
+    case_data: dict = {
+        "case_id": case_id,
+        "idea_summary": f"summary for {case_id}",
+        "harnesses": ["opencode"],
+        "models": models or ["anthropic:claude-sonnet-4-6"],
+        "judge_model": "openai/gpt-5.2",
+        "role": role,
+        "visibility": visibility,
+    }
+    if arms is not None:
+        case_data["arms"] = arms
+
+    p = c_dir / "case.yaml"
+    p.write_text(yaml.safe_dump(case_data), encoding="utf-8")
+    return p
+
+
+class _DummyHandle:
+    async def result(self):
+        return "bench-result"
+
+
+class _DummyClient:
+    async def start_workflow(self, *args, **kwargs):
+        return _DummyHandle()
+
+
+async def _fake_connect(*args, **kwargs):
+    return _DummyClient()
+
+
+async def _fail_connect(*args, **kwargs):
+    raise AssertionError("Client.connect was reached")
+
+
+def test_run_gate_corpus_without_stamp_refused_with_smoke_hint_and_commit(tmp_path, monkeypatch):
+    import time
+
+    from sdlc.benchmarks.cli import _run_matrix
+
+    case_file = _write_test_case(tmp_path, "c-corpus", role="corpus")
+    monkeypatch.setattr("sdlc.benchmarks.cli.resolve_repo_status", lambda: ("commit-1234", False))
+    monkeypatch.setenv("SDLC_OPS_ROOT", str(tmp_path / "ops"))
+    monkeypatch.setattr("temporalio.client.Client.connect", _fail_connect)
+
+    t0 = time.monotonic()
+    with pytest.raises(SystemExit) as excinfo:
+        asyncio.run(_run_matrix(str(case_file)))
+    assert time.monotonic() - t0 < 5.0
+    msg = str(excinfo.value)
+    assert "sdlc benchmark smoke" in msg
+    assert "commit-1234" in msg
+
+
+def test_run_gate_corpus_with_passing_stamp_reaches_client(tmp_path, monkeypatch):
+    from sdlc.benchmarks.cli import _run_matrix
+    from sdlc.benchmarks.smoke import SmokeStamp, write_stamp
+
+    case_file = _write_test_case(tmp_path, "c-corpus", role="corpus")
+    monkeypatch.setattr("sdlc.benchmarks.cli.resolve_repo_status", lambda: ("commit-1234", False))
+    monkeypatch.setenv("SDLC_OPS_ROOT", str(tmp_path / "ops"))
+    monkeypatch.setattr("temporalio.client.Client.connect", _fake_connect)
+
+    stamp = SmokeStamp(
+        kroker_commit="commit-1234",
+        bench_run_id="b1",
+        passed=True,
+        failed_conditions=[],
+        written="2026-07-20T10:00:00Z",
+    )
+    write_stamp(stamp, root=tmp_path / "ops")
+
+    res = asyncio.run(_run_matrix(str(case_file)))
+    assert res == "bench-result"
+
+
+def test_run_gate_skip_smoke_reaches_client_and_prints_message(tmp_path, capsys, monkeypatch):
+    from sdlc.benchmarks.cli import _run_matrix
+
+    case_file = _write_test_case(tmp_path, "c-corpus", role="corpus")
+    monkeypatch.setattr("sdlc.benchmarks.cli.resolve_repo_status", lambda: ("commit-1234", False))
+    monkeypatch.setenv("SDLC_OPS_ROOT", str(tmp_path / "ops"))
+    monkeypatch.setattr("temporalio.client.Client.connect", _fake_connect)
+
+    res = asyncio.run(_run_matrix(str(case_file), skip_smoke=True))
+    assert res == "bench-result"
+    out = capsys.readouterr().out
+    assert "smoke check skipped" in out
+
+
+def test_run_gate_dirty_tree_refused_even_with_passing_stamp(tmp_path, monkeypatch):
+    from sdlc.benchmarks.cli import _run_matrix
+    from sdlc.benchmarks.smoke import SmokeStamp, write_stamp
+
+    case_file = _write_test_case(tmp_path, "c-corpus", role="corpus")
+    monkeypatch.setattr("sdlc.benchmarks.cli.resolve_repo_status", lambda: ("commit-1234", True))
+    monkeypatch.setenv("SDLC_OPS_ROOT", str(tmp_path / "ops"))
+    monkeypatch.setattr("temporalio.client.Client.connect", _fail_connect)
+
+    stamp = SmokeStamp(
+        kroker_commit="commit-1234",
+        bench_run_id="b1",
+        passed=True,
+        failed_conditions=[],
+        written="2026-07-20T10:00:00Z",
+    )
+    write_stamp(stamp, root=tmp_path / "ops")
+
+    with pytest.raises(SystemExit) as excinfo:
+        asyncio.run(_run_matrix(str(case_file)))
+    assert "dirty" in str(excinfo.value).lower()
+
+
+def test_run_gate_smoke_and_probe_cases_need_no_stamp(tmp_path, monkeypatch):
+    from sdlc.benchmarks.cli import _run_matrix
+
+    monkeypatch.setattr("sdlc.benchmarks.cli.resolve_repo_status", lambda: ("commit-1234", False))
+    monkeypatch.setenv("SDLC_OPS_ROOT", str(tmp_path / "ops"))
+    monkeypatch.setattr("temporalio.client.Client.connect", _fake_connect)
+
+    smoke_file = _write_test_case(tmp_path, "c-smoke", role="smoke")
+    probe_file = _write_test_case(tmp_path, "c-probe", role="probe")
+
+    res_smoke = asyncio.run(_run_matrix(str(smoke_file)))
+    assert res_smoke == "bench-result"
+
+    res_probe = asyncio.run(_run_matrix(str(probe_file)))
+    assert res_probe == "bench-result"
+
+
+def test_run_gate_parked_case_refused_without_allow_parked(tmp_path, monkeypatch):
+    from sdlc.benchmarks.cli import _run_matrix
+
+    case_file = _write_test_case(tmp_path, "c-parked", role="parked")
+    monkeypatch.setattr("temporalio.client.Client.connect", _fail_connect)
+
+    with pytest.raises(SystemExit) as excinfo:
+        asyncio.run(_run_matrix(str(case_file)))
+    assert "parked" in str(excinfo.value).lower()
+
+    # With allow_parked=True reaches client
+    monkeypatch.setattr("temporalio.client.Client.connect", _fake_connect)
+    res = asyncio.run(_run_matrix(str(case_file), allow_parked=True))
+    assert res == "bench-result"
+
+
+def test_run_gate_arm_flag_reduces_matrix_and_unknown_arm_fails(tmp_path, monkeypatch):
+    from sdlc.benchmarks.cli import _run_matrix
+
+    case_file = _write_test_case(
+        tmp_path,
+        "c-two-arms",
+        role="corpus",
+        arms=[
+            {"name": "arm-strong", "role_models": {}},
+            {"name": "arm-weak", "role_models": {}},
+        ],
+    )
+    monkeypatch.setattr("sdlc.benchmarks.cli.resolve_repo_status", lambda: ("commit-1234", False))
+    monkeypatch.setenv("SDLC_OPS_ROOT", str(tmp_path / "ops"))
+    monkeypatch.setattr("temporalio.client.Client.connect", _fail_connect)
+
+    with pytest.raises(SystemExit) as excinfo:
+        asyncio.run(_run_matrix(str(case_file), arm="arm-unknown", skip_smoke=True))
+    msg = str(excinfo.value)
+    assert "arm-unknown" in msg
+    assert "arm-strong" in msg
+    assert "arm-weak" in msg
+
+    # With valid arm reaches client
+    monkeypatch.setattr("temporalio.client.Client.connect", _fake_connect)
+    res = asyncio.run(_run_matrix(str(case_file), arm="arm-strong", skip_smoke=True))
+    assert res == "bench-result"
+
+
+def test_run_gate_multi_cell_corpus_refused_without_arm_or_all_arms(tmp_path, monkeypatch):
+    from sdlc.benchmarks.cli import _run_matrix
+
+    case_file = _write_test_case(
+        tmp_path,
+        "c-multi",
+        role="corpus",
+        arms=[
+            {"name": "arm-strong", "role_models": {}},
+            {"name": "arm-weak", "role_models": {}},
+        ],
+    )
+    monkeypatch.setattr("sdlc.benchmarks.cli.resolve_repo_status", lambda: ("commit-1234", False))
+    monkeypatch.setenv("SDLC_OPS_ROOT", str(tmp_path / "ops"))
+    monkeypatch.setattr("temporalio.client.Client.connect", _fail_connect)
+
+    with pytest.raises(SystemExit) as excinfo:
+        asyncio.run(_run_matrix(str(case_file), skip_smoke=True))
+    msg = str(excinfo.value)
+    assert "arm-strong" in msg
+    assert "arm-weak" in msg
+
+    # With all_arms=True reaches client
+    monkeypatch.setattr("temporalio.client.Client.connect", _fake_connect)
+    res = asyncio.run(_run_matrix(str(case_file), all_arms=True, skip_smoke=True))
+    assert res == "bench-result"
+
+
+def test_run_gate_probe_case_with_two_cells_needs_neither_flag(tmp_path, monkeypatch):
+    from sdlc.benchmarks.cli import _run_matrix
+
+    case_file = _write_test_case(
+        tmp_path,
+        "p-multi",
+        role="probe",
+        arms=[
+            {"name": "arm-a", "role_models": {}},
+            {"name": "arm-b", "role_models": {}},
+        ],
+    )
+    monkeypatch.setattr("sdlc.benchmarks.cli.resolve_repo_status", lambda: ("commit-1234", False))
+    monkeypatch.setenv("SDLC_OPS_ROOT", str(tmp_path / "ops"))
+    monkeypatch.setattr("temporalio.client.Client.connect", _fake_connect)
+
+    res = asyncio.run(_run_matrix(str(case_file)))
+    assert res == "bench-result"
+
+
+def test_dispatch_smoke_passing_and_failing(tmp_path, capsys, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from sdlc.benchmarks.cli import dispatch_smoke
+    from sdlc.benchmarks.models import (
+        BenchmarkOutcome,
+        BenchmarkRecord,
+        BenchmarkScope,
+        CostBag,
+        QualityScore,
+        SpeedBag,
+    )
+    from sdlc.benchmarks.recorder import RecordStore
+    from sdlc.benchmarks.smoke import passing_stamp
+    from sdlc.core.models import HarnessKind
+
+    cases_root = tmp_path / "cases"
+    _write_test_case(tmp_path, "todo-api", role="smoke")
+
+    ops_dir = tmp_path / "ops"
+    bench_dir = tmp_path / "runs"
+    monkeypatch.setenv("SDLC_OPS_ROOT", str(ops_dir))
+    monkeypatch.setenv("SDLC_BENCHMARKS_ROOT", str(bench_dir))
+
+    t0 = datetime(2026, 7, 20, 10, tzinfo=UTC)
+
+    def _make_records(oracle_ok: bool) -> list[BenchmarkRecord]:
+        return [
+            BenchmarkRecord(
+                run_id="r1",
+                bench_run_id="b-smoke-pass",
+                case_id="todo-api",
+                scope=BenchmarkScope.STAGE,
+                stage="clarify",
+                role="clarify",
+                harness=HarnessKind.OPENCODE,
+                model="m",
+                quality=QualityScore(score=1.0, judge="staged_rubric"),
+                cost=CostBag(),
+                speed=SpeedBag(wall_clock_s=1.0, started_at=t0, ended_at=t0 + timedelta(seconds=1)),
+                outcome=BenchmarkOutcome.PASS,
+                kroker_commit="commit-smoke-1",
+            ),
+            BenchmarkRecord(
+                run_id="r1",
+                bench_run_id="b-smoke-pass",
+                case_id="todo-api",
+                scope=BenchmarkScope.STAGE,
+                stage="architecture",
+                role="architecture",
+                harness=HarnessKind.OPENCODE,
+                model="m",
+                quality=QualityScore(score=1.0, judge="staged_rubric"),
+                cost=CostBag(),
+                speed=SpeedBag(wall_clock_s=1.0, started_at=t0, ended_at=t0 + timedelta(seconds=1)),
+                outcome=BenchmarkOutcome.PASS,
+                kroker_commit="commit-smoke-1",
+            ),
+            BenchmarkRecord(
+                run_id="r1",
+                bench_run_id="b-smoke-pass",
+                case_id="todo-api",
+                scope=BenchmarkScope.ORACLE,
+                stage="oracle",
+                role="oracle",
+                harness=HarnessKind.OPENCODE,
+                model="deterministic",
+                quality=QualityScore(score=1.0 if oracle_ok else 0.0, judge="oracle"),
+                cost=CostBag(),
+                speed=SpeedBag(wall_clock_s=1.0, started_at=t0, ended_at=t0 + timedelta(seconds=1)),
+                outcome=BenchmarkOutcome.PASS if oracle_ok else BenchmarkOutcome.FAIL,
+                kroker_commit="commit-smoke-1",
+            ),
+        ]
+
+    # Write passing records
+    store = RecordStore(
+        bench_run_id="b-smoke-pass", cell_id="todo-api#opencode#arm", root=str(bench_dir)
+    )
+    for r in _make_records(oracle_ok=True):
+        store.append(r)
+
+    def _stub_run_pass(case_path: str) -> str:
+        return "b-smoke-pass"
+
+    out = dispatch_smoke(cases_root=str(cases_root), ops_dir=str(ops_dir), run_fn=_stub_run_pass)
+    assert "smoke: PASS commit-smoke-1" in out
+    printed = capsys.readouterr().out
+    assert "smoke: PASS commit-smoke-1" in printed
+    stamp = passing_stamp("commit-smoke-1", root=ops_dir)
+    assert stamp is not None
+    assert stamp.passed is True
+
+    # Write failing records
+    store_fail = RecordStore(
+        bench_run_id="b-smoke-fail", cell_id="todo-api#opencode#arm", root=str(bench_dir)
+    )
+    for r in _make_records(oracle_ok=False):
+        store_fail.append(r)
+
+    def _stub_run_fail(case_path: str) -> str:
+        return "b-smoke-fail"
+
+    with pytest.raises(SystemExit):
+        dispatch_smoke(cases_root=str(cases_root), ops_dir=str(ops_dir), run_fn=_stub_run_fail)
+    fail_printed = capsys.readouterr().out
+    assert "oracle_all_pass" in fail_printed
+
+
+def test_dispatch_smoke_runs_inside_running_asyncio_event_loop(tmp_path, monkeypatch):
+    """Regression test: root CLI runs under asyncio.run(main()).
+    dispatch_smoke and dispatch_benchmark_cmd(smoke) must execute cleanly inside a running loop
+    without hitting 'RuntimeError: asyncio.run() cannot be called from a running event loop'.
+    """
+    import argparse
+    import asyncio
+    from datetime import UTC, datetime, timedelta
+
+    from sdlc.benchmarks import cli
+    from sdlc.benchmarks.cli import dispatch_benchmark_cmd
+    from sdlc.benchmarks.models import (
+        BenchmarkOutcome,
+        BenchmarkRecord,
+        BenchmarkScope,
+        CostBag,
+        QualityScore,
+        SpeedBag,
+    )
+    from sdlc.benchmarks.recorder import RecordStore
+    from sdlc.benchmarks.smoke import passing_stamp
+    from sdlc.core.models import HarnessKind
+
+    cases_root = tmp_path / "cases"
+    _write_test_case(tmp_path, "todo-smoke", role="smoke")
+
+    ops_dir = tmp_path / "ops"
+    bench_dir = tmp_path / "runs"
+    monkeypatch.setenv("SDLC_OPS_ROOT", str(ops_dir))
+    monkeypatch.setenv("SDLC_BENCHMARKS_ROOT", str(bench_dir))
+
+    t0 = datetime(2026, 7, 20, 10, tzinfo=UTC)
+    records = [
+        BenchmarkRecord(
+            run_id="r1",
+            bench_run_id="b-loop-pass",
+            case_id="todo-smoke",
+            scope=BenchmarkScope.STAGE,
+            stage="clarify",
+            role="clarify",
+            harness=HarnessKind.OPENCODE,
+            model="m",
+            quality=QualityScore(score=1.0, judge="staged_rubric"),
+            cost=CostBag(),
+            speed=SpeedBag(wall_clock_s=1.0, started_at=t0, ended_at=t0 + timedelta(seconds=1)),
+            outcome=BenchmarkOutcome.PASS,
+            kroker_commit="commit-loop-1",
+        ),
+        BenchmarkRecord(
+            run_id="r1",
+            bench_run_id="b-loop-pass",
+            case_id="todo-smoke",
+            scope=BenchmarkScope.STAGE,
+            stage="architecture",
+            role="architecture",
+            harness=HarnessKind.OPENCODE,
+            model="m",
+            quality=QualityScore(score=1.0, judge="staged_rubric"),
+            cost=CostBag(),
+            speed=SpeedBag(wall_clock_s=1.0, started_at=t0, ended_at=t0 + timedelta(seconds=1)),
+            outcome=BenchmarkOutcome.PASS,
+            kroker_commit="commit-loop-1",
+        ),
+        BenchmarkRecord(
+            run_id="r1",
+            bench_run_id="b-loop-pass",
+            case_id="todo-smoke",
+            scope=BenchmarkScope.ORACLE,
+            stage="oracle",
+            role="oracle",
+            harness=HarnessKind.OPENCODE,
+            model="deterministic",
+            quality=QualityScore(score=1.0, judge="oracle"),
+            cost=CostBag(),
+            speed=SpeedBag(wall_clock_s=1.0, started_at=t0, ended_at=t0 + timedelta(seconds=1)),
+            outcome=BenchmarkOutcome.PASS,
+            kroker_commit="commit-loop-1",
+        ),
+    ]
+
+    store = RecordStore(
+        bench_run_id="b-loop-pass", cell_id="todo-smoke#opencode#arm", root=str(bench_dir)
+    )
+    for r in records:
+        store.append(r)
+
+    async def _stub_async_run_matrix(case_path: str, skip_smoke: bool = False) -> str:
+        return "b-loop-pass"
+
+    monkeypatch.setattr(cli, "_run_matrix", _stub_async_run_matrix)
+
+    args = argparse.Namespace(
+        cmd="benchmark",
+        bench_cmd="smoke",
+        cases_root=str(cases_root),
+        ops_root=str(ops_dir),
+    )
+
+    async def _main_entry():
+        handled = dispatch_benchmark_cmd(args)
+        assert handled is True
+
+    asyncio.run(_main_entry())
+
+    stamp = passing_stamp("commit-loop-1", root=ops_dir)
+    assert stamp is not None
+    assert stamp.passed is True
