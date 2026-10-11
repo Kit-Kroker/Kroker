@@ -306,3 +306,54 @@ def test_stored_cat_cafe_root_cause_figures():
     assert matrix.no_requirement_results == 10
     assert matrix.labelled == 0
     assert matrix.unlabelled == 0
+# --- 015 T009 (contract §4): the stored corpus is the negative proof -------------
+
+
+def test_stored_cat_cafe_reads_not_measured_on_the_axis_everywhere():
+    """§4.1: every stored run has no axis record; the not-measured count
+    equals runs started. The 18/10/8 figure above is the unchanged 013
+    pin this rides beside."""
+    from sdlc.benchmarks.runs import totals
+
+    runs = _runs_for(_stored_records(), CAT_CAFE)
+    t = totals(runs)
+    assert all(r.axis is None for r in runs)
+    assert t.axis_measured == 0
+    assert t.axis_not_measured == t.started == 18
+
+
+def test_stored_todo_api_reads_not_measured_on_the_axis_everywhere():
+    from sdlc.benchmarks.runs import totals
+
+    runs = _runs_for(_stored_records(), TODO_API)
+    t = totals(runs)
+    assert all(r.axis is None for r in runs)
+    assert t.axis_measured == 0
+    assert t.axis_not_measured == t.started
+
+
+def test_stored_totals_line_carries_the_axis_clause_with_those_numbers():
+    from sdlc.benchmarks.report import _totals_line
+    from sdlc.benchmarks.runs import totals
+
+    t = totals(_runs_for(_stored_records(), CAT_CAFE))
+    line = _totals_line(t)
+    assert line.endswith("axis: 0 measured, 18 not measured")
+    # the 013 figures keep their words: the head of the line is untouched
+    assert line.startswith("- runs started: 18, graded: 10, lost: 8 (")
+
+
+def test_stored_rows_render_no_record_and_no_group_mean_on_the_axis():
+    """§4.1 rendered: every row reads n/m(no record) in both columns, every
+    group header reads erosion n/a (0) — absence, never a zero mean."""
+    from sdlc.benchmarks.grid import build_grid, render_grid_markdown
+    from sdlc.benchmarks.runs import build_runs
+
+    md = render_grid_markdown(build_grid(build_runs(_stored_records())))
+    rows = [ln for ln in md.splitlines() if ln.startswith("| ") and not ln.startswith("| run ")]
+    assert rows, "no run rows in the stored grid"
+    for row in rows:
+        assert "| n/m(no record) | n/m(no record) |" in row
+    assert md.count("erosion n/a (0)") == md.count("### ")
+    assert "erosion 0." not in md
+    assert "verbosity 0." not in md
