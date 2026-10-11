@@ -1,0 +1,46 @@
+# cat-cafe-monitoring task definitions (T012, Phase 8).
+# Maps the 12 existing oracle tests across the approved requirements
+# from cat-cafe-requirements.md that have tests today.
+tasks:
+- id: act_eating
+  error_class: functional
+  oracle_tests:
+  - test_activity.py::test_stationary_at_food_bowl_is_eating
+- id: act_drinking
+  error_class: functional
+  oracle_tests:
+  - test_activity.py::test_stationary_at_water_bowl_is_drinking
+- id: act_sleeping
+  error_class: functional
+  oracle_tests:
+  - test_activity.py::test_resting_low_bpm_is_sleeping
+- id: act_litter_box
+  error_class: functional
+  oracle_tests:
+  - test_activity.py::test_stationary_at_litter_box_is_litter_box
+- id: act_playing_fighting
+  error_class: functional
+  oracle_tests:
+  - test_activity.py::test_colocated_fast_high_bpm_is_playing_or_fighting
+- id: mon_movement
+  error_class: functional
+  oracle_tests:
+  - test_monitoring.py::test_post_moves_cat_on_cats_view
+- id: mon_detail
+  error_class: functional
+  oracle_tests:
+  - test_monitoring.py::test_history_contains_injected_readings
+- id: mon_history_window
+  error_class: data_integrity
+  oracle_tests:
+  - test_monitoring.py::test_history_window_is_24h_from_newest_reading
+- id: mon_unknown_cat
+  error_class: error_handling
+  oracle_tests:
+  - test_monitoring.py::test_unknown_cat_is_404
+- id: risk_flag
+  error_class: functional
+  oracle_tests:
+  - test_risk.py::test_sustained_180_bpm_at_rest_is_risk
+  - test_risk.py::test_sustained_5_bpm_is_risk
+  - test_risk.py::test_calm_resting_cat_is_not_risk
