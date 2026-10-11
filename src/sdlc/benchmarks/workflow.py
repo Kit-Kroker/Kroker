@@ -33,6 +33,7 @@ with workflow.unsafe.imports_passed_through():
         RoleConfig,
     )
     from ..workflows.pipeline_child import execute_pipeline_child
+    from .axis import AxisInput, axis_record, measure_code_axis
     from .cell import cell_record, grading_status, summarize_cell
     from .judge import load_case_assets
     from .matrix import expand_matrix
@@ -60,6 +61,11 @@ RECORD_ACT = workflow.ActivityConfig(
 )
 ORACLE_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=20), retry_policy=RetryPolicy(maximum_attempts=1)
+)
+# 015 (data-model §3): the measurement never raises, so retries are dead
+# code by construction; five minutes covers a case-sized tree (SC-005).
+AXIS_ACT = workflow.ActivityConfig(
+    start_to_close_timeout=timedelta(minutes=5), retry_policy=RetryPolicy(maximum_attempts=1)
 )
 
 
@@ -429,6 +435,39 @@ class BenchmarkWorkflow:
                     ),
                     **RECORD_ACT,
                 )
+                if workflow.patched("015-quality-axis"):
+                    # 015 (contract §2.1): the objective quality axis, one
+                    # fail-safe measurement per started cell after its cell
+                    # record. The activity never raises; a bag with a reason
+                    # records the measured absence (FR-006), so nothing here
+                    # can fail the run, the grade or any other record.
+                    axis_started = workflow.now()
+                    bag = await workflow.execute_activity(
+                        measure_code_axis,
+                        AxisInput(
+                            case_id=spec.case_id,
+                            repo_url=spec.repo_url or "",
+                            run_id=child_id,
+                            language=spec.language,
+                            base_branch=idea.base_branch,
+                            code_finished=progress.code_finished,
+                        ),
+                        **AXIS_ACT,
+                    )
+                    await workflow.execute_activity(
+                        record_benchmark,
+                        axis_record(
+                            cell,
+                            bag,
+                            bench_run_id,
+                            child_id,
+                            axis_started,
+                            workflow.now(),
+                            provenance=provenance,
+                            graph_sha=arm_graph_sha,
+                        ),
+                        **RECORD_ACT,
+                    )
             elif spec.language:
                 # pre-012 path, kept verbatim for replay of in-flight runs
                 started = workflow.now()

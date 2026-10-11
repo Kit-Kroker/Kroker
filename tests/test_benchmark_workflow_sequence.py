@@ -41,8 +41,10 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
 with workflow.unsafe.imports_passed_through():
+    from sdlc.benchmarks.axis import AxisInput
     from sdlc.benchmarks.cell import CellProgress
     from sdlc.benchmarks.models import (
+        AxisBag,
         BenchmarkOutcome,
         BenchmarkRecord,
         BenchmarkScope,
@@ -66,6 +68,10 @@ STATE: dict = {
     "grade_calls": 0,
     "summarize_calls": 0,
     "provenance_calls": 0,
+    "axis": None,  # AxisBag the measure_code_axis stub returns (measured)
+    "axis_calls": 0,  # times the axis activity fired at all
+    "axis_measured": 0,  # times the stub's checkout side would have run
+    "axis_branch_absent": False,  # the worktree-add failure simulation
 }
 
 
@@ -78,6 +84,10 @@ def _reset() -> None:
         grade_calls=0,
         summarize_calls=0,
         provenance_calls=0,
+        axis=None,
+        axis_calls=0,
+        axis_measured=0,
+        axis_branch_absent=False,
     )
 
 
@@ -119,6 +129,21 @@ async def stub_grade_oracle(inp) -> OracleGrade:
 async def stub_summarize_cell(bench_run_id: str, cell_id: str) -> CellProgress:
     STATE["summarize_calls"] += 1
     return STATE["progress"]
+
+
+@activity.defn(name="measure_code_axis")
+async def stub_measure_code_axis(inp: AxisInput) -> AxisBag:
+    # mirrors the real activity's precondition order (contract §2.3):
+    # each early return means the checkout never runs.
+    STATE["axis_calls"] += 1
+    if not inp.code_finished:
+        return AxisBag(reason="code stage did not finish")
+    if inp.language != "python":
+        return AxisBag(reason="language not python")
+    if STATE["axis_branch_absent"]:
+        return AxisBag(reason="integration branch absent")
+    STATE["axis_measured"] += 1
+    return STATE["axis"]
 
 
 @activity.defn(name="resolve_provenance")
@@ -186,6 +211,7 @@ async def _run_parent(spec_json: str) -> str:
                     stub_record_benchmark,
                     stub_grade_oracle,
                     stub_summarize_cell,
+                    stub_measure_code_axis,
                     stub_resolve_provenance,
                     stub_finalize_benchmark_report,
                 ],
@@ -302,3 +328,107 @@ async def test_provenance_resolved_once_for_two_cells():
     cells = _cell_records()
     assert len(cells) == 2
     assert all(c.kroker_commit == "abc123" for c in cells)
+
+
+# --- 015 T006: the quality-axis record rides the per-cell sequence ---
+
+
+def _axis_bag(**kw) -> AxisBag:
+    base = dict(
+        erosion=0.42,
+        verbosity=0.18,
+        functions_total=9,
+        functions_over=2,
+        mass_total=90.0,
+        mass_over=37.8,
+        flagged_lines=4,
+        loc=22,
+        files=3,
+        head="f00dcafe",
+        ruleset_version="1",
+        tools={"radon": "6.0.1", "ast-grep": "0.50.0"},
+    )
+    base.update(kw)
+    return AxisBag(**base)
+
+
+def _axis_records():
+    return _scopes(BenchmarkScope.AXIS)
+
+
+@pytest.mark.asyncio
+async def test_graded_cell_writes_one_axis_record_after_the_cell_record():
+    """(015 i) a finished cell's axis record follows the cell record, carries
+    the stub's figures and its head/ruleset_version/tools, never a score."""
+    _reset()
+    STATE["progress"] = CellProgress(last_stage="merge", code_finished=True)
+    STATE["grade"] = _grade(score=1.0)
+    STATE["axis"] = _axis_bag()
+    await _run_parent(_spec_json())
+    axis = _axis_records()
+    assert len(axis) == 1
+    assert STATE["axis_measured"] == 1
+    rec = axis[0]
+    assert rec.stage == "axis" and rec.role == "axis"
+    assert rec.model == "deterministic" and rec.prompt_sha == "none:deterministic"
+    assert rec.quality.score is None and rec.quality.judge == "axis"
+    assert rec.outcome is BenchmarkOutcome.NOT_EVALUATED
+    assert rec.axis == _axis_bag()
+    assert rec.axis is not None and rec.axis.head == "f00dcafe"
+    assert rec.axis is not None and rec.axis.ruleset_version == "1"
+    assert rec.kroker_commit == "abc123"
+    # after the cell record, in the cell's own records stream
+    cells = _cell_records()
+    assert len(cells) == 1
+    assert STATE["records"].index(cells[0]) < STATE["records"].index(rec)
+    assert rec.cell_id == cells[0].cell_id and rec.arm == cells[0].arm
+
+
+@pytest.mark.asyncio
+async def test_lost_cell_writes_axis_reason_without_a_checkout():
+    """(015 ii) the child failed before code finished: the axis record still
+    lands, with the reason, and the checkout never ran."""
+    _reset()
+    STATE["child"] = "raise"
+    STATE["progress"] = CellProgress(last_stage="clarify", code_finished=False)
+    await _run_parent(_spec_json())
+    axis = _axis_records()
+    assert len(axis) == 1
+    assert axis[0].axis is not None
+    assert axis[0].axis.reason == "code stage did not finish"
+    assert axis[0].axis.erosion is None
+    assert STATE["axis_calls"] == 1
+    assert STATE["axis_measured"] == 0
+
+
+@pytest.mark.asyncio
+async def test_non_python_language_writes_the_language_reason():
+    """(015 iii) a case whose language is not python: the reason records it
+    and no checkout runs (ruling R3)."""
+    _reset()
+    STATE["progress"] = CellProgress(last_stage="merge", code_finished=True)
+    await _run_parent(_spec_json(language="typescript"))
+    axis = _axis_records()
+    assert len(axis) == 1
+    assert axis[0].axis is not None
+    assert axis[0].axis.reason == "language not python"
+    assert STATE["axis_measured"] == 0
+
+
+@pytest.mark.asyncio
+async def test_absent_integration_branch_writes_the_branch_reason():
+    """(015 iv) the worktree add fails: the reason records the absent branch;
+    the run and its other records are unaffected (contract §2.2)."""
+    _reset()
+    STATE["progress"] = CellProgress(last_stage="merge", code_finished=True)
+    STATE["grade"] = _grade(score=1.0)
+    STATE["axis_branch_absent"] = True
+    await _run_parent(_spec_json())
+    axis = _axis_records()
+    assert len(axis) == 1
+    assert axis[0].axis is not None
+    assert axis[0].axis.reason == "integration branch absent"
+    assert STATE["axis_measured"] == 0
+    # the rest of the run is untouched by the measurement's failure
+    assert STATE["grade_calls"] == 1
+    assert len(_cell_records()) == 1
