@@ -311,6 +311,8 @@ def test_stored_cat_cafe_root_cause_figures():
     assert matrix.no_requirement_results == 10
     assert matrix.labelled == 0
     assert matrix.unlabelled == 0
+
+
 # --- 015 T009 (contract §4): the stored corpus is the negative proof -------------
 
 

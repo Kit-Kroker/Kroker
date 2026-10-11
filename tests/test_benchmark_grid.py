@@ -596,6 +596,8 @@ def test_group_header_oracle_identity():
     with_id = build_grid(build_runs(rec_with_id))
     header_line = render_grid_markdown(with_id).splitlines()[0]
     assert "oracle abcdef01" in header_line
+
+
 # --- 015 T008: the axis columns and the group's axis figures ---------------------
 
 

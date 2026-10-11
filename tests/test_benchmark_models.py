@@ -737,6 +737,8 @@ def test_stored_shape_record_without_oracle_id_loads_with_none():
     data.pop("oracle_id", None)
     loaded = BenchmarkRecord.model_validate(data)
     assert loaded.oracle_id is None
+
+
 # --- 015: the axis bag and the axis record shape (data-model §1-§2) ---
 
 
