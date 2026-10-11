@@ -85,6 +85,7 @@ class _GridGroup(BaseModel):
     arm: str
     generation: str
     commit: str | None
+    oracle_id: str | None = None
     started: int
     graded: int
     lost: int
@@ -190,6 +191,7 @@ def _grid_group(g: Group, rows: tuple[GridRow, ...]) -> _GridGroup:
         arm=g.arm,
         generation=g.generation,
         commit=g.commit,
+        oracle_id=g.oracle_id,
         started=g.started,
         graded=g.graded,
         lost=g.lost,
@@ -210,7 +212,15 @@ def build_grid(runs: list[Run]) -> Grid:
     case, arm, generation (`012` first), then the start of the group's
     first run; rows by start."""
     groups = group_runs(runs)
-    groups.sort(key=lambda g: (g.case_id, g.arm, g.generation, g.runs[0].started_at or _EPOCH))
+    groups.sort(
+        key=lambda g: (
+            g.case_id,
+            g.arm,
+            g.generation,
+            g.oracle_id or "",
+            g.runs[0].started_at or _EPOCH,
+        )
+    )
     stages = _rendered_stages(runs)
     grid_groups = tuple(
         _grid_group(
@@ -254,6 +264,8 @@ def _header_text(g: _GridGroup) -> str:
     `arm recovered`."""
     commit = g.commit if g.commit is not None else "not recorded"
     parts = [f"{g.case_id} / {g.harness} / {g.arm} / commit {commit}"]
+    if g.oracle_id is not None:
+        parts.append(f"oracle {g.oracle_id.removeprefix('sha256:')[:8]}")
     if g.generation == "pre012":
         parts.append("untrusted (pre-012)")
     if any(row.run.arm_recovered for row in g.rows):

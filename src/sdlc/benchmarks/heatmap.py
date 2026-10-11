@@ -112,6 +112,7 @@ class HeatmapRow(BaseModel):
     lost_before_code: int
     lost_tokens: int | None
     no_stage_recorded: int
+    oracle_id: str | None = None
 
 
 class LayeredHeatmap(BaseModel):
@@ -186,15 +187,16 @@ def build_layers(runs: list[Run], language_by_case: dict[str, str] | None = None
     order = {stage: i for i, stage in enumerate(CELL_STAGE_ORDER)}
     code_idx = order["code"]
 
-    by_row: dict[tuple[str, str, str, str], list[Run]] = defaultdict(list)
+    by_row: dict[tuple[str, str, str, str, str | None], list[Run]] = defaultdict(list)
     for run in runs:
-        by_row[(run.case_id, run.harness, run.arm, run.generation)].append(run)
+        by_row[(run.case_id, run.harness, run.arm, run.generation, run.oracle_id)].append(run)
     keys = sorted(
         by_row,
         key=lambda k: (
             k[0],
             k[2],
             k[3],
+            k[4] or "",
             min(r.started_at or _EPOCH for r in by_row[k]),
         ),
     )
@@ -210,7 +212,7 @@ def build_layers(runs: list[Run], language_by_case: dict[str, str] | None = None
     copy_rows: list[bool] = []
 
     for key in keys:
-        case_id, harness, arm, generation = key
+        case_id, harness, arm, generation, oracle_id = key
         members = sorted(by_row[key], key=lambda r: r.started_at or _EPOCH)
         positions = [_attrition_position(m) for m in members]
         idx = [order[p] if p in order else None for p in positions]
@@ -232,9 +234,12 @@ def build_layers(runs: list[Run], language_by_case: dict[str, str] | None = None
 
         lost = [m for m in members if m.status == "lost"]
         token_list = [m.tokens for m in lost if m.tokens is not None]
+        row_key = f"{case_id} / {harness} / {arm} / {generation}"
+        if oracle_id is not None:
+            row_key = f"{row_key} / oracle {oracle_id.removeprefix('sha256:')[:8]}"
         rows.append(
             HeatmapRow(
-                key=f"{case_id} / {harness} / {arm} / {generation}",
+                key=row_key,
                 case_id=case_id,
                 harness=harness,
                 arm=arm,
@@ -248,6 +253,7 @@ def build_layers(runs: list[Run], language_by_case: dict[str, str] | None = None
                 ),
                 lost_tokens=sum(token_list) if token_list else None,
                 no_stage_recorded=sum(1 for m in members if m.last_stage is None),
+                oracle_id=oracle_id,
             )
         )
 

@@ -757,3 +757,38 @@ def test_json_shape_and_row_keys():
     assert analyze["row"] == "c / opencode / a1 / pre012"
     # oracle 4/5 is a fail (6.3), so the rejected run lands in reject_fail
     assert analyze["reject_fail"] == 1
+
+
+# --- oracle identity row splitting (T004) -------------------------------------
+
+
+def test_two_oracle_identities_give_two_gate_oracle_rows_and_no_count_shared():
+    from sdlc.benchmarks.gate_oracle import build_gate_oracle
+    from sdlc.benchmarks.runs import build_runs
+
+    r1_id = "b1/c#opencode#a1"
+    r2_id = "b2/c#opencode#a1"
+    r1 = _graded_run(r1_id, 5, 5, kroker_commit="x", oracle_id="sha256:oracle1") + [
+        _gate(
+            r1_id,
+            "analyze",
+            BenchmarkOutcome.PASS,
+            kroker_commit="x",
+            oracle_id="sha256:oracle1",
+        )
+    ]
+    r2 = _graded_run(r2_id, 5, 5, kroker_commit="x", oracle_id="sha256:oracle2") + [
+        _gate(
+            r2_id,
+            "analyze",
+            BenchmarkOutcome.PASS,
+            kroker_commit="x",
+            oracle_id="sha256:oracle2",
+        )
+    ]
+    go = build_gate_oracle(build_runs(r1 + r2))
+    analyze_rows = [r for r in go.rows if r.gate == "analyze"]
+    assert len(analyze_rows) == 2
+    assert analyze_rows[0].n == 1
+    assert analyze_rows[1].n == 1
+    assert analyze_rows[0].row != analyze_rows[1].row

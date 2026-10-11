@@ -48,7 +48,7 @@ def _row_scope(r: BenchmarkRecord) -> bool:
     return r.scope in _ROW_SCOPES
 
 
-_RowKey = tuple[str, str, str, str, str]
+_RowKey = tuple[str, str, str, str, str, str | None]
 _RowMembers = list[tuple[Run, list[BenchmarkRecord]]]
 
 
@@ -106,21 +106,19 @@ def compute_summaries(
     runs = build_runs(records)
     decisions = composite_shown(runs)
 
-    # R-11: one row per (case, stage, harness, arm, generation), holding
-    # the runs of that key and their records at that stage.
-    stage_rows: dict[tuple[str, str, str, str, str], list[tuple[Run, list[BenchmarkRecord]]]] = (
-        defaultdict(list)
-    )
-    oracle_rows: dict[tuple[str, str, str, str, str], list[Run]] = defaultdict(list)
+    # R-11: one row per (case, stage, harness, arm, generation, oracle_id),
+    # holding the runs of that key and their records at that stage.
+    stage_rows: dict[_RowKey, list[tuple[Run, list[BenchmarkRecord]]]] = defaultdict(list)
+    oracle_rows: dict[_RowKey, list[Run]] = defaultdict(list)
     for run in runs:
         row_records = [r for r in run.records if _row_scope(r)]
         for stage in sorted({r.stage for r in row_records}):
-            key = (run.case_id, stage, run.harness, run.arm, run.generation)
+            key = (run.case_id, stage, run.harness, run.arm, run.generation, run.oracle_id)
             stage_rows[key].append((run, [r for r in row_records if r.stage == stage]))
         if run.status == "graded" and any(r.scope is BenchmarkScope.ORACLE for r in run.records):
             # Contract §5.6: an oracle record of a lost run is in no row;
             # a graded run without an oracle record has nothing to add.
-            okey = (run.case_id, "oracle", run.harness, run.arm, run.generation)
+            okey = (run.case_id, "oracle", run.harness, run.arm, run.generation, run.oracle_id)
             oracle_rows[okey].append(run)
 
     ctx = _normalisation(stage_rows, oracle_rows)
@@ -132,7 +130,9 @@ def compute_summaries(
     summaries += [
         _oracle_row(key, members, decisions, ctx, w) for key, members in oracle_rows.items()
     ]
-    summaries.sort(key=lambda s: (s.case_id, s.stage, s.generation, s.arm, s.model))
+    summaries.sort(
+        key=lambda s: (s.case_id, s.stage, s.generation, s.arm, s.oracle_id or "", s.model)
+    )
     return summaries
 
 
@@ -175,13 +175,13 @@ def _composite_for(
 
 
 def _stage_row(
-    key: tuple[str, str, str, str, str],
+    key: _RowKey,
     members: list[tuple[Run, list[BenchmarkRecord]]],
     decisions,
     ctx,
     w,
 ) -> BenchmarkSummary:
-    case_id, stage, _harness_s, arm, generation = key
+    case_id, stage, _harness_s, arm, generation, oracle_id = key
     run_records = [r for _run, recs in members for r in recs]
     counted = _counted(run_records)
     rubric = [
@@ -238,6 +238,7 @@ def _stage_row(
         errors=[r.error for r in counted if r.error],
         cell_id=next((r.cell_id for r in run_records if r.cell_id is not None), None),
         arm=arm,
+        oracle_id=oracle_id,
         pre012=(generation == "pre012"),
         generation=generation,
         pass_n=pass_n,
@@ -250,13 +251,13 @@ def _stage_row(
 
 
 def _oracle_row(
-    key: tuple[str, str, str, str, str],
+    key: _RowKey,
     graded_runs: list[Run],
     decisions,
     ctx,
     w,
 ) -> BenchmarkSummary:
-    case_id, _stage, _harness_s, arm, generation = key
+    case_id, _stage, _harness_s, arm, generation, oracle_id = key
     oracle_records = [
         [r for r in run.records if r.scope is BenchmarkScope.ORACLE][-1] for run in graded_runs
     ]
@@ -283,6 +284,7 @@ def _oracle_row(
         errors=[r.error for r in counted if r.error],
         cell_id=next((r.cell_id for r in counted if r.cell_id is not None), None),
         arm=arm,
+        oracle_id=oracle_id,
         pre012=(generation == "pre012"),
         generation=generation,
         all_pass=(sum(1 for run in graded_runs if run.all_pass), len(graded_runs)),

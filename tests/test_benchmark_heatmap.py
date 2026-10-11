@@ -739,3 +739,21 @@ def test_us3_scenario_one_failed_then_repaired_attempt():
     hot = [c for c in hm.cells if c.num > 0 and c is not first and c is not wasted]
     assert hot == []
     assert len(hm.oracle_marks) == 1
+
+
+# --- oracle identity row splitting (T004) -------------------------------------
+
+
+def test_two_oracle_identities_give_two_heatmap_rows_and_no_count_shared():
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.runs import build_runs
+
+    r1 = _graded("b1/c1#opencode#a1", _T0, commit="x")
+    r2 = _graded("b2/c1#opencode#a1", _T1, commit="x")
+    r1_with_id = [r.model_copy(update={"oracle_id": "sha256:oracle1"}) for r in r1]
+    r2_with_id = [r.model_copy(update={"oracle_id": "sha256:oracle2"}) for r in r2]
+
+    hm = build_layers(build_runs(r1_with_id + r2_with_id))
+    assert len(hm.rows) == 2
+    assert hm.rows[0].started == 1
+    assert hm.rows[1].started == 1

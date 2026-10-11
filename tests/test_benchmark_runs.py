@@ -843,3 +843,76 @@ def test_attempt_sort_key_is_attempt_or_zero_then_started_at():
     when = datetime(2026, 7, 4, 10)
     assert attempt_sort_key(_record(attempt=2, speed=_speed(when))) == (2, when)
     assert attempt_sort_key(_record(attempt=None, speed=_speed(when))) == (0, when)
+
+
+# --- oracle_id on Run and grouping (T004) -------------------------------------
+
+
+def test_run_oracle_id_resolution():
+    from sdlc.benchmarks.runs import build_runs
+
+    # from cell record
+    cell_rec = _record(
+        run_id="b1/c#opencode#a",
+        scope=BenchmarkScope.CELL,
+        stage="cell",
+        role="cell",
+        oracle_id="sha256:cell_id_123",
+    )
+    (run1,) = build_runs([cell_rec])
+    assert run1.oracle_id == "sha256:cell_id_123"
+
+    # else from oracle record
+    oracle_rec = _oracle_record(
+        run_id="b1/c#opencode#a",
+        oracle_id="sha256:oracle_id_456",
+    )
+    (run2,) = build_runs([_record(run_id="b1/c#opencode#a"), oracle_rec])
+    assert run2.oracle_id == "sha256:oracle_id_456"
+
+    # cell record takes precedence over oracle record
+    cell_rec2 = _record(
+        run_id="b1/c#opencode#a",
+        scope=BenchmarkScope.CELL,
+        stage="cell",
+        role="cell",
+        oracle_id="sha256:cell_id_123",
+    )
+    (run3,) = build_runs([cell_rec2, oracle_rec])
+    assert run3.oracle_id == "sha256:cell_id_123"
+
+    # else None
+    (run4,) = build_runs([_record(run_id="b1/c#opencode#a")])
+    assert run4.oracle_id is None
+
+
+def test_two_graded_runs_with_different_oracle_identities_form_two_groups():
+    from sdlc.benchmarks.runs import build_runs, group_runs
+
+    r1 = _graded_run("b1/c#opencode#a", 4, 5, kroker_commit="cmt", oracle_id="sha256:id1")
+    r2 = _graded_run("b2/c#opencode#a", 4, 5, kroker_commit="cmt", oracle_id="sha256:id2")
+    groups = group_runs(build_runs(r1 + r2))
+    assert len(groups) == 2
+    assert {g.oracle_id for g in groups} == {"sha256:id1", "sha256:id2"}
+
+
+def test_lost_run_with_same_oracle_identity_shares_group():
+    from sdlc.benchmarks.runs import build_runs, group_runs
+
+    r_graded = _graded_run("b1/c#opencode#a", 4, 5, kroker_commit="cmt", oracle_id="sha256:id1")
+    r_lost = [
+        _record(run_id="b2/c#opencode#a", stage="research", kroker_commit="cmt"),
+        _record(
+            run_id="b2/c#opencode#a",
+            scope=BenchmarkScope.CELL,
+            stage="cell",
+            role="cell",
+            oracle_id="sha256:id1",
+            kroker_commit="cmt",
+        ),
+    ]
+    groups = group_runs(build_runs(r_graded + r_lost))
+    assert len(groups) == 1
+    assert groups[0].started == 2
+    assert groups[0].graded == 1
+    assert groups[0].lost == 1

@@ -692,3 +692,40 @@ def test_review_row_not_evaluated_excluded_and_contract_judge_no_quality():
     assert review.mean_quality is None
     assert review.pass_n == 1
     assert review.pass_d == 2
+
+
+# --- oracle identity row splitting (T004) -------------------------------------
+
+
+def test_two_oracle_identities_give_two_summary_rows_and_no_count_shared():
+    # Two graded runs of same case, stage, harness, arm, generation, but different oracle_id
+    rec1 = _012_rec(
+        "c1",
+        "code",
+        "dev",
+        "m1",
+        q=0.8,
+        cell_id="c1#opencode#a1",
+        arm="a1",
+    ).model_copy(update={"run_id": "b1/c1#opencode#a1"})
+    rec2 = _012_rec(
+        "c1",
+        "code",
+        "dev",
+        "m1",
+        q=0.8,
+        cell_id="c1#opencode#a1",
+        arm="a1",
+    ).model_copy(update={"run_id": "b2/c1#opencode#a1"})
+    c1 = _cell_scope_rec("c1", "c1#opencode#a1", "a1").model_copy(
+        update={"oracle_id": "sha256:oracle1", "run_id": "b1/c1#opencode#a1"}
+    )
+    c2 = _cell_scope_rec("c1", "c1#opencode#a1", "a1").model_copy(
+        update={"oracle_id": "sha256:oracle2", "run_id": "b2/c1#opencode#a1"}
+    )
+    rows = compute_summaries([rec1, c1, rec2, c2])
+    code_rows = [s for s in rows if s.stage == "code"]
+    assert len(code_rows) == 2
+    assert code_rows[0].n == 1
+    assert code_rows[1].n == 1
+    assert code_rows[0].oracle_id != code_rows[1].oracle_id

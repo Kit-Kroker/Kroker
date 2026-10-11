@@ -81,6 +81,7 @@ class Run(BaseModel):
     tokens: int | None
     wall_clock_s: float | None
     records: tuple[BenchmarkRecord, ...] = Field(exclude=True)
+    oracle_id: str | None = None
 
     @property
     def partial_credit(self) -> float | None:
@@ -114,7 +115,7 @@ class Run(BaseModel):
 
 
 class Group(BaseModel):
-    """The runs of one (case, harness, arm, generation, commit) — FR-005's
+    """The runs of one (case, harness, arm, generation, commit, oracle_id) — FR-005's
     'never combine generations' and FR-008's commit groups both live in the
     key (research R-4)."""
 
@@ -125,6 +126,7 @@ class Group(BaseModel):
     arm: str
     generation: Generation
     commit: str | None
+    oracle_id: str | None = None
     runs: tuple[Run, ...]
     started: int
     graded: int
@@ -357,6 +359,17 @@ def _build_run(run_id: str, records: list[BenchmarkRecord]) -> Run:
         oracle_passed, oracle_total = None, None
     discarded = len(oracle_records) if status == "lost" else 0
 
+    oracle_id: str | None = None
+    for r in cell_records:
+        if r.oracle_id is not None:
+            oracle_id = r.oracle_id
+            break
+    if oracle_id is None:
+        for r in reversed(oracle_records):
+            if r.oracle_id is not None:
+                oracle_id = r.oracle_id
+                break
+
     arm, arm_recovered = _arm_of(records, run_id)
     parsed = parse_run_id(run_id)
     return Run(
@@ -382,6 +395,7 @@ def _build_run(run_id: str, records: list[BenchmarkRecord]) -> Run:
         tokens=_tokens(records),
         wall_clock_s=_wall_clock(records),
         records=tuple(records),
+        oracle_id=oracle_id,
     )
 
 
@@ -406,17 +420,21 @@ def build_runs(records: list[BenchmarkRecord]) -> list[Run]:
 
 
 def group_runs(runs: list[Run]) -> list[Group]:
-    """Groups keyed (case, harness, arm, generation, commit) — contract
+    """Groups keyed (case, harness, arm, generation, commit, oracle_id) — contract
     §1.8. A group's figures are over its graded runs; `sd` is the sample
     deviation, None under two; `low_n` under five."""
-    keyed: dict[tuple[str, str, str, Generation, str | None], list[Run]] = defaultdict(list)
+    keyed: dict[tuple[str, str, str, Generation, str | None, str | None], list[Run]] = defaultdict(
+        list
+    )
     for run in runs:
-        keyed[(run.case_id, run.harness, run.arm, run.generation, run.commit)].append(run)
+        keyed[
+            (run.case_id, run.harness, run.arm, run.generation, run.commit, run.oracle_id)
+        ].append(run)
 
     groups: list[Group] = []
     for key, members in keyed.items():
         members.sort(key=lambda run: run.started_at or _EPOCH)
-        case_id, harness, arm, generation, commit = key
+        case_id, harness, arm, generation, commit, oracle_id = key
         graded = [r for r in members if r.status == "graded"]
         credits = [r.partial_credit for r in graded if r.partial_credit is not None]
         counts = {s: 0 for s in ("graded", "lost", "grading_failed", "no_oracle")}
@@ -431,6 +449,7 @@ def group_runs(runs: list[Run]) -> list[Group]:
                 arm=arm,
                 generation=generation,
                 commit=commit,
+                oracle_id=oracle_id,
                 runs=tuple(members),
                 started=len(members),
                 graded=counts["graded"],
@@ -446,7 +465,14 @@ def group_runs(runs: list[Run]) -> list[Group]:
             )
         )
     groups.sort(
-        key=lambda g: (g.case_id, g.harness, g.arm, g.generation, g.runs[0].started_at or _EPOCH)
+        key=lambda g: (
+            g.case_id,
+            g.harness,
+            g.arm,
+            g.generation,
+            g.oracle_id or "",
+            g.runs[0].started_at or _EPOCH,
+        )
     )
     return groups
 

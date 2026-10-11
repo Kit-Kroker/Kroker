@@ -485,6 +485,7 @@ class BenchmarkSummary(BaseModel):
     # never mixes kinds (contract §7.3).
     cell_id: str | None = None
     arm: str | None = None
+    oracle_id: str | None = None
     pre012: bool = False
     # 013 (data-model §2): optional figures keyed by the run model
     # (research R-11). Defaults keep every existing construction valid.

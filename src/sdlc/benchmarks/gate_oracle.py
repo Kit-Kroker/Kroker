@@ -47,10 +47,19 @@ _GATE_SCOPES = (BenchmarkScope.STAGE, BenchmarkScope.TASK_ATTEMPT)
 _EPOCH = datetime.min
 
 
-def _row_key(case_id: str, harness: str, arm: str, generation: str) -> str:
+def _row_key(
+    case_id: str,
+    harness: str,
+    arm: str,
+    generation: str,
+    oracle_id: str | None = None,
+) -> str:
     """The heatmap row key (data-model §3 `HeatmapRow.key`), formed the same
     way `build_layers` forms it."""
-    return f"{case_id} / {harness} / {arm} / {generation}"
+    base = f"{case_id} / {harness} / {arm} / {generation}"
+    if oracle_id is not None:
+        return f"{base} / oracle {oracle_id.removeprefix('sha256:')[:8]}"
+    return base
 
 
 class GateRow(BaseModel):
@@ -169,25 +178,26 @@ def build_gate_oracle(runs: list[Run]) -> GateOracle:
     generation)` and gate in `GATE_STAGES` that has a verdict in at least one
     graded run of the row; the qa gate of an all-copy row is the §6.6 copy
     row."""
-    by_row: dict[tuple[str, str, str, str], list[Run]] = defaultdict(list)
+    by_row: dict[tuple[str, str, str, str, str | None], list[Run]] = defaultdict(list)
     for run in runs:
-        by_row[(run.case_id, run.harness, run.arm, run.generation)].append(run)
+        by_row[(run.case_id, run.harness, run.arm, run.generation, run.oracle_id)].append(run)
     keys = sorted(
         by_row,
         key=lambda k: (
             k[0],
             k[2],
             k[3],
+            k[4] or "",
             min(r.started_at or _EPOCH for r in by_row[k]),
         ),
     )
 
     rows: list[GateRow] = []
     for key in keys:
-        case_id, harness, arm, generation = key
+        case_id, harness, arm, generation, oracle_id = key
         members = by_row[key]
         graded = [r for r in members if r.status == "graded"]
-        row = _row_key(case_id, harness, arm, generation)
+        row = _row_key(case_id, harness, arm, generation, oracle_id)
         for gate in GATE_STAGES:
             counted = _counted(graded, gate)
             if gate == "qa" and not counted:

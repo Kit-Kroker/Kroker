@@ -573,3 +573,23 @@ def test_run_ids_with_hashes_render_verbatim_and_ascii():
         md.splitlines()[0]
         == "### c1 / crew:opencode / team#x / commit not recorded untrusted (pre-012)"
     )
+
+
+# --- group header oracle identity (T004) --------------------------------------
+
+
+def test_group_header_oracle_identity():
+    from sdlc.benchmarks.grid import build_grid, render_grid_markdown
+    from sdlc.benchmarks.runs import build_runs
+
+    # without oracle_id -> prints nothing about oracle in header
+    without_id = build_grid(build_runs(_graded("b1/c1#opencode#a1", _T0, commit="x")))
+    assert "oracle" not in render_grid_markdown(without_id).splitlines()[0]
+
+    # with oracle_id -> prints oracle <8 hex>
+    rec = _graded("b1/c1#opencode#a1", _T0, commit="x")
+    # inject oracle_id on cell/oracle records
+    rec_with_id = [r.model_copy(update={"oracle_id": "sha256:abcdef0123456789"}) for r in rec]
+    with_id = build_grid(build_runs(rec_with_id))
+    header_line = render_grid_markdown(with_id).splitlines()[0]
+    assert "oracle abcdef01" in header_line
