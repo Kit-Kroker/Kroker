@@ -18,5 +18,5 @@ the repo. `AGENTS.md` explains the distinction.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`.specify/specs/013-benchmark-scoring-output/plan.md`
+`.specify/specs/015-erosion-verbosity/plan.md`
 <!-- SPECKIT END -->
