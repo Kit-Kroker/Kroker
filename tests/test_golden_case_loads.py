@@ -40,7 +40,10 @@ def test_cat_cafe_case_loads_as_one_cell():
     spec = load_case_spec(str(CAT_CASE))
     assert spec.case_id == "cat-cafe-monitoring"
     assert spec.research_enabled is True
-    assert len(expand_matrix(spec)) == 1
+    cells = expand_matrix(spec)
+    assert len(cells) == 2
+    strong_cell = next(c for c in cells if c.arm_name == spec.strong_arm)
+    assert strong_cell.cell_id == "cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.2"
 
 
 def test_cat_cafe_ships_five_rubrics():

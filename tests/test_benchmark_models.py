@@ -1,11 +1,16 @@
 from datetime import datetime
 
+import pytest
+from pydantic import ValidationError
+
 from sdlc.benchmarks.models import (
+    Arm,
     BenchmarkCell,
     BenchmarkOutcome,
     BenchmarkRecord,
     BenchmarkScope,
     BenchmarkSummary,
+    CaseRole,
     CaseSpec,
     CompositeWeights,
     CostBag,
@@ -618,3 +623,108 @@ def test_benchmark_summary_013_optional_fields_set_and_read_back():
     assert s.all_pass == (0, 2)
     assert s.tokens == 150
     assert s.qa_is_copy is True
+
+
+def test_case_spec_role_and_visibility_defaults():
+    spec = CaseSpec(
+        case_id="dummy",
+        idea_summary="summary",
+        harnesses=["opencode"],
+        models=["m"],
+        judge_model="j",
+    )
+    assert spec.role == CaseRole.CORPUS
+    assert spec.visibility is None
+    assert spec.strong_arm is None
+    assert spec.weak_arm is None
+
+
+def test_case_spec_roles_and_visibilities_load():
+    for r in ("corpus", "smoke", "probe", "parked"):
+        spec = CaseSpec(
+            case_id="dummy",
+            idea_summary="summary",
+            harnesses=["opencode"],
+            models=["m"],
+            judge_model="j",
+            role=r,
+        )
+        assert spec.role == r
+
+    for v in ("private", "public"):
+        spec = CaseSpec(
+            case_id="dummy",
+            idea_summary="summary",
+            harnesses=["opencode"],
+            models=["m"],
+            judge_model="j",
+            visibility=v,
+        )
+        assert spec.visibility == v
+
+
+def test_case_spec_unknown_role_fails():
+    with pytest.raises(ValidationError):
+        CaseSpec(
+            case_id="dummy",
+            idea_summary="summary",
+            harnesses=["opencode"],
+            models=["m"],
+            judge_model="j",
+            role="unknown_role",
+        )
+
+
+def test_case_spec_strong_arm_validation():
+    arm1 = Arm(name="arm1", role_models={"dev": "m1"})
+    arm2 = Arm(name="arm2", role_models={"dev": "m2"})
+
+    # strong_arm naming no arm in arms fails
+    with pytest.raises(ValidationError):
+        CaseSpec(
+            case_id="dummy",
+            idea_summary="summary",
+            harnesses=["opencode"],
+            models=["m"],
+            judge_model="j",
+            arms=[arm1],
+            strong_arm="nonexistent",
+        )
+
+    # strong_arm == weak_arm fails
+    with pytest.raises(ValidationError):
+        CaseSpec(
+            case_id="dummy",
+            idea_summary="summary",
+            harnesses=["opencode"],
+            models=["m"],
+            judge_model="j",
+            arms=[arm1, arm2],
+            strong_arm="arm1",
+            weak_arm="arm1",
+        )
+
+    # one of the two set alone is allowed
+    spec_strong_only = CaseSpec(
+        case_id="dummy",
+        idea_summary="summary",
+        harnesses=["opencode"],
+        models=["m"],
+        judge_model="j",
+        arms=[arm1, arm2],
+        strong_arm="arm1",
+    )
+    assert spec_strong_only.strong_arm == "arm1"
+    assert spec_strong_only.weak_arm is None
+
+    spec_weak_only = CaseSpec(
+        case_id="dummy",
+        idea_summary="summary",
+        harnesses=["opencode"],
+        models=["m"],
+        judge_model="j",
+        arms=[arm1, arm2],
+        weak_arm="arm2",
+    )
+    assert spec_weak_only.weak_arm == "arm2"
+    assert spec_weak_only.strong_arm is None

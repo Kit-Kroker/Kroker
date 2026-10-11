@@ -76,6 +76,21 @@ description: "# Introduction\nThe purpose of this project is to develop a Python
 mode: greenfield
 language: python
 repo_url: /srv/scratch-repos/deveval-readtime
+role: corpus
+visibility: public
+strong_arm: zai-coding-plan-glm-5.2
+weak_arm: zai-coding-plan-glm-5.3-flash
+arms:
+  - name: zai-coding-plan-glm-5.2
+    role_models:
+      dev: zai-coding-plan/glm-5.2
+      test: zai-coding-plan/glm-5.2
+      devops: zai-coding-plan/glm-5.2
+  - name: zai-coding-plan-glm-5.3-flash
+    role_models:
+      dev: zai-coding-plan/glm-5.3-flash
+      test: zai-coding-plan/glm-5.3-flash
+      devops: zai-coding-plan/glm-5.3-flash
 research_enabled: false
 network_required: false
 harnesses:

@@ -54,6 +54,21 @@ description: |
 mode: greenfield
 language: python
 repo_url: /srv/scratch-repos/cat-cafe-monitoring
+role: corpus
+visibility: private
+strong_arm: zai-coding-plan-glm-5.2
+weak_arm: zai-coding-plan-glm-5.3-flash
+arms:
+  - name: zai-coding-plan-glm-5.2
+    role_models:
+      dev: zai-coding-plan/glm-5.2
+      test: zai-coding-plan/glm-5.2
+      devops: zai-coding-plan/glm-5.2
+  - name: zai-coding-plan-glm-5.3-flash
+    role_models:
+      dev: zai-coding-plan/glm-5.3-flash
+      test: zai-coding-plan/glm-5.3-flash
+      devops: zai-coding-plan/glm-5.3-flash
 research_enabled: true
 harnesses:
   - opencode

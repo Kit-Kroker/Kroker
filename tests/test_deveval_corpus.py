@@ -50,6 +50,15 @@ def test_committed_cases_are_not_quarantined(case_dir):
 
 
 @pytest.mark.parametrize("case_dir", DEVEVAL, ids=lambda p: p.name)
+def test_imported_cases_state_role_and_visibility(case_dir):
+    from sdlc.benchmarks.models import CaseRole, CaseVisibility
+
+    spec = load_case_spec(str(case_dir / "case.yaml"))
+    assert spec.role == CaseRole.CORPUS
+    assert spec.visibility == CaseVisibility.PUBLIC
+
+
+@pytest.mark.parametrize("case_dir", DEVEVAL, ids=lambda p: p.name)
 def test_oracle_suites_do_not_leak_into_reference(case_dir):
     """reference/ is the gold implementation; a copy of the oracle inside it
     would hand E-81's Oracle Test its own answer key.

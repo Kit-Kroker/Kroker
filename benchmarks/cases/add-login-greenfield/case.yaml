@@ -7,6 +7,8 @@ description: |
   frozen contract). Sized for a single short factory run.
 mode: greenfield
 repo_url: null
+role: probe
+visibility: private
 harnesses:
   - claude_code
   - opencode

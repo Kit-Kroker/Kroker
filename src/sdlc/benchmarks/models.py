@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -235,6 +235,18 @@ class CompositeWeights(BaseModel):
     speed: float = 0.2
 
 
+class CaseRole(StrEnum):
+    CORPUS = "corpus"
+    SMOKE = "smoke"
+    PROBE = "probe"
+    PARKED = "parked"
+
+
+class CaseVisibility(StrEnum):
+    PRIVATE = "private"
+    PUBLIC = "public"
+
+
 class CaseSpec(BaseModel):
     """A golden case: the idea + the (harness, model) matrix to run it on."""
 
@@ -287,6 +299,27 @@ class CaseSpec(BaseModel):
     # PipelineConfig.gate_timeout_hours (default 48h) if nothing answers the
     # escalation — pass --gate-policy off for a fire-and-forget batch run.
     gate_policy: GatePolicy = GatePolicy.SOFT
+    role: CaseRole = CaseRole.CORPUS
+    visibility: CaseVisibility | None = None
+    strong_arm: str | None = None
+    weak_arm: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_arms_selection(self) -> Self:
+        arm_names = {arm.name for arm in self.arms}
+        if self.strong_arm is not None and self.strong_arm not in arm_names:
+            raise ValueError(
+                f"strong_arm {self.strong_arm!r} not found in arms: {sorted(arm_names)}"
+            )
+        if self.weak_arm is not None and self.weak_arm not in arm_names:
+            raise ValueError(f"weak_arm {self.weak_arm!r} not found in arms: {sorted(arm_names)}")
+        if (
+            self.strong_arm is not None
+            and self.weak_arm is not None
+            and self.strong_arm == self.weak_arm
+        ):
+            raise ValueError(f"strong_arm and weak_arm cannot be identical: {self.strong_arm!r}")
+        return self
 
 
 class BenchmarkCell(BaseModel):

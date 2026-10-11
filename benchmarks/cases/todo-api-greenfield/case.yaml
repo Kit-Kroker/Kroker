@@ -19,6 +19,8 @@ description: |
 mode: greenfield
 language: python
 repo_url: /srv/scratch-repos/todo-api-greenfield
+role: smoke
+visibility: private
 research_enabled: true
 harnesses:
   - opencode

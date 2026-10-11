@@ -21,6 +21,8 @@ mode: greenfield
 # case's assertions must be stated against the worktree, or the scratch repo
 # must be visible wherever they are evaluated.
 repo_url: /srv/scratch-repos/todo-api-greenfield
+role: probe
+visibility: private
 harnesses: [crew]
 models:
   # Unused once `arms` is set (expand_matrix ignores `models` when arms is
