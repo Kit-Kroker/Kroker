@@ -1,7 +1,9 @@
-"""Tests for benchmark acceptance record, offline verdict, and YAML persistence (T005)."""
+"""Tests for benchmark acceptance record, offline verdict, separation,
+and YAML persistence (T005, T014)."""
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from sdlc.benchmarks.acceptance import (
@@ -16,8 +18,46 @@ from sdlc.benchmarks.acceptance import (
     decide,
     load_acceptance,
     save_acceptance,
+    separation,
 )
 from sdlc.benchmarks.models import CaseRole, CaseVisibility
+from sdlc.benchmarks.runs import Run
+
+
+def _make_run(
+    run_id: str,
+    arm: str,
+    passed: int | None = 10,
+    total: int | None = 10,
+    status: str = "graded",
+    oracle_id: str | None = "oid-curr",
+    case_id: str = "case-1",
+) -> Run:
+    return Run(
+        run_id=run_id,
+        bench_run_id="b1",
+        case_id=case_id,
+        harness="opencode",
+        arm=arm,
+        arm_recovered=False,
+        generation="012",
+        commit="c1",
+        tree_dirty=False,
+        started_at=None,
+        status=status,  # type: ignore[arg-type]
+        status_derived=False,
+        last_stage="qa",
+        pipeline_finished=True,
+        oracle_passed=passed,
+        oracle_total=total,
+        discarded_oracle_records=0,
+        tasks=(),
+        qa_is_copy=False,
+        tokens=100,
+        wall_clock_s=10.0,
+        records=(),
+        oracle_id=oracle_id,
+    )
 
 
 def test_constants_of_names():
@@ -171,7 +211,6 @@ def test_load_acceptance_on_missing_file_returns_none(tmp_path: Path):
 
 
 def test_exposure_validation():
-    import pytest
     from pydantic import ValidationError
 
     # valid exposures
@@ -183,3 +222,208 @@ def test_exposure_validation():
     # invalid exposure fails
     with pytest.raises(ValidationError):
         AcceptanceRecord(case_id="c", verdict=Verdict.NOT_ASSESSED, exposure="invalid")  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# T014 Separation and full verdict tests (US1 scenarios 5-9, FR-007-009)
+# ---------------------------------------------------------------------------
+
+
+def test_separation_strong_only_not_all_1_gives_not_assessed():
+    runs = [_make_run("r1", "strong", 8, 10)]
+    sep = separation(runs, strong="strong", weak="weak", oracle_id="oid-curr")
+    assert sep.passed is None
+    ref = SuiteCheck(passed=True, tests_passed=10, tests_total=10)
+    floor = SuiteCheck(passed=True, tests_passed=0, tests_total=10)
+    verdict, reason, detail = decide(ref, floor, sep)
+    assert verdict == Verdict.NOT_ASSESSED
+    assert reason is None
+
+
+def test_separation_one_run_per_arm_margin_0_15_gives_provisional():
+    runs = [
+        _make_run("r1", "strong", 3, 4),  # 0.75
+        _make_run("r2", "weak", 2, 4),  # 0.50
+    ]
+    sep = separation(runs, strong="strong", weak="weak", oracle_id="oid-curr")
+    assert sep.passed is True
+    assert sep.margin == pytest.approx(0.25)
+    ref = SuiteCheck(passed=True, tests_passed=4, tests_total=4)
+    floor = SuiteCheck(passed=True, tests_passed=0, tests_total=4)
+    verdict, reason, _ = decide(ref, floor, sep)
+    assert verdict == Verdict.PROVISIONAL
+    assert reason is None
+
+
+def test_separation_three_runs_per_arm_with_margin_gives_accepted():
+    runs = [
+        _make_run("s1", "strong", 8, 10),
+        _make_run("s2", "strong", 9, 10),
+        _make_run("s3", "strong", 7, 10),  # mean 0.80
+        _make_run("w1", "weak", 5, 10),
+        _make_run("w2", "weak", 6, 10),
+        _make_run("w3", "weak", 4, 10),  # mean 0.50
+    ]
+    sep = separation(runs, strong="strong", weak="weak", oracle_id="oid-curr")
+    assert sep.passed is True
+    assert sep.margin == pytest.approx(0.30)
+    ref = SuiteCheck(passed=True, tests_passed=10, tests_total=10)
+    floor = SuiteCheck(passed=True, tests_passed=0, tests_total=10)
+    verdict, reason, _ = decide(ref, floor, sep)
+    assert verdict == Verdict.ACCEPTED
+    assert reason is None
+
+
+def test_separation_three_on_one_arm_two_on_other_gives_provisional():
+    runs = [
+        _make_run("s1", "strong", 8, 10),
+        _make_run("s2", "strong", 9, 10),
+        _make_run("s3", "strong", 7, 10),
+        _make_run("w1", "weak", 5, 10),
+        _make_run("w2", "weak", 5, 10),
+    ]
+    sep = separation(runs, strong="strong", weak="weak", oracle_id="oid-curr")
+    assert sep.passed is True
+    ref = SuiteCheck(passed=True, tests_passed=10, tests_total=10)
+    floor = SuiteCheck(passed=True, tests_passed=0, tests_total=10)
+    verdict, reason, _ = decide(ref, floor, sep)
+    assert verdict == Verdict.PROVISIONAL
+    assert reason is None
+
+
+def test_separation_margin_0_1499_gives_rejected_no_separation():
+    runs = [
+        _make_run("s1", "strong", 7499, 10000),  # 0.7499
+        _make_run("w1", "weak", 6000, 10000),  # 0.6000
+    ]
+    sep = separation(runs, strong="strong", weak="weak", oracle_id="oid-curr")
+    assert sep.passed is False
+    ref = SuiteCheck(passed=True, tests_passed=10, tests_total=10)
+    floor = SuiteCheck(passed=True, tests_passed=0, tests_total=10)
+    verdict, reason, _ = decide(ref, floor, sep)
+    assert verdict == Verdict.REJECTED
+    assert reason == Reason.NO_SEPARATION
+
+
+def test_separation_margin_tolerance_0_75_minus_0_60():
+    runs = [
+        _make_run("s1", "strong", 75, 100),  # 0.75
+        _make_run("w1", "weak", 60, 100),  # 0.60
+    ]
+    sep = separation(runs, strong="strong", weak="weak", oracle_id="oid-curr")
+    assert sep.passed is True
+    ref = SuiteCheck(passed=True, tests_passed=10, tests_total=10)
+    floor = SuiteCheck(passed=True, tests_passed=0, tests_total=10)
+    verdict, reason, _ = decide(ref, floor, sep)
+    assert verdict == Verdict.PROVISIONAL
+
+
+def test_separation_weak_above_strong_gives_rejected_no_separation_with_both_means():
+    runs = [
+        _make_run("s1", "strong", 5, 10),  # 0.5
+        _make_run("w1", "weak", 8, 10),  # 0.8
+    ]
+    sep = separation(runs, strong="strong", weak="weak", oracle_id="oid-curr")
+    assert sep.passed is False
+    ref = SuiteCheck(passed=True, tests_passed=10, tests_total=10)
+    floor = SuiteCheck(passed=True, tests_passed=0, tests_total=10)
+    verdict, reason, detail = decide(ref, floor, sep)
+    assert verdict == Verdict.REJECTED
+    assert reason == Reason.NO_SEPARATION
+    assert sep.strong is not None and sep.strong.mean == 0.5
+    assert sep.weak is not None and sep.weak.mean == 0.8
+    assert "0.5" in str(detail) and "0.8" in str(detail)
+
+
+def test_separation_strong_all_1_gives_rejected_saturated():
+    runs = [
+        _make_run("s1", "strong", 10, 10),
+        _make_run("s2", "strong", 10, 10),
+        _make_run("w1", "weak", 5, 10),
+    ]
+    sep = separation(runs, strong="strong", weak="weak", oracle_id="oid-curr")
+    ref = SuiteCheck(passed=True, tests_passed=10, tests_total=10)
+    floor = SuiteCheck(passed=True, tests_passed=0, tests_total=10)
+    verdict, reason, _ = decide(ref, floor, sep)
+    assert verdict == Verdict.REJECTED
+    assert reason == Reason.SATURATED
+
+    runs_strong_only = [
+        _make_run("s1", "strong", 10, 10),
+    ]
+    sep2 = separation(runs_strong_only, strong="strong", weak="weak", oracle_id="oid-curr")
+    verdict2, reason2, _ = decide(ref, floor, sep2)
+    assert verdict2 == Verdict.REJECTED
+    assert reason2 == Reason.SATURATED
+
+
+def test_separation_strong_all_0_gives_rejected_degenerate():
+    runs = [
+        _make_run("s1", "strong", 0, 10),
+        _make_run("s2", "strong", 0, 10),
+    ]
+    sep = separation(runs, strong="strong", weak="weak", oracle_id="oid-curr")
+    ref = SuiteCheck(passed=True, tests_passed=10, tests_total=10)
+    floor = SuiteCheck(passed=True, tests_passed=0, tests_total=10)
+    verdict, reason, _ = decide(ref, floor, sep)
+    assert verdict == Verdict.REJECTED
+    assert reason == Reason.DEGENERATE
+
+
+def test_order_of_reasons_failed_reference_beats_saturated():
+    runs = [_make_run("s1", "strong", 10, 10)]
+    sep = separation(runs, strong="strong", weak="weak", oracle_id="oid-curr")
+    ref = SuiteCheck(passed=False, tests_passed=8, tests_total=10, detail="ref failed")
+    floor = SuiteCheck(passed=True, tests_passed=0, tests_total=10)
+    verdict, reason, _ = decide(ref, floor, sep)
+    assert verdict == Verdict.REJECTED
+    assert reason == Reason.REFERENCE
+
+
+def test_runs_of_another_identity_counted_in_not_comparable():
+    runs = [
+        _make_run("s1", "strong", 8, 10, oracle_id="oid-curr"),
+        _make_run("s2", "strong", 8, 10, oracle_id="oid-other"),
+        _make_run("w1", "weak", 5, 10, oracle_id="oid-other"),
+    ]
+    sep = separation(runs, strong="strong", weak="weak", oracle_id="oid-curr")
+    assert sep.not_comparable == 2
+    assert sep.strong is not None and len(sep.strong.run_ids) == 1
+    assert sep.weak is not None and sep.weak.run_ids == []
+
+
+def test_lost_runs_and_grading_failures_enter_nothing():
+    runs = [
+        _make_run("s1", "strong", 8, 10, status="graded"),
+        _make_run("s2", "strong", None, None, status="lost"),
+        _make_run("s3", "strong", None, None, status="grading_failed"),
+    ]
+    sep = separation(runs, strong="strong", weak="weak", oracle_id="oid-curr")
+    assert sep.strong is not None and len(sep.strong.run_ids) == 1
+    assert sep.not_comparable == 0
+
+
+def test_case_with_no_strong_arm_gives_not_assessed_with_note():
+    runs = [_make_run("r1", "some-arm", 8, 10)]
+    sep = separation(runs, strong=None, weak="weak", oracle_id="oid-curr")
+    assert sep.passed is None
+    ref = SuiteCheck(passed=True, tests_passed=10, tests_total=10)
+    floor = SuiteCheck(passed=True, tests_passed=0, tests_total=10)
+    verdict, reason, note = decide(ref, floor, sep)
+    assert verdict == Verdict.NOT_ASSESSED
+    assert note is not None
+
+
+def test_smoke_probe_parked_separation_not_assessed_failed_ref_rejected():
+    sep_parked = SeparationCheck(passed=None, detail="separation not assessed for parked case")
+    ref_ok = SuiteCheck(passed=True, tests_passed=10, tests_total=10)
+    floor_ok = SuiteCheck(passed=True, tests_passed=0, tests_total=10)
+    verdict, reason, detail = decide(ref_ok, floor_ok, sep_parked)
+    assert verdict == Verdict.NOT_ASSESSED
+    assert reason is None
+
+    # But failed reference still gives rejected
+    ref_bad = SuiteCheck(passed=False, tests_passed=5, tests_total=10, detail="ref failed")
+    verdict2, reason2, _ = decide(ref_bad, floor_ok, sep_parked)
+    assert verdict2 == Verdict.REJECTED
+    assert reason2 == Reason.REFERENCE

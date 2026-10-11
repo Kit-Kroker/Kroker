@@ -463,7 +463,30 @@ def dispatch_accept(
 
     ref_check = run_reference_check(case_dir)
     floor_check = run_floor_check(case_dir)
-    verdict, reason, detail = decide(ref_check, floor_check, separation=None)
+
+    sep_check = None
+    if not offline:
+        from .acceptance import SeparationCheck, separation
+        from .evidence import load_evidence
+        from .models import CaseRole
+        from .runs import build_runs
+
+        if spec.role != CaseRole.CORPUS:
+            sep_check = SeparationCheck(
+                passed=None,
+                detail=f"separation not assessed for {spec.role.value} case",
+            )
+        else:
+            ev = load_evidence(case=spec.case_id)
+            runs = build_runs(ev.records) if (ev and ev.records) else []
+            sep_check = separation(
+                runs=runs,
+                strong=spec.strong_arm,
+                weak=spec.weak_arm,
+                oracle_id=oid,
+            )
+
+    verdict, reason, detail = decide(ref_check, floor_check, separation=sep_check)
 
     oracle_tests = ref_check.tests_total or floor_check.tests_total
     rec = AcceptanceRecord(
@@ -475,6 +498,7 @@ def dispatch_accept(
         oracle_tests=oracle_tests,
         reference=ref_check,
         floor=floor_check,
+        separation=sep_check,
         role=spec.role,
         visibility=spec.visibility,
         exposure="repo_public",
