@@ -30,6 +30,10 @@ dependencies = [
     "pydantic-ai-harness[codemode,exa]>=0.36,<0.37",
     "fastapi>=0.141.1",
     "uvicorn>=0.30",
+    # Round 015 quality axis: erosion (radon) and verbosity (ast-grep)
+    # measured by the worker at run end — runtime deps, not dev extras.
+    "ast-grep-py==0.50.0",
+    "radon==6.0.1",
 ]
 
 [tool.setuptools.packages.find]
