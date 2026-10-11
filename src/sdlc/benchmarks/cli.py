@@ -401,6 +401,9 @@ def register_benchmark_subparsers(bsub: argparse._SubParsersAction) -> None:
     bsmoke.add_argument("--cases-root", default=None, help="override cases directory")
     bsmoke.add_argument("--ops-root", default=None, help="override ops directory")
 
+    bcorpus = bsub.add_parser("corpus")
+    bcorpus.add_argument("--cases-root", default=None, help="override cases directory")
+
 
 def dispatch_benchmark_cmd(args: argparse.Namespace) -> bool:
     """Dispatches registered benchmark subcommands. Returns True if handled."""
@@ -418,7 +421,24 @@ def dispatch_benchmark_cmd(args: argparse.Namespace) -> bool:
             ops_dir=getattr(args, "ops_root", None),
         )
         return True
+    if cmd == "corpus":
+        dispatch_corpus(
+            cases_root=getattr(args, "cases_root", None),
+        )
+        return True
     return False
+
+
+def dispatch_corpus(*, cases_root: str | None = None) -> str:
+    """Prints the status of all cases in the corpus and returns the rendered output."""
+    from .corpus import corpus_status, render_corpus_status
+    from .paths import cases_dir
+
+    root = Path(cases_root) if cases_root else cases_dir()
+    rows = corpus_status(root)
+    rendered = render_corpus_status(rows)
+    print(rendered)
+    return rendered
 
 
 def dispatch_accept(

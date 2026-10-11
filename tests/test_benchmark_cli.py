@@ -966,3 +966,35 @@ def test_dispatch_smoke_runs_inside_running_asyncio_event_loop(tmp_path, monkeyp
     stamp = passing_stamp("commit-loop-1", root=ops_dir)
     assert stamp is not None
     assert stamp.passed is True
+
+
+def test_benchmark_corpus_cli(tmp_path: Path, capsys):
+    from sdlc.benchmarks.cli import build_parser, dispatch_benchmark_cmd
+
+    cases_root = tmp_path / "cases"
+    cases_root.mkdir()
+    c1 = cases_root / "c1"
+    c1.mkdir()
+    (c1 / "case.yaml").write_text(
+        "case_id: c1\n"
+        "idea_summary: sum\n"
+        "role: corpus\n"
+        "visibility: public\n"
+        "harnesses: [opencode]\n"
+        "models: [m]\n"
+        "judge_model: j\n",
+        encoding="utf-8",
+    )
+
+    p = build_parser()
+    args = p.parse_args(["benchmark", "corpus", "--cases-root", str(cases_root)])
+    assert args.cmd == "benchmark"
+    assert args.bench_cmd == "corpus"
+    assert args.cases_root == str(cases_root)
+
+    handled = dispatch_benchmark_cmd(args)
+    assert handled is True
+
+    captured = capsys.readouterr()
+    assert "c1" in captured.out
+    assert "0 of 8 accepted or provisional, 0 of 2 private" in captured.out

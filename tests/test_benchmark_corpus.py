@@ -149,3 +149,153 @@ def test_reference_isolation_fr031():
             val = kw_names["seeded"]
             assert isinstance(val, ast.Constant) and val.value is None
     assert found_call
+
+
+def test_corpus_status_and_render_on_tmp_path_corpus(tmp_path: Path):
+    from sdlc.benchmarks.acceptance import AcceptanceRecord, Reason, Verdict, save_acceptance
+    from sdlc.benchmarks.corpus import (
+        CorpusRow,
+        corpus_status,
+        render_corpus_status,
+    )
+
+    cases_root = tmp_path / "cases"
+    cases_root.mkdir()
+
+    def make_case(cid: str, role: str, visibility: str | None = None, with_oracle: bool = True):
+        cdir = cases_root / cid
+        cdir.mkdir()
+        vis_line = f"visibility: {visibility}\n" if visibility else ""
+        (cdir / "case.yaml").write_text(
+            f"case_id: {cid}\n"
+            f"idea_summary: summary of {cid}\n"
+            f"role: {role}\n"
+            f"{vis_line}"
+            f"harnesses: [opencode]\n"
+            f"models: [m]\n"
+            f"judge_model: j\n",
+            encoding="utf-8",
+        )
+        if with_oracle:
+            odir = cdir / "oracle"
+            odir.mkdir()
+            (odir / "test_sample.py").write_text("def test_ok(): pass\n", encoding="utf-8")
+        return cdir
+
+    # 1. smoke case with no acceptance record
+    make_case("c-smoke", "smoke")
+
+    # 2. probe case with no acceptance record
+    make_case("c-probe", "probe", "private", with_oracle=False)
+
+    # 3. parked case with acceptance record (reason: saturated)
+    c_parked = make_case("c-parked", "parked", "public")
+    from sdlc.benchmarks.oracle_id import oracle_identity
+
+    oid_parked = oracle_identity(c_parked / "oracle")
+    save_acceptance(
+        AcceptanceRecord(
+            case_id="c-parked",
+            verdict=Verdict.REJECTED,
+            reason=Reason.SATURATED,
+            oracle_id=oid_parked,
+            role=CaseRole.PARKED,
+            exposure="repo_public",
+            kroker_commit="abc",
+            updated="2026-10-11",
+        ),
+        c_parked,
+    )
+
+    # 4. corpus case accepted, private, up-to-date (not stale)
+    c_corp1 = make_case("c-corp1", "corpus", "private")
+    oid_corp1 = oracle_identity(c_corp1 / "oracle")
+    save_acceptance(
+        AcceptanceRecord(
+            case_id="c-corp1",
+            verdict=Verdict.ACCEPTED,
+            oracle_id=oid_corp1,
+            role=CaseRole.CORPUS,
+            exposure="repo_public",
+            kroker_commit="abc",
+            updated="2026-10-11",
+        ),
+        c_corp1,
+    )
+
+    # 5. corpus case provisional, public, up-to-date (not stale)
+    c_corp2 = make_case("c-corp2", "corpus", "public")
+    oid_corp2 = oracle_identity(c_corp2 / "oracle")
+    save_acceptance(
+        AcceptanceRecord(
+            case_id="c-corp2",
+            verdict=Verdict.PROVISIONAL,
+            oracle_id=oid_corp2,
+            role=CaseRole.CORPUS,
+            exposure="repo_public",
+            kroker_commit="abc",
+            updated="2026-10-11",
+        ),
+        c_corp2,
+    )
+
+    # 6. corpus case accepted, but stale (oracle changed on disk)
+    c_corp3 = make_case("c-corp3", "corpus", "private")
+    save_acceptance(
+        AcceptanceRecord(
+            case_id="c-corp3",
+            verdict=Verdict.ACCEPTED,
+            oracle_id="sha256:different_hash",
+            role=CaseRole.CORPUS,
+            exposure="repo_public",
+            kroker_commit="abc",
+            updated="2026-10-11",
+        ),
+        c_corp3,
+    )
+
+    # 7. corpus case without acceptance record -> stale is "not assessed"
+    make_case("c-corp4", "corpus", "public")
+
+    rows = corpus_status(cases_root)
+    assert len(rows) == 7
+    assert all(isinstance(r, CorpusRow) for r in rows)
+    row_map = {r.case_id: r for r in rows}
+
+    assert row_map["c-smoke"].role == CaseRole.SMOKE
+    assert row_map["c-smoke"].stale == "not assessed"
+    assert row_map["c-smoke"].verdict is None
+
+    assert row_map["c-probe"].role == CaseRole.PROBE
+    assert row_map["c-probe"].stale == "not assessed"
+
+    assert row_map["c-parked"].role == CaseRole.PARKED
+    assert row_map["c-parked"].verdict == Verdict.REJECTED
+    assert row_map["c-parked"].reason == Reason.SATURATED
+    assert row_map["c-parked"].stale is False
+
+    assert row_map["c-corp1"].verdict == Verdict.ACCEPTED
+    assert row_map["c-corp1"].stale is False
+
+    assert row_map["c-corp2"].verdict == Verdict.PROVISIONAL
+    assert row_map["c-corp2"].stale is False
+
+    assert row_map["c-corp3"].verdict == Verdict.ACCEPTED
+    assert row_map["c-corp3"].stale is True
+
+    assert row_map["c-corp4"].stale == "not assessed"
+
+    rendered = render_corpus_status(rows)
+    # The rendered text must be ASCII
+    rendered.encode("ascii")
+
+    # Parked case listed with its reason
+    assert "c-parked" in rendered
+    assert "saturated" in rendered
+
+    # Tally counts only non-stale accepted/provisional corpus cases:
+    # c-corp1 (accepted, private, fresh) and c-corp2 (provisional, public, fresh).
+    # c-corp3 is stale, so not counted. c-parked is parked, so not counted.
+    # Total accepted or provisional non-stale = 2.
+    # Private accepted or provisional non-stale = 1 (c-corp1).
+    assert "2 of 8 accepted or provisional, 1 of 2 private" in rendered
