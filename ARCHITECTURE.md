@@ -477,7 +477,11 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   record contract is in `BENCHMARK.md`. Since round 013 the score path
   reads records through a run model (`benchmarks/runs.py`) and renders
   the run grid, the layered heatmap and the gate-versus-oracle view
-  (`grid.py`, `heatmap_render.py`, `gate_oracle.py`).
+  (`grid.py`, `heatmap_render.py`, `gate_oracle.py`). Since round 015 a
+  second objective quality axis rides the same records
+  (`benchmarks/axis.py`, `rules/verbosity/`): erosion and verbosity of
+  the produced diff, measured once at run end and read like any other
+  record — never inside a quality, composite or gate figure.
 - **Trajectory harvesting (P5 seam):** Temporal history + artifacts +
   handoffs + gate decisions already constitute complete trajectories
   (actions, tool calls, costs, outcomes, human feedback). The observability
@@ -833,6 +837,7 @@ Kroker/
 │   │                          #   sc_rollup, drift, oracle, heatmap_render; the matrices
 │   │                          #   (error/task/waste/agreement); importers/
 │   │                          #   provenance.py, cell.py, paths.py  # record trust (012): commit/prompt hash, cell record, one cases root
+│   │                          #   axis.py, rules/verbosity/  # quality axis (015): erosion, verbosity
 │   ├── assessment/            # Tier 2 EDCR: scan/ signals, discover/, risk/
 │   ├── triage/                # Tier 0: admission, signals/, delta, advisories
 │   ├── capability/            # CapabilityMap identity, fingerprint, corrections (E-47)

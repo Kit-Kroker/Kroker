@@ -82,6 +82,14 @@ waste, reviewer-versus-adversary, task and error matrix files.
 arms that each have a graded run, and the report says so when it is not
 used.
 
+Every run row carries two quality-axis columns — `erosion` and `verbosity`
+(BENCHMARK.md §4.5: what the run did to the code, measured on the produced
+diff at run end) — and the group headers carry their means. A run that was
+not measured reads `n/m(<reason>)` there, never `0`: every run recorded
+before the axis existed (and any run the measurement could not apply to)
+counts on the totals line's `axis: N measured, M not measured` clause
+instead of entering a mean.
+
 Two round-012 notes for `benchmark run`:
 
 - **Pre-flight:** a case manifest that registers a rubric or veto file it

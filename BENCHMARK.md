@@ -466,7 +466,10 @@ side). A score writes `report.md`, `grid.*`, `heatmap.*`, `gate-oracle.*`,
 `sc-rollup.*` and, per case, the waste, reviewer-versus-adversary, task,
 root-cause (`root-cause.html`, `root-cause.json`), and error matrix files.
 The E-77 `fail_reentry` axis and the per-task maximum of `fix_attempts` are
-superseded by the first-attempt layer's per-`(run, task)` units.
+superseded by the first-attempt layer's per-`(run, task)` units. The run
+grid's rows carry two quality-axis columns (§4.5) after the code-score
+columns, and the `## Runs` totals line ends with one axis clause
+(`axis: N measured, M not measured`).
 
 **Root cause (round 015, report 3.5).** Aggregates failure modes into four
 standard buckets: `planning`, `execution`, `verification`, and `unattributed`.
@@ -478,6 +481,51 @@ label file under `benchmarks/labels/<case>/<bench_run_id>.yaml` attributing it.
 No cause is assigned automatically to a graded run. Graded runs without
 requirement results (no requirement mapping) are tracked separately under
 `no_requirement_results` and never falsely attributed.
+
+### 4.5 Erosion and verbosity (the second, objective quality axis)
+
+*Status (2026-10-11, round 015):* the oracle says whether the produced code
+works; nothing else said what the run **did to the code**. At the end of
+every run the worker measures two deterministic properties of the produced
+diff at the integration branch head and stores them as one record beside
+the run's others — no judge, no network.
+
+- **Erosion** — the share of complexity mass in functions whose cyclomatic
+  complexity is above 10, where a function's mass is its complexity times
+  the square root of its lines (`mass = CC × sqrt(SLOC)`, radon's CC and
+  line spans). A run can pass every held-out test and still double the
+  complexity mass of what it touched; this is the figure that shows it.
+  The record carries the mass split, so the share is auditable.
+- **Verbosity** — the lines the project's own pinned rule set flags, over
+  the non-blank lines of the measured files. The rule set lives in this
+  repository (`src/sdlc/benchmarks/rules/verbosity/`, versioned; v1:
+  `except-pass`, `bare-except`, `print-call`, `debugger-call`,
+  `nested-ternary`, `if-deep-4`), applied by ast-grep; a match flags its
+  whole node span and the flagged lines are the union. Cloned lines are
+  NOT united in v1 — the source benchmark's definition unites them, but
+  no licence-checked clone detector is a dependency yet; a later rule-set
+  version adds them without lying about the old figures.
+
+**Measured = the produced diff.** The measured files are the `*.py` paths
+of `git diff --name-only <base>...HEAD` at the integration head, final
+state — a run owns its diff, never the whole base repository. The record
+carries the branch head, the rule-set version and the tool versions, so a
+figure stays interpretable months later; measuring the same tree twice
+gives the same figures.
+
+**Absence is a state, never a zero.** A run that cannot be measured reads
+`n/m(<reason>)`: `code stage did not finish`, `integration branch absent`,
+`language not python` (v1 measures Python only), `no python files in diff`,
+`no functions`, `measurement failed: <detail>` — and for every run recorded
+before round 015, `no axis record` forever (no integration branch
+survives). The totals line counts both sides; a group mean never crosses a
+rule-set version and is grey under five measured runs.
+
+**The axis never blends with the oracle.** The figures appear in the run
+grid's two columns and in the group header, and nowhere else — never in a
+quality column, a partial-credit or all-pass figure, a composite weight,
+or a gate-versus-oracle count, in text, HTML or JSON. They ride their own
+record payload, never `QualityScore`.
 
 ---
 
