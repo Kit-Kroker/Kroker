@@ -335,3 +335,77 @@ def test_summarize_cell_unknown_stage_does_not_crash_the_ordering(tmp_path, monk
     progress = _summarize(tmp_path, monkeypatch)
     assert progress.last_stage == "code"
     assert progress.code_finished is False
+
+
+# --- oracle_id on summarize_cell and cell_record (T003) -----------------------
+
+
+def test_cell_progress_constructs_without_oracle_id():
+    p = CellProgress(last_stage="plan", code_finished=False)
+    assert p.last_stage == "plan"
+    assert p.code_finished is False
+    assert p.oracle_id is None
+
+
+def test_summarize_cell_resolves_oracle_id(tmp_path, monkeypatch):
+    cases_dir = tmp_path / "cases"
+    cases_dir.mkdir()
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(cases_dir))
+
+    # case with oracle/
+    case_with_oracle = cases_dir / "case_with_oracle"
+    oracle_dir = case_with_oracle / "oracle"
+    oracle_dir.mkdir(parents=True)
+    (oracle_dir / "test_suite.py").write_text("def test_x(): pass\n", encoding="utf-8")
+
+    # case without oracle/
+    case_no_oracle = cases_dir / "case_no_oracle"
+    case_no_oracle.mkdir()
+
+    records_dir = tmp_path / "records"
+
+    # cell for case with oracle
+    p1 = _summarize(records_dir, monkeypatch, cell_id="case_with_oracle#opencode#a1")
+    assert p1.oracle_id is not None
+    assert p1.oracle_id.startswith("sha256:")
+
+    # cell for case without oracle
+    p2 = _summarize(records_dir, monkeypatch, cell_id="case_no_oracle#opencode#a1")
+    assert p2.oracle_id is None
+
+    # cell for unknown case
+    p3 = _summarize(records_dir, monkeypatch, cell_id="unknown_case#opencode#a1")
+    assert p3.oracle_id is None
+
+
+def test_cell_record_writes_oracle_id():
+    cell = BenchmarkCell(case_id="dummy", harness=HarnessKind.OPENCODE, arm_name="a1")
+    status = CellStatus(
+        pipeline_finished=True,
+        code_finished=True,
+        completed=True,
+        last_stage="deploy",
+        grading="graded",
+    )
+    rec_default = cell_record(
+        cell,
+        status,
+        "b1",
+        "r1",
+        _T0,
+        _T0 + timedelta(seconds=1),
+        _PROV,
+    )
+    assert rec_default.oracle_id is None
+
+    rec_with_id = cell_record(
+        cell,
+        status,
+        "b1",
+        "r1",
+        _T0,
+        _T0 + timedelta(seconds=1),
+        _PROV,
+        oracle_id="sha256:fedcba",
+    )
+    assert rec_with_id.oracle_id == "sha256:fedcba"

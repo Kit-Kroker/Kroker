@@ -227,6 +227,8 @@ class BenchmarkRecord(BaseModel):
     cell_id: str | None = None
     # Set only on the cell record (scope CELL).
     cell: CellStatus | None = None
+    # 015 (Phase 3, US4): identity of the oracle that graded this run.
+    oracle_id: str | None = None
 
 
 class CompositeWeights(BaseModel):

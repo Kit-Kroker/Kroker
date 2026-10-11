@@ -28,6 +28,8 @@ from .models import (
     cell_progress,
     grading_from_score,
 )
+from .oracle_id import oracle_identity
+from .paths import cases_dir
 from .recorder import RecordStore
 
 if TYPE_CHECKING:
@@ -45,6 +47,7 @@ class CellProgress:
 
     last_stage: str | None
     code_finished: bool
+    oracle_id: str | None = None
 
 
 @activity.defn
@@ -63,7 +66,14 @@ async def summarize_cell(bench_run_id: str, cell_id: str) -> CellProgress:
     one body serves the 012 writer and the 013 reader."""
     records = RecordStore(bench_run_id=bench_run_id, cell_id=cell_id).read_all()
     last_stage, code_finished = cell_progress(records)
-    return CellProgress(last_stage=last_stage, code_finished=code_finished)
+    case_id = cell_id.split("#", 1)[0]
+    oracle_dir = cases_dir() / case_id / "oracle"
+    oracle_id: str | None = None
+    try:
+        oracle_id = oracle_identity(oracle_dir)
+    except Exception:
+        oracle_id = None
+    return CellProgress(last_stage=last_stage, code_finished=code_finished, oracle_id=oracle_id)
 
 
 GradingStatus = Literal["graded", "not_graded", "grading_failed", "no_oracle"]
@@ -94,6 +104,7 @@ def cell_record(
     ended: datetime,
     provenance: Provenance | None,
     graph_sha: str | None = None,
+    oracle_id: str | None = None,
 ) -> BenchmarkRecord:
     """contract §3.4: the one cell record — scope cell, stage cell, role
     cell, no quality score (judge contract: the status IS the judgment),
@@ -129,4 +140,5 @@ def cell_record(
         cell_id=cell.cell_id,
         cell=status,
         graph=graph,
+        oracle_id=oracle_id,
     )

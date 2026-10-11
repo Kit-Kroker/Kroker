@@ -444,3 +444,35 @@ def test_oracle_task_records_empty_when_no_task_grades():
     t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
     recs = _oracle_task_records(_cell(), _grade(), "b1", "run1", t0, t1, provenance=_PROV)
     assert recs == []
+
+
+# --- oracle_id on _oracle_record and _oracle_task_records (T003) --------------
+
+
+def test_oracle_record_oracle_id():
+    t0 = datetime(2026, 7, 23, tzinfo=UTC)
+    t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
+    r_default = _oracle_record(_cell(), _grade(), "b1", "r1", t0, t1, provenance=_PROV)
+    assert r_default.oracle_id is None
+
+    r_custom = _oracle_record(
+        _cell(), _grade(), "b1", "r1", t0, t1, provenance=_PROV, oracle_id="sha256:1234abcd"
+    )
+    assert r_custom.oracle_id == "sha256:1234abcd"
+
+
+def test_oracle_task_records_oracle_id():
+    t0 = datetime(2026, 7, 23, tzinfo=UTC)
+    t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
+    grade = _grade_with_tasks(
+        TaskGrade(task_id="t01", error_class="functional", score=1.0, judge="oracle", detail="ok")
+    )
+    recs_default = _oracle_task_records(_cell(), grade, "b1", "r1", t0, t1, provenance=_PROV)
+    assert len(recs_default) == 1
+    assert recs_default[0].oracle_id is None
+
+    recs_custom = _oracle_task_records(
+        _cell(), grade, "b1", "r1", t0, t1, provenance=_PROV, oracle_id="sha256:5678ef01"
+    )
+    assert len(recs_custom) == 1
+    assert recs_custom[0].oracle_id == "sha256:5678ef01"

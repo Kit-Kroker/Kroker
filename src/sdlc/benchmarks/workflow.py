@@ -161,6 +161,7 @@ def _oracle_record(
     *,
     graph_sha: str | None = None,
     provenance: Provenance | None = None,
+    oracle_id: str | None = None,
 ) -> BenchmarkRecord:
     """Build the stage='oracle' record from a grade. An integrity breach
     (held-out or language mismatch) sets .error so it surfaces in the
@@ -215,6 +216,7 @@ def _oracle_record(
         outcome=outcome,
         error=err,
         graph=(GraphAttribution(graph_sha=graph_sha) if graph_sha else None),
+        oracle_id=oracle_id,
     )
 
 
@@ -228,6 +230,7 @@ def _oracle_task_records(
     *,
     graph_sha: str | None = None,
     provenance: Provenance | None = None,
+    oracle_id: str | None = None,
 ) -> list[BenchmarkRecord]:
     """One record per TaskGrade in grade.task_grades. error_class is not
     stored on the record -- task_matrix.py / error_matrix.py join it from
@@ -263,6 +266,7 @@ def _oracle_task_records(
                 ),
                 outcome=outcome,
                 graph=(GraphAttribution(graph_sha=graph_sha) if graph_sha else None),
+                oracle_id=oracle_id,
             )
         )
     return out
@@ -383,6 +387,7 @@ class BenchmarkWorkflow:
                             ended,
                             graph_sha=arm_graph_sha,
                             provenance=provenance,
+                            oracle_id=progress.oracle_id,
                         ),
                         **RECORD_ACT,
                     )
@@ -398,6 +403,7 @@ class BenchmarkWorkflow:
                             ended,
                             graph_sha=arm_graph_sha,
                             provenance=provenance,
+                            oracle_id=progress.oracle_id,
                         ):
                             await workflow.execute_activity(record_benchmark, rec, **RECORD_ACT)
                 status = CellStatus(
@@ -419,6 +425,7 @@ class BenchmarkWorkflow:
                         workflow.now(),
                         provenance,
                         arm_graph_sha,
+                        oracle_id=progress.oracle_id,
                     ),
                     **RECORD_ACT,
                 )

@@ -728,3 +728,11 @@ def test_case_spec_strong_arm_validation():
     )
     assert spec_weak_only.weak_arm == "arm2"
     assert spec_weak_only.strong_arm is None
+
+
+def test_stored_shape_record_without_oracle_id_loads_with_none():
+    r = _record()
+    data = r.model_dump()
+    data.pop("oracle_id", None)
+    loaded = BenchmarkRecord.model_validate(data)
+    assert loaded.oracle_id is None
