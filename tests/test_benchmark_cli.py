@@ -301,3 +301,207 @@ def test_import_deveval_reports_network_quarantine(tmp_path):
 
     report = dispatch_import_deveval(src=str(src_root), out=str(out))
     assert "QUARANTINED" in report
+
+
+# --- benchmark accept (T006) --------------------------------------------------
+
+
+def test_parser_accepts_benchmark_accept():
+    from sdlc.cli import build_parser as root_build_parser
+
+    p = root_build_parser()
+    args = p.parse_args(["benchmark", "accept", "--case", "deveval-readtime", "--offline"])
+    assert args.cmd == "benchmark"
+    assert args.bench_cmd == "accept"
+    assert args.case == "deveval-readtime"
+    assert args.offline is True
+
+    # also on benchmarks.cli build_parser
+    p_b = build_parser()
+    args_b = p_b.parse_args(["benchmark", "accept", "--case", "deveval-readtime", "--offline"])
+    assert args_b.bench_cmd == "accept"
+    assert args_b.case == "deveval-readtime"
+    assert args_b.offline is True
+
+
+def test_dispatch_accept_offline_writes_record_and_prints_verdict(tmp_path, capsys, monkeypatch):
+    import shutil
+    from pathlib import Path
+
+    from sdlc.benchmarks.acceptance import Verdict, load_acceptance
+    from sdlc.benchmarks.cli import dispatch_accept, dispatch_import_deveval
+
+    # Create a fixture case deveval-mini-calc
+    fixture = Path(__file__).resolve().parent / "fixtures" / "mini_calc"
+    src_root = tmp_path / "src" / "python"
+    src_root.mkdir(parents=True)
+    shutil.copytree(fixture, src_root / "mini_calc")
+    cases_dir = tmp_path / "cases"
+    dispatch_import_deveval(src=str(src_root), out=str(cases_dir))
+    c_yaml = cases_dir / "deveval-mini-calc" / "case.yaml"
+    extra = "role: corpus\nvisibility: public\n"
+    c_yaml.write_text(c_yaml.read_text(encoding="utf-8") + extra, encoding="utf-8")
+
+    # Stub the environment provisioner for fast offline checks
+    from sdlc.benchmarks import offline_checks
+
+    async def _stub_prov(worktree: str, oracle_dir: str, timeout_s: int):
+        import os
+        import sys
+
+        return {"PATH": os.environ.get("PATH", ""), "VIRTUAL_ENV": sys.prefix}, None
+
+    monkeypatch.setattr(offline_checks, "_provision_oracle_env", _stub_prov)
+
+    # Run dispatch_accept
+    dispatch_accept(case="deveval-mini-calc", offline=True, cases_root=str(cases_dir))
+
+    # Verify printed verdict line
+    out = capsys.readouterr().out
+    assert "deveval-mini-calc" in out
+    assert "not_assessed" in out
+
+    # Verify acceptance.yaml written
+    rec = load_acceptance(cases_dir / "deveval-mini-calc")
+    assert rec is not None
+    assert rec.case_id == "deveval-mini-calc"
+    assert rec.verdict == Verdict.NOT_ASSESSED
+    assert rec.oracle_id is not None
+    assert rec.oracle_id.startswith("sha256:")
+    assert rec.oracle_tests == 3
+    assert rec.role.value == "corpus"
+    assert rec.visibility.value == "public"
+    assert rec.exposure == "repo_public"
+    assert rec.kroker_commit != ""
+    assert rec.updated != ""
+
+
+def test_dispatch_accept_case_without_language_gives_not_assessed_no_oracle(tmp_path, capsys):
+    from sdlc.benchmarks.acceptance import Verdict, load_acceptance
+    from sdlc.benchmarks.cli import dispatch_accept
+
+    # probe case with no language
+    c_dir = tmp_path / "cases" / "probe-no-lang"
+    c_dir.mkdir(parents=True)
+    (c_dir / "case.yaml").write_text(
+        "case_id: probe-no-lang\n"
+        "idea_summary: probe\n"
+        "harnesses: [opencode]\n"
+        "models: [m]\n"
+        "judge_model: j\n"
+        "role: probe\n"
+        "visibility: private\n",
+        encoding="utf-8",
+    )
+
+    dispatch_accept(case="probe-no-lang", offline=True, cases_root=str(tmp_path / "cases"))
+
+    out = capsys.readouterr().out
+    assert "probe-no-lang" in out
+    assert "not_assessed" in out
+
+    rec = load_acceptance(c_dir)
+    assert rec is not None
+    assert rec.verdict == Verdict.NOT_ASSESSED
+    assert rec.note == "no oracle"
+
+
+def test_dispatch_accept_smoke_case_with_oracle_and_no_reference_gives_rejected_reference(
+    tmp_path, capsys, monkeypatch
+):
+    from sdlc.benchmarks import offline_checks
+    from sdlc.benchmarks.acceptance import Reason, Verdict, load_acceptance
+    from sdlc.benchmarks.cli import dispatch_accept
+
+    # smoke case with oracle and no reference/ (like todo-api)
+    c_dir = tmp_path / "cases" / "smoke-todo"
+    c_dir.mkdir(parents=True)
+    (c_dir / "oracle").mkdir()
+    (c_dir / "oracle" / "test_api.py").write_text("def test_ok(): pass\n", encoding="utf-8")
+    (c_dir / "case.yaml").write_text(
+        "case_id: smoke-todo\n"
+        "idea_summary: todo\n"
+        "harnesses: [opencode]\n"
+        "models: [m]\n"
+        "judge_model: j\n"
+        "language: python\n"
+        "role: smoke\n"
+        "visibility: public\n",
+        encoding="utf-8",
+    )
+
+    async def _stub_prov(worktree: str, oracle_dir: str, timeout_s: int):
+        import os
+        import sys
+
+        return {"PATH": os.environ.get("PATH", ""), "VIRTUAL_ENV": sys.prefix}, None
+
+    monkeypatch.setattr(offline_checks, "_provision_oracle_env", _stub_prov)
+
+    dispatch_accept(case="smoke-todo", offline=True, cases_root=str(tmp_path / "cases"))
+
+    out = capsys.readouterr().out
+    assert "smoke-todo" in out
+    assert "rejected" in out
+    assert "reference" in out
+
+    rec = load_acceptance(c_dir)
+    assert rec is not None
+    assert rec.verdict == Verdict.REJECTED
+    assert rec.reason == Reason.REFERENCE
+
+
+def test_dispatch_accept_runs_inside_running_asyncio_event_loop(tmp_path, monkeypatch):
+    """Regression test: root CLI runs under asyncio.run(main()).
+    dispatch_accept and dispatch_benchmark_cmd must execute cleanly inside a running loop.
+    """
+    import argparse
+    import asyncio
+
+    from sdlc.benchmarks import offline_checks
+    from sdlc.benchmarks.acceptance import Reason, Verdict, load_acceptance
+    from sdlc.benchmarks.cli import dispatch_benchmark_cmd
+
+    c_dir = tmp_path / "cases" / "smoke-todo"
+    c_dir.mkdir(parents=True)
+    (c_dir / "oracle").mkdir()
+    (c_dir / "oracle" / "test_api.py").write_text("def test_ok(): pass\n", encoding="utf-8")
+    (c_dir / "case.yaml").write_text(
+        "case_id: smoke-todo\n"
+        "idea_summary: todo\n"
+        "harnesses: [opencode]\n"
+        "models: [m]\n"
+        "judge_model: j\n"
+        "language: python\n"
+        "role: smoke\n"
+        "visibility: public\n",
+        encoding="utf-8",
+    )
+
+    async def _stub_prov(worktree: str, oracle_dir: str, timeout_s: int):
+        import os
+        import sys
+
+        return {"PATH": os.environ.get("PATH", ""), "VIRTUAL_ENV": sys.prefix}, None
+
+    monkeypatch.setattr(offline_checks, "_provision_oracle_env", _stub_prov)
+
+    args = argparse.Namespace(
+        cmd="benchmark",
+        bench_cmd="accept",
+        case="smoke-todo",
+        offline=True,
+        cases_root=str(tmp_path / "cases"),
+    )
+
+    async def _main_entry():
+        # Executes while an event loop is active (reproducing root CLI asyncio.run(main()))
+        handled = dispatch_benchmark_cmd(args)
+        assert handled is True
+
+    asyncio.run(_main_entry())
+
+    rec = load_acceptance(c_dir)
+    assert rec is not None
+    assert rec.verdict == Verdict.REJECTED
+    assert rec.reason == Reason.REFERENCE

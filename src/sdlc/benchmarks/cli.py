@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -69,6 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="Q,C,S",
         help="composite weights as quality,cost,speed; defaults to benchmarks/config.yaml",
     )
+
+    register_benchmark_subparsers(bsub)
 
     cal = sub.add_parser("calibrate")
     cal.add_argument("rubric")
@@ -275,6 +278,120 @@ def main_async(args: argparse.Namespace) -> None:
                 weights=getattr(args, "weights", None),
             )
         )
+    elif dispatch_benchmark_cmd(args):
+        return
+
+
+def _resolve_kroker_commit() -> str:
+    import subprocess
+
+    root = Path(__file__).resolve().parents[3]
+    try:
+        res = subprocess.run(
+            ["git", "-c", "safe.directory=*", "rev-parse", "HEAD"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            return res.stdout.strip()
+    except (FileNotFoundError, OSError):
+        pass
+    return os.environ.get("KROKER_COMMIT") or "unknown"
+
+
+def register_benchmark_subparsers(bsub: argparse._SubParsersAction) -> None:
+    """Registers benchmark subcommands on the benchmark subparser."""
+    ba = bsub.add_parser("accept")
+    ba.add_argument("--case", required=True, help="a case_id")
+    ba.add_argument(
+        "--offline",
+        action="store_true",
+        default=False,
+        help="run only offline reference and floor checks",
+    )
+
+
+def dispatch_benchmark_cmd(args: argparse.Namespace) -> bool:
+    """Dispatches registered benchmark subcommands. Returns True if handled."""
+    if getattr(args, "bench_cmd", None) == "accept":
+        dispatch_accept(
+            case=args.case,
+            offline=getattr(args, "offline", False),
+            cases_root=getattr(args, "cases_root", None),
+        )
+        return True
+    return False
+
+
+def dispatch_accept(
+    *,
+    case: str,
+    offline: bool = False,
+    cases_root: str | None = None,
+) -> str:
+    """Run acceptance checks for one case and write <case dir>/acceptance.yaml."""
+    from .acceptance import AcceptanceRecord, Verdict, decide, save_acceptance
+    from .offline_checks import run_floor_check, run_reference_check
+    from .oracle_id import oracle_identity
+    from .paths import cases_dir
+
+    root = Path(cases_root) if cases_root else cases_dir()
+    case_dir = root / case
+    if not case_dir.is_dir():
+        raise SystemExit(f"case directory not found: {case_dir}")
+
+    spec = load_case_spec(str(case_dir / "case.yaml"))
+    commit = _resolve_kroker_commit()
+    updated = datetime.now(UTC).isoformat()
+
+    if spec.language is None:
+        rec = AcceptanceRecord(
+            case_id=spec.case_id,
+            verdict=Verdict.NOT_ASSESSED,
+            note="no oracle",
+            role=spec.role,
+            visibility=spec.visibility,
+            exposure="repo_public",
+            kroker_commit=commit,
+            updated=updated,
+        )
+        save_acceptance(rec, case_dir)
+        line = f"{spec.case_id}: not_assessed (no oracle)"
+        print(line)
+        return line
+
+    oracle_path = case_dir / "oracle"
+    oid = oracle_identity(oracle_path) if oracle_path.is_dir() else None
+
+    ref_check = run_reference_check(case_dir)
+    floor_check = run_floor_check(case_dir)
+    verdict, reason, detail = decide(ref_check, floor_check, separation=None)
+
+    oracle_tests = ref_check.tests_total or floor_check.tests_total
+    rec = AcceptanceRecord(
+        case_id=spec.case_id,
+        verdict=verdict,
+        reason=reason,
+        note=detail,
+        oracle_id=oid,
+        oracle_tests=oracle_tests,
+        reference=ref_check,
+        floor=floor_check,
+        role=spec.role,
+        visibility=spec.visibility,
+        exposure="repo_public",
+        kroker_commit=commit,
+        updated=updated,
+    )
+    save_acceptance(rec, case_dir)
+
+    reason_suffix = f" ({reason.value})" if reason is not None else ""
+    line = f"{spec.case_id}: {verdict.value}{reason_suffix}"
+    print(line)
+    return line
 
 
 def dispatch_import_deveval(

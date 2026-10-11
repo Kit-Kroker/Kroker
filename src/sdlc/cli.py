@@ -331,6 +331,10 @@ def build_parser() -> argparse.ArgumentParser:
     bxc.add_argument("--experiment", required=True)
     bxc.add_argument("--candidate", required=True, help="a bench_run_id")
 
+    from .benchmarks.cli import register_benchmark_subparsers
+
+    register_benchmark_subparsers(bsub)
+
     ev = sub.add_parser("eval")
     ev.add_argument("target", help="a role name")
     ev.add_argument("--case", default=None)
@@ -573,6 +577,11 @@ async def main() -> None:
             return
         if args.bench_cmd == "drift":
             print("drift requires a live Temporal client; see ARCHITECTURE.md section 8.")
+            return
+
+        from .benchmarks.cli import dispatch_benchmark_cmd
+
+        if dispatch_benchmark_cmd(args):
             return
 
     if args.cmd == "schedules":

@@ -105,3 +105,47 @@ def test_seven_corpus_cases_have_two_arms_and_matching_base_cells():
         assert len(cells) == 2
         strong_cell = next(c for c in cells if c.arm_name == spec.strong_arm)
         assert strong_cell.cell_id == base_cell_id
+
+
+def test_reference_isolation_fr031():
+    import ast
+    import inspect
+
+    from sdlc.benchmarks.paths import cases_dir
+    from sdlc.benchmarks.workflow import BenchmarkWorkflow
+
+    root = cases_dir()
+    for case_dir in root.iterdir():
+        if not case_dir.is_dir():
+            continue
+        ref_dir = case_dir / "reference"
+        if not ref_dir.is_dir():
+            continue
+        case_yaml_text = (case_dir / "case.yaml").read_text(encoding="utf-8")
+        assert "reference/" not in case_yaml_text
+
+        # For every file under reference/, no path under reference/ is named in case.yaml
+        for p in ref_dir.rglob("*"):
+            if p.is_file():
+                rel = p.relative_to(ref_dir).as_posix()
+                assert f"reference/{rel}" not in case_yaml_text
+
+    # The function that seeds a run (execute_pipeline_child in BenchmarkWorkflow)
+    # is given no path under Cases (seeded=None).
+    import textwrap
+
+    source = inspect.getsource(BenchmarkWorkflow.run)
+    tree = ast.parse(textwrap.dedent(source))
+    found_call = False
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "execute_pipeline_child"
+        ):
+            found_call = True
+            kw_names = {kw.arg: kw.value for kw in node.keywords}
+            assert "seeded" in kw_names
+            val = kw_names["seeded"]
+            assert isinstance(val, ast.Constant) and val.value is None
+    assert found_call
