@@ -308,3 +308,99 @@ def build_root_cause(
         no_requirement_results=total_no_req_results,
         notes=matrix_notes,
     )
+
+
+def _row_label(row: RootCauseRow) -> str:
+    label = row.arm
+    if row.generation and row.generation != "012":
+        label += f" ({row.generation})"
+    if row.oracle_id:
+        short = row.oracle_id.removeprefix("sha256:")[:8]
+        label += f" / oracle {short}"
+    return label
+
+
+def render_root_cause_json(matrix: RootCauseMatrix) -> str:
+    """Render the root-cause matrix as JSON."""
+    return matrix.model_dump_json(indent=2)
+
+
+def render_root_cause_html(matrix: RootCauseMatrix) -> str:
+    """Render the root-cause matrix as HTML."""
+    from html import escape
+
+    cols = ("arm", *ROOT_CAUSES)
+    head = "".join(f"<th>{escape(c)}</th>" for c in cols)
+    if matrix.rows:
+        row_trs = []
+        for r in matrix.rows:
+            tds = [f"<th>{escape(_row_label(r))}</th>"]
+            for c in ROOT_CAUSES:
+                cell = r.cells[c]
+                cls_attr = ' class="low_n"' if cell.low_n else ""
+                tds.append(f"<td{cls_attr}>{cell.numerator}/{cell.denominator}</td>")
+            row_trs.append("<tr>" + "".join(tds) + "</tr>")
+        body = f"<table><tr>{head}</tr>" + "".join(row_trs) + "</table>"
+    else:
+        body = "<p>No runs recorded.</p>"
+
+    paragraphs = [
+        (
+            f"<p>{matrix.labelled} failed requirements labelled by a person, "
+            f"{matrix.unlabelled} not labelled</p>"
+        )
+    ]
+    if matrix.no_requirement_results > 0:
+        paragraphs.append(
+            f"<p>{matrix.no_requirement_results} graded runs have no requirement results</p>"
+        )
+    for n in matrix.notes:
+        paragraphs.append(f"<p>{escape(n)}</p>")
+
+    paras_html = "\n".join(paragraphs)
+
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Root cause - {escape(matrix.case_id)}</title>
+<style>
+body{{font:14px system-ui,sans-serif;margin:2rem;color:#111}}
+h1{{font-size:1.3rem}}
+table{{border-collapse:collapse;margin:.5rem 0}}
+th,td{{border:1px solid #ddd;padding:.3rem .5rem;text-align:right}}
+th{{background:#f5f5f5;text-align:left}}
+.low_n{{color:#888}}
+</style></head><body>
+<h1>Root cause - {escape(matrix.case_id)}</h1>
+{body}
+{paras_html}
+</body></html>"""
+
+
+def render_root_cause_markdown(matrix: RootCauseMatrix) -> str:
+    """Render the root-cause matrix as ASCII markdown."""
+    cols = ("arm", *ROOT_CAUSES)
+    if not matrix.rows:
+        lines = ["No runs recorded."]
+    else:
+        lines = [
+            "| " + " | ".join(cols) + " |",
+            "|" + "---|" * len(cols),
+        ]
+        for r in matrix.rows:
+            cells = [_row_label(r)]
+            for c in ROOT_CAUSES:
+                cell = r.cells[c]
+                cells.append(f"{cell.numerator}/{cell.denominator}")
+            lines.append("| " + " | ".join(cells) + " |")
+
+    lines.append("")
+    lines.append(
+        f"{matrix.labelled} failed requirements labelled by a person, "
+        f"{matrix.unlabelled} not labelled"
+    )
+    if matrix.no_requirement_results > 0:
+        lines.append(f"{matrix.no_requirement_results} graded runs have no requirement results")
+    for n in matrix.notes:
+        lines.append(n)
+
+    return "\n".join(lines)

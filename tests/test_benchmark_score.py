@@ -92,6 +92,7 @@ def test_missing_tasks_yaml_skips_matrices_and_notes_it(tmp_path, monkeypatch):
     )
     written = write_score(ev, tmp_path, CompositeWeights())
     assert "task-matrix.html" not in {p.name for p in written}
+    assert {"root-cause.html", "root-cause.json"} <= {p.name for p in written}
     md = (tmp_path / "report.md").read_text(encoding="utf-8")
     assert "tasks.yaml" in md
 
@@ -187,6 +188,8 @@ _SCORE_FILES = {
     "heatmap.json",
     "gate-oracle.html",
     "gate-oracle.json",
+    "root-cause.html",
+    "root-cause.json",
     "sc-rollup.html",
     "sc-rollup.json",
     "waste-matrix.html",
@@ -226,6 +229,7 @@ def test_write_score_report_sections_in_contract_order(tmp_path, monkeypatch):
         "## Stages",
         "## Pre-012 records (untrusted)",
         "## Gate versus oracle",
+        "## Root cause",
         "## Success criteria",
         "## Notes",
     ]

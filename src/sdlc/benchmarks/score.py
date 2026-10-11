@@ -148,7 +148,7 @@ def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[
         p.write_text(text, encoding="utf-8")
         written.append(p)
 
-    written += _write_case_matrices(ev, out_dir, notes)
+    written += _write_case_matrices(ev, out_dir, notes, runs=runs)
 
     rollup = build_sc_rollup(ev.summaries, ev.records, selection_runs=ev.selection_runs)
     for name, text in (
@@ -167,6 +167,7 @@ def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[
         decisions=decisions,
         sc_rollup=render_sc_rollup_markdown(rollup),
         notes=notes,
+        records=ev.records,
     )
     report_p = out_dir / "report.md"
     report_p.write_text(md, encoding="utf-8")
@@ -174,7 +175,7 @@ def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[
     return written
 
 
-def _write_case_matrices(ev: Evidence, out_dir: Path, notes: list[str]) -> list[Path]:
+def _write_case_matrices(ev: Evidence, out_dir: Path, notes: list[str], runs=None) -> list[Path]:
     """Per-case grids. The waste matrix takes no tasks.yaml dependency and
     is written for every case; the task and error matrices need the suite
     and are skipped with a note when it is absent (today dispatch_history
@@ -221,6 +222,29 @@ def _write_case_matrices(ev: Evidence, out_dir: Path, notes: list[str]) -> list[
         for name, text in (
             ("agreement-matrix.html", render_agreement_matrix_html(am)),
             ("agreement-matrix.json", render_agreement_matrix_json(am)),
+        ):
+            p = d / name
+            p.write_text(text, encoding="utf-8")
+            written.append(p)
+
+        from .root_cause import (
+            build_root_cause,
+            load_labels,
+            render_root_cause_html,
+            render_root_cause_json,
+        )
+
+        case_runs = [r for r in (runs or []) if r.case_id == case_id]
+        if not case_runs and not runs:
+            from .runs import build_runs
+
+            case_runs = [r for r in build_runs(ev.records) if r.case_id == case_id]
+
+        labels = load_labels(case_id, suite=suite, records=ev.records)
+        rcm = build_root_cause(case_id, case_runs, ev.records, suite=suite, labels=labels)
+        for name, text in (
+            ("root-cause.html", render_root_cause_html(rcm)),
+            ("root-cause.json", render_root_cause_json(rcm)),
         ):
             p = d / name
             p.write_text(text, encoding="utf-8")

@@ -176,6 +176,7 @@ def render_markdown(
     decisions: dict[str, CompositeDecision] | None = None,
     sc_rollup: str | None = None,
     notes: list[str] | None = None,
+    root_cause: str | None = None,
 ) -> str:
     """013 (contract 8): every section of report.md, in order, each heading
     exactly once. `write_score` passes the grid, the gate view, the
@@ -241,6 +242,30 @@ def render_markdown(
         gate_md = render_gate_oracle_markdown(gate_oracle)
         if gate_md:
             lines += ["", "## Gate versus oracle", "", gate_md]
+    if root_cause is not None:
+        rc_md = root_cause
+    elif runs:
+        from .root_cause import build_root_cause, load_labels, render_root_cause_markdown
+
+        rc_parts = []
+        cases = sorted({r.case_id for r in runs})
+        for c in cases:
+            c_runs = [r for r in runs if r.case_id == c]
+            c_recs = [r for r in (records or []) if r.case_id == c]
+            if not c_recs and runs:
+                c_recs = [rec for r in c_runs for rec in r.records]
+            c_labels = load_labels(c, records=c_recs)
+            mat = build_root_cause(c, c_runs, c_recs, labels=c_labels)
+            if mat.rows:
+                if len(cases) > 1:
+                    rc_parts.append(f"### {c}\n\n" + render_root_cause_markdown(mat))
+                else:
+                    rc_parts.append(render_root_cause_markdown(mat))
+        rc_md = "\n\n".join(rc_parts)
+    else:
+        rc_md = ""
+    if rc_md:
+        lines += ["", "## Root cause", "", rc_md.strip("\n")]
     errored = [s for s in summaries if s.errors]
     if errored:
         lines += ["", "## Stage failures", ""]

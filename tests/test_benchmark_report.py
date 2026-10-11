@@ -499,6 +499,7 @@ _SECTIONS = [
     "## Stages",
     "## Pre-012 records (untrusted)",
     "## Gate versus oracle",
+    "## Root cause",
     "## Stage failures",
     "## Success criteria",
     "## Notes",

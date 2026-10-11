@@ -17,6 +17,9 @@ from sdlc.benchmarks.root_cause import (
     Label,
     build_root_cause,
     load_labels,
+    render_root_cause_html,
+    render_root_cause_json,
+    render_root_cause_markdown,
 )
 from sdlc.benchmarks.runs import Run, build_runs
 from sdlc.benchmarks.tasks import TaskSpec, TaskSuite
@@ -428,3 +431,132 @@ def test_load_labels_validation(tmp_path):
     assert loaded[0].task_id == "t1"
     assert loaded[0].cause == "planning"
     assert loaded[0].note == "verified"
+
+
+def test_render_root_cause_html():
+    recs = [
+        _make_record(
+            "r1", "b1", "case-1", BenchmarkScope.STAGE, "research", outcome=BenchmarkOutcome.FAIL
+        ),
+        _make_record("r2", "b1", "case-1", BenchmarkScope.STAGE, "analyze"),
+        _make_record(
+            "r2",
+            "b1",
+            "case-1",
+            BenchmarkScope.ORACLE_TASK,
+            "oracle",
+            task_id="t1",
+            score=0.5,
+        ),
+        _make_record(
+            "r2",
+            "b1",
+            "case-1",
+            BenchmarkScope.ORACLE,
+            "oracle",
+            score=0.5,
+        ),
+    ]
+    runs = build_runs(recs)
+    matrix = build_root_cause("case-1", runs, recs)
+    html = render_root_cause_html(matrix)
+
+    # 4 columns in order of ROOT_CAUSES
+    for c in ROOT_CAUSES:
+        assert f"<th>{c}</th>" in html
+    assert (
+        html.index("planning")
+        < html.index("execution")
+        < html.index("verification")
+        < html.index("unattributed")
+    )
+
+    # value and denominator in every cell
+    assert ">1/2</td>" in html  # planning: 1 lost run / 2 runs started
+    assert ">0/2</td>" in html  # execution: 0 lost / 2 started
+    assert ">0/1</td>" in html  # verification: 0 failed / 1 requirement graded
+    assert ">1/1</td>" in html  # unattributed: 1 failed / 1 requirement graded
+
+    # class low_n when cell.low_n is True
+    assert 'class="low_n"' in html
+
+    # lines: N failed requirements labelled by a person, M not labelled
+    assert "0 failed requirements labelled by a person, 1 not labelled" in html
+
+
+def test_render_root_cause_html_with_no_requirement_results():
+    recs = [
+        _make_record("r1", "b1", "case-1", BenchmarkScope.STAGE, "analyze"),
+        _make_record("r1", "b1", "case-1", BenchmarkScope.ORACLE, "oracle", score=1.0),
+    ]
+    runs = build_runs(recs)
+    matrix = build_root_cause("case-1", runs, recs)
+    html = render_root_cause_html(matrix)
+    assert "1 graded runs have no requirement results" in html
+
+
+def test_render_root_cause_markdown():
+    recs = [
+        _make_record(
+            "r1", "b1", "case-1", BenchmarkScope.STAGE, "research", outcome=BenchmarkOutcome.FAIL
+        ),
+        _make_record("r2", "b1", "case-1", BenchmarkScope.STAGE, "analyze"),
+        _make_record(
+            "r2",
+            "b1",
+            "case-1",
+            BenchmarkScope.ORACLE_TASK,
+            "oracle",
+            task_id="t1",
+            score=0.5,
+        ),
+        _make_record(
+            "r2",
+            "b1",
+            "case-1",
+            BenchmarkScope.ORACLE,
+            "oracle",
+            score=0.5,
+        ),
+    ]
+    runs = build_runs(recs)
+    labels = [Label(run_id="r2", task_id="t1", cause="verification")]
+    matrix = build_root_cause("case-1", runs, recs, labels=labels)
+    md = render_root_cause_markdown(matrix)
+
+    # Markdown is ASCII
+    assert md.isascii()
+
+    # Columns in order
+    assert "| arm | planning | execution | verification | unattributed |" in md
+    assert "1/2" in md
+    assert "1/1" in md
+
+    # Line: labelled / not labelled
+    assert "1 failed requirements labelled by a person, 0 not labelled" in md
+
+
+def test_render_root_cause_markdown_with_no_requirement_results():
+    recs = [
+        _make_record("r1", "b1", "case-1", BenchmarkScope.STAGE, "analyze"),
+        _make_record("r1", "b1", "case-1", BenchmarkScope.ORACLE, "oracle", score=1.0),
+    ]
+    runs = build_runs(recs)
+    matrix = build_root_cause("case-1", runs, recs)
+    md = render_root_cause_markdown(matrix)
+    assert md.isascii()
+    assert "1 graded runs have no requirement results" in md
+
+
+def test_render_root_cause_json():
+    recs = [
+        _make_record(
+            "r1", "b1", "case-1", BenchmarkScope.STAGE, "research", outcome=BenchmarkOutcome.FAIL
+        ),
+    ]
+    runs = build_runs(recs)
+    matrix = build_root_cause("case-1", runs, recs)
+    raw = render_root_cause_json(matrix)
+    assert '"case_id": "case-1"' in raw
+    assert '"planning"' in raw
+    assert '"numerator": 1' in raw

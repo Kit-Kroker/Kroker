@@ -282,3 +282,27 @@ def test_stored_cat_cafe_sc_rollup_reads_zero_of_eighteen():
     rollup = build_sc_rollup(ev.summaries, ev.records, selection_runs=ev.selection_runs)
     assert rollup.summary_runs == 0
     assert "0 of 18 runs left a run summary" in render_sc_rollup_markdown(rollup)
+
+
+# --- 015 T010: Phase 6 US3 root-cause figures on stored cat-cafe runs ----------
+
+
+def test_stored_cat_cafe_root_cause_figures():
+    """Round 015 Phase 6 US3: cat-cafe stored runs root-cause figures."""
+    from sdlc.benchmarks.root_cause import build_root_cause
+
+    recs = _stored_records()
+    runs = _runs_for(recs, CAT_CAFE)
+    matrix = build_root_cause(CAT_CAFE, runs, recs)
+    assert len(matrix.rows) == 1
+    row = matrix.rows[0]
+    assert row.planning.lost_runs == 8
+    assert row.planning.runs_started == 18
+    assert row.planning.numerator == 8
+    assert row.planning.denominator == 18
+    assert row.execution.lost_runs == 0
+    assert row.execution.numerator == 0
+    assert row.execution.denominator == 18
+    assert matrix.no_requirement_results == 10
+    assert matrix.labelled == 0
+    assert matrix.unlabelled == 0
