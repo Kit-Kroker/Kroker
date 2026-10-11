@@ -22,8 +22,6 @@ from ..core.models import (
     GatePolicy,
     HarnessKind,
 )
-from ..crew.loader import preflight_crew
-from ..worker import TASK_QUEUE
 from .matrix import expand_matrix
 from .models import CaseRole, CaseSpec
 from .smoke import (
@@ -33,7 +31,6 @@ from .smoke import (
     resolve_repo_status,
     write_stamp,
 )
-from .workflow import BenchmarkWorkflow
 
 
 def _run_sync[T](coro: Coroutine[Any, Any, T]) -> T:
@@ -322,6 +319,9 @@ async def _run_matrix(
     # Refuse a colliding sweep before the matrix starts, not at each cell's
     # code stage (parent §5). expand_matrix already turned `crew:<harness>`
     # entries into cells, so this reads the same strings the arms will use.
+    from ..crew.loader import preflight_crew
+    from .workflow import BenchmarkWorkflow
+
     for cell in expand_matrix(spec):
         if cell.harness is HarnessKind.CREW:
             preflight_crew("code", cell.lead_harness, cell.role_models.get("dev"))
@@ -330,6 +330,8 @@ async def _run_matrix(
     client = await Client.connect(
         os.environ.get("TEMPORAL_HOST", "localhost:7233"), data_converter=pydantic_data_converter
     )
+    from ..worker import TASK_QUEUE
+
     handle = await client.start_workflow(
         BenchmarkWorkflow.run,
         spec.model_dump_json(),
