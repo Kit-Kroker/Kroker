@@ -4,8 +4,16 @@
 |---|---|
 | Status | Draft v1.0 |
 | Date | 2026-07-02 |
-| Last amended | 2026-09-01 — the crew, a multi-agent code stage (§§2, 3, 4; E-88); §14 regenerated from `main`; §7 marked P4/unbuilt |
+| Last amended | 2026-10-11 — direction set by the agent architecture plan: target blocks in §§1–6, 8–11, 13; ADR-2/6/9/12 amended; ADR-22…24 added; §9 and §14 corrected to the one queue `main` runs. 2026-09-01 — the crew, a multi-agent code stage (§§2, 3, 4; E-88); §14 regenerated from `main`; §7 marked P4/unbuilt |
+| Direction | `docs/reports/Kroker Agent Architecture & Implementation Plan.md` (2026-10-04, revised 2026-10-11 with scaling, SDK portability and run UI) is the priority document. Where this file and the plan disagree, the plan wins and this file moves toward it |
 | Related | `PRD.md`, `SDLC-spec-v2.md`, `ROADMAP.md`, `BENCHMARK.md` — contracts in `src/sdlc/models.py` are the source of truth |
+
+> **Reading target blocks.** A paragraph opening with **Target (plan, not
+> built)** states where the architecture is going, in the plan's terms and
+> by the plan's phases, written `AP-0`…`AP-6` and tracked in
+> `docs/roadmap/agent-architecture-plan.md`. Everything outside those
+> blocks describes `main`. A target block becomes plain text when its phase
+> lands; until then `ROADMAP.md` carries it as open.
 
 ---
 
@@ -26,6 +34,19 @@ Two rules shape everything:
 2. **Memory is I/O.** All memory access happens in activities; recall
    results become persisted, hashed `RecallSnapshot` artifacts declared as
    stage inputs — stages stay pure functions of hashed inputs.
+
+**Target (plan, not built):** the system is a **deterministic workflow of
+bounded ReAct agents** (ADR-22). Rule 1 narrows from "proposers never touch
+tools" to "no role acts outside a boundary the runtime enforces": proposer
+roles gain **read-only** repository tools pinned to a commit, with a step
+budget, and still cannot write, run arbitrary commands, or see another
+role's session. A third rule joins the two above:
+
+3. **Model observes, code decides.** A model returns per-item observations
+   with evidence; every boolean a gate or loop reads (`approve`,
+   `tests_passed`, `stack_mismatch`, `plan_valid`) is a pure function in
+   code (ADR-24). Anything checkable inside the conversation is an output
+   validator that sends the model back, not an outer re-run.
 
 ```mermaid
 flowchart TB
@@ -58,7 +79,7 @@ through its validated diff artifact.
 | Temporal server | run state, event history, timers, signals, schedules, visibility | business logic |
 | GraphWorkflow (FeatureWorkflow retained for in-flight runs) | stage sequencing, gate waits, fix-loop bounds, budget counters | I/O, subprocesses, memory, nondeterminism |
 | MaintenanceWorkflow **(P4 — designed, not built)** | DAPER cycle, repair gating, child factory runs | direct code patches |
-| Proposer agents | typed artifact proposals (Requirements … RepairPlan) | tool calls, file access |
+| Proposer agents | typed artifact proposals (Requirements … RepairPlan) | tool calls, file access. *Target (plan, not built):* owns typed evidence gathered with read-only repo tools; never writes, never runs unlisted commands, never computes its own verdict |
 | Harness runner activity | `claude -p` / `opencode run` execution, heartbeats, checkpoint commits, cost capture | leaving the worktree; choosing its own permissions |
 | CrewTaskWorkflow (E-88) | the code stage's round loop when a task runs as a crew: turn order, the four brakes, per-round checkpoints, its own `tool_approval` / `crew_question` gates | subprocesses and file I/O (every turn is an activity); writing repository files through any role but the lead |
 | Support activities | Hindsight retain/recall/reflect, worktree/PR ops, test/lint/coverage runs, notifications | decision-making |
@@ -104,6 +125,55 @@ task gate (accept / retry with guidance / quarantine). Every harness run
 ends with a checkpoint commit (a failed one is logged at WARNING, not raised),
 and every completed task emits a `HandoffSummary` (what changed, decisions, open concerns) consumed by
 subsequent tasks and the merge stage.
+
+**Target (plan, not built) — the per-task loop decides on evidence:**
+
+- **Planning splits in two.** The planner decomposes with repo tools into
+  task skeletons (`covers`, `files_hint`, `depends_on`); one call per task
+  then compiles its Validation Contract. Code checks the DAG, id
+  uniqueness, requirement coverage and task size, and dry-runs every
+  contract command on an empty worktree — a command that does not exist is
+  a plan error, found before any code is written.
+- **Tests come first.** The test harness writes tests from the contract and
+  the test freeze (C2) locks them; code checks they exist and fail before
+  implementation.
+- **The developer's definition of done is the contract's commands.** A
+  wrapper refuses hand-off unless `test_commands` and `lint_commands` exit 0.
+- **QA traces evidence.** It returns one `AssertionEvidence` per contract
+  assertion (met / unmet / unverifiable, with the test and implementation
+  location), using read-only repo tools and `run_single_test`.
+  `tests_passed` and `stack_mismatch` are computed from that list.
+- **The reviewer is four parallel lenses** — correctness, test integrity,
+  integration, security — on another model family. Each `Finding` carries
+  `path`, `line` and a quote; a validator drops any finding whose quote is
+  not at that location. `approve` is computed: no critical or high finding
+  and no unmet assertion.
+- **A regression check** reverts the implementation for a key assertion and
+  requires its test to fail.
+- **The fix loop carries a task ledger** — attempts, commands run, failing
+  tests, unmet assertions, findings — so a retry does not repeat a failed
+  approach, and receives the full failures section rather than a
+  truncated tail. The bound stays at 2 attempts until the loop is shown to
+  converge.
+- **Roles removed or merged:** `devops_planner` folds into planner
+  decompose; `adversary` gives way to two samples of the correctness lens,
+  with disagreement going to a human; `merge_verdict` stops advising and
+  becomes a release summary for the person at the merge gate.
+
+**Target (plan, not built) — the roles around the loop:**
+
+- **Architect** gathers evidence with repo tools and returns
+  `requirement_coverage`; the brownfield delta check becomes a validator on
+  its output. A critic on another family reviews requirements and spec
+  only; one blocking critique triggers one revision round.
+- **Clarify probes** read the repo; their questions are deduplicated and
+  ranked by `materiality` in code before they reach the inbox.
+- **Analyst** becomes an aggregator: the trace matrix over all
+  `AssertionEvidence` is built in code, and the model is called only for
+  cross-task issues and `unverifiable` items.
+- **Research** fetches pages as numbered fragments; every claim cites a
+  `fragment_id`, and a validator rejects any citation of a fragment that was
+  not fetched.
 
 **One session or a crew (E-88):** a task's implementation is by default one
 harness session driven by an activity. It may instead run as a **crew** — a
@@ -175,6 +245,60 @@ names (rename = breaking change); a role that drops or weakens the
 capability fails registry load (003); developer and reviewer must differ in
 harness or model family.
 
+**Target (plan, not built) — one factory, bounded ReAct roles:** every role
+is built by `make_agent(role_spec, output_type, tools, validators)` from the
+same parts, so a new role is configuration plus a prompt.
+
+| Part | What it is |
+|---|---|
+| `RoleSpec` (in `agent.yaml`) | model id and family, thinking budget, max tokens, step and tool-call budget, retries, task queue, SDK |
+| `RepoReadTools(root, commit)` | `read_file`, `grep`, `list_dir`, `git_show`, `find_tests` — read-only, commit-pinned, truncated with paging |
+| `SandboxTools` | `run_command`, `run_single_test` in an isolated worktree, budgeted and allowlisted |
+| Validators library | `paths_exist`, `quote_in_file`, `ids_unique`, `dag_acyclic`, `covers_all`, `fragment_was_fetched` |
+| Evidence schemas | `AssertionEvidence`, `Finding`, `Coverage` — evidence fields before status fields |
+| Verdict functions | pure, unit-tested: `review_verdict`, `plan_verdict`, `task_verdict` |
+| `ModelRouter` + family check | resolves role to model; start-up fails when a judge shares dev's model (ADR-6) |
+
+The class table above changes with it: architect, planner, QA, reviewer
+lenses, clarify probes and analyst move from *one LLM call* to a bounded
+tool loop inside one activity; critics, handoff and the release summary stay
+single calls. When a role's step budget is spent its tools are removed, so
+it must return its structured output. Read-only roles never get a shell;
+anything that runs commands sits in a sandbox workspace.
+
+One constraint shapes the validators: a role's loop runs in workflow code
+(`workflows/role_host.py`), where file access is not allowed. A validator
+that reads the tree (`paths_exist`, `quote_in_file`) therefore runs in an
+activity and returns its failure to the conversation; only validators over
+the output alone (`ids_unique`, `dag_acyclic`, `covers_all`) run inline.
+
+**Target (plan, not built) — tools and hooks per role.** Every role gets the
+smallest toolset that lets it check its own claims, and the runtime — not
+the prompt — enforces its limits. A baseline attaches to every role through
+`make_agent`: tracing, thinking at the role's effort, tool-output limits,
+spend limits; a start-of-run check of the ADR-6 family rule; tool removal
+once the step budget is spent; tool errors sorted into *retry* (transient)
+or *failed result* (definitive, the model adapts), anything else aborting.
+
+| Role | Tools | Enforced beyond baseline |
+|---|---|---|
+| clarify probes | read-only repo | every `evidence` path exists |
+| architect | read-only repo, `git_show`, `research` | delta valid against the git tree; every requirement covered; each decision lists alternatives |
+| critics | none | family differs from dev (ADR-6) and from the role it critiques |
+| planner decompose | read-only repo, `find_tests` | DAG acyclic, ids unique, coverage, size thresholds |
+| contract compile | read-only, manifests only | each command references an existing script; dry-run is an orchestrator activity, not a tool |
+| test harness | write in sandbox | writes outside test paths cancelled; network and `git push` denied |
+| dev harness | write in sandbox | frozen tests and CI config read-only, edits cancelled with a reason; hand-off refused unless contract commands exit 0 |
+| QA | read-only repo, `run_single_test` | call cap; test names must come from the diff or test output |
+| reviewer lenses | read-only repo, `git_show`; no shell | finding's quote must be at `path:line` |
+| deep_review | none; its input is the scrubbed transcript | runs on orchestrator signals only |
+| analyst | read-only on the integration branch | every criterion in the trace matrix or flagged `unverifiable` |
+| research | search, numbered-fragment fetch, prompt-injection screening | every cited fragment was fetched |
+| handoff, release summary | none | — |
+
+File-tool roots bound file tools only, never a shell, so any role that runs
+commands lives in a sandbox workspace.
+
 Beside durability every durable proposer (and the research stage's
 activity-side planner/synthesis agents) carries the single-retry resolver
 (`agents/model_ids.py::single_retry_layer`, 004): the provider client is
@@ -210,6 +334,12 @@ rule: history payloads stay small by reference, and agent reasoning stays
 sharp by scope. High-volume exploration (the Cartographer walking a large
 repo) uses programmatic access — tools that filter and extract — rather
 than streaming the corpus through the context window.
+*Target (plan, not built):* "no agent sees another stage's raw transcript"
+holds unchanged; what changes is that a role may read the repository at
+the task's commit through its read-only tools instead of receiving a
+pre-built extract. Reading code is evidence gathering, not context
+sharing. "The Clarifier never sees code" goes with it: clarify probes read
+the repo so each question can cite the path that raised it.
 
 **Model tiering per role:** capability-matched, configured per agent, cost
 attributed per role per run (SC-7 feeds tiering decisions):
@@ -221,7 +351,21 @@ attributed per role per run (SC-7 feeds tiering decisions):
 | Reviewer, QA analyst | adversarial instruction-following | **different model family than the developer's authoring model** |
 | Clarifier, detector, Cartographer triage | narrow classification/extraction | small fast model |
 
-**Harness abstraction:** one protocol, two adapters.
+**Target (plan, not built) — tiers by where an error multiplies:**
+
+| Tier | Roles | Family rule | Thinking |
+|---|---|---|---|
+| Strong judge | reviewer lenses, architect critic, plan critic | must differ from dev | on |
+| Strong planner | architect, planner decompose | any; prefer strong | on |
+| Worker | dev and test harness, QA, contract compile, clarify probes | any | off or low |
+| Cheap | handoff, release summary, analyst gap-filling, research fetch/cite | any | off |
+
+With budget for one upgrade, the reviewer moves to a different strong family
+first, then the planner. A model swap is measured separately from a prompt
+change.
+
+**Harness abstraction:** one protocol, three CLI adapters (claude_code,
+opencode, cursor) plus the crew composition.
 `claude -p <prompt> --output-format json --allowedTools … --resume <sid>` and
 `opencode run [-m provider/model] [-s sid] [--attach url] --format json
 <prompt>`. Adapters normalize to `HarnessRunResult{session_id, exit_code,
@@ -250,6 +394,21 @@ tools, repo, or worker session — so it *cannot* wander or be polluted. The
 doer has tools; the judge does not. A harness **deep-review** tier is
 configurable per project/task for high-risk work; when enabled, the
 harness-inequality clause re-applies to that path.
+
+**Target (plan, not built) — read access, not reasoning access:** clean
+context comes to mean *no view of the developer's session or narrative*.
+Judges gain read-only access to the worktree at the task's commit, so they
+check a claim instead of guessing at it; they still hold no write tool and
+no shell. `deep_review` runs only on orchestrator signals (test edits, many
+reverts, drift), not as a standing tier.
+
+**Target (plan, not built) — SDK portability:** Kroker owns each role's
+contract and an AI SDK is an adapter behind a `RoleRunner` port, the same
+shape the coding harnesses already have (ADR-23). Kroker-owned: role input
+and output schemas, tool definitions, validators, verdict functions, the
+retry-with-error loop, the event schema, tool policy, model identity and
+cost. The adapter calls the model, translates tools and maps events.
+pydantic-ai stays the only adapter until a second one has a reason.
 
 **The crew (E-88), when one harness session is not the unit of work.** A crew
 is assets, not code: `crew/roles/<name>.yaml` declares a role's harness, model,
@@ -324,6 +483,12 @@ Escalation is not a separate mechanism: fix-loop exhaustion, budget
 exhaustion, and repair approvals all *enter a hard gate* using the same
 contract, which is why they all appear in the same inbox on every surface.
 
+**Target (plan, not built):** a soft gate clears on code-computed checks —
+the stage's validators and verdict function — not on the proposal's own
+confidence alone (today's soft path is confidence-only; ROADMAP FR-301).
+Two more things enter the same inbox: a waiver of a reviewer finding, and
+a disagreement between the two correctness samples.
+
 ## 6. Memory architecture
 
 Hindsight, self-hosted (Postgres). Banks: `org` (cross-project) and
@@ -345,6 +510,23 @@ memory learns the soft rules). Retains are fire-and-forget with retries and
 a PII/secret scrub hook. Calibration: retro compares agent confidence
 scores against human overrides and retains miscalibration, feeding threshold
 tuning.
+
+**Target (plan, not built):**
+
+- *Within a run.* One typed run context (requirements, clarify answers,
+  decisions, stack, repo conventions) reaches every stage, and a stage's
+  input contract is checked in code, so a missing input fails the run
+  instead of dropping silently. The per-task ledger (§3) is the fix loop's
+  short-term memory. Long tool loops compact old tool results.
+- *Across runs.* Dev, QA and reviewer recall `gotcha` and `gate_feedback`
+  filtered by the task's modules and stack, still logged as a snapshot
+  under the run's watermark. Only verified lessons are retained: each
+  memory carries its outcome and source run, and `reflect` drops lessons
+  from tasks that later failed. A gotcha recurring in two or more projects
+  is promoted to the `org` bank; feedback that recurs becomes a validator
+  or a prompt-gate veto; items never cited after N recalls expire.
+- *Measured first.* The benchmark runs with memory off and on before
+  anything relies on it, and a degraded recall fails loudly there.
 
 ## 7. Maintenance loop (DAPER)
 
@@ -404,6 +586,19 @@ poller costs `N_runs`. Operator surfaces still own no durable state.
 The workflow authors decision-card content (title, detail, suggested
 answer); surfaces render verbatim. New gate types need zero UI changes.
 
+**Target (plan, not built) — the run page shows evidence, not only
+progress.** The main screen per task is an evidence view: contract
+assertions with met / unmet / unverifiable and links to test and
+implementation; reviewer findings by lens with their quote; the verdict
+traced through its function to the rule that failed; gate decisions and
+waivers; the fix-loop history from the task ledger. Under it, `RunState`
+is published as one snapshot plus ordered JSON Patches on a workflow
+stream, so nothing between two poller ticks is lost and a late client
+replays the stream; a scrubber walks the `RunEvent` log with markers for
+gates, validator retries and exhausted fix budgets; time and cost are
+broken down per role and model. `RunEvent` gains per-role model, tool
+start/end, approval and usage events in one schema.
+
 ## 9. Deployment topology
 
 ```mermaid
@@ -423,6 +618,10 @@ flowchart LR
     GH[(Git remote / CI)]; WH --> GH
 ```
 
+> **Status: the split above is designed, not built.** `main` runs one task
+> queue (`TASK_QUEUE = "ai-sdlc"` in `worker.py`); ROADMAP NFR-2 and ADR-9
+> are open.
+
 Two task queues split the fleet: lightweight proposer/support workers scale
 on LLM throughput; heavy harness workers (harness CLIs, language toolchains,
 repo credentials, worktree disk) scale on coding concurrency — and hold the
@@ -430,6 +629,30 @@ only credentials that can touch repos, repo-scoped and short-lived. Each
 harness run is contained per the §10 tier (restricted OS user at P1,
 container at fleet scale). Everything stateless is disposable;
 backup surface = Temporal DB + Hindsight Postgres + object store.
+
+**Target (plan, not built) — five pools, routed per role.** Each role's
+activities go to the queue named in its `RoleSpec`; workflow code barely
+changes.
+
+| Pool (task queue) | Runs | Scales by |
+|---|---|---|
+| `kroker-orchestrator` | workflows only | small, 1–2 replicas |
+| `kroker-llm` | tool-less role calls: critics, release summary, handoff | provider rate limits |
+| `kroker-repo-read` | roles with read-only tools | horizontally; needs a clone or the task sandbox |
+| `kroker-sandbox` | dev and test harness, contract dry-run, `run_single_test` | heavy hosts or a remote sandbox; strict activity concurrency |
+| `kroker-memory` | recall, retain, reflect | small, beside Hindsight |
+
+A task's worktree lives on one host, so its activities follow it through a
+worker-specific queue and the worktree is recreated elsewhere on worker
+loss; a remote sandbox addressed by id needs no affinity. Independent plan
+tasks run as parallel child workflows only when the planner declares no
+module or file overlap between them (wave mode); overlapping tasks still
+serialize, and serial stays the default (ADR-13). Pool sizes, not the
+workflow, are then the real concurrency limits. Shared storage is the
+prerequisite: an S3-backed artifact store and Temporal payload offload on
+every client and worker. Each checkpoint commit is also pushed to a task
+branch every sandbox worker can fetch, so a task that loses its host
+resumes from its last checkpoint instead of starting over (§11).
 
 ## 10. Security & governance
 
@@ -447,6 +670,21 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
   hook inspects the concrete command and denies/escalates out-of-worktree
   writes, `rm -rf`, and non-allowlisted network. Egress is restricted to the
   model API + git remote.
+- **Target (plan, not built) — criteria-based tool approval.** This extends
+  the containment policy (ADR-17) rather than standing beside it: a rule
+  gains a third action, *evaluate*, between allow and escalate. A rule
+  names a criteria set (`read_only`, `irreversible`, …) and the rules
+  behind a name are configuration an operator can change per project. A
+  call is then allowed by static allow-list, by an evaluator judging its
+  arguments against the set, or by a human. The evaluator is code or a
+  different-family model, never the dev model. It cannot fail open: low
+  confidence, an irreversible effect, an evaluator error or a call with no
+  criteria set all go to a human through the same gate inbox (§5). Every
+  evaluation is an event with its verdict, reasoning and latency. Two
+  limits carry over from ADR-17: the hook stays import-light and calls no
+  model, so the evaluator runs in the workflow on a deferred call, as
+  escalation does; and a harness with no hook layer (opencode today)
+  cannot enforce it, so the gap is recorded or, under `strict`, refused.
 - Secrets: never in prompts, history, or memory; scrub hook on retain;
   harness credentials only on harness workers, repo-scoped and short-lived.
 - Budgets per run (steps, wall-clock, cost) — exhaustion escalates.
@@ -502,267 +740,30 @@ backup surface = Temporal DB + Hindsight Postgres + object store.
 | Hindsight down | recalls degrade to empty snapshot (logged); retains retry in background — pipeline never blocks on memory |
 | History growth (maintenance/long runs) | continue-as-new |
 | Prompt edited mid-fleet | memoization hash invalidates only affected stages |
+| Role step budget spent *(target)* | tools removed; the role must return structured output; a missing or invalid output fails the step like any validator exhaustion |
+| Output validator retries exhausted *(target)* | step fails non-retryably with the last validation error recorded; the stage's gate or the task gate escalates |
+| Worker holding a task worktree lost *(target)* | worker-specific queue times out; the worktree is recreated on another sandbox worker. The task resumes from its last checkpoint commit only if the task branch is reachable from shared storage; otherwise it restarts from the integration head |
+| Correctness samples disagree *(target)* | no verdict is computed; the task enters a hard gate with both finding sets |
+| Judge or evaluator shares the developer's model *(target)* | at start-up the worker refuses to boot; a per-run override that would cause it is refused at submission. No run starts with a judge on the developer's weights |
 
 ## 12. Architecture decision records
 
-- **ADR-1 Temporal owns state** (not a custom manifest/event-log
-  orchestrator). Durable timers, signals, retries, visibility for free; the
-  v1 hand-rolled engine's ideas survive as workflow code; `events.jsonl`
-  demoted to export. *Trade-off:* determinism discipline required in
-  workflow code (enforced by import-linter).
-- **ADR-2 Pydantic AI for proposers, harness CLIs for doers.** Typed,
-  validated artifacts where thinking happens; full agentic tool use where
-  code gets written. The `TemporalDurability` capability (003; previously
-  the deprecated `TemporalAgent` wrapper) gives durability without custom
-  glue.
-  *Trade-off:* two agent runtimes to operate.
-- **ADR-3 `CodeArtifact` = files[] | diff_ref union.** Propose-mode for
-  small/greenfield and test files; harness-mode (diff in worktree) for real
-  iterative work. Downstream consumers see one materialized diff.
-- **ADR-4 Gates as policy-driven durable signal waits** (hard/soft/off +
-  confidence threshold). A decision's outcome is `{approve, reject, revise}`,
-  and gate identity is `(gate_name, round)` so `revise` loops back
-  (bounded) while idempotency holds per round. One mechanism serves
-  approvals, questions, escalations, repairs, *and revisions* — one inbox
-  everywhere. *Trade-off:* calibrated confidence is a prompt-engineering
-  liability → monitored via SC-6.
-- **ADR-5 Hindsight as advisory memory; auditability vs memoization split.**
-  Auditability (persisted artifacts + snapshots + history) is the invariant;
-  memoization is a best-effort dev-loop cache. A per-run memory watermark
-  pins recall — reusing the persisted snapshot *is* the freeze — so memory is
-  refreshed on purpose, not busted by nightly `reflect`. *Trade-off:* extra
-  artifact per stage; the memoization module and watermark are real (if
-  small) components Temporal does not provide.
-- **ADR-6 Anti-collusion review by construction.** The real invariant is
-  *different model family than the developer's authoring model*; the reviewer
-  is a clean-context proposer (no tools/repo/session) by default, so the doer
-  has tools and the judge does not. The registry validator enforces
-  model-family inequality. **Precise boundary for sessions (ADR-16):** the
-  default `review` starts from a clean context and **never resumes the
-  developer's session**; the optional, opt-in `deep_review` tier (ROADMAP
-  E-39) reads the **scrubbed** `HarnessSession` as *data* (never the raw
-  session, never via resume-handle), stays ADR-6 family-independent of the
-  developer, and is an **additional** decorrelated lens, not a replacement
-  for clean-context review — so it additionally rejects same harness+family.
-  Default review starts clean and never resumes the developer's session. The
-  optional `deep_review` tier (FR-111/E-39) reads the *scrubbed* HarnessSession
-  as data — never the raw session, never via resume-handle — is ADR-6
-  family-independent of `dev`, and is advisory-only: an additional lens, never a
-  replacement for the clean-context reviewer.
-  Structural, not prompt-based.
-- **ADR-7 Repairs execute through the factory.** MaintenanceWorkflow starts
-  brownfield children for code fixes; autonomy never bypasses gates.
-- **ADR-8 Interfaces are stateless signal/query shells.** No interface DB;
-  Temporal is the single source of run truth; surfaces cannot drift.
-- **ADR-9 Two worker pools by capability.** Proposer vs. harness queues:
-  independent scaling, credential isolation, cheap fleet economics.
-- **ADR-10 Claim-check for all large payloads.** 2MB history limit as a
-  design forcing-function; `ArtifactRef{kind, uri, sha256}` everywhere.
-- **ADR-11 Deterministic DAG, deliberately — contra the "Bitter Lesson."**
-  Current practice argues orchestration should live in prompts/skills so
-  architectures improve with each model release. We adopt that *within*
-  stages (agent behavior, registry config, prompts) and reject it *between*
-  stages: an SDLC needs auditability, gates that cannot be reasoned around,
-  and reproducible re-runs — properties only a fixed, deterministic DAG
-  provides. *Trade-off:* pipeline shape changes require code + versioning
-  discipline; accepted as the price of governance.
-- **ADR-12 Contract-first validation with clean-context validators.**
-  Validation Contracts freeze "done" before implementation; validators never
-  see the worker's narrative or session. Correctness is measured against
-  requirements, not implementation bias — the structural complement to
-  ADR-6's cross-harness rule. *Trade-off:* planning gets heavier; contracts
-  can be wrong — which is exactly what the plan gate reviews.
-- **ADR-13 Serial-by-default implementation; context by reference.**
-  Worktrees prevent file collisions, not design divergence, so
-  implementation defaults to serial with declared-overlap serialization in
-  wave mode; agent context is handles + scoped extracts with per-role
-  budgets, and sessions are resume-bounded (fresh session + structured
-  handoff past the ceiling — compaction is failure). The ceiling is
-  *measured*: `input_tokens > fraction × context_window` (from the harness
-  result JSON), with `max_session_resumes` as a hard fallback — not a blind
-  resume count. *Trade-off:* lower throughput per run and stricter
-  prompt-assembly plumbing, in exchange for design consistency and sustained
-  reasoning quality over long runs.
-- **ADR-14 Integration by running branch.** Worktrees isolate but do not
-  compose; a `sdlc/<run_id>/integration` branch accumulates completed task
-  work, tasks branch from its head, and merge back on QA pass. The merge PR
-  is `integration → base` (resolves the old OQ-2). Validator diffs anchor to
-  the branch point; a wave-mode merge conflict is a falsified `overlaps`
-  declaration → serialize or escalate. *Trade-off:* integration fixes
-  visibility, not divergence (still serial-by-default's job); adds a
-  merge-back activity and run-scoped worktree paths.
-- **ADR-15 Toolchain adapters for language-agnostic evaluation.** Generated
-  projects are not one language, so the stage-11/12 quality activities
-  (`run_test_suite`, `run_lint`, `security_scan`, `measure_coverage`) cannot
-  hardcode one toolchain. A `ToolchainAdapter` registry (`TOOLCHAINS`, beside
-  `HARNESSES`) resolves **by marker file in the produced repo**
-  (`pyproject.toml`/`package.json`/`go.mod`/`Cargo.toml` — the built artifact
-  decides, not the Architect's stated stack) and normalises
-  `build()/test()/lint()/coverage()` into the existing `TestReport`. Two format
-  invariants keep the deterministic gate language-agnostic and *unchanged*:
-  canonical coverage is **Cobertura XML** (each adapter translates into it;
-  `measure_coverage` already reads `coverage.xml`), and the absolute security
-  floor is **semgrep → SARIF** (one multi-language tool, so `security_no_critical`
-  / SC-5 stays a single check, not per-language sprawl). This is the exact
-  shape of ADR-2/3's harness adapter, applied to the evaluation toolchain:
-  adding a language is adding an adapter, never a fork. Rollout is incremental
-  — one reference adapter (Python) proves the seam end-to-end; further languages
-  are added on demand as the benchmark corpus needs them (ROADMAP §9.8,
-  E-30/E-30a-c). *Trade-off:* a new abstraction and registry to maintain, and a
-  per-language translation shim, in exchange for a grade that holds across every
-  language the factory can emit. **New scope** vs a Python-only pipeline —
-  likely a PRD line for the multi-language capability, not only this ADR.
-  *2026-08-08 (E-41a–d):* the adapter gains its first pure per-language
-  **parser** member, `function_spans`, beside its command strings. It runs no
-  subprocess and touches no filesystem, so ADR-15's purity rule holds; it is
-  the same kind of member as `classify_test_exit` — a per-language
-  interpretation rather than a command. Framework fingerprints and
-  misconfiguration rules deliberately do **not** live here: one language
-  serves many frameworks.
-- **ADR-16 Harness sessions as first-class, claim-checked artifacts.**
-  Every harness run emits a canonical `HarnessSession` — a normalised
-  transcript (tool-calls, file reads/writes, commands + exit status, model
-  turns) — as `session_ref: ArtifactRef{kind: harness_session}` on
-  `HarnessRunResult` (§4). Normalising the transcript is the **harness
-  adapter's** responsibility, beside the resume-handle it already owns
-  (`claude --resume` / `opencode -s`) — same registry and pattern as the
-  toolchain adapter (ADR-15). Because capture is **always-on**, three
-  properties are hot-path invariants, not options: claim-check is
-  unconditional (transcripts are large, never touch workflow state — the
-  second reason FR-702 must close, beside diffs); the memory scrub
-  (`pre_retain`) runs over the session **before** storage, **fail-closed**
-  like the SC-5 security floor (an injected credential in an always-stored
-  transcript is a leak by default); and retention follows a decided policy —
-  full transcript on fail / benchmark / any run with >0 fix-loop attempts, a
-  structured `SessionDigest` (§4.3 waste aggregates + decision-skeleton,
-  computed pre-truncation and always kept) on clean-green runs, never a blind
-  byte-truncation; scrub runs fail-closed **before** the full-vs-digest
-  branch, so a scrub failure stores nothing either way (full-transcript TTL
-  is the one open sub-point, OQ-B7). The session is the concrete **P5 trajectory
-  seam** (§10): most of what `events.jsonl`/`report.html` render and the
-  extraction point for trajectory eval + small-model distillation. Consumers
-  are the offline benchmark/anti-cheat, the opt-in `deep_review` lens
-  (ADR-6, E-39), trajectory harvesting, and retro distillation into memory —
-  **never** the default clean-context reviewer (ADR-6). *Trade-off:* a
-  storage + scrub cost on every run, in exchange for making agent behaviour
-  (not just its output diff) a first-class, measurable signal. **New scope.**
-- **ADR-17** Containment as a declared harness capability — a `CodingHarness`
-  declares which layers it can enforce (`native` / `hook`); the policy is one
-  versioned asset (`policy/containment.yaml`) compiled per adapter. Native
-  config is the **inner** layer and the hook the outer one, which is
-  structural rather than conventional: a hook's `allow` cannot bypass a
-  `permissions.deny` rule (verified against claude 2.1.219). Because a native
-  denial is **not** structurally reported (`permission_denials` is empty for
-  it) while a hook denial is, `layer:` declares a rule's *minimum* capability
-  and each adapter enforces at every layer it has. Total absence of layers
-  fails closed (cursor); partial coverage is recorded in `ContainmentReport`,
-  never silent; `strict` promotes partial coverage to a refusal. The hook
-  (`python -m sdlc.harness.hook`) is its own import-light module — it runs
-  once per tool call and must not import Temporal/pydantic_ai — and receives
-  the policy path explicitly (`--policy`), because its cwd is the task
-  worktree (a temp dir) where repo-root discovery would fail. **Adapter
-  reality (unequal mechanisms):** claude compiles to `permissions.deny` +
-  `hooks.PreToolUse` (full, observable); opencode (1.18.4) has no config flag
-  and no config env var, so its native deny is written into the worktree's
-  own `opencode.json` — self-protecting via the `edit` deny the same
-  compilation emits for agent-config paths; cursor surfaces neither and fails
-  closed. **This is a fence, not a sandbox:** egress denial is tool-level only
-  (a socket opened inside an allowed `Bash` call is invisible); the
-  OS-user/container tier is E-21.
-- **ADR-18** Triage precedes capability modelling — a repository that does not
-  build, or whose structure is not discernible, is **not** capability-mapped;
-  the factory reports the precondition as unmet (FR-903) instead of emitting a
-  low-confidence model. The forcing case is the repository class the assessment
-  product exists for: the EDCR methodology is enterprise-brownfield machinery
-  (BIAN / TM Forum / ACORD / HL7 blueprints), and against a three-week-old
-  vibe-coded repo its ≥90% file→capability coverage has nothing to map to,
-  every QA composite degenerates to `unknown`, and per-capability STRIDE
-  reasoning is paid for over structure that does not exist. So Tier 0 triage
-  (FR-900) is a distinct, cheaper, deterministic tier that **gates** Tier 2
-  (FR-910) rather than a first pass of it. *Trade-off:* two artifact families
-  and two workflows instead of one, in exchange for never shipping a
-  confident-looking capability model derived from absent structure — a wrong
-  answer here is not a weaker audit, it is a misleading one. **New scope.**
-- **ADR-19** Deployment targets and product-analytics sources are **adapters,
-  not substrate** — resolved from configuration exactly as toolchains are
-  (ADR-15), with one reference adapter each and no hosting, feature-flagging,
-  or analytics implementation of our own (NG7). This is what keeps the
-  product-outcome loop (FR-1100) an adjacent capability rather than a second
-  product: what remains after the substrate is excluded is a frozen contract, a
-  traceability check, a durable timer, and a gate — all mechanisms this system
-  already has. *Trade-off:* the factory's verdict depends on a metric read from
-  a system it does not control, which is FR-914's grounding problem outside our
-  trust boundary and is recorded unresolved as **OQ-9**. **New scope.**
-- **ADR-20** Pre-registration reuses contract-freeze semantics — an
-  experiment's decision rule is frozen and hashed at the hypothesis gate
-  precisely as `ValidationContract` freezes at planning (FR-803), and a
-  post-hoc change is a new audited gate round retaining both versions, never a
-  silent rewrite. One freeze mechanism, one audit shape, and the property that
-  carries the value (the rule cannot be edited once the data is visible) is
-  inherited rather than reinvented. *Trade-off:* rigidity is the point — an
-  owner who genuinely learns something mid-window must pay an audited round to
-  act on it, which is the cost of the guarantee. **New scope.**
-
-  *Extended 2026-07-25 (E-17):* the same hook carries approval, not only
-  denial. claude's `permissionDecision: "defer"` suspends the call and ends
-  the print-mode run, so the durable wait lives in the workflow's existing
-  gate rather than in an activity awaiting a signal. `defer` is print-mode
-  only and **solo-only** — a defer emitted for a batched call is discarded
-  and the call falls through to `acceptEdits` — so the hook counts sibling
-  tool_use blocks and denies when it cannot guarantee a solo defer.
-  Degradation is always toward deny.
-
-- **ADR-21 The agent board is a durable projection, never a second source of
-  truth.** Typed stage artifacts (`ClarifiedRequirements`, `ArchitectureSpec`,
-  `ImplementationPlan`, `DevTask[]`) previously existed only in Temporal
-  history, so "what design did run X propose?" required a replay and nothing
-  could carry a *status*. The board makes them addressable: immutable bodies in
-  the claim-check store, a mutable graph in SQLite, versioned per project with
-  lineage across runs. Agents may move task status; the workflow alone writes
-  `authoritative_status`. **That split is the whole design.** Statistics,
-  scoring, and any human reading "what happened" consume
-  `authoritative_status` only, so an agent that crashes mid-claim,
-  double-claims, or reports optimistically corrupts the live view and nothing
-  else — Temporal history still reconstructs the run, preserving §12's
-  auditability invariant. Divergence between the two columns is itself a
-  surfaced signal. Storage splits on the mutable/immutable line because they
-  have different needs: bodies want content addressing (sha256, already built
-  for ADR-16), state wants transactions. SQLite supplies serialization from the
-  standard library — `BEGIN IMMEDIATE` plus a `row_version` compare-and-swap is
-  what makes two agents racing for one task yield one winner and one `409`.
-  *Rejected:* a git-backed board in the target repo (most reviewable, but status
-  churn becomes merge conflicts and every claim is a commit) and extending
-  Hindsight (already project-scoped, but a semantic recall system has no state
-  machine and no compare-and-swap). *Trade-off:* one SQLite file is correct for
-  a single worker container and must become Postgres before a second one — the
-  same threshold at which `server start-dev` has to go. **New scope.**
-
-  *Idempotency is a load-bearing requirement, not a nicety.* Temporal executes
-  activities at least once: an activity that commits and then loses its worker
-  before reporting completion is re-run. Board writes must therefore absorb
-  re-execution — a repeated terminal transition is a no-op returning the
-  current row, not an `InvalidTransition`, because the latter fails identically
-  on every retry and turns a transient worker blip into a permanently failed
-  run.
-
-  *Deferred, deliberately:* replacing the deterministic pipeline with an LLM
-  scheduler that reads the board and dispatches. Externalizing state is what
-  makes dynamic task graphs, resume, and re-entry possible, and Temporal can
-  read the board and dispatch without surrendering replay. Building the
-  orchestrator on top later means it can be *measured* against the workflow
-  rather than adopted on faith; adopting it now would trade replay,
-  gate semantics, and benchmark signal-to-noise for flexibility already
-  obtained.
+The ADR catalogue lives in [`docs/adr.md`](docs/adr.md) — split out
+2026-10-12 for the 1000-line ceiling; this section number is kept so
+existing "ARCHITECTURE.md §12" references resolve. ADR-22, ADR-23
+and ADR-24 and the 2026-10-11 amendments to ADR-2, ADR-6, ADR-9 and
+ADR-12 carry the agent architecture plan's decisions.
 
 ## 13. Technology summary
 
 | Concern | Choice | Notes |
 |---|---|---|
 | Orchestration | Temporal (OSS or Cloud) | Python SDK, pydantic data converter |
-| Agent runtime | Pydantic AI + `pydantic-ai-slim[temporal]` | `TemporalDurability` capability (003) |
+| Agent runtime | Pydantic AI + `pydantic-ai-slim[temporal]` | `TemporalDurability` capability (003). *Target:* Pydantic AI Harness (0.x, version pinned) for read-only file tools, shell allowlists, output limits and spend limits, behind the `RoleRunner` port |
 | Coding harnesses | Claude Code (`claude -p`), OpenCode (`opencode run`) | adapter protocol; `--attach` to warm opencode serve |
 | Memory | Hindsight (vectorize-io) + Postgres | banks + metadata filters |
-| Artifacts | S3-compatible object store + git | claim-check |
+| Artifacts | Local claim-check store (`LocalFileStore`) + git. *Target:* S3-compatible object store behind the same `ArtifactStore` protocol, plus Temporal `ExternalStorage` on every client and worker | claim-check |
+| Observability | `RunEvent` trace + Temporal history, exported to `events.jsonl` / `report.html`; pydantic-ai instrumentation through Logfire when a token is present (`observability/logfire_setup.py`). *Target:* per-role model, tool, approval and usage events in one schema | one schema across SDK adapters (ADR-23) |
 | Agent board | SQLite (WAL, `BEGIN IMMEDIATE`) for the mutable graph; claim-check store for bodies | stdlib, no new infra; Postgres is a second backend behind `BoardStore` at the same threshold `server start-dev` must go |
 | Dashboard API | FastAPI + fastapi-request-pipeline | API-key auth, rate limit |
 | Chat surface | MCP (FastMCP server) | Claude/goose/IDE clients |
@@ -855,7 +856,7 @@ Kroker/
 │   ├── gate.py                # DeterministicQualityGate + ABSOLUTE_FLOOR
 │   ├── pending.py             # PendingDecision — the four gate variants
 │   ├── handoff.py · grounding.py · measurement.py · pricing.py · naming.py · prompts.py
-│   ├── worker.py              # queues ai-sdlc / ai-sdlc-harness; registers everything
+│   ├── worker.py              # one queue, ai-sdlc; registers everything
 │   └── cli.py · cli_roles.py
 ├── interfaces/
 │   ├── dashboard/api/main.py  # composes the board + dashboard routers (+ /chat)

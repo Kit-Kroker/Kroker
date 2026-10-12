@@ -72,6 +72,7 @@ nav:
       - ROADMAP: ROADMAP.md
       - Status board: generated/roadmap-board.md
       - docs/roadmap:
+          - agent-architecture-plan: roadmap/agent-architecture-plan.md
           - agent-board: roadmap/agent-board.md
           - crew: roadmap/crew.md
           - filesystem-first: roadmap/filesystem-first.md
@@ -103,3 +104,4 @@ nav:
           - foundation: reference/foundation.md
           - presentation-pipeline-temporal: reference/presentation-pipeline-temporal.md
           - architecture-review-2026-07: reference/architecture-review-2026-07.md
+          - architecture-decision-records: adr.md

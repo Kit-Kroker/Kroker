@@ -12,6 +12,7 @@
 - `[ ]` ⚠️ — partial: mechanism exists but incomplete or not fully wired (see note)
 - `[ ]` — not started
 - `—` — not falsifiable from code alone (needs runtime measurement)
+- `AP-n` — Phase *n* of the agent architecture plan (`docs/roadmap/agent-architecture-plan.md`); `BIP-n` — Phase *n* of the benchmark improvement plan (`docs/reports/2026-10-06-benchmark-improvement-plan.md`). Two plans number their phases from the same digits, so a bare "Phase n" is not used for either.
 
 > Since the 2026-07-05 audit, the **reviewer stage (ADR-6/FR-204)** and **agent registry (FR-201)** landed (merged `b9455c3`), plus a **coding-harness adapter layer** and **harness observability logging**. Those items are now checked. The audit's `docs/reports/feature-coverage-audit-2026-07-05.md` is superseded by this tracker.
 
@@ -50,7 +51,7 @@
 > phase exits are gated on measurement that does not run yet — P3's exit is
 > literally *"SC-4 and SC-6 measurable"*, and SC-1/2/3 are all `—`.
 
-> **2026-10-08 — benchmark record trustworthiness, Phase 1 landed (spec
+> **2026-10-08 — benchmark record trustworthiness, BIP-1 landed (spec
 > 012).** Round 012 made the records the harness writes trustworthy
 > before any new benchmark runs: provenance (`kroker_commit`,
 > `tree_dirty`, real `prompt_sha`) on every record; one cell label and
@@ -64,7 +65,7 @@
 > cases location (`SDLC_CASES_ROOT`) for every reader and a missing
 > registered rubric stops the run at zero spend. Oracle scores from 012
 > on are not comparable with pre-012 ones; pre-012 records load but are
-> marked untrusted by every report. **Phase 2 of the benchmark
+> marked untrusted by every report. **BIP-2 of the benchmark
 > improvement plan (`docs/reports/2026-10-06-benchmark-improvement-plan.md`)
 > landed in full — round 013 (spec `013-benchmark-scoring-output`) and
 > round 015 (spec `015-erosion-verbosity`, item 2.9: erosion and
@@ -312,10 +313,10 @@
 - [ ] ⚠️ **FR-202** schema-validated artifacts + re-prompt — Pydantic `output_type` gives validation; configurable `validation_retries` knob not surfaced.
 - [x] **FR-203** `claude -p` / `opencode run` adapters, harness-agnostic workflow (`harness/adapters.py`, `HARNESSES`).
 - [x] **FR-204** reviewer clean-context, model-family inequality enforced by boot-time `validate_registry`, no session resume. **(new)**
-- [ ] ⚠️ **FR-205** proposer MAY/MUST NOT validators — only inline dependency-cycle check; no dedicated `validators.py`.
+- [ ] ⚠️ **FR-205** proposer MAY/MUST NOT validators — only inline dependency-cycle check; no dedicated `validators.py`. Tracked as AP-2.3.
 
 ### Human-in-the-loop (FR-300)
-- [ ] ⚠️ **FR-301** hard/soft/off + threshold + revise + `MAX_GATE_ROUNDS` — wired for architecture/plan/merge; soft still confidence-only (no deterministic-check AND-clause); no calibration monitoring. Tool-call approval now escalates into this same machinery (E-17), so a `pre_tool` denial and a human gate are one mechanism.
+- [ ] ⚠️ **FR-301** hard/soft/off + threshold + revise + `MAX_GATE_ROUNDS` — wired for architecture/plan/merge; soft still confidence-only (no deterministic-check AND-clause); no calibration monitoring. The AND-clause is ADR-24's direction; the agent plan names no item for it, and its nearest home is AP-3 (computed `approve`) and AP-4 (`plan_valid`). Tool-call approval now escalates into this same machinery (E-17), so a `pre_tool` denial and a human gate are one mechanism.
 - [x] **FR-302** idempotent signals, `(gate, round)` identity, first-decision-wins.
 - [x] **FR-303** notifications + durable timers — notify activity (`log`/`webhook` adapters), reminder + escalation + expiry timers, `on_timeout` per gate (E-9). A `$VAR` route target whose variable is unset is still dropped, but now visibly: one load-time WARNING per dropped route, and `sdlc doctor` lists unset targets (006-B2).
 - [ ] ⚠️ **FR-304** decisions recorded/queryable — fields captured + retained as text; no structured queryable decision log.
@@ -449,7 +450,7 @@ as tracked rather than accidental.
 ## 3. Non-functional requirements (PRD §7)
 
 - [x] **NFR-1** Durability — Temporal-native.
-- [ ] **NFR-2** Scale / two pools — single task queue `"ai-sdlc"`; contra ADR-9.
+- [ ] **NFR-2** Scale / two pools — single task queue `"ai-sdlc"`; contra ADR-9. Tracked as AP-2.5.
 - [ ] — **NFR-3** Latency (5s/2s) — untested, not falsifiable from code.
 - [ ] ⚠️ **NFR-4** Auditability — Temporal history reconstructs runs, and the `events.jsonl`/`report.html` export exists (FR-704, E-32). Still partial: decisions are not a structured, queryable log (FR-304), and claim-check is not load-bearing (FR-702).
 - [ ] ⚠️ **NFR-5** Security — env allowlist done; `pre_tool` hook landed (2026-07-24, E-15/E-16, tool-level destructive-action + egress denial); OS user, container, network-level egress, scoped-cred injection still absent (E-20/E-21).
@@ -504,7 +505,7 @@ as tracked rather than accidental.
 
 ---
 
-## 6. Architecture decision records (ARCHITECTURE.md §12)
+## 6. Architecture decision records ([docs/adr.md](docs/adr.md), indexed at ARCHITECTURE.md §12)
 
 - [x] **ADR-1** Temporal owns state
 - [x] **ADR-2** Pydantic AI proposers + harness CLIs
@@ -527,6 +528,11 @@ as tracked rather than accidental.
 - [ ] ⚠️ **ADR-19** Deployment targets and analytics sources are adapters, not substrate (FR-1105, NG7, E-68/E-69). **Deployment half done** (E-67/E-68: `src/sdlc/deploy/adapters.py`, compose + script). Analytics half open (E-69). Unresolved consequence: **OQ-9**.
 - [ ] **ADR-20** Pre-registration reuses `ValidationContract` freeze semantics (FR-1102, FR-803, E-65).
 - [x] **ADR-21** Agent board as a durable projection; `authoritative_status` (workflow-written) vs `status` (agent-writable) keeps replay the source of truth (E-78).
+- [ ] **ADR-22** A deterministic workflow of bounded ReAct agents — proposer roles gain read-only, commit-pinned repo tools inside a step budget; coordinator and swarm excluded. Decided 2026-10-11 from `docs/reports/Kroker Agent Architecture & Implementation Plan.md`; not built (AP-2…AP-4).
+- [ ] **ADR-23** Kroker owns the role contract; the AI SDK is an adapter behind a `RoleRunner` port. Not built (AP-2.9; a second adapter is AP-6, only when a reason appears).
+- [ ] **ADR-24** Evidence before verdict; code computes the verdict (`approve`, `tests_passed`, `plan_valid`). Not built (AP-3, AP-4). Already-recorded pieces of it: §7's `ReviewReport` field ordering, FR-205 validators, FR-301's confidence-only soft gate.
+
+> **2026-10-11 — amendments to ADR-2, ADR-6, ADR-9 and ADR-12** (docs/adr.md) follow the same plan and are not built. **The ADR-6 `[x]` above is true of the mechanism and not of what it guarantees:** `check_adr6_families` compares provider prefixes, and on `main` the reviewer is `zai:glm-5.3` while `dev` is `zai-coding-plan/glm-5.3` — different prefixes, same model. FR-204 and US-5 inherit the same caveat. The amendment moves the check to the model id and widens it to every judge. **Ordering:** this is AP-1.0, ahead of any conclusion about the reviewer drawn from the benchmark — reviewer data from default-arm runs was produced on the developer's weights. It is blocked on one decision, the reviewer's second model family, because the corrected check fails the shipped registry.
 
 ---
 
@@ -544,7 +550,8 @@ as tracked rather than accidental.
   approve to false if ANY finding is critical/high". `MergeVerdict` rates its own
   confidence two fields before listing concerns. `AnalysisReport`/`ArchitectureSpec`
   are already evidence-first. A one-line-per-contract fix; its own change and its
-  own benchmark run (out of scope for the research increment).
+  own benchmark run (out of scope for the research increment). Tracked as
+  **AP-1.4** — one task, not two.
 
 ---
 
@@ -554,9 +561,10 @@ as tracked rather than accidental.
 2. ~~**Analyze/Analyst stage** — unlocks coverage + criterion→test traceability advisory checks (FR-106).~~ **Done** on `feat/analyst-stage`; plan `docs/superpowers/plans/2026-07-16-analyst-stage.md`, spec `docs/superpowers/specs/2026-07-16-analyst-stage-traceability-coverage-design.md`.
 3. ~~**retro/reflect wiring** (FR-404) — starts accumulating the SC-4/SC-6 calibration signal. Tasks: **E-12, E-13** (§9.3).~~ **Partially done** — schedule mechanism + nightly project reflect ship (E-12/E-13); plan `docs/superpowers/plans/2026-07-16-schedules-as-files-and-nightly-reflect.md`. Signal only accrues on runs with `memory.enabled=true` (defaults `False`). Org half blocked on **E-25**; the retro *stage* (§1 item 13, `RunSummary`) is still unbuilt (**E-32**). *Follow-on:* the benchmark instrument (§9.8) is what turns the accruing signal into the SC-1..6 numbers — held-out grade (**E-30/E-31**) and per-role economics (**E-33**) are the load-bearing measurement work, ranked there by invariant undercut.
 4. ~~**Harness containment**~~ — `pre_tool` hook ✅ (E-15/E-16) + approval escalation ✅ (E-17); egress beyond tool-level remains **E-21**. Tasks: **E-15…E-18** (§9.4) — note the hook and the gate are one mechanism, not two.
-5. **Operability** — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602). Tasks: **E-6…E-11** (§9.2) — these four items are one contract plus thin adapters, so E-6/E-7 land before any surface.
-6. **Post-P1 roadmap** — MaintenanceWorkflow/DAPER (**E-14**), two worker pools, run budgets (**E-19**), ~~observability export (**E-22, E-23**)~~ (landed in E-32), brownfield mode, claim-check.
-7. **Repo hardening via agents-as-folders** — closes §7's prompts-as-assets drift. Tasks: **E-1, E-2, E-4** (§9.1). *Re-ranked down*: the memoization payoff that justified it was already banked (see §9.1), and the ADR-6 hole it sat next to is closed. Cheapest self-contained item on this list, but now purely reorganisation.
+5. **Agent architecture plan — AP-0 baseline, then AP-1 quick wins** (`docs/roadmap/agent-architecture-plan.md`). Ranked here because the plan is the priority document for `ARCHITECTURE.md` (2026-10-11) and AP-1 carries the open ADR-6 hole: reviewer and `dev` run the same model. AP-0 re-baselines on trusted records; AP-1 is small and lands in existing code paths. AP-2…AP-6 follow, each behind its gate.
+6. **Operability** — dashboard FastAPI backend + MCP + cross-run inbox (FR-305/601/602). Tasks: **E-6…E-11** (§9.2) — these four items are one contract plus thin adapters, so E-6/E-7 land before any surface.
+7. **Post-P1 roadmap** — MaintenanceWorkflow/DAPER (**E-14**), two worker pools, run budgets (**E-19**), ~~observability export (**E-22, E-23**)~~ (landed in E-32), brownfield mode, claim-check.
+8. **Repo hardening via agents-as-folders** — closes §7's prompts-as-assets drift. Tasks: **E-1, E-2, E-4** (§9.1). *Re-ranked down*: the memoization payoff that justified it was already banked (see §9.1), and the 2026-07-16 ADR-6 hole it sat next to is closed; the same-weights hole found 2026-10-11 is open (§6 note, AP-1.0). Cheapest self-contained item on this list, but now purely reorganisation.
 
 ---
 
@@ -579,3 +587,4 @@ in-flight work lives in its design doc until merge.
 | Agent board (`E-78`) | [`agent-board.md`](docs/roadmap/agent-board.md) |
 | The crew (`E-88`) | [`crew.md`](docs/roadmap/crew.md) |
 | UI component library (`E-89`) | [`ui-component-library.md`](docs/roadmap/ui-component-library.md) |
+| Agent architecture plan (`AP-0`…`AP-6`) | [`agent-architecture-plan.md`](docs/roadmap/agent-architecture-plan.md) |

@@ -72,6 +72,16 @@ In-flight work, speculative designs, and planned migrations live in their
 respective design doc under `docs/superpowers/specs/` until their implementation
 is merged.
 
+**One exception, marked where it occurs (2026-10-11).** The agent architecture
+plan (`docs/reports/Kroker Agent Architecture & Implementation Plan.md`) is the
+priority document for `ARCHITECTURE.md`, so that file carries the plan's
+direction ahead of the code: in paragraphs that open with **Target (plan, not
+built)**, in table rows marked *(target)*, and in dated ADR amendments. Text
+outside those markers still describes `main`, and `ROADMAP.md` tracks each
+target as open (`AP-0`…`AP-6`, `docs/roadmap/agent-architecture-plan.md`). When
+a phase lands, its markers come off; nobody should remove an unlanded target
+block as drift.
+
 Corollary: **a design spec is not documentation of the system; it is a record of
 a decision.** No document or agent should cite a design spec under
 `docs/superpowers/specs/` as evidence of current system behaviour.
