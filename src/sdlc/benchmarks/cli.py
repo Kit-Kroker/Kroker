@@ -27,6 +27,7 @@ from .models import CaseRole, CaseSpec
 from .smoke import (
     SmokeStamp,
     check_smoke,
+    extract_bench_run_id,
     passing_stamp,
     resolve_repo_status,
     write_stamp,
@@ -553,9 +554,11 @@ def dispatch_smoke(
     case_file = root_path / spec.case_id / "case.yaml"
 
     if run_fn is not None:
-        bench_run_id = run_fn(str(case_file))
+        raw_result = run_fn(str(case_file))
     else:
-        bench_run_id = _run_sync(_run_matrix(str(case_file), skip_smoke=True))
+        raw_result = _run_sync(_run_matrix(str(case_file), skip_smoke=True))
+
+    bench_run_id = extract_bench_run_id(raw_result)
 
     records = _read_all(bench_run_id, None)
     bench_path = Path(benchmarks_root()) / bench_run_id

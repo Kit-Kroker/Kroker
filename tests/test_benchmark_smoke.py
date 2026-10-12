@@ -232,3 +232,121 @@ def test_write_stamp_replaces_earlier_stamp(tmp_path, monkeypatch):
     assert loaded is not None
     assert loaded.bench_run_id == "b-smoke-2"
     assert loaded.passed is True
+
+
+def test_extract_bench_run_id_variants():
+    from sdlc.benchmarks.smoke import extract_bench_run_id
+
+    # report.md path (relative or absolute, unix or windows)
+    assert (
+        extract_bench_run_id("runs/benchmarks/bench-todo-api-greenfield-1791804132/report.md")
+        == "bench-todo-api-greenfield-1791804132"
+    )
+    assert (
+        extract_bench_run_id(
+            "/abs/path/runs/benchmarks/bench-todo-api-greenfield-1791804132/report.md"
+        )
+        == "bench-todo-api-greenfield-1791804132"
+    )
+    assert (
+        extract_bench_run_id(r"C:\runs\benchmarks\bench-todo-api-greenfield-1791804132\report.md")
+        == "bench-todo-api-greenfield-1791804132"
+    )
+    # direct bench_run_id
+    assert (
+        extract_bench_run_id("bench-todo-api-greenfield-1791804132")
+        == "bench-todo-api-greenfield-1791804132"
+    )
+    assert extract_bench_run_id("b-smoke-pass") == "b-smoke-pass"
+    # bench dir path
+    assert (
+        extract_bench_run_id("runs/benchmarks/bench-todo-api-greenfield-1791804132")
+        == "bench-todo-api-greenfield-1791804132"
+    )
+    # trailing whitespace/newline
+    assert (
+        extract_bench_run_id("runs/benchmarks/bench-todo-api-greenfield-1791804132/report.md\n")
+        == "bench-todo-api-greenfield-1791804132"
+    )
+
+
+def test_dispatch_smoke_with_real_run_matrix_report_path(tmp_path, capsys, monkeypatch):
+    """Real contract test: _run_matrix returns the report path, not the bench run id.
+    dispatch_smoke without run_fn stub must extract the bench run id, read records,
+    and write the stamp with the real bench_run_id (not the report path).
+    """
+    import yaml
+
+    from sdlc.benchmarks.cli import dispatch_smoke
+    from sdlc.benchmarks.recorder import RecordStore
+    from sdlc.benchmarks.smoke import passing_stamp
+
+    cases_root = tmp_path / "cases"
+    c_dir = cases_root / "todo-api"
+    c_dir.mkdir(parents=True)
+    (c_dir / "case.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "case_id": "todo-api",
+                "idea_summary": "todo",
+                "harnesses": ["opencode"],
+                "models": ["m"],
+                "judge_model": "j",
+                "role": "smoke",
+                "visibility": "public",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    ops_dir = tmp_path / "ops"
+    bench_dir = tmp_path / "runs"
+    monkeypatch.setenv("SDLC_OPS_ROOT", str(ops_dir))
+    monkeypatch.setenv("SDLC_BENCHMARKS_ROOT", str(bench_dir))
+
+    bench_run_id = "bench-todo-api-greenfield-1791804132"
+    store = RecordStore(
+        bench_run_id=bench_run_id, cell_id="todo-api#opencode#arm", root=str(bench_dir)
+    )
+    for r in [
+        _mk_record("clarify", judge="staged_rubric", score=1.0, commit="commit-smoke-real"),
+        _mk_record("architecture", judge="staged_rubric", score=1.0, commit="commit-smoke-real"),
+        _mk_record(
+            "oracle",
+            scope=BenchmarkScope.ORACLE,
+            judge="oracle",
+            score=1.0,
+            outcome=BenchmarkOutcome.PASS,
+            commit="commit-smoke-real",
+        ),
+    ]:
+        store.append(r)
+
+    # The real report.md that finalize_benchmark_report writes
+    report_file = bench_dir / bench_run_id / "report.md"
+    report_file.parent.mkdir(parents=True, exist_ok=True)
+    report_file.write_text("# Report", encoding="utf-8")
+
+    # Mock Client.connect to simulate BenchmarkWorkflow.run finishing with report.md path
+    class _DummyHandle:
+        async def result(self):
+            return str(report_file)
+
+    class _DummyClient:
+        async def start_workflow(self, *args, **kwargs):
+            return _DummyHandle()
+
+    async def _fake_connect(*args, **kwargs):
+        return _DummyClient()
+
+    monkeypatch.setattr("temporalio.client.Client.connect", _fake_connect)
+
+    # Call dispatch_smoke WITHOUT run_fn stub (run_fn=None)
+    out = dispatch_smoke(cases_root=str(cases_root), ops_dir=str(ops_dir))
+    assert "smoke: PASS commit-smoke-real" in out
+
+    stamp = passing_stamp("commit-smoke-real", root=ops_dir)
+    assert stamp is not None
+    assert stamp.passed is True
+    assert stamp.bench_run_id == bench_run_id
+    assert stamp.failed_conditions == []

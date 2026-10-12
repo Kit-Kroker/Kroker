@@ -58,6 +58,15 @@ def ops_root(root: str | Path | None = None) -> Path:
     return Path("runs/ops")
 
 
+def extract_bench_run_id(output: str) -> str:
+    """Extract a bench_run_id from either a direct id or a report/directory path."""
+    clean = output.strip().replace("\\", "/")
+    p = Path(clean)
+    if p.name == "report.md" or p.suffix in (".md", ".json", ".html"):
+        return p.parent.name
+    return p.name
+
+
 def check_smoke(
     records: Sequence[BenchmarkRecord],
     record_files: Sequence[str | Path],
