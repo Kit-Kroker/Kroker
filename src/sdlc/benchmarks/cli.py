@@ -403,6 +403,14 @@ def register_benchmark_subparsers(bsub: argparse._SubParsersAction) -> None:
     bsmoke = bsub.add_parser("smoke")
     bsmoke.add_argument("--cases-root", default=None, help="override cases directory")
     bsmoke.add_argument("--ops-root", default=None, help="override ops directory")
+    bsmoke.add_argument(
+        "--gate-policy",
+        choices=["off", "soft", "hard"],
+        default=None,
+        dest="gate_policy",
+        help="override the smoke case's gate_policy for every gate "
+        "(default: use the case's own setting)",
+    )
 
     bcorpus = bsub.add_parser("corpus")
     bcorpus.add_argument("--cases-root", default=None, help="override cases directory")
@@ -422,6 +430,7 @@ def dispatch_benchmark_cmd(args: argparse.Namespace) -> bool:
         dispatch_smoke(
             cases_root=getattr(args, "cases_root", None),
             ops_dir=getattr(args, "ops_root", None),
+            gate_policy=getattr(args, "gate_policy", None),
         )
         return True
     if cmd == "corpus":
@@ -540,6 +549,7 @@ def dispatch_smoke(
     *,
     cases_root: str | None = None,
     ops_dir: str | None = None,
+    gate_policy: str | None = None,
     run_fn: Callable[[str], str] | None = None,
 ) -> str:
     """Run the smoke test case, verify smoke conditions, and record stamp."""
@@ -556,7 +566,13 @@ def dispatch_smoke(
     if run_fn is not None:
         raw_result = run_fn(str(case_file))
     else:
-        raw_result = _run_sync(_run_matrix(str(case_file), skip_smoke=True))
+        raw_result = _run_sync(
+            # D-D: the smoke case's own SOFT gates otherwise park the run
+            # (research waits 48h unattended) -- the 012/015 precedent runs
+            # smoke with gates off, and that choice belongs on the command
+            # line, not in a hand-babysitted session.
+            _run_matrix(str(case_file), skip_smoke=True, gate_policy=gate_policy)
+        )
 
     bench_run_id = extract_bench_run_id(raw_result)
 

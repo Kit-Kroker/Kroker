@@ -657,7 +657,7 @@ undercut, not by size.
    |---|---|---|---|
    | Prompt A/B, one stage | `sdlc eval <role>` | seconds | did this prompt edit help on a captured fixture |
    | Re-score stored evidence | `sdlc benchmark score` | seconds | what do the runs I already have say, under these weights |
-   | Smoke test | `sdlc benchmark smoke` | minutes | verify four smoke conditions and write commit stamp |
+   | Smoke test | `sdlc benchmark smoke` | minutes | verify four smoke conditions and write commit stamp (`--gate-policy off` matches the 012/015 unattended-run precedent; the four conditions include the case-level oracle all-pass) |
    | Full matrix / arm run | `sdlc benchmark run --arm <arm>` | hours | what does this architecture change do end-to-end |
 
    **Run gate (round 015).** Starting a `corpus` case with `sdlc benchmark run`

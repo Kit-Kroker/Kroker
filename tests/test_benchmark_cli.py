@@ -945,7 +945,7 @@ def test_dispatch_smoke_runs_inside_running_asyncio_event_loop(tmp_path, monkeyp
     for r in records:
         store.append(r)
 
-    async def _stub_async_run_matrix(case_path: str, skip_smoke: bool = False) -> str:
+    async def _stub_async_run_matrix(case_path: str, **kwargs) -> str:
         return "b-loop-pass"
 
     monkeypatch.setattr(cli, "_run_matrix", _stub_async_run_matrix)

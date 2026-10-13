@@ -301,6 +301,71 @@ def test_extract_bench_run_id_variants():
     )
 
 
+def test_dispatch_smoke_forwards_gate_policy_to_run_matrix(tmp_path, monkeypatch):
+    """D-D: dispatch_smoke had no --gate-policy, so the smoke case's own
+    SOFT gates had to be babysat by hand during R0 (research parks 48h).
+    The flag reaches _run_matrix exactly as `benchmark run` passes it."""
+    import yaml
+
+    from sdlc.benchmarks import cli
+    from sdlc.benchmarks.recorder import RecordStore
+
+    cases_root = tmp_path / "cases"
+    c_dir = cases_root / "todo-api"
+    c_dir.mkdir(parents=True)
+    (c_dir / "case.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "case_id": "todo-api",
+                "idea_summary": "todo",
+                "harnesses": ["opencode"],
+                "models": ["m"],
+                "judge_model": "j",
+                "role": "smoke",
+                "visibility": "public",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    bench_dir = tmp_path / "runs"
+    monkeypatch.setenv("SDLC_BENCHMARKS_ROOT", str(bench_dir))
+    bench_run_id = "bench-todo-api-1791839267"
+    store = RecordStore(
+        bench_run_id=bench_run_id, cell_id="todo-api#opencode#arm", root=str(bench_dir)
+    )
+    for r in [
+        _mk_record("clarify", judge="staged_rubric", score=1.0, commit="cmt"),
+        _mk_record("architecture", judge="staged_rubric", score=1.0, commit="cmt"),
+        _mk_record(
+            "oracle",
+            scope=BenchmarkScope.ORACLE,
+            judge="oracle",
+            score=1.0,
+            outcome=BenchmarkOutcome.PASS,
+            commit="cmt",
+        ),
+    ]:
+        store.append(r)
+    report_file = bench_dir / bench_run_id / "report.md"
+    report_file.parent.mkdir(parents=True, exist_ok=True)
+    report_file.write_text("# Report", encoding="utf-8")
+
+    captured: dict = {}
+
+    async def _fake_matrix(case_file, **kwargs):
+        captured.update(kwargs, case_file=case_file)
+        return str(report_file)
+
+    monkeypatch.setattr(cli, "_run_matrix", _fake_matrix)
+
+    out = cli.dispatch_smoke(
+        cases_root=str(cases_root), ops_dir=str(tmp_path / "ops"), gate_policy="off"
+    )
+    assert "smoke: PASS" in out
+    assert captured["gate_policy"] == "off"
+
+
 def test_dispatch_smoke_with_real_run_matrix_report_path(tmp_path, capsys, monkeypatch):
     """Real contract test: _run_matrix returns the report path, not the bench run id.
     dispatch_smoke without run_fn stub must extract the bench run id, read records,
