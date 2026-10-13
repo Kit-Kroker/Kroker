@@ -99,8 +99,14 @@ def check_smoke(
     if not (n_cells > 0 and len(record_files) == n_cells):
         failed.append("one_file_per_cell")
 
-    # 4. oracle_all_pass: an all-pass oracle record
-    oracle_recs = [r for r in records if r.scope == BenchmarkScope.ORACLE or r.stage == "oracle"]
+    # 4. oracle_all_pass: the case-level oracle record passes (D-A). Only
+    # scope=ORACLE counts: oracle_task records share stage 'oracle' but carry
+    # per-task writer outcomes -- sweeping by stage made six task-level error
+    # grades (the D-B writer defect) fail the smoke while the case-level
+    # oracle graded 6/6 (R0 runs 1791808170, 1791839267). The 012-era
+    # baseline runs that define this condition carry no oracle_task records
+    # at all; the case-level record is the precedent.
+    oracle_recs = [r for r in records if r.scope == BenchmarkScope.ORACLE]
     oracle_ok = bool(oracle_recs) and all(
         r.outcome == BenchmarkOutcome.PASS and (r.quality.score is None or r.quality.score >= 1.0)
         for r in oracle_recs

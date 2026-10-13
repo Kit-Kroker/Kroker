@@ -140,6 +140,37 @@ def test_check_smoke_fails_oracle_all_pass_when_no_oracle_record():
     assert failed == ["oracle_all_pass"]
 
 
+def test_check_smoke_oracle_all_pass_reads_case_level_record_only():
+    """D-A: condition 4 is the case-level oracle record (scope=ORACLE). The
+    stage=='oracle' sweep also caught every oracle_task record, so the R0
+    smoke runs (1791808170, 1791839267) failed oracle_all_pass on six
+    task-level error grades while the case-level oracle graded 6/6."""
+    records, files, n_cells = _passing_suite()
+    records += [
+        _mk_record(
+            "oracle",
+            scope=BenchmarkScope.ORACLE_TASK,
+            judge="error",
+            score=None,
+            outcome=BenchmarkOutcome.FAIL,
+        )
+        for _ in range(6)
+    ]
+    failed = check_smoke(records, files, n_cells)
+    assert failed == []
+
+
+def test_check_smoke_fails_oracle_all_pass_when_only_task_records_exist():
+    """The other half of D-A: a task-level record alone is not an oracle
+    verdict -- without a case-level ORACLE record the condition fails."""
+    records, files, n_cells = _passing_suite()
+    records = [r for r in records if r.scope != BenchmarkScope.ORACLE] + [
+        _mk_record("oracle", scope=BenchmarkScope.ORACLE_TASK, judge="oracle", score=1.0)
+    ]
+    failed = check_smoke(records, files, n_cells)
+    assert failed == ["oracle_all_pass"]
+
+
 def test_write_stamp_and_passing_stamp(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_OPS_ROOT", str(tmp_path / "ops"))
 
