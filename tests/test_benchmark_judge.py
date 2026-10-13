@@ -774,3 +774,19 @@ def test_judge_agent_retries_httpx_status_errors_too(monkeypatch):
     raw = _run_judge_agent(object(), "sys", "user prompt")
     assert raw == "ok"
     assert len(calls) == 2
+
+
+def test_judge_agent_retries_a_read_timeout(monkeypatch):
+    """A provider hang (read timeout) is the same overload family as a 503:
+    the R0 attempt-5 pre-dispatch probe timed out on a toy prompt minutes
+    after an earlier probe returned 200. Retry it; a last-attempt timeout
+    still raises into the fail-safe."""
+    script = [httpx.ReadTimeout("read timed out"), "ok"]
+    calls: list = []
+    monkeypatch.setattr(judge_mod, "Agent", _agent_stub(script, calls))
+    monkeypatch.setattr(judge_mod, "_JUDGE_RETRY_DELAYS", (0.0,), raising=False)
+
+    raw = _run_judge_agent(object(), "sys", "user prompt")
+
+    assert raw == "ok"
+    assert len(calls) == 2

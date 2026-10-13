@@ -106,6 +106,16 @@ def _status_of(exc: Exception) -> int | None:
     return None
 
 
+def _transient(exc: Exception) -> bool:
+    """Worth a backoff retry: a transient HTTP status, or a provider hang
+    (read timeout) — the R0 attempt-5 probe watched a toy prompt time out
+    minutes after an identical probe returned 200."""
+    if isinstance(exc, httpx.TimeoutException):
+        return True
+    status = _status_of(exc)
+    return status is not None and status in _JUDGE_RETRY_STATUSES
+
+
 _JUDGE_SYSTEM_PROMPT = (
     "You are an impartial quality judge. Work through the supplied "
     "evaluation steps in order and score the artifact against them. "
@@ -176,13 +186,13 @@ def _run_judge_agent(model, system_prompt: str, user_prompt: str) -> str:
         try:
             result = agent.run_sync(user_prompt)
         except Exception as exc:
-            status = _status_of(exc)
-            if status not in _JUDGE_RETRY_STATUSES or attempt >= len(_JUDGE_RETRY_DELAYS):
+            if not _transient(exc) or attempt >= len(_JUDGE_RETRY_DELAYS):
                 raise
             delay = _JUDGE_RETRY_DELAYS[attempt]
             _LOGGER.warning(
-                "judge model call failed with HTTP %s (attempt %d/%d); retrying in %ss",
-                status,
+                "judge model call failed (%s, HTTP %s) (attempt %d/%d); retrying in %ss",
+                type(exc).__name__,
+                _status_of(exc),
                 attempt + 1,
                 len(_JUDGE_RETRY_DELAYS) + 1,
                 delay,
