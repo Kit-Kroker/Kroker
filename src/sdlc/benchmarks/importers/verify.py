@@ -22,6 +22,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from ...toolchain.adapters import TOOLCHAINS, ToolchainKind
+from ..oracle import copy_case_tree
 
 
 class VerifyResult(BaseModel):
@@ -50,7 +51,9 @@ def verify_case(case_dir: Path, *, timeout_s: int = 600) -> VerifyResult:
     try:
         wt = Path(parent) / "wt"
         shutil.copytree(ref, wt)
-        shutil.copytree(oracle, wt / "oracle")
+        # D-B: drop bytecode caches from the oracle copy (see oracle.py) --
+        # verify-case parses the same junit the graders do.
+        copy_case_tree(oracle, wt / "oracle")
         adapter = TOOLCHAINS[ToolchainKind.PYTHON]
         cmd = adapter.oracle_test_cmd("oracle", str(wt / "oracle-report.xml"))
         proc = subprocess.run(

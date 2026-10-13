@@ -121,6 +121,24 @@ def _safe_heartbeat() -> None:
         pass
 
 
+# D-B: bytecode caches must never ride into a grade environment. A .pyc
+# compiled on one host carries that host's absolute paths in co_filename,
+# and pytest's legacy junit `file` attribute follows it
+# (Function.reportinfo -> getfslineno -> co_filename). A stale cache copied
+# in with the case's oracle rewrites every oracle test's node id to the
+# compiling host's path, every tasks.yaml mapping misses, and all task
+# grades read judge='error' while the case-level score (suite attributes)
+# stays 6/6 (R0 runs 1791808170, 1791839267 -- both todo-api cells; the
+# stale pycs reached the worker image because .dockerignore's
+# '__pycache__/' pattern is root-anchored and misses nested case dirs).
+_BYTECODE_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
+
+
+def copy_case_tree(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+    """Copy a case asset tree (oracle/, reference/) without bytecode caches."""
+    shutil.copytree(src, dst, ignore=_BYTECODE_IGNORE)
+
+
 def held_out_ok(changed_files: list[str], oracle_dirname: str = "oracle") -> bool:
     """False iff the produced diff authored anything at/under the oracle dir.
 
@@ -301,7 +319,7 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
             )
         run_env = _oracle_run_env(prov_env)
 
-        shutil.copytree(oracle_src, os.path.join(wt, "oracle"))
+        copy_case_tree(oracle_src, os.path.join(wt, "oracle"))
         report = os.path.join(wt, "oracle-report.xml")
         await _bounded_shell(
             adapter.oracle_test_cmd("oracle", report), wt, inp.test_timeout_s, env=run_env

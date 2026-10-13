@@ -1,5 +1,12 @@
+# dockerignore patterns are root-anchored, unlike .gitignore: '__pycache__/'
+# alone matches only the context root's own dir. The nested '**/' forms are
+# the load-bearing ones -- without them COPY benchmarks baked host-compiled
+# pycs (Windows co_filename) into the worker image, and pytest's legacy junit
+# file attribute followed them into every oracle task grade (D-B).
 __pycache__/
+**/__pycache__/
 *.pyc
+**/*.pyc
 *.egg-info/
 .env
 env/

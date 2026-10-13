@@ -265,6 +265,10 @@ def _oracle_task_records(
                 kroker_commit=(provenance.kroker_commit if provenance is not None else None),
                 tree_dirty=(provenance.tree_dirty if provenance is not None else None),
                 quality=QualityScore(score=t.score, judge=t.judge),
+                # D-B instrumentation: an error grade without its reason is
+                # undiagnosable from the records -- the junit it names dies
+                # with the temp worktree, so the record is the only survivor.
+                error=(t.detail if t.judge == "error" else None),
                 speed=SpeedBag(
                     wall_clock_s=(ended - started).total_seconds(),
                     started_at=started,

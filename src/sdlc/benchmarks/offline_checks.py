@@ -22,6 +22,7 @@ from sdlc.benchmarks.oracle import (
     _bounded_shell,
     _oracle_run_env,
     _provision_oracle_env,
+    copy_case_tree,
     grade_from_junit,
     grade_testcases_from_junit,
 )
@@ -79,7 +80,10 @@ async def _run_check_async(
             )
         run_env = _oracle_run_env(prov_env)
 
-        shutil.copytree(oracle_dir, wt / "oracle")
+        # D-B: the oracle copy drops bytecode caches (see oracle.py) -- the
+        # offline reference/floor checks task-grade from the same junit, so
+        # the same stale-pyc channel would corrupt their task attribution.
+        copy_case_tree(oracle_dir, wt / "oracle")
         report_path = wt / "oracle-report.xml"
         cmd = adapter.oracle_test_cmd("oracle", str(report_path))
         await _bounded_shell(cmd, str(wt), timeout_s, env=run_env)

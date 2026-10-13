@@ -128,6 +128,52 @@ def test_grade_testcases_empty_or_malformed_returns_empty_dict():
     assert grade_testcases_from_junit("<not-xml") == {}
 
 
+# --- D-B: the grade-time oracle copy must not carry bytecode caches --------
+
+
+def test_copy_case_tree_drops_bytecode_caches(tmp_path):
+    """D-B root cause: a host-compiled __pycache__ rode the oracle copy into
+    the grade worktree. pytest's legacy junit `file` attribute follows the
+    imported module's co_filename, so the stale cache rewrote every oracle
+    test's node id to the compiling host's absolute path, every tasks.yaml
+    mapping missed, and all six task grades read judge='error' while the
+    case-level score (suite attributes) stayed 6/6 (R0 runs 1791808170,
+    1791839267)."""
+    from sdlc.benchmarks.oracle import copy_case_tree
+
+    src = tmp_path / "oracle"
+    (src / "__pycache__").mkdir(parents=True)
+    (src / "test_crud.py").write_text("def test_x():\n    pass\n", encoding="utf-8")
+    (src / "__pycache__" / "test_crud.cpython-313-pytest-9.1.1.pyc").write_bytes(b"stale")
+    (src / "stray.pyc").write_bytes(b"stale")
+    dst = tmp_path / "wt" / "oracle"
+    copy_case_tree(src, dst)
+    assert (dst / "test_crud.py").is_file()
+    assert not (dst / "__pycache__").exists()
+    assert not list(dst.rglob("*.pyc"))
+
+
+def test_grade_tasks_error_detail_names_observed_keys():
+    """D-B instrumentation: when no mapped oracle test matches, the reason
+    must name the keys the report DID carry -- the shape the junit `file`
+    attribute took is the diagnosis, and the record is the only place it
+    survives (the report dies with the temp worktree)."""
+    from sdlc.benchmarks.tasks import TaskSpec, TaskSuite, grade_tasks
+
+    suite = TaskSuite(
+        case_id="c",
+        tasks=[
+            TaskSpec(
+                id="create", error_class="functional", oracle_tests=["test_crud.py::test_create"]
+            )
+        ],
+    )
+    grades = grade_tasks(suite, {"D:/host/path/oracle/test_crud.py::test_create": True}, {})
+    assert grades[0].judge == "error"
+    assert "test_crud.py::test_create" in grades[0].detail
+    assert "D:/host/path/oracle/test_crud.py::test_create" in grades[0].detail
+
+
 def test_truncate_diff_passes_short_text_through_unchanged():
     text = "a" * 100
     assert _truncate_diff(text, max_chars=20000) == text

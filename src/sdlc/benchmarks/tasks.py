@@ -100,13 +100,20 @@ def grade_tasks(
         if t.oracle_tests:
             found = [testcase_results[nid] for nid in t.oracle_tests if nid in testcase_results]
             if not found:
+                # D-B instrumentation: name the keys the report DID carry --
+                # the shape the junit `file` attribute took is the diagnosis,
+                # and the record is where it must survive.
+                observed = [k[:120] for k in sorted(testcase_results)[:3]]
                 out.append(
                     TaskGrade(
                         task_id=t.id,
                         error_class=t.error_class,
                         score=None,
                         judge="error",
-                        detail=f"none of {t.oracle_tests} found in oracle report",
+                        detail=(
+                            f"none of {t.oracle_tests} found in oracle report; "
+                            f"observed keys: {observed}"
+                        ),
                     )
                 )
                 continue

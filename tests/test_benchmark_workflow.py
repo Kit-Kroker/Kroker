@@ -362,6 +362,31 @@ def test_oracle_task_records_carry_provenance_and_deterministic_identity():
     assert r.tree_dirty is False
 
 
+def test_oracle_task_records_error_grade_carries_its_reason():
+    """D-B instrumentation: grade_tasks computes a reason for every error
+    grade ("none of [...] found in oracle report"); the R0 smoke runs wrote
+    error=null on all six error records, so the stored evidence could not
+    say why tasks did not match. The reason belongs on the record."""
+    t0 = datetime(2026, 7, 23, tzinfo=UTC)
+    t1 = datetime(2026, 7, 23, 0, 0, 5, tzinfo=UTC)
+    grade = _grade_with_tasks(
+        TaskGrade(
+            task_id="t01",
+            error_class="functional",
+            score=None,
+            judge="error",
+            detail="none of ['test_crud.py::test_x'] found in oracle report",
+        ),
+        TaskGrade(task_id="t02", error_class="functional", score=1.0, judge="oracle", detail="1/1"),
+    )
+    recs = _oracle_task_records(_cell(), grade, "b1", "run1", t0, t1, provenance=_PROV)
+    r01 = next(r for r in recs if r.task_id == "t01")
+    assert r01.error is not None and "none of" in r01.error
+    assert "test_crud.py::test_x" in r01.error
+    r02 = next(r for r in recs if r.task_id == "t02")
+    assert r02.error is None
+
+
 def test_oracle_task_records_none_score_is_fail():
     from sdlc.benchmarks.models import BenchmarkOutcome as BO
 
