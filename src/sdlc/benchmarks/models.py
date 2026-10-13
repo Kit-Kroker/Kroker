@@ -84,6 +84,12 @@ class BenchmarkOutcome(StrEnum):
 class QualityScore(BaseModel):
     score: float | None = None  # 0.0..1.0; None when judge errored
     components: dict[str, float] = Field(default_factory=dict)
+    # Why the judge did not measure: the reason behind judge="error" (R0
+    # attempts 3-4 lost all four rubric calls to 503s and the stage records
+    # carried error=null — the stage half of the D-B visibility gap). The
+    # stage call sites thread it onto the record's error field; None for a
+    # scored judge.
+    detail: str | None = None
     # Non-DAG lenses (deep_review/adversary/handoff) are judges too. Omitting
     # one here is not a type error at the call site -- _stage_record passes
     # `judge: str` straight through -- it is a ValidationError swallowed by the

@@ -28,6 +28,30 @@ from sdlc.core.models import (
 _PROV = Provenance(kroker_commit="abc123", tree_dirty=False)
 
 
+def test_the_judge_activity_gets_a_model_call_budget_not_a_record_budget():
+    """R0 attempt-4 hardening: RECORD_ACT's 30 s start_to_close fits a
+    record write, not a judge — two model calls plus the transient-503
+    backoff chain (5+30+120 s) cannot finish inside it, so Temporal would
+    kill and re-run the activity until attempts run out and then FAIL the
+    stage. judge_artifact gets its own config with a real model budget.
+    No recorded replay history schedules judge_artifact, so the dedicated
+    config is replay-safe."""
+    import inspect
+
+    from sdlc.workflows import benchmark_host
+
+    src = inspect.getsource(benchmark_host.BenchmarkHost._judge)
+    assert "JUDGE_ACT" in src, "_judge must use a dedicated activity config"
+    assert "RECORD_ACT" not in src, (
+        "_judge still borrows RECORD_ACT: a 30 s start_to_close cannot "
+        "hold the judge's model calls plus backoff"
+    )
+    cfg = benchmark_host.JUDGE_ACT
+    timeout = cfg.get("start_to_close_timeout")
+    assert timeout is not None
+    assert timeout.total_seconds() >= 600
+
+
 def _grade(**kw):
     base = dict(
         score=0.5,

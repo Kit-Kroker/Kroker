@@ -35,6 +35,15 @@ RECORD_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
 )
 
+# The judge is model calls, not a record write: two staged calls plus the
+# transient-503 backoff chain (5+30+120 s) cannot fit RECORD_ACT's 30 s
+# start_to_close — Temporal would kill and re-run the activity until the
+# attempts ran out, then FAIL the stage. No recorded replay history
+# schedules judge_artifact, so this dedicated config is replay-safe.
+JUDGE_ACT = workflow.ActivityConfig(
+    start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
+)
+
 
 class BenchmarkHost:
     """Mixin. Subclasses must call super().__init__()."""
@@ -147,4 +156,4 @@ class BenchmarkHost:
         )
         if judge_input is None:
             return fallback
-        return await workflow.execute_activity(judge_artifact, judge_input, **RECORD_ACT)
+        return await workflow.execute_activity(judge_artifact, judge_input, **JUDGE_ACT)

@@ -96,3 +96,35 @@ def test_prepare_produce_finish_compose_to_the_same_sequence():
     assert isinstance(prep, PlanPrep)
     assert ctx.calls == EXPECTED
     assert (prep.resolved_model, prep.spend.role) == ("m-plan", "planner")
+
+
+def test_a_judge_error_records_its_reason():
+    """R0 attempts 3-4: a judge=error record carried error=null. The
+    reason rides QualityScore.detail onto the record's error field."""
+    from types import SimpleNamespace
+
+    ctx = Ctx()
+    records: list = []
+
+    async def judge(cfg, artifact_json, stage, author_model):
+        return SimpleNamespace(score=None, judge="error", detail="ModelHTTPError: 503 overloaded")
+
+    async def record(cfg, rec):
+        records.append(rec)
+
+    ctx.judge = judge
+    ctx.record = record
+    asyncio.run(
+        step(
+            ctx,
+            cfg=PipelineConfig(),
+            architecture=ARCH,
+            idea=greenfield_idea(),
+            planner_agent=object(),
+            planner_model="m-plan",
+        )
+    )
+
+    assert records, "the judged stage must write its record"
+    assert records[0].quality.judge == "error"
+    assert records[0].error == "ModelHTTPError: 503 overloaded"

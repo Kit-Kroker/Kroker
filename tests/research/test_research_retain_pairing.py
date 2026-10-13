@@ -270,3 +270,26 @@ async def test_verified_brief_without_findings_retains_nothing_and_passes(monkey
     assert len(ctx.records) == 1
     assert ctx.records[0].outcome.name == "PASS"
     assert res.digest != ""
+
+
+@pytest.mark.asyncio
+async def test_a_judge_error_records_its_reason(monkeypatch, tmp_path):
+    """R0 attempts 3-4: a judge=error record carried error=null, so naming
+    the gemini 503 took worker-log forensics. The reason rides
+    QualityScore.detail onto the record's error field."""
+    from types import SimpleNamespace
+
+    ctx = _StubCtx([(GateOutcome.APPROVE, None)])
+    _script_activities(monkeypatch, synth=[(BRIEF1, _usage())], verify=[[]])
+
+    async def judge(cfg: object, artifact_json: str, stage: str, author_model: str) -> object:
+        return SimpleNamespace(score=None, judge="error", detail="ModelHTTPError: 503 overloaded")
+
+    ctx.judge = judge
+    await _run_step(ctx, monkeypatch, tmp_path)
+
+    judged = [
+        r for r in ctx.records if getattr(getattr(r, "quality", None), "judge", "") == "error"
+    ]
+    assert judged, "the judged research record must be written"
+    assert judged[0].error == "ModelHTTPError: 503 overloaded"

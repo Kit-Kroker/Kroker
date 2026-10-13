@@ -367,6 +367,7 @@ async def step(
                 ended=_now(),
                 quality_score=_r_quality.score,
                 judge=_r_quality.judge,
+                error=(_r_quality.detail if _r_quality.judge == "error" else None),
                 outcome=BenchmarkOutcome.PASS,
                 model=resolved_model,
                 spend=research_spend,

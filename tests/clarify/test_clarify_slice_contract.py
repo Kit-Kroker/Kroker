@@ -111,3 +111,69 @@ async def test_step_resolves_questions_via_ask_and_wait_or_suggested():
     )
     assert ctx_off.asked is False
     assert res_off.open_questions[0].answer == "Default"
+
+
+@pytest.mark.clause("CLARIFY-1.4")
+@pytest.mark.asyncio
+async def test_a_judge_error_records_its_reason():
+    """R0 attempts 3-4: clarify's judge=error record carried error=null, so
+    naming the gemini 503 took worker-log forensics. The reason rides
+    QualityScore.detail onto the record's error field."""
+    from types import SimpleNamespace
+
+    from sdlc.benchmarks.models import QualityScore
+    from sdlc.core.models import GateConfig, GatePolicy, IdeaBrief, PipelineConfig, ProjectMode
+    from sdlc.stages.clarify.models import ClarifiedRequirements
+
+    records: list = []
+
+    class _StubCtx:
+        def stage(self, *a: Any, **k: Any) -> None:
+            pass
+
+        def emit(self, *a: Any, **k: Any) -> None:
+            pass
+
+        async def recall(self, *a: Any, **k: Any) -> Any:
+            from sdlc.memory.models import RecallSnapshot
+
+            return RecallSnapshot(query_hash="q", bank="b", watermark="w", items=[])
+
+        async def cached_stage(self, *a: Any, **k: Any) -> tuple[ClarifiedRequirements, bool]:
+            return (
+                ClarifiedRequirements(
+                    summary="s",
+                    functional_requirements=[],
+                    non_functional_requirements=[],
+                    out_of_scope=[],
+                    open_questions=[],
+                ),
+                False,
+            )
+
+        async def ask_and_wait(
+            self, questions: Any, *, stage: str, timeout_hours: int
+        ) -> dict[str, str]:
+            raise AssertionError("no open questions: nothing to ask")
+
+        async def judge(self, *a: Any, **k: Any) -> QualityScore:
+            return SimpleNamespace(
+                score=None, judge="error", detail="ModelHTTPError: 503 overloaded"
+            )
+
+        async def record(self, cfg: Any, rec: Any) -> None:
+            records.append(rec)
+
+    ctx = _StubCtx()
+    cfg = PipelineConfig(gates={"clarify": GateConfig(policy=GatePolicy.OFF)})
+    idea = IdeaBrief(title="t", description="d", mode=ProjectMode.GREENFIELD)
+    await clarify.step(
+        ctx, cfg=cfg, idea=idea, clarify_agent=None, route_agent=None, probe_agent=None
+    )
+
+    assert records, "the judged stage must write its record"
+    assert records[0].quality.judge == "error"
+    assert records[0].error == "ModelHTTPError: 503 overloaded", (
+        f"record error={records[0].error!r}: the judge's reason must reach "
+        "the record, not die in the judge's broad except"
+    )

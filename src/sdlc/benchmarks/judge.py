@@ -2,21 +2,25 @@
 
 The real LLM call is behind JudgeFn so tests inject a fake and CI makes no
 model calls. On any failure (exception, bad JSON, out-of-range) we return
-QualityScore(score=None, judge="error") — the judge never raises, so a
-broken judge can never fail a benchmark cell; the record is simply excluded
-from the composite.
+QualityScore(score=None, judge="error", detail=<reason>) — the judge never
+raises, so a broken judge can never fail a benchmark cell; the record is
+simply excluded from the composite, and the detail explains why.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 
+import httpx
 from pydantic_ai import Agent
+from pydantic_ai.exceptions import ModelHTTPError
 from temporalio import activity
 
 from ..agents.model_ids import resolve_model
@@ -78,6 +82,28 @@ _judge_fn: JudgeFn | None = None
 def _set_judge_fn(fn: JudgeFn | None) -> None:
     global _judge_fn
     _judge_fn = fn
+
+
+_LOGGER = logging.getLogger(__name__)
+
+# R0 attempts 3-4 (verification.md §7.4): all four rubric calls across two
+# runs died to gemini-3.5-flash 503s with zero retries — _judge_sync turns
+# the exception into a graceful error score and the activity then completes
+# "successfully", so Temporal's retry policy never engages. Transient
+# statuses retry here, at the seam both staged phases share; anything else
+# (or the last attempt) still raises into the fail-safe in _judge_sync.
+_JUDGE_RETRY_DELAYS: tuple[float, ...] = (5.0, 30.0, 120.0)
+_JUDGE_RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
+def _status_of(exc: Exception) -> int | None:
+    """The HTTP status behind a model-call failure, whatever the provider
+    stack raised: pydantic-ai's ModelHTTPError or the raw httpx error."""
+    if isinstance(exc, ModelHTTPError):
+        return exc.status_code
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code
+    return None
 
 
 _JUDGE_SYSTEM_PROMPT = (
@@ -146,8 +172,25 @@ def _run_judge_agent(model, system_prompt: str, user_prompt: str) -> str:
     if isinstance(model, str):
         model = resolve_model(model)
     agent = Agent(model, name="benchmark_judge", system_prompt=system_prompt)
-    result = agent.run_sync(user_prompt)
-    return result.output
+    for attempt in range(len(_JUDGE_RETRY_DELAYS) + 1):
+        try:
+            result = agent.run_sync(user_prompt)
+        except Exception as exc:
+            status = _status_of(exc)
+            if status not in _JUDGE_RETRY_STATUSES or attempt >= len(_JUDGE_RETRY_DELAYS):
+                raise
+            delay = _JUDGE_RETRY_DELAYS[attempt]
+            _LOGGER.warning(
+                "judge model call failed with HTTP %s (attempt %d/%d); retrying in %ss",
+                status,
+                attempt + 1,
+                len(_JUDGE_RETRY_DELAYS) + 1,
+                delay,
+            )
+            time.sleep(delay)
+        else:
+            return result.output
+    raise AssertionError("unreachable: the loop returns or raises")
 
 
 def _default_judge(inp: JudgeInput) -> str:
@@ -186,17 +229,23 @@ def _judge_sync(inp: JudgeInput) -> QualityScore:
         vetoes = parse_vetoes(inp.vetoes_yaml)
         artifact = json.loads(inp.artifact_json) if vetoes else {}
         failures = check(artifact, vetoes) if vetoes else []
-    except Exception:
-        return QualityScore(score=None, judge="error")
+    except Exception as exc:
+        return QualityScore(
+            score=None,
+            judge="error",
+            detail=f"veto config: {type(exc).__name__}: {exc}"[:400],
+        )
 
     fn = _judge_fn or _default_judge
     try:
         payload = json.loads(fn(inp))
         score = max(0.0, min(1.0, float(payload.get("score", 0.0))))
         components = dict(payload.get("components") or {})
-    except Exception:
+    except Exception as exc:
         if not failures:
-            return QualityScore(score=None, judge="error")
+            return QualityScore(
+                score=None, judge="error", detail=f"{type(exc).__name__}: {exc}"[:400]
+            )
         # A veto fired. That IS a finding, and discarding it because the
         # advisory judge fell over would throw away the sharper signal.
         score, components = 0.0, {}

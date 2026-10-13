@@ -155,6 +155,7 @@ async def finish(
             ended=_ended,
             quality_score=_quality.score,
             judge=_quality.judge,
+            error=(_quality.detail if _quality.judge == "error" else None),
             outcome=(BenchmarkOutcome.PASS if gate.approved else BenchmarkOutcome.REVISED),
             model=prep.resolved_model,
             spend=prep.spend,

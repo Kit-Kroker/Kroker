@@ -1,6 +1,8 @@
 import asyncio
 
+import httpx
 import pytest
+from pydantic_ai.exceptions import ModelHTTPError
 
 import sdlc.benchmarks.judge as judge_mod
 from sdlc.benchmarks.judge import (
@@ -636,3 +638,139 @@ def test_judge_artifact_runs_the_sync_judge_off_the_event_loop(monkeypatch):
         "swallowed into not-measured and the record lost its score"
     )
     assert result.score == 0.5
+
+
+# --- R0 attempt-4 hardening: transient-HTTP retry + persisted reasons ------
+#
+# Attempts 3-4 lost all four rubric calls to gemini 503s with zero retries:
+# _judge_sync swallows the exception into judge='error' and the activity
+# completes "successfully", so Temporal's retry policy never engages
+# (verification.md §7.4: worker-log 503s at 14:35:15Z and 14:46:47Z, one
+# per stage). The stage records then carried error=null because
+# QualityScore had nowhere to put the reason — the stage half of the D-B
+# visibility gap.
+
+
+def test_error_score_carries_its_reason():
+    def boom(inp: JudgeInput) -> str:
+        raise RuntimeError("judge down: endpoint 503")
+
+    _set_judge_fn(boom)
+    result = judge_artifact.sync(
+        JudgeInput(artifact_json="{}", rubric="r", author_model="a", judge_model="b")
+    )
+    assert result.judge == "error"
+    assert result.score is None
+    assert "RuntimeError" in (result.detail or "")
+    assert "judge down" in (result.detail or "")
+
+
+def test_veto_config_error_carries_its_reason():
+    _set_judge_fn(lambda inp: '{"score": 0.9, "components": {}}')
+    try:
+        qs = judge_artifact.sync(
+            JudgeInput(
+                artifact_json='{"tests_passed": true}',
+                rubric="r",
+                author_model="a",
+                judge_model="b",
+                vetoes_yaml="- id: v\n  kind: vibes\n",
+            )
+        )
+    finally:
+        _set_judge_fn(None)
+    assert qs.judge == "error"
+    assert "veto" in (qs.detail or "").lower()
+
+
+def test_error_reason_is_truncated():
+    """A provider error body can be a whole HTML page; the detail is for a
+    record field, not a log dump."""
+
+    def boom(inp: JudgeInput) -> str:
+        raise RuntimeError("x" * 5000)
+
+    _set_judge_fn(boom)
+    result = judge_artifact.sync(
+        JudgeInput(artifact_json="{}", rubric="r", author_model="a", judge_model="b")
+    )
+    assert result.judge == "error"
+    assert result.detail is not None and len(result.detail) <= 400
+
+
+def _agent_stub(script: list, calls: list):
+    """An Agent stand-in consuming `script` one entry per run_sync call:
+    an entry is either an exception to raise or an output string."""
+
+    class _Stub:
+        def __init__(self, model, **kwargs):
+            pass
+
+        def run_sync(self, prompt):
+            from types import SimpleNamespace
+
+            calls.append(prompt)
+            item = script.pop(0)
+            if isinstance(item, BaseException):
+                raise item
+            return SimpleNamespace(output=item)
+
+    return _Stub
+
+
+def test_judge_agent_retries_a_transient_503(monkeypatch):
+    script = [
+        ModelHTTPError(model_name="m", status_code=503, body="overloaded"),
+        ModelHTTPError(model_name="m", status_code=503, body="overloaded"),
+        "ok",
+    ]
+    calls: list = []
+    monkeypatch.setattr(judge_mod, "Agent", _agent_stub(script, calls))
+    monkeypatch.setattr(judge_mod, "_JUDGE_RETRY_DELAYS", (0.0, 0.0), raising=False)
+
+    raw = _run_judge_agent(object(), "sys", "user prompt")  # non-str: no resolve_model
+
+    assert raw == "ok"
+    assert len(calls) == 3, "two 503s must be retried before success"
+
+
+def test_judge_agent_exhausts_retries_and_lets_the_503_propagate(monkeypatch):
+    script = [ModelHTTPError(model_name="m", status_code=503, body="overloaded")] * 2
+    calls: list = []
+    monkeypatch.setattr(judge_mod, "Agent", _agent_stub(script, calls))
+    monkeypatch.setattr(judge_mod, "_JUDGE_RETRY_DELAYS", (0.0,), raising=False)
+
+    with pytest.raises(ModelHTTPError):
+        _run_judge_agent(object(), "sys", "user prompt")
+    assert len(calls) == 2, "one delay entry means initial + one retry"
+
+
+def test_judge_agent_does_not_retry_a_400(monkeypatch):
+    """A 400 is a bad request, not an outage — retrying it changes nothing
+    and burns the run's wall clock."""
+    script = [ModelHTTPError(model_name="m", status_code=400, body="bad request")]
+    calls: list = []
+    monkeypatch.setattr(judge_mod, "Agent", _agent_stub(script, calls))
+    monkeypatch.setattr(judge_mod, "_JUDGE_RETRY_DELAYS", (0.0, 0.0), raising=False)
+
+    with pytest.raises(ModelHTTPError):
+        _run_judge_agent(object(), "sys", "user prompt")
+    assert len(calls) == 1
+
+
+def test_judge_agent_retries_httpx_status_errors_too(monkeypatch):
+    """Some provider stacks surface the 503 as a raw httpx error; the
+    retry must key off the STATUS, not the exception class."""
+
+    def _503():
+        req = httpx.Request("POST", "https://generativelanguage.googleapis.com/v1beta/x")
+        return httpx.HTTPStatusError("503", request=req, response=httpx.Response(503, request=req))
+
+    script = [_503(), "ok"]
+    calls: list = []
+    monkeypatch.setattr(judge_mod, "Agent", _agent_stub(script, calls))
+    monkeypatch.setattr(judge_mod, "_JUDGE_RETRY_DELAYS", (0.0,), raising=False)
+
+    raw = _run_judge_agent(object(), "sys", "user prompt")
+    assert raw == "ok"
+    assert len(calls) == 2
