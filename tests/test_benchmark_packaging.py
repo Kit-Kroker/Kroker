@@ -10,7 +10,7 @@ are what keep host bytecode out of COPY benchmarks.
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePath
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,6 +29,22 @@ def test_verbosity_rules_ship_as_package_data():
     )
     yamls = [p.name for p in (rules / "verbosity").iterdir()]
     assert [n for n in yamls if n.endswith(".yml")], "ruleset .yml files vanished"
+
+
+def test_package_data_patterns_cover_the_ruleset_extension():
+    """The ruleset files are .yml, the historic package-data pattern only
+    said **/*.yaml -- the wheel shipped the empty package and the worker
+    measured with an empty rule set (D-C's second half; axis.py's own
+    comment warned about it). The patterns must actually match a ruleset
+    path, which is what the wheel build applies."""
+    import tomllib
+
+    data = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    patterns = data["tool"]["setuptools"]["package-data"]["sdlc"]
+    sample = "sdlc/benchmarks/rules/verbosity/bare-except.yml"
+    assert any(PurePath(sample).full_match(p) for p in patterns), (
+        f"no package-data pattern matches {sample}: {patterns}"
+    )
 
 
 def test_dockerignore_blocks_nested_bytecode():

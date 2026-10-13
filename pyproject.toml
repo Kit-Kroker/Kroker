@@ -44,8 +44,11 @@ where = ["src"]
 # stage contract / AGENTS markdown is discovered relative to the package dir.
 # setuptools ships only *.py in a wheel unless told otherwise, so a pip
 # install of this project crashes the worker on boot without this.
+# **/*.yml is the pinned verbosity ruleset (benchmarks/rules/verbosity,
+# D-C): axis.py globs *.yml at call time and its own comment warned the
+# pattern had to be here before a frozen wheel could carry the rules.
 [tool.setuptools.package-data]
-sdlc = ["**/*.yaml", "**/*.md"]
+sdlc = ["**/*.yaml", "**/*.yml", "**/*.md"]
 
 [project.optional-dependencies]
 dev = [
