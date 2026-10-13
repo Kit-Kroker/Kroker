@@ -137,3 +137,66 @@ The code half of Round 015 (Tasks T001 through T018) is **fully implemented, tes
 - **Merge & Run Clearance Blocked**:
   * Merge to `main` is **BLOCKED** pending an orchestrator ruling to quarantine the external file out of the records root (or wait out the run) and re-verify the full fast tier on the restored root.
   * Phase 12 (Run Batches R0–R3, Tasks T019–T023) remains strictly blocked per SG-5 until the orchestrator issues explicit batch clearance.
+
+---
+
+## 7. Addendum (2026-10-13): R0 attempts, defect bundle D-A..D-D, and the repeat
+
+**Merge note first**: the block in §6 was resolved (the external run finished;
+root re-verified), the code half merged, and Phase 12 cleared for R0.
+
+### 7.1 Attempt timeline
+
+| # | Run | Pin | Verdict | Failed condition |
+|---|---|---|---|---|
+| 1 | `bench-todo-api-greenfield-1791808170` | `91cff98f` | FAIL | `oracle_all_pass` |
+| 2 | `bench-todo-api-greenfield-1791839267` | `91cff98f` | FAIL | `oracle_all_pass` |
+| 3 | `bench-todo-api-greenfield-1791883560` | `80e787dc` | FAIL | `rubric_scores` (external — §7.4) |
+
+Attempts 1–2 surfaced four defects (D-A..D-D). Per T019/D-12 the fixes are
+code changes on `main` (`f2739c15`, `24896c1f`, `aafb3139`, `f772ca52`,
+`80e787dc`), and attempt 3 reran R0 from a detached worktree of the new pin
+with the rebuilt worker image.
+
+### 7.2 Defects and root causes
+
+| # | Defect | Root cause | Fix |
+|---|---|---|---|
+| D-A | `check_smoke` condition 4 swept every record with `stage=='oracle'`, so six task-level error grades failed the smoke while the case-level oracle graded 6/6 | checker overreach | condition reads `scope=ORACLE` only (`f2739c15`) |
+| D-B | live grades wrote all six `oracle_task` records as `judge='error', score=None, error=null`; identical code+branch graded perfectly on demand | **stale host-compiled bytecode rode into the grade environment**: `.dockerignore`'s `__pycache__/` is root-anchored (unlike `.gitignore`), so `COPY benchmarks` baked Windows-compiled pycs into the worker image; `grade_oracle`'s plain `copytree` carried them into the grade worktree; matching py313+pytest-9.1.1 tags and preserved mtime/size meant no recompile, so every code object kept its Windows `co_filename`; pytest's legacy junit `file` attribute follows `co_filename` (`Function.reportinfo` → `getfslinno`), so every oracle node id came out as the compiling host's absolute path and every `tasks.yaml` mapping missed. The reason existed in `TaskGrade.detail` but was dropped at record write, and the junit died with the temp worktree — hence "invisible without instrumented recording" | `copy_case_tree` (no `__pycache__`/`*.pyc`) at all three oracle copy sites; nested `**/__pycache__///**/*.pyc` dockerignore patterns; error-grade reason + observed report keys persisted on the record (`24896c1f`). Proven by a single-variable worker replay: with the cache, `file="D:\own\..."` and six error grades; without it, `file="oracle/test_crud.py"` and six `1.0 oracle` |
+| D-C | axis measured with an empty rule set in the worker | two halves: `rules/`+`rules/verbosity/` had no `__init__.py` (package find missed them) **and** package-data listed only `**/*.yaml` while the rule files are `.yml` (axis.py's own comment warned). The second half was caught inspecting the rebuilt image of `f772ca52`, whose wheel shipped the package with `__init__.py` and zero rule files | package markers (`aafb3139`) + `**/*.yml` in package-data with a pattern-coverage test (`80e787dc`) |
+| D-D | smoke had no gate override; R0 #1–2 needed five hand-babysitted gates | missing passthrough | `benchmark smoke --gate-policy` reaches `_run_matrix` (`f772ca52`); attempt 3 ran unattended end-to-end |
+
+### 7.3 Attempt 3 record evidence (all on pin `80e787dc`)
+
+- 42 records, one file per cell, commit `80e787dc` on every record
+  (`commit_on_records` green).
+- Case-level oracle `1.0`, 6/6, pass; **all six `oracle_task` records
+  `judge=oracle score=1.0 outcome=pass error=null`** — D-B closed in live
+  records.
+- **Axis measured** in-workflow (`axis: 1 measured, 0 not measured` in the
+  report totals; erosion 0.27, verbosity 0.00, 60 functions / 1 over CC 10)
+  — D-C closed live.
+- Cell: graded, merge last, oracle 6/6, first attempt 3/5, after repair 4/5,
+  1.81M tokens, wall 6687 s.
+
+### 7.4 The remaining failure is external
+
+`rubric_scores` failed because the judge model endpoint
+(`generativelanguage.googleapis.com`, `gemini-3.5-flash`) returned
+**503 Service Unavailable** twice during the run window — 09:43:09Z
+(clarify) and 09:55:58Z (architecture), exactly the two records with
+`judge=error score=None`. The judge fail-safe behaved as designed (score
+None, run continued to the oracle). A direct probe after the run returned
+HTTP 200 — the outage was transient. No code defect remains behind this
+condition.
+
+### 7.5 Standing state
+
+- Stamp `runs/ops/smoke/80e787dc….json`: `passed=false,
+  failed_conditions=[rubric_scores]` — so R1 remains gated on a passing
+  stamp for the current commit.
+- Per T019 a FAIL with no code change does not move the pin: the next R0
+  repeat re-runs **the same commit** once the judge endpoint is healthy
+  (it is now). Estimate unchanged: one run, ~1.9–2.4 h measured, ~$1.6;
+  orchestrator clearance required per FR-036.
