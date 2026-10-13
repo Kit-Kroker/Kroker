@@ -152,11 +152,13 @@ root re-verified), the code half merged, and Phase 12 cleared for R0.
 | 1 | `bench-todo-api-greenfield-1791808170` | `91cff98f` | FAIL | `oracle_all_pass` |
 | 2 | `bench-todo-api-greenfield-1791839267` | `91cff98f` | FAIL | `oracle_all_pass` |
 | 3 | `bench-todo-api-greenfield-1791883560` | `80e787dc` | FAIL | `rubric_scores` (external — §7.4) |
+| 4 | `bench-todo-api-greenfield-1791897241` | `80e787dc` | FAIL | `rubric_scores` (external — §7.4) |
 
 Attempts 1–2 surfaced four defects (D-A..D-D). Per T019/D-12 the fixes are
 code changes on `main` (`f2739c15`, `24896c1f`, `aafb3139`, `f772ca52`,
 `80e787dc`), and attempt 3 reran R0 from a detached worktree of the new pin
-with the rebuilt worker image.
+with the rebuilt worker image. Attempt 4 re-ran the same pin after a
+pre-dispatch probe of the judge endpoint returned HTTP 200.
 
 ### 7.2 Defects and root causes
 
@@ -180,6 +182,22 @@ with the rebuilt worker image.
 - Cell: graded, merge last, oracle 6/6, first attempt 3/5, after repair 4/5,
   1.81M tokens, wall 6687 s.
 
+- Cell: graded, merge last, oracle 6/6, first attempt 3/5, after repair 4/5,
+  1.81M tokens, wall 6687 s.
+
+### 7.3a Attempt 4 record evidence (all on pin `80e787dc`)
+
+- 48 records, commit `80e787dc` on every record.
+- Case-level oracle `1.0`, 6/6; **all six `oracle_task` records
+  `judge=oracle score=1.0 outcome=pass error=null`** — D-B stays closed
+  live. Axis measured (erosion 0.0495, verbosity 0.0082, 84 functions) —
+  D-C stays closed. Unattended end-to-end on `--gate-policy off` (D-D).
+- Cell: graded, merge last; research/clarify/architecture/plan first-pass;
+  code 2/5 first attempt, 4/5 after repair; `analyze` failed (17 untraced
+  criteria) and merge blocked on `build_integration_green` (3 introduced
+  failing tests) — proposer-quality findings, not harness defects; the
+  smoke conditions do not score the cell. 2.40M tokens, wall 10199.8 s.
+
 ### 7.4 The remaining failure is external
 
 `rubric_scores` failed because the judge model endpoint
@@ -191,12 +209,37 @@ None, run continued to the oracle). A direct probe after the run returned
 HTTP 200 — the outage was transient. No code defect remains behind this
 condition.
 
+**Attempt 4 confirmed the same external signature, this time from the
+worker log directly** (attempt 3's causes were inferred from timing): two
+`POST …/gemini-3.5-flash:generateContent → 503` lines in
+`kroker-worker-1` at 14:35:15Z (clarify) and 14:46:47Z (architecture) —
+again exactly the two `judge=error` records, again after a pre-dispatch
+probe (12:07Z) had returned 200. Across attempts 3–4 that is 4/4 real
+rubric calls 503'd while both one-off toy probes (tiny prompt) succeeded;
+cannot distinguish `gemini-3.5-flash` overload waves from a
+request-shape factor (the judge prompt carries the full stage artifact;
+the architecture author stage pulled 218K input tokens).
+
+Two structural facts make this fragile and invisible:
+
+- **Zero retries.** `_judge_sync` swallows every exception into
+  `QualityScore(score=None, judge="error")` (judge.py:197), and the
+  activity then completes successfully — so Temporal's activity retry
+  never engages and one 503 costs the stage's rubric score for the run.
+- **The reason is dropped for stage records.** The D-B fix persisted the
+  error reason on task/oracle grades only; stage records carry
+  `error=null` (confirmed on attempts 3–4), which is why both outages
+  needed log forensics.
+
 ### 7.5 Standing state
 
-- Stamp `runs/ops/smoke/80e787dc….json`: `passed=false,
-  failed_conditions=[rubric_scores]` — so R1 remains gated on a passing
-  stamp for the current commit.
-- Per T019 a FAIL with no code change does not move the pin: the next R0
-  repeat re-runs **the same commit** once the judge endpoint is healthy
-  (it is now). Estimate unchanged: one run, ~1.9–2.4 h measured, ~$1.6;
-  orchestrator clearance required per FR-036.
+- Stamp `runs/ops/smoke/80e787dc….json` (rewritten by attempt 4,
+  16:04:07Z): `passed=false, failed_conditions=[rubric_scores]` — R1
+  remains gated on a passing stamp for the current commit.
+- Per T019 a FAIL with no code change does not move the pin. After two
+  consecutive rubric-503 losses, the orchestrator chooses between:
+  (a) blind re-roll of the same pin (~2–2.8 h, ~$2 measured), or
+  (b) a judge hardening change first — retry-with-backoff on the rubric
+  calls and/or persisting the stage judge-error reason — which is a code
+  change and therefore re-pins the round (new stamp commit) per T019.
+  Either way, FR-036 clearance required.
