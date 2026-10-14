@@ -11,4 +11,4 @@ weights:
 # ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic — the prefix is a protocol
 # label, the weights are GLM. google:gemini-3.5-flash is decorrelated on both
 # axes and authenticates from GEMINI_API_KEY, which this deployment sets.
-default_judge_model: google:gemini-3.5-flash
+default_judge_model: google:gemini-3.8-flash
