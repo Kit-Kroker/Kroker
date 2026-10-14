@@ -153,12 +153,25 @@ root re-verified), the code half merged, and Phase 12 cleared for R0.
 | 2 | `bench-todo-api-greenfield-1791839267` | `91cff98f` | FAIL | `oracle_all_pass` |
 | 3 | `bench-todo-api-greenfield-1791883560` | `80e787dc` | FAIL | `rubric_scores` (external — §7.4) |
 | 4 | `bench-todo-api-greenfield-1791897241` | `80e787dc` | FAIL | `rubric_scores` (external — §7.4) |
+| 5 | `bench-todo-api-greenfield-1791922358` | `ccfe0a64` | FAIL | `rubric_scores` (external, reason on record — §7.4) |
+| 6 | `bench-todo-api-greenfield-1791960889` | `736dd591` | **PASS** | — |
 
 Attempts 1–2 surfaced four defects (D-A..D-D). Per T019/D-12 the fixes are
 code changes on `main` (`f2739c15`, `24896c1f`, `aafb3139`, `f772ca52`,
 `80e787dc`), and attempt 3 reran R0 from a detached worktree of the new pin
 with the rebuilt worker image. Attempt 4 re-ran the same pin after a
-pre-dispatch probe of the judge endpoint returned HTTP 200.
+pre-dispatch probe of the judge endpoint returned HTTP 200. After two
+consecutive rubric-503 losses the orchestrator chose judge hardening over a
+blind re-roll: attempts 3–5 lost **5 of 5 real rubric calls** to the same
+`gemini-3.5-flash` UNAVAILABLE 503 at hours spread across the day. The
+hardening landed as `e9b732d1` (transient-HTTP + read-timeout retry with
+5/30/120 s backoff, dedicated `JUDGE_ACT` activity budget, `QualityScore.
+detail` persisted as the record's `error` on the four stage sites) plus
+`ccfe0a64` (timeout coverage; attempt 5's pin). Attempt 5's records then
+carried the reason inline (§7.4). With saturation confirmed as the model's
+chronic state, the orchestrator moved the case judge to
+`google:gemini-3.8-flash` (`736dd591`), and attempt 6 passed all four
+smoke conditions.
 
 ### 7.2 Defects and root causes
 
@@ -198,6 +211,30 @@ pre-dispatch probe of the judge endpoint returned HTTP 200.
   failing tests) — proposer-quality findings, not harness defects; the
   smoke conditions do not score the cell. 2.40M tokens, wall 10199.8 s.
 
+### 7.3b Attempts 5–6 record evidence
+
+Attempt 5 (pin `ccfe0a64`, 48 records): D-B/D-C/D-D hold live (oracle 6/6
+with six `oracle_task` 1.0 `error=null`; axis measured erosion 0.0 /
+verbosity 0.0; unattended). The two rubic-stage records carried the judge
+failure **inline** — the hardening's first live proof:
+`ModelHTTPError: status_code: 503, model_name: gemini-3.5-flash, body:
+{'error': {'code': 503, 'message': 'This model is currently experiencing
+high demand…', 'status': 'UNAVAILABLE'}}` on both clarify and
+architecture. The retry chain (5/30/120 s) exhausted against the wave —
+it is longer than the backoff, not a blip.
+
+Attempt 6 (pin `736dd591`, 35 records) — **all four smoke conditions
+pass**, stamp `passed=true []`:
+
+- **Rubric judge scored live for the first time since the fix bundle**:
+  clarify `staged_rubric 1.0`, architecture `staged_rubric 0.91` on
+  `google:gemini-3.8-flash`.
+- Oracle 6/6 with all six `oracle_task` records `1.0/oracle error=null`;
+  axis measured erosion 0.00 / verbosity 0.00 (43 functions, 0 over CC).
+- Cell graded, last stage `deploy` (deepest run of the round: analyze
+  failed on 21 untraced criteria — proposer quality — everything else
+  first-pass, merge scored 1.0). 1.31M tokens, wall 5175.2 s.
+
 ### 7.4 The remaining failure is external
 
 `rubric_scores` failed because the judge model endpoint
@@ -231,15 +268,29 @@ Two structural facts make this fragile and invisible:
   `error=null` (confirmed on attempts 3–4), which is why both outages
   needed log forensics.
 
+**Resolution.** Attempt 5 (pin `ccfe0a64`) confirmed both facts fixed
+live: the retry chain fired and the reason landed on the records
+(§7.3b) — but also settled the question §7.4 opened: the failure is
+**the model, not the waves**. Five real rubric calls across hours of
+three separate days all drew the same "high demand / UNAVAILABLE" 503,
+while toy probes intermittently returned 200. The orchestrator moved the
+R0 case judge to `google:gemini-3.8-flash` (`736dd591`); attempt 6
+scored both rubric stages and passed. `benchmarks/config.yaml`'s
+`default_judge_model` and the other cases still name `gemini-3.5-flash`
+— extend the move once 3.8-flash has more healthy-hours evidence.
+
 ### 7.5 Standing state
 
-- Stamp `runs/ops/smoke/80e787dc….json` (rewritten by attempt 4,
-  16:04:07Z): `passed=false, failed_conditions=[rubric_scores]` — R1
-  remains gated on a passing stamp for the current commit.
-- Per T019 a FAIL with no code change does not move the pin. After two
-  consecutive rubric-503 losses, the orchestrator chooses between:
-  (a) blind re-roll of the same pin (~2–2.8 h, ~$2 measured), or
-  (b) a judge hardening change first — retry-with-backoff on the rubric
-  calls and/or persisting the stage judge-error reason — which is a code
-  change and therefore re-pins the round (new stamp commit) per T019.
-  Either way, FR-036 clearance required.
+- **R0 is closed.** Passing stamp on the round's pin:
+  `runs/ops/smoke/736dd591….json` → `passed=true, failed_conditions=[]`
+  (attempt 6, written 2026-10-14T08:21:11Z). The FR-036 gate for R1–R3 is
+  satisfied on `736dd591`.
+- Decision trail (orchestrator, 2026-10-13/14): two 503 losses on
+  `80e787dc` → judge hardening chosen over a blind re-roll (re-pin
+  `ccfe0a64`); attempt 5 proved the cause is the model's chronic
+  saturation → judge moved to `gemini-3.8-flash` (re-pin `736dd591`);
+  attempt 6 passed.
+- Judge hardening that outlives the round: transient-HTTP/timeout retry
+  with backoff at the judge seam, a real activity budget for
+  `judge_artifact`, and judge-failure reasons persisted on stage records
+  (`e9b732d1`, `ccfe0a64`).
