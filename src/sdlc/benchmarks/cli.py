@@ -301,14 +301,13 @@ async def _run_matrix(
                 )
 
     # 3. Arm filtering and multi-cell refusal
-    from .matrix import _arms_for
+    from .matrix import _arms_for, arm_filtered_spec
 
     known_arms = [a.name for a in (spec.arms or _arms_for(spec))]
     if arm is not None:
-        matching = [a for a in (spec.arms or _arms_for(spec)) if a.name == arm]
-        if not matching:
+        if not any(a.name == arm for a in (spec.arms or _arms_for(spec))):
             raise SystemExit(f"unknown arm '{arm}'; known arms: {', '.join(known_arms)}")
-        spec = spec.model_copy(update={"arms": matching})
+        spec = arm_filtered_spec(spec, arm)
     else:
         cells = expand_matrix(spec)
         if spec.role == CaseRole.CORPUS and len(cells) > 1 and not all_arms:

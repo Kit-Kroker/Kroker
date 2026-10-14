@@ -40,6 +40,32 @@ def _arms_for(spec: CaseSpec) -> list[Arm]:
     ]
 
 
+def arm_filtered_spec(spec: CaseSpec, arm: str) -> CaseSpec:
+    """The spec reduced to the single named arm for a `--arm` run.
+
+    `model_copy` skips validation, but the worker re-validates the wire
+    payload — so the copy must satisfy CaseSpec on its own. Reducing
+    `arms` while keeping the case's declared strong/weak arm fails
+    deserialization there ('weak_arm … not found in arms'), which refused
+    every R1 screen start. A declaration whose arm left the subset is
+    cleared on the COPY; the case file stays the source of truth —
+    accept reloads the full case."""
+    matching = [a for a in _arms_for(spec) if a.name == arm]
+
+    def _kept(declared: str | None) -> str | None:
+        if declared is None or any(a.name == declared for a in matching):
+            return declared
+        return None
+
+    return spec.model_copy(
+        update={
+            "arms": matching,
+            "strong_arm": _kept(spec.strong_arm),
+            "weak_arm": _kept(spec.weak_arm),
+        }
+    )
+
+
 def _parse_harness_entry(entry: str) -> tuple[HarnessKind, HarnessKind | None]:
     """spec §5: an entry is either a plain harness ("opencode") or a crew
     cell naming its lead CLI ("crew:claude_code" → CREW + that lead).

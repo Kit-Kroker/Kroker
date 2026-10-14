@@ -176,3 +176,38 @@ def test_unknown_crew_lead_entry_is_rejected():
     )
     with pytest.raises(ValueError, match="crew:bogus"):
         expand_matrix(spec)
+
+
+def test_a_single_arm_run_spec_still_validates_on_the_worker():
+    """--arm filtering reduced the arms but kept the case's declared
+    weak_arm, and the worker re-validates the wire payload — it refused
+    every R1 screen start with 'weak_arm … not found in arms: [strong]'
+    (bench-todo chain 2026-10-14). The filtered copy must round-trip
+    through CaseSpec: a dropped strong/weak declaration is cleared on the
+    copy, and the case file stays the source of truth (accept reloads the
+    full case)."""
+    from sdlc.benchmarks.matrix import arm_filtered_spec
+
+    spec = _spec_arms(
+        [
+            Arm(name="strong", role_models={"dev": "zai-coding-plan/glm-5.2"}),
+            Arm(name="weak", role_models={"dev": "zai-coding-plan/glm-5.3-flash"}),
+        ],
+    )
+    spec = spec.model_copy(update={"strong_arm": "strong", "weak_arm": "weak"})
+
+    run_spec = arm_filtered_spec(spec, "strong")
+    assert [a.name for a in run_spec.arms] == ["strong"]
+    assert CaseSpec.model_validate(run_spec.model_dump()) is not None, (
+        "the filtered spec must deserialize on the worker"
+    )
+    assert run_spec.weak_arm is None, "a dropped declaration must not ride the wire"
+    assert run_spec.strong_arm == "strong"
+
+    weak_run = arm_filtered_spec(spec, "weak")
+    CaseSpec.model_validate(weak_run.model_dump())
+    assert weak_run.strong_arm is None
+    assert weak_run.weak_arm == "weak"
+
+    # the unfiltered case still declares both (accept reads them from there)
+    assert (spec.strong_arm, spec.weak_arm) == ("strong", "weak")
