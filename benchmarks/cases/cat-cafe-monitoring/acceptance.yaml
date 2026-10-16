@@ -1,7 +1,7 @@
 case_id: cat-cafe-monitoring
-verdict: not_assessed
-reason: null
-note: null
+verdict: rejected
+reason: no_separation
+note: strong 0.4722, weak 0.8333, margin -0.3611
 oracle_id: sha256:f9a25268b472a6c0f0c4a475082b19b0e63e3450fbeb12519b537defc2643f28
 oracle_tests: 36
 reference:
@@ -35,9 +35,27 @@ floor:
     oracle/test_risk.py::test_sustained_180_bpm_at_rest_is_risk, oracle/test_risk.py::test_sustained_5_bpm_is_risk,
     oracle/test_risk.py::test_calm_resting_cat_is_not_risk, oracle/test_risk.py::test_risk_is_independent_per_cat,
     oracle/test_risk.py::test_single_reading_cat_has_boolean_at_risk'
-separation: null
+separation:
+  passed: false
+  strong:
+    arm: zai-coding-plan-glm-5.2
+    run_ids:
+    - bench-cat-cafe-monitoring-1792137753/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.2
+    scores:
+    - 0.4722222222222222
+    mean: 0.4722222222222222
+  weak:
+    arm: zai-coding-plan-glm-5.3-flash
+    run_ids:
+    - bench-cat-cafe-monitoring-1792148180/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3-flash
+    scores:
+    - 0.8333333333333334
+    mean: 0.8333333333333334
+  margin: -0.36111111111111116
+  not_comparable: 10
+  detail: ''
 role: corpus
 visibility: private
 exposure: repo_public
-kroker_commit: unknown
-updated: '2026-10-11T19:59:57.327301+00:00'
+kroker_commit: 64cd9f546834ec57c6be92c88ec0c31e98d2661d
+updated: '2026-10-16T14:11:55.387518+00:00'
