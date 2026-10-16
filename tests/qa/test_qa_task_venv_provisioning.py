@@ -39,7 +39,7 @@ async def test_run_test_suite_installs_the_produced_projects_own_deps(tmp_path):
     assert report.tests_passed is True, report.issues
     # The shared cache (venv_cache.py): the venv lives under the run root,
     # keyed by the manifest fingerprint, not inside the worktree.
-    cache = tmp_path.parent.parent / ".sdlc-venv-cache"
+    cache = tmp_path.parent / ".sdlc-venv-cache"
     assert cache.is_dir() and any(cache.iterdir())
 
 
@@ -101,7 +101,7 @@ async def test_run_test_suite_installs_a_uv_workspace_via_uv(tmp_path):
     report = await run_test_suite(QAInput(worktree=str(tmp_path)))
 
     assert report.tests_passed is True, report.issues
-    cache = tmp_path.parent.parent / ".sdlc-venv-cache"
+    cache = tmp_path.parent / ".sdlc-venv-cache"
     assert cache.is_dir() and any(cache.iterdir())
 
 

@@ -25,7 +25,17 @@ from .models import (
     SecurityReport,
     SecuritySeverity,
 )
-from .venv_cache import build_env, dir_lock, fingerprint, gc_cache, is_workspace, shared_venv_dir
+from .venv_cache import (
+    MARKER_NAME,
+    build_env,
+    dir_lock,
+    fingerprint,
+    gc_cache,
+    is_workspace,
+    marker_ok,
+    shared_venv_dir,
+    touch_marker,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -141,19 +151,24 @@ async def _ensure_python_env(
     a QA failure indistinguishable from a real bug in the generated code.
 
     By default provisions a SHARED venv, cache-keyed by the content hash of
-    the worktree's dependency manifests (venv_cache.py): tasks of one run
-    declare the same dependencies, so the ~290 MB venv is provisioned once
-    per unique set instead of once per task worktree — the cache, not the
-    worktrees, is where repeated installs used to pile up (52 GB of
-    near-identical venvs before this). The produced project is not installed
-    into the shared venv at all (an editable install would leave one task's
-    source on the venv's sys.path for the next); importability comes from
-    PYTHONPATH. A workspace project, a worktree off the run layout, or a
-    lock that cannot be taken in time keeps the legacy per-worktree venv
-    (``_ensure_worktree_env``, unchanged behaviour). ``shared=False`` opts
-    out entirely — the per-grade oracle uses that: its venv dies with its
-    temporary worktree and its per-case oracle requirements must not leak
-    into a cache shared with the tasks.
+    the worktree's dependency manifests (venv_cache.py), scoped to the
+    RUN directory: tasks of one run declare the same dependencies, so the
+    ~290 MB venv is provisioned once per unique set instead of once per
+    task worktree — the cache, not the worktrees, is where repeated
+    installs used to pile up (52 GB of near-identical venvs before this).
+    The run scope is the security boundary, not just the layout: produced
+    manifests are untrusted input, so a poisoned cache must never be
+    reachable from another run, and the A-terminal teardown removes it
+    with the run. The produced project is not installed into the shared
+    venv at all (an editable install would leave one task's source on the
+    venv's sys.path for the next); importability comes from PYTHONPATH,
+    and the install shells run with an allowlisted environment
+    (``_provision_env``). A workspace project, a worktree with no parent
+    to scope under, or a lock that cannot be taken in time keeps the
+    legacy per-worktree venv (``_ensure_worktree_env``, unchanged
+    behaviour). ``shared=False`` opts out entirely — the per-grade oracle
+    uses that: its venv dies with its temporary worktree and its per-case
+    oracle requirements must not leak into a cache shared with the tasks.
 
     Install failures are tolerated, not fatal: a produced project with no
     packaging metadata (e.g. a flat single-module fixture) still gets a real
@@ -169,31 +184,91 @@ async def _ensure_python_env(
     venv_bin = os.path.join(venv_dir, bin_dir)
     exe_suffix = ".exe" if sys.platform.startswith("win") else ""
     py_exe = os.path.join(venv_bin, f"python{exe_suffix}")
-    marker = os.path.join(venv_dir, ".provisioned")
+    env_allow = _provision_env(venv_dir)
 
     try:
         async with dir_lock(venv_dir + ".lock", timeout_s=float(timeout_s)):
             if not os.path.isdir(venv_dir):
                 code, out = await _bounded_shell(
-                    f'"{sys.executable}" -m venv "{venv_dir}"', worktree, timeout_s
+                    f'"{sys.executable}" -m venv "{venv_dir}"',
+                    worktree,
+                    timeout_s,
+                    env_allow,
                 )
                 if code != 0:
                     return None, f"venv creation failed: {out[-1000:]}"
-            if not os.path.isfile(marker):
-                if await _install_shared_deps(venv_dir, worktree, py_exe, timeout_s):
-                    with open(marker, "w", encoding="utf-8") as f:
+            if not marker_ok(venv_dir, fp):
+                if await _install_shared_deps(venv_dir, worktree, py_exe, timeout_s, env_allow):
+                    with open(os.path.join(venv_dir, MARKER_NAME), "w", encoding="utf-8") as f:
                         f.write(fp)
+            touch_marker(venv_dir)
     except TimeoutError:
         # Contention beyond the timeout (a slow first install elsewhere):
         # degrade to the legacy private venv rather than fail the task.
         return await _ensure_worktree_env(worktree, timeout_s)
 
+    if not os.path.isfile(py_exe):
+        # The cache entry vanished between the lock release and now (a
+        # janitor-style sweep won the race): do not hand back an env that
+        # points at nothing.
+        return await _ensure_worktree_env(worktree, timeout_s)
     gc_cache(os.path.dirname(venv_dir), venv_dir)
     env = build_env(venv_dir, worktree, os.environ)
     return env, None
 
 
-async def _install_shared_deps(venv_dir: str, worktree: str, py_exe: str, timeout_s: int) -> bool:
+# The install-time environment for the shared cache's shells (qa slice's
+# twin of the oracle's _ORACLE_ENV_ALLOW discipline): the worker's secrets
+# never reach install-time code, which produced manifests can run. The
+# proxy/index names stay because pip/uv genuinely need them to reach the
+# package index in this environment — dropping them would turn every
+# install into a silently tolerated failure.
+_PROVISION_ENV_ALLOW: tuple[str, ...] = (
+    "PATH",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "COMSPEC",
+    "PROGRAMFILES",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+    "PIP_INDEX_URL",
+    "PIP_EXTRA_INDEX_URL",
+    "PIP_TRUSTED_HOST",
+    "UV_INDEX_URL",
+    "UV_EXTRA_INDEX_URL",
+    "UV_CACHE_DIR",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+)
+
+
+def _provision_env(venv_dir: str) -> dict[str, str]:
+    """The allowlisted environment install shells run with (see the tuple
+    comment), plus the venv itself."""
+    out = {k: os.environ[k] for k in _PROVISION_ENV_ALLOW if k in os.environ}
+    bin_dir = "Scripts" if sys.platform.startswith("win") else "bin"
+    out["VIRTUAL_ENV"] = venv_dir
+    out["PATH"] = os.path.join(venv_dir, bin_dir) + os.pathsep + out.get("PATH", "")
+    return out
+
+
+async def _install_shared_deps(
+    venv_dir: str,
+    worktree: str,
+    py_exe: str,
+    timeout_s: int,
+    env: dict[str, str],
+) -> bool:
     """Populate a (fresh or partially provisioned) shared venv with the
     produced project's DECLARED dependencies — never the project itself
     (see _ensure_python_env). Returns True only when every install exited
@@ -201,7 +276,7 @@ async def _install_shared_deps(venv_dir: str, worktree: str, py_exe: str, timeou
     transient pip failure is retried on the next call (pip is idempotent
     and the partial venv is still usable for what did install)."""
     ok = True
-    code, _ = await _bounded_shell(f'"{py_exe}" -m pip install -q uv', worktree, timeout_s)
+    code, _ = await _bounded_shell(f'"{py_exe}" -m pip install -q uv', worktree, timeout_s, env)
     ok = ok and code == 0
     pyproject = os.path.join(worktree, "pyproject.toml")
     if os.path.isfile(pyproject):
@@ -213,22 +288,24 @@ async def _install_shared_deps(venv_dir: str, worktree: str, py_exe: str, timeou
             f'"{py_exe}" -m uv pip install -q -r "{pyproject}" --extra dev',
             worktree,
             timeout_s,
+            env,
         )
         if code != 0:
             code, _ = await _bounded_shell(
                 f'"{py_exe}" -m uv pip install -q -r "{pyproject}"',
                 worktree,
                 timeout_s,
+                env,
             )
         ok = ok and code == 0
     for req in _REQUIREMENTS_FILES:
         if os.path.isfile(os.path.join(worktree, req)):
             code, _ = await _bounded_shell(
-                f'"{py_exe}" -m pip install -q -r "{req}"', worktree, timeout_s
+                f'"{py_exe}" -m pip install -q -r "{req}"', worktree, timeout_s, env
             )
             ok = ok and code == 0
     code, _ = await _bounded_shell(
-        f'"{py_exe}" -m pip install -q pytest pytest-cov ruff', worktree, timeout_s
+        f'"{py_exe}" -m pip install -q pytest pytest-cov ruff', worktree, timeout_s, env
     )
     return ok and code == 0
 
