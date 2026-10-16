@@ -55,7 +55,7 @@ description: "# Introduction\nThe project aims to develop a Python-based impleme
 mode: greenfield
 language: python
 repo_url: /srv/scratch-repos/deveval-particle-swarm-optimization
-role: corpus
+role: parked
 visibility: public
 strong_arm: zai-coding-plan-glm-5.2
 weak_arm: zai-coding-plan-glm-5.3-flash

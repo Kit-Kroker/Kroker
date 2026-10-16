@@ -1,7 +1,7 @@
 case_id: deveval-hone
 verdict: not_assessed
 reason: null
-note: null
+note: separation not assessed for parked case
 oracle_id: sha256:ef8df118bef3343bbadac78cc645bac452049e09b77e5cb6b3ac61109cd78df9
 oracle_tests: 12
 reference:
@@ -15,9 +15,15 @@ floor:
   tests_total: 3
   detail: '0/3 oracle tests passed; failed: oracle/acceptance_tests/test_acceptance.py::oracle.acceptance_tests.test_acceptance,
     oracle/unit_tests/test_csv_utils.py::oracle.unit_tests.test_csv_utils, oracle/unit_tests/test_hone.py::oracle.unit_tests.test_hone'
-separation: null
-role: corpus
+separation:
+  passed: null
+  strong: null
+  weak: null
+  margin: null
+  not_comparable: 0
+  detail: separation not assessed for parked case
+role: parked
 visibility: public
 exposure: repo_public
-kroker_commit: unknown
-updated: '2026-10-11T20:02:34.886830+00:00'
+kroker_commit: 64cd9f546834ec57c6be92c88ec0c31e98d2661d
+updated: '2026-10-16T07:38:59.612734+00:00'

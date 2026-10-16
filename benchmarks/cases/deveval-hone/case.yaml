@@ -175,7 +175,7 @@ description: "# Introduction\nThe Hone project is designed to facilitate the con
 mode: greenfield
 language: python
 repo_url: /srv/scratch-repos/deveval-hone
-role: corpus
+role: parked
 visibility: public
 strong_arm: zai-coding-plan-glm-5.2
 weak_arm: zai-coding-plan-glm-5.3-flash
