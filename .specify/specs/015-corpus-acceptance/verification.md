@@ -294,3 +294,100 @@ scored both rubric stages and passed. `benchmarks/config.yaml`'s
   with backoff at the judge seam, a real activity budget for
   `judge_artifact`, and judge-failure reasons persisted on stage records
   (`e9b732d1`, `ccfe0a64`).
+
+## 8. Addendum (2026-10-16): R0 on the final pin and the R1 screen
+
+### 8.1 The judge lottery, attempts 7–11 (pins `e4fe5962` → `f1603fcb`)
+
+After §7.5 the pin moved twice by orchestrator decision — every case
+judge to `gemini-3.8-flash` (`e4fe5962`), then the `--arm` spec
+validation fix (`f1603fcb`) — and each move re-opened R0 per D-12.
+Four attempts lost to **four different external causes**:
+
+- **Attempt 8** (`f1603fcb`): `gemini-3.8-flash` itself 503'd on both
+  rubric stages in an evening window (17:35–19:45 local); retries
+  exhausted. Independently, research failed grounding by citing
+  Kroker's own repo files.
+- **Attempt 9**: died entering architecture — hindsight recall
+  read-timeouts under a 90-memory consolidation backlog started right
+  after the stack was recreated; four recalls degraded to empty, the
+  fifth exceeded its budget and the child workflow died. Drained
+  within 3 minutes of the failure; a pure window collision.
+- **Attempt 10**: `429 "You exceeded your current quota"` — the free
+  tier's **daily** quota, not a wave. Minute-scale backoff cannot
+  cross a quota reset; the pipeline otherwise ran nearly complete
+  (oracle 1.0).
+- **Attempt 11** (morning): 503s again on both rubric windows while a
+  ~94 KB probe and a toy probe both returned 200 — small requests
+  answer while real rubric calls shed. That closed the "run at a
+  quiet hour" theory: **the free-tier lottery is unwinnable at run
+  scale, at any hour** (5 of 6 attempts lost across two gemini
+  models).
+
+### 8.2 The judge that worked, and two more causes (attempts 12–14)
+
+- Judge moved to **`anthropic:claude-sonnet-5`** everywhere
+  (`64cd9f54`; paid, stable; ADR-6 holds vs the zai producers;
+  `ANTHROPIC_API_KEY` and the SDK were already in the worker image).
+- **Attempt 12**: died *before* any judge call — the **proposer** hit
+  zai `429 code 1302` at clarify with three retries in five seconds
+  (no backoff in the proposer retry layer). Recovered in minutes;
+  re-roll passed the stage. Hardening candidate, not exercised
+  further this round.
+- **Attempt 13**: first run where both rubric stages scored — clarify
+  0.97, architecture 0.94 under sonnet-5 (`rubric_scores` green for
+  the first time on the pin) — then died at
+  `plan-validation: task 'T4' depends on unknown task id(s) ['T3']`
+  (glm-5.3 emitted a dangling dependency). Also surfaced a provenance
+  trap: **records carry the worker image's baked `KROKER_COMMIT`
+  while smoke stamps key on the harness env** — the worker image was
+  rebuilt with `--build-arg KROKER_COMMIT=64cd9f54…` before the next
+  dispatch (rule: rebuild on every re-pin, even when only yaml
+  changed).
+- **Attempt 14**: `smoke: PASS 64cd9f54` — **R0 closed on the round's
+  final pin** (`runs/ops/smoke/64cd9f54….json`, 2026-10-15T12:19Z).
+
+### 8.3 R1 screen results (T020, arm `zai-coding-plan-glm-5.2`, pin `64cd9f54`)
+
+Prep defect found by the first wave: deveval cases need a per-case
+scratch repo at `D:/own/sdlc-scratch-repos/<case_id>` (bind-mounted to
+`/srv/scratch-repos`, an empty init commit); geotext and hone burned
+their first runs as `lost` in ~20 s for its absence, and **a lost run
+exits rc=0**, so chain retries must grep the report (`lost: 1`), not
+trust the exit code.
+
+| case | mean oracle | verdict |
+|---|---|---|
+| deveval-geotext | **0.778** (7/9) | graded — corpus candidate |
+| deveval-readtime | **0.167** (2/12) | graded — corpus candidate |
+| deveval-hone | 1.000 (12/12) | rejected / saturated |
+| deveval-stocktrends | 0.000 (0/4) | rejected / degenerate |
+| deveval-particle-swarm-optimization | — | lost ×2 at plan-validation |
+| deveval-lice | — | rejected / reference (unchanged) |
+
+- **pso lost twice, same class**: `failed:plan-validation: task 'T7'
+  depends on unknown task id(s) ['T6']` — glm-5.3 systematically
+  violates the plan contract on this case (todo attempt 13's `T4→T3`
+  is the same defect on a different case). The T020 single lost-run
+  repeat is spent; the case is unassessed and the plan-validation
+  failure mode is a registered proposer-quality concern.
+- Accept verdicts read `not_assessed` mid-screen by design: the
+  separation check needs a strong/weak pair and the screen ran one
+  arm.
+
+### 8.4 Standing state
+
+- **R0 closed on `64cd9f54`** (passing stamp on disk); **R1 screen
+  complete** — all five cases have runs, scores and accept records;
+  role moves per T020 (geotext + readtime stay corpus; hone /
+  stocktrends out; pso unassessed) land with the records on the
+  follow-up branch.
+- Infrastructure rules the round proved: rebuild the worker image
+  with the new `KROKER_COMMIT` on every re-pin; recreate the stack
+  (or at least drain hindsight) before a dispatch after prior runs;
+  scratch repos per case must exist before dispatch; zai and the
+  proposer seam have no 429 backoff (judge seam does).
+- Residuals for the register: proposer 429 hardening, the
+  plan-validation dangling-dependency failure class, and research
+  grounding flakiness on the smoke case (failed 2 of the last 4
+  attempts, non-gating but ~$1 each).
