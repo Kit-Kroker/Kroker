@@ -250,7 +250,10 @@ async def _provision_oracle_env(
     stale = os.path.join(worktree, _VENV_DIR_NAME)
     if os.path.isdir(stale):
         shutil.rmtree(stale, ignore_errors=True)
-    env, setup_error = await _ensure_python_env(worktree, timeout_s)
+    # shared=False: this venv dies with the grade's worktree, and the
+    # case's oracle/requirements.txt is installed into it — that must not
+    # land in the cache the tasks share (venv_cache / _ensure_python_env).
+    env, setup_error = await _ensure_python_env(worktree, timeout_s, shared=False)
     if setup_error is not None or env is None:
         return None, setup_error or "venv creation failed"
     bin_dir = "Scripts" if sys.platform.startswith("win") else "bin"

@@ -26,7 +26,13 @@ file carries only what is true *here*.
 
 ## Activities
 
-- `run_test_suite`: runs test runner inside worktree venv with traceback capture.
+- `run_test_suite`: runs test runner against a provisioned venv with
+  traceback capture. The venv is SHARED by default — cache-keyed by the
+  manifest fingerprint under the run's worktree root (`venv_cache.py`);
+  the produced project is never installed into it (PYTHONPATH supplies
+  importability). uv workspaces, off-layout worktrees, lock contention
+  and `shared=False` (the oracle) keep the legacy per-worktree
+  `.sdlc-venv`.
 - `run_lint`: runs project linter inside worktree with diagnostic capture.
 - `scan_paths`: pure per-point scan over an explicit path list (one finding per match, with its line).
 - `scoped_security_scan`: tracked files at head and base, then the `change_scope` delta (DS4).
