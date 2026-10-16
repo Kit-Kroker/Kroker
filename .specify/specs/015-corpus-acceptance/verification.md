@@ -391,3 +391,53 @@ trust the exit code.
   plan-validation dangling-dependency failure class, and research
   grounding flakiness on the smoke case (failed 2 of the last 4
   attempts, non-gating but ~$1 each).
+
+## 9. Addendum (2026-10-17): R2 acceptance runs and the R4 erratum
+
+### 9.1 R2 results (T021, one run per arm, pin `64cd9f54`, judge
+`anthropic:claude-sonnet-5`)
+
+The grown oracles (012) got one strong-arm run (`zai-coding-plan-glm-5.2`)
+and one weak-arm run (`zai-coding-plan-glm-5.3-flash`) each:
+
+| case | strong glm-5.2 | weak glm-5.3-flash | margin | verdict |
+|---|---|---|---|---|
+| cat-cafe-monitoring | 0.472 (17/36) | 0.833 (30/36) | −0.361 | rejected / no_separation (d768d571) |
+| deveval-geotext | 0.778 (7/9) | 0.222 (2/9) | 0.556 | provisional (fe18e07d) |
+| deveval-readtime | 0.167 (2/12) | 0.250 (3/12) | −0.083 | rejected / no_separation (fe18e07d) |
+
+The weak arm outscored the strong arm on 2 of 3 grown oracles.
+
+### 9.2 R4 erratum: the tier assumption is contradicted by public
+benchmarks
+
+R4 chose `glm-5.3-flash` as the weak arm on the assumption that "the
+flash tier of the current generation [is] clearly below the strong arm
+(glm-5.2, variant max)". A public-benchmark check (2026-10-17) shows the
+opposite ordering: Z.ai reports GLM-5.3-Flash beating GLM-5.2 across six
+coding/agentic benchmarks, often by a wide margin (DeepSWE 63.4 vs
+46.2), and full GLM-5.3 at 34.5% vs GLM-5.2's 23.4% on SWE-bench-style
+agentic coding. The harness results agree with the public ordering on
+cat-cafe and readtime; geotext (the only case where glm-5.2 won) is the
+outlier, not the rule. The R2 inversions were therefore predictable from
+open data at GATE 1 time: no public evidence ever supported "clearly
+below", and the harness-side calibration set (todo-api) was run on the
+strong arm only.
+
+Consequences, without rewriting R4's record (it stands as the decision
+that was made):
+
+- The arm pair MUST be re-decided before R3. Relabeling in place is not
+  enough: with glm-5.3-flash as the strong arm, the R1/R2 glm-5.2 runs
+  become weak-arm data and a fresh strong arm is still needed.
+- The only untested weaker candidate from the R4 list is
+  `glm-5-turbo` (no public coding scores found); glm-4.7 stays a
+  capability cliff per R4. A FR-034 probe plus one screen run decide it.
+- Open benchmarks are adopted as a pre-run baseline check for arm
+  choice: they predicted 2 of 3 harness outcomes at zero cost. They do
+  not replace runs — geotext shows the harness (opencode + gates +
+  partial-credit oracle) can invert the public ordering at n=1.
+- The geotext provisional verdict and both no_separation rejections
+  stand as recorded; separation matching was verified correct
+  (name-based, `acceptance.py`), and each run's code stage ran its
+  declared arm's model.
