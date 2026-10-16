@@ -40,8 +40,15 @@ def test_load_corpus_returns_ten_specs_with_roles_and_visibilities():
         "deveval-stocktrends",
     ]
     for cid in deveval_ids:
-        assert by_id[cid].role == CaseRole.CORPUS
         assert by_id[cid].visibility == CaseVisibility.PUBLIC
+
+    # T020 role moves: hone / stocktrends parked (saturated / degenerate)
+    # and pso parked (lost ×2 at plan-validation) by the R1 screen.
+    for cid in deveval_ids:
+        if cid in ("deveval-hone", "deveval-stocktrends", "deveval-particle-swarm-optimization"):
+            assert by_id[cid].role == CaseRole.PARKED
+        else:
+            assert by_id[cid].role == CaseRole.CORPUS
 
     assert by_id["add-login-greenfield"].role == CaseRole.PROBE
     assert by_id["add-login-greenfield"].visibility == CaseVisibility.PRIVATE
@@ -91,8 +98,11 @@ def test_seven_corpus_cases_have_two_arms_and_matching_base_cells():
 
     for cid, base_cell_id in CORPUS_BASE_CELL_IDS.items():
         spec = by_id[cid]
-        assert spec.strong_arm == "zai-coding-plan-glm-5.2"
-        assert spec.weak_arm == "zai-coding-plan-glm-5.3-flash"
+        # R4-r1 (2026-10-17): the arms are relabeled — glm-5.3-flash is the
+        # strong arm; the base cell id (from `models:`) stays the glm-5.2
+        # cell and belongs to the weak arm now.
+        assert spec.strong_arm == "zai-coding-plan-glm-5.3-flash"
+        assert spec.weak_arm == "zai-coding-plan-glm-5.2"
 
         arm_map = {a.name: a for a in spec.arms}
         assert set(arm_map.keys()) == {
@@ -105,7 +115,9 @@ def test_seven_corpus_cases_have_two_arms_and_matching_base_cells():
         cells = expand_matrix(spec)
         assert len(cells) == 2
         strong_cell = next(c for c in cells if c.arm_name == spec.strong_arm)
-        assert strong_cell.cell_id == base_cell_id
+        weak_cell = next(c for c in cells if c.arm_name == spec.weak_arm)
+        assert weak_cell.cell_id == base_cell_id
+        assert strong_cell.cell_id.endswith("#zai-coding-plan-glm-5.3-flash")
 
 
 def test_reference_isolation_fr031():

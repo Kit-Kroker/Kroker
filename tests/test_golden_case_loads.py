@@ -43,7 +43,11 @@ def test_cat_cafe_case_loads_as_one_cell():
     cells = expand_matrix(spec)
     assert len(cells) == 2
     strong_cell = next(c for c in cells if c.arm_name == spec.strong_arm)
-    assert strong_cell.cell_id == "cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.2"
+    # R4-r1 (2026-10-17): the arms are relabeled — glm-5.3-flash is the
+    # strong arm; the base cell id (from `models:`) stays the glm-5.2 cell.
+    assert strong_cell.cell_id == "cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3-flash"
+    weak_cell = next(c for c in cells if c.arm_name == spec.weak_arm)
+    assert weak_cell.cell_id == "cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.2"
 
 
 def test_cat_cafe_ships_five_rubrics():

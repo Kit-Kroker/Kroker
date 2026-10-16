@@ -441,3 +441,17 @@ that was made):
   stand as recorded; separation matching was verified correct
   (name-based, `acceptance.py`), and each run's code stage ran its
   declared arm's model.
+
+### 9.3 Ruling R4-r1 (2026-10-17): the arm pair is relabeled
+
+On the §9.2 evidence the user ruled (variant 1): the pair is relabeled
+in place across all seven corpus manifests — `zai-coding-plan-glm-5.3-flash`
+becomes the strong arm, `zai-coding-plan-glm-5.2` the weak one. The
+`models:` base list is untouched, so base cell ids do not change; the
+base cell now belongs to the weak arm. Public data supports the pair as
+strong/weak (DeepSWE 63.4 vs 46.2, a 17-point gap), and the weak arm's
+observed 0.167–0.778 range keeps it clear of guaranteed zeros. No new
+model is probed; `glm-5-turbo` stays a fallback if a second, independent
+pair is ever needed. The R2 acceptance records are NOT re-derived under
+the new labels — they stand as the R4-era assessment; R3's fresh runs
+are assessed with the relabeled manifests.

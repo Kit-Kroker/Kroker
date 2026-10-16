@@ -57,8 +57,8 @@ language: python
 repo_url: /srv/scratch-repos/deveval-particle-swarm-optimization
 role: parked
 visibility: public
-strong_arm: zai-coding-plan-glm-5.2
-weak_arm: zai-coding-plan-glm-5.3-flash
+strong_arm: zai-coding-plan-glm-5.3-flash
+weak_arm: zai-coding-plan-glm-5.2
 arms:
   - name: zai-coding-plan-glm-5.2
     role_models:
