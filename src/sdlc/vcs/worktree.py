@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from temporalio import activity
 
@@ -213,3 +213,87 @@ async def create_worktree(inp: WorktreeInput) -> WorktreeHandle:
         errors="replace",
     ).stdout.strip()
     return WorktreeHandle(path=actual, branch=branch, branch_point=point)
+
+
+@dataclass
+class CleanupWorktreesInput:
+    run_id: str
+
+
+@dataclass
+class CleanupWorktreesReport:
+    run_id: str
+    worktrees_removed: int = 0
+    repos_pruned: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    missing: bool = False
+
+
+def _repo_root_of(task_dir: str) -> str | None:
+    """The repository a worktree's ``.git`` pointer file attaches to, or
+    None when the dir is not a git worktree (a ``.git`` DIRECTORY means a
+    primary checkout — never touched; a missing/blank pointer means a
+    plain produced dir, also not)."""
+    pointer = os.path.join(task_dir, ".git")
+    try:
+        with open(pointer, encoding="utf-8") as f:
+            line = f.readline().strip()
+    except OSError:
+        return None
+    if not line.startswith("gitdir:"):
+        return None
+    gitdir = os.path.normpath(line[len("gitdir:") :].strip())
+    marker = os.sep + ".git" + os.sep
+    cut = gitdir.rfind(marker)
+    if cut == -1:
+        return None
+    return gitdir[:cut]
+
+
+def cleanup_run_dir(run_id: str) -> CleanupWorktreesReport:
+    """Remove every worktree of one terminal run, keep the branches.
+
+    Branches (``sdlc/<run_id>/<task>``) live in the repos and are what
+    the diff anchor and any later forensic re-checkout need — ``git
+    worktree remove -f`` never touches them. Registrations die with the
+    worktrees; a final ``git worktree prune`` per repo clears any that
+    were only half-attached. The run dir itself is removed last; a
+    Windows handle held open on one file tolerates into the report (the
+    janitor re-runs the whole sweep later), it never raises out."""
+    run_dir = os.path.join(_worktrees_root(), run_id)
+    report = CleanupWorktreesReport(run_id=run_id)
+    if not os.path.isdir(run_dir):
+        report.missing = True
+        return report
+    repos: dict[str, list[str]] = {}
+    for entry in os.scandir(run_dir):
+        if not entry.is_dir():
+            continue
+        repo = _repo_root_of(entry.path)
+        if repo is not None:
+            repos.setdefault(repo, []).append(entry.path)
+    for repo, paths in repos.items():
+        for path in paths:
+            try:
+                _clear_worktree_dir(repo, path)
+                report.worktrees_removed += 1
+            except OSError as e:
+                report.errors.append(f"{path}: {e}")
+        _git(["worktree", "prune"], repo)
+        report.repos_pruned.append(repo)
+    try:
+        _rmtree_with_retry(run_dir)
+    except OSError as e:
+        report.errors.append(f"{run_dir}: {e}")
+    return report
+
+
+@activity.defn
+async def cleanup_run_worktrees(inp: CleanupWorktreesInput) -> CleanupWorktreesReport:
+    """A-terminal teardown: called by a workflow reaching its terminal
+    state (the worktrees are dead weight from then on — the diff is
+    admitted, the branches stay). Idempotent: a missing run dir reports
+    ``missing`` and succeeds, so a retry after a partial sweep converges.
+    Never raises for per-worktree failures — those land in the report and
+    the age-based janitor (vcs/janitor.py) re-covers them."""
+    return cleanup_run_dir(inp.run_id)

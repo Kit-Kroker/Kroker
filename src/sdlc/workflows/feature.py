@@ -66,9 +66,11 @@ with workflow.unsafe.imports_passed_through():
     from ..stages.plan.models import ImplementationPlan
     from ..stages.plan.validation import validate_task_graph as _validate_task_graph
     from ..vcs import (
+        CleanupWorktreesInput,
         DiffInput,
         IntegrationHandle,
         IntegrationInput,
+        cleanup_run_worktrees,
         get_task_diff,
         setup_integration_branch,
     )
@@ -293,7 +295,36 @@ class FeatureWorkflow(
         except _BudgetRejected:
             result = "rejected:budget"
         await self._retro(cfg, idea, result)
+        await self._teardown_worktrees()
         return result
+
+    async def _teardown_worktrees(self) -> None:
+        """A-terminal: the run's worktrees are dead weight the moment the
+        run reaches its terminal state — the diff is admitted, the merge
+        gate has judged the integration tree, and the branches (what any
+        later forensic re-checkout needs) live in the repo, not here.
+        Best-effort by contract: a failed sweep never fails the run after
+        the fact (maximum_attempts=1 + swallow); the age-based janitor
+        (vcs/janitor.py) is the net for this and for killed runs.
+
+        Behind a patch marker: replaying a pre-teardown history must not
+        see the activity call (the same guarantee the replay corpus
+        pins)."""
+        if not workflow.patched("worktree-teardown"):
+            return
+        try:
+            await workflow.execute_activity(
+                cleanup_run_worktrees,
+                CleanupWorktreesInput(run_id=self._run_id),
+                start_to_close_timeout=timedelta(minutes=5),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+        except Exception as e:  # noqa: BLE001
+            workflow.logger.warning(
+                "worktree teardown failed for %s (the janitor covers it): %s",
+                self._run_id,
+                e,
+            )
 
     async def _context(
         self,

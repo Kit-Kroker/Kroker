@@ -107,6 +107,7 @@ from .triage.activities import (
 )
 from .vcs import (
     build_verification_branch,
+    cleanup_run_worktrees,
     create_worktree,
     get_task_diff,
     merge_into_integration,
@@ -114,6 +115,7 @@ from .vcs import (
     read_committed_bytes,
     setup_integration_branch,
 )
+from .vcs.janitor import worktree_janitor
 from .workflows.assessment import AssessmentWorkflow
 from .workflows.crew import CrewTaskWorkflow
 from .workflows.deployment import DeploymentWorkflow
@@ -164,6 +166,7 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
     return [
         *stage_activities,
         create_worktree,
+        cleanup_run_worktrees,
         setup_integration_branch,
         merge_into_integration,
         build_verification_branch,
@@ -293,7 +296,14 @@ async def main() -> None:
         activities=get_worker_activities(),
     )
     print(f"worker running on task queue {TASK_QUEUE!r}")
-    await worker.run()
+    # A-terminal backstop: sweeps run dirs whose workflow is gone and that
+    # have been untouched past the grace period (killed/crashed runs — the
+    # workflow-side teardown cannot fire for those).
+    janitor = asyncio.create_task(worktree_janitor(client))
+    try:
+        await worker.run()
+    finally:
+        janitor.cancel()
 
 
 if __name__ == "__main__":

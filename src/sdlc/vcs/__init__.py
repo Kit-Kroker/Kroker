@@ -29,12 +29,15 @@ from .integration import (
     setup_integration_branch,
 )
 from .worktree import (
+    CleanupWorktreesInput,
+    CleanupWorktreesReport,
     WorktreeHandle,
     WorktreeInput,
     _clear_worktree_dir,
     _ensure_worktree,
     _find_live_worktree_for_branch,
     _worktrees_root,
+    cleanup_run_worktrees,
     create_worktree,
 )
 
@@ -47,12 +50,15 @@ ACTIVITIES = [
     get_task_diff,
     check_test_drift,
     read_committed_bytes,
+    cleanup_run_worktrees,
 ]
 
 __all__ = [
     "ACTIVITIES",
     "BaseWorktree",
     "BaseWorktreeInput",
+    "CleanupWorktreesInput",
+    "CleanupWorktreesReport",
     "CommittedBytesInput",
     "DiffInput",
     "DriftInput",
@@ -74,6 +80,7 @@ __all__ = [
     "_worktrees_root",
     "build_verification_branch",
     "check_test_drift",
+    "cleanup_run_worktrees",
     "create_worktree",
     "get_task_diff",
     "merge_into_integration",

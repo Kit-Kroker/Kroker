@@ -8,7 +8,10 @@ stays registered only for in-flight executions (grace-retention, OQ-10).
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from temporalio import workflow
+from temporalio.common import RetryPolicy
 from temporalio.exceptions import ApplicationError
 
 with workflow.unsafe.imports_passed_through():
@@ -23,6 +26,7 @@ with workflow.unsafe.imports_passed_through():
     from ..graph.run_view import ACTIVATION, GraphRunView, stage_marks
     from ..graph.validate import InvalidGraph, from_graph
     from ..memory.activities import WatermarkInput, capture_watermark
+    from ..vcs import CleanupWorktreesInput, cleanup_run_worktrees
     from .benchmark_host import BenchmarkHost
     from .board_host import BoardHost
     from .gates import GateHost
@@ -203,4 +207,27 @@ class GraphWorkflow(
         result = outcome_string(outcome, router.topology)
         await self._retro(cfg, idea, result)
         self._result = result  # E-75 F3: never a success string while retro can still fail
+        await self._teardown_worktrees()
         return result
+
+    async def _teardown_worktrees(self) -> None:
+        """A-terminal: same contract as FeatureWorkflow's — the run's
+        worktrees are dead weight at the terminal state, the branches stay
+        in the repos, a failed sweep never fails the run after the fact,
+        and the janitor (vcs/janitor.py) covers killed runs. Behind a
+        patch marker so pre-teardown replay histories stay valid."""
+        if not workflow.patched("worktree-teardown"):
+            return
+        try:
+            await workflow.execute_activity(
+                cleanup_run_worktrees,
+                CleanupWorktreesInput(run_id=self._run_id),
+                start_to_close_timeout=timedelta(minutes=5),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+        except Exception as e:  # noqa: BLE001
+            workflow.logger.warning(
+                "worktree teardown failed for %s (the janitor covers it): %s",
+                self._run_id,
+                e,
+            )
