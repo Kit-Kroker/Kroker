@@ -51,6 +51,7 @@ from sdlc.vcs import (
     MergeResult,
     WorktreeHandle,
     WorktreeInput,
+    cleanup_run_worktrees,
 )
 
 
@@ -213,6 +214,10 @@ GIT_FAKES = [
     fake_check_brownfield_delta,
     fake_apply_session_retention,
     price_usage,  # E-33: real activity — pure local table lookup, no network
+    # A-terminal: real activity — in a capture environment the run's worktree
+    # directory never exists, so it returns the deterministic missing=True
+    # report and touches nothing (the same no-network shape as price_usage).
+    cleanup_run_worktrees,
     *BOARD_FAKES,
 ]
 

@@ -98,6 +98,9 @@ def _patch_workflow_module(monkeypatch, gm, *, activity=None):
         now=lambda: "t0",
         info=lambda: SimpleNamespace(workflow_id="wf-42"),
         execute_activity=activity or default_activity,
+        # the A-terminal teardown sits behind a patch marker; a chaos run
+        # is a fresh execution outside Temporal, so the marker is "absent"
+        patched=lambda *_a, **_k: False,
     )
     monkeypatch.setattr(gm, "workflow", fake)
     return calls

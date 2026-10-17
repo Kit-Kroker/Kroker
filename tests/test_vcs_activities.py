@@ -24,6 +24,7 @@ def test_vcs_owns_the_plumbing():
         "get_task_diff",
         "check_test_drift",
         "read_committed_bytes",
+        "cleanup_run_worktrees",
     }
 
 

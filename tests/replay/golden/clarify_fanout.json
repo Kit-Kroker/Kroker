@@ -49,9 +49,10 @@
   "timer",
   "child:DeploymentWorkflow",
   "activity:export_run_artifacts",
-  "activity:apply_session_retention"
+  "activity:apply_session_retention",
+  "activity:cleanup_run_worktrees"
  ],
- "source_commit": "203e7dde4b86ae496319b6eb8ae2f55a110bb352",
+ "source_commit": "076db3633802c5612449fed1f64413fe3e2770ea",
  "trace": [
   [
    "stage",
