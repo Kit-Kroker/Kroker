@@ -455,3 +455,48 @@ model is probed; `glm-5-turbo` stays a fallback if a second, independent
 pair is ever needed. The R2 acceptance records are NOT re-derived under
 the new labels — they stand as the R4-era assessment; R3's fresh runs
 are assessed with the relabeled manifests.
+
+### 9.4 Ruling R4-r2 (2026-10-17): R3 assessed offline from the stored cells
+
+Preparation for R3 on the new pin (58678268) surfaced the records
+`runs/ops/r3-*.log` (2026-10-16 19:30–22:21, pin `64cd9f54`): the
+flash-arm runs on both screened-in cases already existed —
+`bench-deveval-geotext-1792161325` and
+`bench-deveval-readtime-1792171942` had run as R3 under the OLD labels
+(with flash as the weak arm) and were folded into the R2-era acceptance
+records. Cell data is label-agnostic (the arm lives in the cell id), so
+the strong/weak pair exists in storage for every corpus case and R3
+needs no new model calls — only `accept` re-run against the relabeled
+manifests.
+
+This supersedes the non-re-derivation clause of R4-r1 for the three
+corpus cases: the user ruled (variant 1) that the acceptance records
+are regenerated offline from the stored cells. The old R2-era records
+stand in git history (`git log -- benchmarks/cases/*/acceptance.yaml`);
+they are not rewritten, only replaced by re-derivation. Accept was run
+once per case in a throwaway container on detached pin worktree
+58678268 (log: `runs/ops/r4r2-accept.log`); results, exactly as
+predicted from the cell arithmetic:
+
+| case | strong (glm-5.3-flash) | weak (glm-5.2) | margin (≥0.15) | verdict |
+|---|---|---|---|---|
+| cat-cafe-monitoring | 0.8333 | 0.4722 | +0.3611 | **provisional** (n=1/arm) |
+| deveval-geotext | 0.2222 | 0.7778 | −0.5556 | rejected no_separation |
+| deveval-readtime | 0.2500 | 0.1667 | +0.0833 | rejected no_separation |
+
+Reading: under the honest labels the harness agrees with the public
+ordering only on cat-cafe — the sole case where separation now holds,
+and the only one where the R2-era weak score (0.472) leaves room below
+the strong arm. Geotext's R2 provisional status was an artifact of the
+inverted labels: with flash as strong the margin is deeply negative,
+the harness inverting the public ordering at n=1 the same way §9.2
+described. Readtime stays a near-tie (margin 0.083 < 0.15) under
+either labeling, now with the sign flipped. Fresh runs on the new pin
+remain optional top-up (accept averages whole cells; n=1/arm verdicts
+stay provisional at best) and are NOT scheduled by this ruling.
+
+Corpus state after R4-r2: 1 of 8 accepted or provisional
+(cat-cafe-monitoring, provisional), 1 of 2 private; geotext and
+readtime rejected no_separation; hone/stocktrends parked
+(saturated/degenerate), pso unassessed (plan-validation), lice
+rejected/reference. T023's tally and documents update from this state.
