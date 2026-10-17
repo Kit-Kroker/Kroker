@@ -173,3 +173,126 @@ def test_real_offline_checks_on_mini_calc_case(tmp_path: Path):
     floor_res = run_floor_check(case_dir)
     assert floor_res.tests_passed == 0
     assert floor_res.tests_passed < ref_res.tests_passed
+
+
+# --- 016 T006 (RED): the third mode, run_tree_check (D-7) ----------------------
+#
+# run_tree_check grades an arbitrary tree against a case's oracle in the
+# per-grade environment: a copy of the case's reference/ passes, a broken
+# tree fails exactly the tests it breaks, per test. The imports are local
+# on purpose: the names do not exist yet, and a module-level import would
+# take every pre-existing test in this file down with the collection.
+
+
+def test_tree_check_passes_on_a_copy_of_the_reference(tmp_path: Path, stub_oracle_env):
+    from sdlc.benchmarks.offline_checks import run_tree_check
+
+    case_dir = _build_mini_calc_case(tmp_path)
+    tree = tmp_path / "tree"
+    shutil.copytree(case_dir / "reference", tree)
+    res = run_tree_check(case_dir, tree)
+    assert res.passed is True
+    assert res.tests_total > 0
+    assert res.tests_total == len(res.per_test)
+    assert all(v is True for v in res.per_test.values())
+    assert all("::" in k for k in res.per_test), (
+        "per_test keys must be junit node ids, the grade_testcases_from_junit shape"
+    )
+
+
+def test_tree_check_fails_per_test_when_tree_broken(tmp_path: Path, stub_oracle_env):
+    from sdlc.benchmarks.offline_checks import run_tree_check
+
+    case_dir = _build_mini_calc_case(tmp_path)
+    tree = tmp_path / "tree"
+    shutil.copytree(case_dir / "reference", tree)
+    # Break the tree so calc.add subtracts instead of adds (same break as
+    # test_reference_check_fails_when_reference_broken).
+    (tree / "calc.py").write_text("def add(a, b):\n    return a - b\n", encoding="utf-8")
+
+    res = run_tree_check(case_dir, tree)
+    assert res.passed is False
+    failing = [k for k, v in res.per_test.items() if v is False]
+    # The mini-calc oracle is three add-dependent tests (two unit, one
+    # acceptance) and nothing else: breaking calc.add fails exactly that
+    # set, per test, and the counts agree (the passing side of the
+    # discrimination is the unbroken-copy test above).
+    assert set(failing) == {
+        "oracle/acceptance_tests/test_cli.py::test_acceptance_add",
+        "oracle/unit_tests/test_calc.py::test_add_negative",
+        "oracle/unit_tests/test_calc.py::test_add_positive",
+    }
+    assert res.tests_passed == 0
+    assert res.tests_total == len(res.per_test) == 3
+
+
+def test_tree_check_is_a_suite_check_carrying_per_test():
+    """Names: TreeCheck extends SuiteCheck and adds per_test."""
+    from sdlc.benchmarks.acceptance import SuiteCheck
+    from sdlc.benchmarks.offline_checks import TreeCheck
+
+    assert issubclass(TreeCheck, SuiteCheck)
+    check = TreeCheck(passed=True, tests_passed=1, tests_total=1, per_test={"a.py::test_b": True})
+    assert check.per_test == {"a.py::test_b": True}
+
+
+@pytest.mark.slow
+def test_real_tree_check_on_mini_calc_case(tmp_path: Path):
+    """Slow tier: the tree mode for real, no stubbed provisioner -- same
+    shape as test_real_offline_checks_on_mini_calc_case."""
+    from sdlc.benchmarks.offline_checks import run_tree_check
+
+    case_dir = _build_mini_calc_case(tmp_path)
+    tree = tmp_path / "tree"
+    shutil.copytree(case_dir / "reference", tree)
+    res = run_tree_check(case_dir, tree)
+    assert res.passed is True
+    assert res.tests_total > 0
+    assert all(v is True for v in res.per_test.values())
+
+
+# --- 016 T006 (RED, chaos): run_tree_check edges ------------------------------
+
+
+def test_tree_check_on_an_empty_tree_gives_the_floor_figures(tmp_path: Path, stub_oracle_env):
+    """An existing tree directory with no files in it grades like the floor:
+    nothing passes, and no per_test value (if any are reported) is True."""
+    from sdlc.benchmarks.offline_checks import run_tree_check
+
+    case_dir = _build_mini_calc_case(tmp_path)
+    tree = tmp_path / "empty-tree"
+    tree.mkdir()
+    res = run_tree_check(case_dir, tree)
+    assert res.tests_passed == 0
+    assert all(v is False for v in res.per_test.values())
+    assert res.passed is not True
+
+
+def test_tree_check_with_a_missing_tree_dir_is_not_assessed(tmp_path: Path, stub_oracle_env):
+    """A tree_dir that does not exist is not a failing grade: passed is None
+    with a detail, the way the reference mode words 'no reference/'."""
+    from sdlc.benchmarks.offline_checks import run_tree_check
+
+    case_dir = _build_mini_calc_case(tmp_path)
+    res = run_tree_check(case_dir, tmp_path / "no-such-tree")
+    assert res.passed is None
+    assert res.detail
+    assert res.tests_passed == 0
+    assert res.per_test == {}
+
+
+def test_tree_check_needs_no_reference_dir_in_the_case(tmp_path: Path, stub_oracle_env):
+    """The tree is the code source. A copy of the reference made BEFORE the
+    case's own reference/ is deleted still grades and passes."""
+    from sdlc.benchmarks.offline_checks import run_tree_check
+
+    case_dir = _build_mini_calc_case(tmp_path)
+    tree = tmp_path / "tree"
+    shutil.copytree(case_dir / "reference", tree)
+    shutil.rmtree(case_dir / "reference")
+    assert not (case_dir / "reference").exists()
+
+    res = run_tree_check(case_dir, tree)
+    assert res.passed is True
+    assert res.tests_total > 0
+    assert all(v is True for v in res.per_test.values())
