@@ -258,3 +258,79 @@ def test_cli_tracked_over_this_repository_finds_nothing_with_the_real_store():
     repository carries a token of it. Opt-in; skipped without the store."""
     code, out = _run_guard(REPO_ROOT, "--tracked", REAL_PRIVATE_ROOT)
     assert code == 0, out
+
+
+# --- guard-fix regression (T016 finding): manifest boilerplate is not a token --
+#
+# Names shingles '8-word shingles of description and of each rubric' -- the
+# description VALUE, not the whole case.yaml. A private manifest
+# structurally mirrors the public one (models, arms role_models blocks,
+# extra_args_by_model), so whole-manifest shingling turns that boilerplate
+# into tokens and fires on every public file quoting the manifest.
+
+MANIFEST_BOILERPLATE = """models:
+  - zai-coding-plan/glm-5.2
+  - zai-coding-plan/glm-5.3-flash
+arms:
+  - name: zai-coding-plan-glm-5.2
+    role_models:
+      dev: zai-coding-plan/glm-5.2
+      test: zai-coding-plan/glm-5.2
+      devops: zai-coding-plan/glm-5.2
+  - name: zai-coding-plan-glm-5.3-flash
+    role_models:
+      dev: zai-coding-plan/glm-5.3-flash
+      test: zai-coding-plan/glm-5.3-flash
+      devops: zai-coding-plan/glm-5.3-flash
+extra_args_by_model:
+  zai-coding-plan/glm-5.2:
+    sandbox_warn: false
+"""
+
+# The same wording as ONE inline line, the way a public doc quotes a
+# manifest; scan() matches tokens per line, so this is the shape that the
+# whole-manifest shingles actually fire on.
+MANIFEST_QUOTE_LINE = (
+    "supported fields: models: - zai-coding-plan/glm-5.2 - zai-coding-plan/glm-5.3-flash "
+    "arms: - name: zai-coding-plan-glm-5.2 role_models: dev: zai-coding-plan/glm-5.2 "
+    "test: zai-coding-plan/glm-5.2 devops: zai-coding-plan/glm-5.2"
+)
+
+
+def _build_manifest_shaped_store(tmp_path: Path) -> Path:
+    """A synthetic case whose case.yaml carries (a) manifest boilerplate
+    identical in wording to MANIFEST_BOILERPLATE and (b) an invented
+    description holding DESCRIPTION_RUN."""
+    cases = tmp_path / "cases"
+    case = cases / "synthetic-manifest-case"
+    case.mkdir(parents=True)
+    (case / "case.yaml").write_text(
+        "case_id: synthetic-manifest-case\n"
+        "idea_summary: an invented case for the boilerplate regression\n"
+        "description: the staging crew resets the hall between two shows "
+        f"and {DESCRIPTION_RUN} the refund completes\n"
+        "mode: greenfield\n" + MANIFEST_BOILERPLATE,
+        encoding="utf-8",
+    )
+    return cases
+
+
+def test_cli_tracked_manifest_boilerplate_is_not_a_token(tmp_path):
+    """T016 guard-fix regression: repo A quotes only manifest boilerplate
+    (the fields every public manifest also carries) and must PASS;
+    the control repo B carrying the description run must still be
+    flagged."""
+    store = _build_manifest_shaped_store(tmp_path)
+
+    (tmp_path / "a").mkdir()
+    repo_a = _git_repo(tmp_path / "a", {"manifest-notes.md": MANIFEST_QUOTE_LINE + "\n"})
+    code_a, out_a = _run_guard(repo_a, "--tracked", store)
+    assert code_a == 0, (
+        f"manifest boilerplate must not be a token (Names shingles the "
+        f"description VALUE, not the whole case.yaml); the guard flagged:\n{out_a}"
+    )
+
+    (tmp_path / "b").mkdir()
+    repo_b = _git_repo(tmp_path / "b", {"notes.md": f"{DESCRIPTION_RUN} refund completes\n"})
+    code_b, out_b = _run_guard(repo_b, "--tracked", store)
+    assert code_b == 1, out_b

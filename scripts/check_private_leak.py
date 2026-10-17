@@ -71,6 +71,56 @@ def _shingles(text: str, *, window: int = 8) -> set[str]:
     return {" ".join(words[i : i + window]) for i in range(0, max(0, len(words) - window + 1))}
 
 
+def _description_lines(case_yaml: Path) -> list[str]:
+    """The lines of the manifest's ``description`` VALUE — a block scalar
+    (``description: |`` followed by deeper-indented lines) or a plain
+    folded scalar (first line on the key, continuations indented under
+    it; what ``yaml.safe_dump`` writes for long strings). Names: the
+    shingle source is the description, never the manifest boilerplate
+    around it (a private manifest structurally mirrors the public one,
+    so whole-file shingling would flag the public corpus itself)."""
+    lines = case_yaml.read_text(encoding="utf-8").splitlines()
+    value: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = re.match(r"^( *)description:\s*(.*)$", line)
+        if not m:
+            i += 1
+            continue
+        key_indent = len(m.group(1))
+        rest = m.group(2).strip()
+        if rest in ("|", "|-", ">", ">-", "|+", ">+"):
+            i += 1
+            while i < len(lines):
+                cont = lines[i]
+                if not cont.strip():
+                    value.append("")
+                    i += 1
+                    continue
+                indent = len(cont) - len(cont.lstrip())
+                if indent > key_indent:
+                    value.append(cont)
+                    i += 1
+                    continue
+                break
+        elif rest:
+            value.append(rest)
+            i += 1
+            while i < len(lines):
+                cont = lines[i]
+                if not cont.strip():
+                    break
+                indent = len(cont) - len(cont.lstrip())
+                if indent > key_indent:
+                    value.append(cont.strip())
+                    i += 1
+                    continue
+                break
+        break
+    return value
+
+
 def _case_tokens(case_dir: Path) -> set[str]:
     tokens: set[str] = set()
 
@@ -119,12 +169,14 @@ def _case_tokens(case_dir: Path) -> set[str]:
                 elif isinstance(node, ast.ClassDef) and _keeps_identifier(node.name):
                     tokens.add(node.name)
 
-    # Description (whole case.yaml text, whitespace-normalised: YAML
-    # folding wraps long strings, and shingles must span the folds) and
-    # every rubric file.
+    # Description (the manifest's description VALUE, whitespace-normalised:
+    # YAML folding wraps long strings, and shingles must span the folds)
+    # and every rubric file.
     case_yaml = case_dir / "case.yaml"
     if case_yaml.is_file():
-        tokens |= _shingles(" ".join(case_yaml.read_text(encoding="utf-8").split()))
+        description = " ".join(" ".join(_description_lines(case_yaml)).split())
+        if description:
+            tokens |= _shingles(description)
     for rubric in sorted(case_dir.glob("rubric-*.md")):
         if rubric.is_file():
             tokens |= _shingles(" ".join(rubric.read_text(encoding="utf-8").split()))
