@@ -15,7 +15,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from .paths import cases_dir as _default_cases_dir
+from .paths import case_dir as _resolve_case_dir
 
 ERROR_CLASSES: list[str] = [
     "functional",
@@ -76,11 +76,17 @@ class TaskGrade(BaseModel):
 def load_task_suite(case_id: str, cases_dir: Path | None = None) -> TaskSuite | None:
     """Load <cases root>/<case_id>/tasks.yaml, or None if absent.
 
+    016 (D-3): with an explicit ``cases_dir`` the behaviour is unchanged;
+    the default branch resolves through ``paths.case_dir`` so a mapping
+    that lives only in the private store is found too.
+
     Raises pydantic.ValidationError on a malformed file -- tasks.yaml is a
     human-authored artifact, so a load-time error is loud on purpose rather
     than silently degrading."""
-    base = cases_dir if cases_dir is not None else _default_cases_dir()
-    p = Path(base) / case_id / "tasks.yaml"
+    if cases_dir is not None:
+        p = Path(cases_dir) / case_id / "tasks.yaml"
+    else:
+        p = _resolve_case_dir(case_id) / "tasks.yaml"
     if not p.is_file():
         return None
     data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}

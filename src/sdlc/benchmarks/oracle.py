@@ -24,7 +24,7 @@ from ..stages.qa.activities import _VENV_DIR_NAME, _ensure_python_env
 from ..toolchain.adapters import TOOLCHAINS, ToolchainKind, detect
 from ..vcs import _git
 from .judge import JudgeInput, _judge_sync
-from .paths import cases_dir
+from .paths import case_dir
 from .tasks import TaskGrade, grade_tasks, load_task_suite
 
 
@@ -277,7 +277,7 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
     strictly AFTER the child that produced the code. Fail-safe -- every failure
     returns score=None with a detail; never raises past this boundary."""
     lang = inp.language
-    oracle_src = cases_dir() / inp.case_id / "oracle"
+    oracle_src = case_dir(inp.case_id) / "oracle"
     if not oracle_src.is_dir():
         return _grade(None, 0, 0, lang, None, True, "no oracle dir for case")
     try:

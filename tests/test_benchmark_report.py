@@ -779,3 +779,28 @@ def test_finalize_benchmark_report_uses_the_shared_writer(tmp_path, monkeypatch)
     out2 = tmp_path / "score-out"
     write_score(ev, out2, load_config_weights())
     assert (bench_dir / "report.md").read_bytes() == (out2 / "report.md").read_bytes()
+
+
+# --- 016 T003 (RED, chaos): resolve_language_map reads the private root --------
+
+
+def test_resolve_language_map_default_root_finds_a_case_only_in_the_private_root(
+    tmp_path, monkeypatch
+):
+    """D-3 (report.py:298, default branch): the manifest exists only under
+    the private root; the control keeps today's empty language."""
+    from sdlc.benchmarks.report import resolve_language_map
+
+    primary = tmp_path / "primary"
+    primary.mkdir()
+    private = tmp_path / "store" / "cases"
+    (private / "zz-private-only").mkdir(parents=True)
+    (private / "zz-private-only" / "case.yaml").write_text(
+        "case_id: zz-private-only\nlanguage: python\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    assert resolve_language_map(["zz-private-only"]) == {"zz-private-only": "python"}
+
+    monkeypatch.delenv("SDLC_PRIVATE_CASES_ROOT", raising=False)
+    assert resolve_language_map(["zz-private-only"]) == {"zz-private-only": ""}

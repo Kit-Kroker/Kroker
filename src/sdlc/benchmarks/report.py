@@ -13,7 +13,7 @@ from .models import (
     BenchmarkSummary,
     CompositeWeights,
 )
-from .paths import cases_dir as _default_cases_dir
+from .paths import case_dir as _resolve_case_dir
 from .recorder import RecordStore, _root
 from .scoring import compute_summaries
 
@@ -294,12 +294,16 @@ def write_report_with_calibration(
 def resolve_language_map(case_ids: list[str], cases_dir: Path | None = None) -> dict[str, str]:
     """Best-effort {case_id: language} from each case's case.yaml. A missing
     manifest or language contributes ""; never raises (a broken manifest just
-    means that case is language-unknown)."""
-    base = cases_dir if cases_dir is not None else _default_cases_dir()
+    means that case is language-unknown). 016 (D-3): the default branch
+    resolves through ``paths.case_dir`` (the private store too); an explicit
+    ``cases_dir`` wins as before."""
     out: dict[str, str] = {}
     for cid in case_ids:
         lang = ""
-        p = Path(base) / cid / "case.yaml"
+        if cases_dir is not None:
+            p = Path(cases_dir) / cid / "case.yaml"
+        else:
+            p = _resolve_case_dir(cid) / "case.yaml"
         if p.is_file():
             try:
                 data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}

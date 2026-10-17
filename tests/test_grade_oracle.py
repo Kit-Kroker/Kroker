@@ -794,3 +794,31 @@ async def test_slow_real_env_passing_branch_then_empty_branch_scores_zero(tmp_pa
     assert second.score == 0.0
     assert second.changed_files == 0
     assert second.detail == "empty diff vs base"
+
+
+# --- 016 T003 (RED, chaos): grade_oracle finds an oracle in the private root ---
+
+
+@pytest.mark.asyncio
+async def test_grade_oracle_finds_an_oracle_dir_only_in_the_private_root(tmp_path, monkeypatch):
+    """D-3 (oracle.py:280). The case exists ONLY under the private root and
+    the language has no toolchain adapter, so reaching the adapter message
+    proves the oracle dir was found there; the control (private root unset)
+    keeps today's 'no oracle dir for case'."""
+    primary = tmp_path / "primary"
+    primary.mkdir()
+    private = tmp_path / "store" / "cases"
+    odir = private / "zz-private-only-case" / "oracle"
+    odir.mkdir(parents=True)
+    (odir / "test_x.py").write_text("def test_x(): pass\n", encoding="utf-8")
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    inp = OracleInput(
+        case_id="zz-private-only-case", repo_url="unused", run_id="r", language="ruby"
+    )
+    grade = await grade_oracle(inp)
+    assert grade.detail == "no toolchain adapter for 'ruby'"
+
+    monkeypatch.delenv("SDLC_PRIVATE_CASES_ROOT", raising=False)
+    control = await grade_oracle(inp)
+    assert control.detail == "no oracle dir for case"

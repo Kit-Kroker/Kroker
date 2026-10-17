@@ -151,3 +151,34 @@ def test_grade_tasks_preserves_task_order():
     )
     grades = grade_tasks(suite, {"a::b": True}, {"t02": 1.0})
     assert [g.task_id for g in grades] == ["t02", "t01"]
+
+
+# --- 016 T003 (RED, chaos): load_task_suite reads the private root -------------
+
+
+def test_load_task_suite_default_root_finds_a_mapping_only_in_the_private_root(
+    tmp_path, monkeypatch
+):
+    """D-3 (tasks.py:83, default branch): no cases_dir argument, the case
+    exists only under the private root; the control keeps None."""
+    primary = tmp_path / "primary"
+    primary.mkdir()
+    private = tmp_path / "store" / "cases"
+    d = private / "zz-private-only"
+    d.mkdir(parents=True)
+    (d / "tasks.yaml").write_text(
+        "tasks:\n"
+        "  - id: t01\n"
+        "    error_class: functional\n"
+        '    oracle_tests: ["test_crud.py::test_create_todo"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    suite = load_task_suite("zz-private-only")
+    assert suite is not None
+    assert suite.case_id == "zz-private-only"
+    assert [t.id for t in suite.tasks] == ["t01"]
+
+    monkeypatch.delenv("SDLC_PRIVATE_CASES_ROOT", raising=False)
+    assert load_task_suite("zz-private-only") is None

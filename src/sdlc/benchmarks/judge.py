@@ -25,7 +25,6 @@ from temporalio import activity
 
 from ..agents.model_ids import resolve_model
 from .models import QualityScore
-from .paths import cases_dir
 from .vetoes import check, parse_vetoes
 
 
@@ -286,8 +285,8 @@ async def load_case_assets(case_id: str, rubric_files: dict[str, str]) -> dict[s
 
     ``rubric_files`` is the CaseSpec.rubrics map (stage -> file path). Paths
     may be absolute or relative to the case dir, resolved through
-    ``paths.cases_dir()`` (012 R-1: one cases location for every reader,
-    honouring SDLC_CASES_ROOT the way the oracle always did).
+    ``paths.case_dir()`` (012 R-1: one cases location for every reader;
+    016: the lenient resolver spans the private store too).
 
     012 (contract §1.4): a registered file that is missing or empty RAISES
     a non-retryable ApplicationError of type ``MissingCaseAsset`` carrying
@@ -303,15 +302,16 @@ async def load_case_assets(case_id: str, rubric_files: dict[str, str]) -> dict[s
     from temporalio.exceptions import ApplicationError
 
     from .paths import MISSING_CASE_ASSET, check_case_assets
+    from .paths import case_dir as resolve_case_dir
 
-    problems = check_case_assets(rubric_files, {}, cases_dir() / case_id)
+    problems = check_case_assets(rubric_files, {}, resolve_case_dir(case_id))
     if problems:
         raise ApplicationError("\n".join(problems), type=MISSING_CASE_ASSET, non_retryable=True)
 
-    case_dir = cases_dir() / case_id
+    resolved = resolve_case_dir(case_id)
     out: dict[str, str] = {}
     for stage, rel in rubric_files.items():
-        p = Path(rel) if Path(rel).is_absolute() else case_dir / rel
+        p = Path(rel) if Path(rel).is_absolute() else resolved / rel
         if p.exists():
             out[stage] = p.read_text(encoding="utf-8")
     return out

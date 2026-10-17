@@ -440,14 +440,40 @@ def dispatch_benchmark_cmd(args: argparse.Namespace) -> bool:
     return False
 
 
+def _store_note() -> str:
+    """016 Names (Corpus): the one line dispatch_corpus appends about the
+    private store — not configured, configured but absent, or the count."""
+    from .paths import iter_case_dirs, private_cases_dir
+
+    private = private_cases_dir()
+    if private is None:
+        return "private store: not configured"
+    if not private.is_dir():
+        return f"private store: absent at {private}"
+    n = sum(1 for root, _case_dir in iter_case_dirs() if root == private)
+    return f"private store: {n} case(s) at {private}"
+
+
+def _resolve_case_strict(case: str) -> Path:
+    """016 D-2: cross-root strict resolution for accept / verify-case.
+    DuplicateCase and CaseNotFound become a clean one-line SystemExit —
+    no traceback — naming the paths involved."""
+    from .paths import CaseNotFound, DuplicateCase, require_case_dir
+
+    try:
+        return require_case_dir(case)
+    except (DuplicateCase, CaseNotFound) as exc:
+        raise SystemExit(str(exc)) from None
+
+
 def dispatch_corpus(*, cases_root: str | None = None) -> str:
     """Prints the status of all cases in the corpus and returns the rendered output."""
     from .corpus import corpus_status, render_corpus_status
-    from .paths import cases_dir
 
-    root = Path(cases_root) if cases_root else cases_dir()
-    rows = corpus_status(root)
-    rendered = render_corpus_status(rows)
+    if cases_root is not None:
+        rendered = render_corpus_status(corpus_status(Path(cases_root)))
+    else:
+        rendered = render_corpus_status(corpus_status(), store_note=_store_note())
     print(rendered)
     return rendered
 
@@ -462,12 +488,14 @@ def dispatch_accept(
     from .acceptance import AcceptanceRecord, Verdict, decide, save_acceptance
     from .offline_checks import run_floor_check, run_reference_check
     from .oracle_id import oracle_identity
-    from .paths import cases_dir
+    from .paths import root_exposure
 
-    root = Path(cases_root) if cases_root else cases_dir()
-    case_dir = root / case
-    if not case_dir.is_dir():
-        raise SystemExit(f"case directory not found: {case_dir}")
+    if cases_root is not None:
+        case_dir = Path(cases_root) / case
+        if not case_dir.is_dir():
+            raise SystemExit(f"case directory not found: {case_dir}")
+    else:
+        case_dir = _resolve_case_strict(case)
 
     spec = load_case_spec(str(case_dir / "case.yaml"))
     commit = _resolve_kroker_commit()
@@ -480,7 +508,7 @@ def dispatch_accept(
             note="no oracle",
             role=spec.role,
             visibility=spec.visibility,
-            exposure="repo_public",
+            exposure=root_exposure(case_dir),
             kroker_commit=commit,
             updated=updated,
         )
@@ -532,7 +560,7 @@ def dispatch_accept(
         separation=sep_check,
         role=spec.role,
         visibility=spec.visibility,
-        exposure="repo_public",
+        exposure=root_exposure(case_dir),
         kroker_commit=commit,
         updated=updated,
     )
@@ -654,9 +682,11 @@ def dispatch_import_deveval(
 def dispatch_verify_case(*, case: str, cases_root: str | None = None) -> str:
     """Run one imported case's oracle against its own reference/."""
     from .importers.verify import verify_case
-    from .paths import cases_dir
 
-    root = Path(cases_root) if cases_root else cases_dir()
-    result = verify_case(root / case)
+    if cases_root is not None:
+        case_dir = Path(cases_root) / case
+    else:
+        case_dir = _resolve_case_strict(case)
+    result = verify_case(case_dir)
     head = f"{result.case_id}: {'PASS' if result.ok else 'FAIL'}"
     return head if result.ok else f"{head}\n{result.output}"

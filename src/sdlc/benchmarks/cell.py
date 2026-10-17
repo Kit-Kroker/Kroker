@@ -29,7 +29,7 @@ from .models import (
     grading_from_score,
 )
 from .oracle_id import oracle_identity
-from .paths import cases_dir
+from .paths import case_dir
 from .recorder import RecordStore
 
 if TYPE_CHECKING:
@@ -67,7 +67,7 @@ async def summarize_cell(bench_run_id: str, cell_id: str) -> CellProgress:
     records = RecordStore(bench_run_id=bench_run_id, cell_id=cell_id).read_all()
     last_stage, code_finished = cell_progress(records)
     case_id = cell_id.split("#", 1)[0]
-    oracle_dir = cases_dir() / case_id / "oracle"
+    oracle_dir = case_dir(case_id) / "oracle"
     oracle_id: str | None = None
     try:
         oracle_id = oracle_identity(oracle_dir)

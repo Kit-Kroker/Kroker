@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,10 @@ from sdlc.benchmarks.matrix import expand_matrix
 from sdlc.benchmarks.models import CaseRole, CaseVisibility
 
 CASES_ROOT = Path(__file__).resolve().parents[1] / "benchmarks" / "cases"
+
+# 016 D-12: the machine's real store binding, captured at import BEFORE the
+# autouse fixture clears the variable; the two iterate-all tests re-apply it.
+REAL_PRIVATE_ROOT = os.environ.get("SDLC_PRIVATE_CASES_ROOT")
 
 CORPUS_BASE_CELL_IDS = {
     "cat-cafe-monitoring": "cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.2",
@@ -120,22 +125,26 @@ def test_seven_corpus_cases_have_two_arms_and_matching_base_cells():
         assert strong_cell.cell_id.endswith("#zai-coding-plan-glm-5.3-flash")
 
 
-def test_reference_isolation_fr031():
+def test_reference_isolation_fr031(monkeypatch):
     import ast
     import inspect
 
-    from sdlc.benchmarks.paths import cases_dir
+    from sdlc.benchmarks.paths import iter_case_dirs
     from sdlc.benchmarks.workflow import BenchmarkWorkflow
 
-    root = cases_dir()
-    for case_dir in root.iterdir():
-        if not case_dir.is_dir():
-            continue
+    # 016 T003 (sanctioned conversion): iterate BOTH roots under the real
+    # env (D-12) -- the store carries the same isolation duty.
+    if REAL_PRIVATE_ROOT:
+        monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", REAL_PRIVATE_ROOT)
+    for _root, case_dir in iter_case_dirs():
         ref_dir = case_dir / "reference"
         if not ref_dir.is_dir():
             continue
         case_yaml_text = (case_dir / "case.yaml").read_text(encoding="utf-8")
         assert "reference/" not in case_yaml_text
+        # 016 T003: verification/ and review/ are held out the same way.
+        assert "verification/" not in case_yaml_text
+        assert "review/" not in case_yaml_text
 
         # For every file under reference/, no path under reference/ is named in case.yaml
         for p in ref_dir.rglob("*"):
@@ -314,17 +323,19 @@ def test_corpus_status_and_render_on_tmp_path_corpus(tmp_path: Path):
     assert "2 of 8 accepted or provisional, 1 of 2 private" in rendered
 
 
-def test_committed_records_match_their_cases():
+def test_committed_records_match_their_cases(monkeypatch):
     """SC-007: Every corpus case has an acceptance.yaml whose oracle_id
-    equals oracle_identity of its oracle/."""
+    equals oracle_identity of its oracle/. 016 T003 (sanctioned
+    conversion): iterates BOTH roots under the real env (D-12)."""
     from sdlc.benchmarks.acceptance import load_acceptance
     from sdlc.benchmarks.models import CaseRole
     from sdlc.benchmarks.oracle_id import oracle_identity
-    from sdlc.benchmarks.paths import cases_dir
+    from sdlc.benchmarks.paths import iter_case_dirs
 
-    root = cases_dir()
-    for case_dir in sorted(root.iterdir()):
-        if not case_dir.is_dir() or not (case_dir / "case.yaml").exists():
+    if REAL_PRIVATE_ROOT:
+        monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", REAL_PRIVATE_ROOT)
+    for _root, case_dir in iter_case_dirs():
+        if not (case_dir / "case.yaml").exists():
             continue
         spec_text = (case_dir / "case.yaml").read_text(encoding="utf-8")
         raw = yaml.safe_load(spec_text)
@@ -340,3 +351,124 @@ def test_committed_records_match_their_cases():
         assert rec.oracle_id == expected_oid, (
             f"mismatched oracle_id in {case_dir.name}: {rec.oracle_id} != {expected_oid}"
         )
+
+
+# --- 016 T003 (RED): the private store beside the primary root ----------------
+
+
+def _make_spec_case(cdir: Path, cid: str, *, role: str, visibility: str | None) -> Path:
+    """Minimal corpus-status case, the same shape make_case builds above."""
+    cdir.mkdir(parents=True)
+    vis_line = f"visibility: {visibility}\n" if visibility else ""
+    (cdir / "case.yaml").write_text(
+        f"case_id: {cid}\n"
+        f"idea_summary: summary of {cid}\n"
+        f"role: {role}\n"
+        f"{vis_line}"
+        f"harnesses: [opencode]\n"
+        f"models: [m]\n"
+        f"judge_model: j\n",
+        encoding="utf-8",
+    )
+    odir = cdir / "oracle"
+    odir.mkdir()
+    (odir / "test_sample.py").write_text("def test_ok(): pass\n", encoding="utf-8")
+    return cdir
+
+
+def _two_root_corpus(tmp_path: Path, monkeypatch) -> tuple[Path, Path]:
+    """A tmp primary root and a tmp private root, each holding one fresh
+    (non-stale) accepted corpus case: 'pub-corp' (public, primary root)
+    and 'priv-corp' (private, store root). Returns (primary, private)."""
+    from sdlc.benchmarks.acceptance import AcceptanceRecord, Verdict, save_acceptance
+    from sdlc.benchmarks.oracle_id import oracle_identity
+
+    primary = tmp_path / "primary-cases"
+    private = tmp_path / "store" / "cases"
+    pub = _make_spec_case(primary / "pub-corp", "pub-corp", role="corpus", visibility="public")
+    priv = _make_spec_case(private / "priv-corp", "priv-corp", role="corpus", visibility="private")
+    for cid, cdir, exposure in (
+        ("pub-corp", pub, "repo_public"),
+        ("priv-corp", priv, "isolated"),
+    ):
+        save_acceptance(
+            AcceptanceRecord(
+                case_id=cid,
+                verdict=Verdict.ACCEPTED,
+                oracle_id=oracle_identity(cdir / "oracle"),
+                role=CaseRole.CORPUS,
+                exposure=exposure,
+                kroker_commit="abc",
+                updated="2026-10-17",
+            ),
+            cdir,
+        )
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    return primary, private
+
+
+def test_corpus_status_without_argument_walks_both_roots(tmp_path, monkeypatch):
+    """Names: corpus_status(cases_root=None) walks iter_case_dirs(), so a
+    case that exists only in the private store is listed beside the
+    primary-root cases, and its row's exposure comes from its root (D-4):
+    'isolated' under the store, 'repo_public' under the primary root."""
+    from sdlc.benchmarks.corpus import corpus_status
+
+    _two_root_corpus(tmp_path, monkeypatch)
+    rows = corpus_status()
+    by_id = {r.case_id: r for r in rows}
+    assert set(by_id) == {"pub-corp", "priv-corp"}
+    assert by_id["priv-corp"].exposure == "isolated"
+    assert by_id["pub-corp"].exposure == "repo_public"
+    assert by_id["priv-corp"].stale is False
+    assert by_id["pub-corp"].stale is False
+
+
+def test_corpus_status_tally_counts_the_store_case_in_both_numbers(tmp_path, monkeypatch):
+    """D-4: the tally keeps counting by visibility, so a fresh accepted
+    private store case counts in BOTH numbers of the line."""
+    from sdlc.benchmarks.corpus import corpus_status, render_corpus_status
+
+    _two_root_corpus(tmp_path, monkeypatch)
+    rendered = render_corpus_status(corpus_status())
+    assert "priv-corp" in rendered
+    assert "2 of 8 accepted or provisional, 1 of 2 private" in rendered
+
+
+def test_render_corpus_status_without_store_note_prints_no_note(tmp_path, monkeypatch):
+    """Names: with store_note=None the render stays byte-identical to
+    today's output -- no note line at all (the existing render test pins
+    the rest of the format)."""
+    from sdlc.benchmarks.corpus import corpus_status, render_corpus_status
+
+    _two_root_corpus(tmp_path, monkeypatch)
+    rendered = render_corpus_status(corpus_status())
+    assert "private store" not in rendered
+
+
+@pytest.mark.parametrize(
+    "note",
+    [
+        "private store: not configured",
+        "private store: absent at /srv/private-cases",
+        "private store: 2 case(s) at /srv/private-cases",
+    ],
+    ids=["not-configured", "absent", "cases"],
+)
+def test_render_corpus_status_prints_each_store_note(note):
+    """Names: render_corpus_status takes store_note and prints it; the
+    three shapes are exactly the ones dispatch_corpus may pass."""
+    from sdlc.benchmarks.corpus import CorpusRow, render_corpus_status
+
+    row = CorpusRow(
+        case_id="c1",
+        role=CaseRole.CORPUS,
+        visibility=CaseVisibility.PUBLIC,
+        exposure="repo_public",
+        verdict=None,
+        reason=None,
+        stale="not assessed",
+    )
+    rendered = render_corpus_status([row], store_note=note)
+    assert note in rendered

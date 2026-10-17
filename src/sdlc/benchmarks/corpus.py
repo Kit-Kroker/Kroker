@@ -57,8 +57,14 @@ def smoke_case(cases_root: Path | str) -> CaseSpec:
     return smokes[0]
 
 
-def corpus_status(cases_root: Path | str) -> list[CorpusRow]:
-    """Inspects all cases under cases_root and builds a CorpusRow for each.
+def corpus_status(cases_root: Path | str | None = None) -> list[CorpusRow]:
+    """Inspects all cases and builds a CorpusRow for each.
+
+    016 (FR-017/FR-022): with ``cases_root`` given, behaviour is exactly as
+    before (one root, exposure from the acceptance record). With None, the
+    walk spans both roots via ``iter_case_dirs()`` and every row's exposure
+    comes from ``root_exposure`` — where the case lives, not what an old
+    record says (D-4).
 
     Stale logic:
     - If there is no acceptance.yaml: stale is 'not assessed'
@@ -67,12 +73,26 @@ def corpus_status(cases_root: Path | str) -> list[CorpusRow]:
       - if record.oracle_id != current identity: stale is True
       - else: stale is False
     """
-    root = Path(cases_root)
-    specs = load_corpus(root)
+    from .paths import iter_case_dirs, root_exposure
+
+    if cases_root is not None:
+        root = Path(cases_root)
+        specs = load_corpus(root)
+        pairs = [(root, root / spec.case_id) for spec in specs]
+        specs_by_dir = {root / spec.case_id: spec for spec in specs}
+        exposure_from_root = False
+    else:
+        pairs = iter_case_dirs()
+        specs_by_dir = {}
+        for _root, case_dir in pairs:
+            raw = yaml.safe_load((case_dir / "case.yaml").read_text(encoding="utf-8"))
+            specs_by_dir[case_dir] = CaseSpec(**raw)
+        exposure_from_root = True
+
     rows: list[CorpusRow] = []
 
-    for spec in specs:
-        case_dir = root / spec.case_id
+    for _root, case_dir in pairs:
+        spec = specs_by_dir[case_dir]
         record = load_acceptance(case_dir)
 
         oracle_dir = case_dir / "oracle"
@@ -95,6 +115,8 @@ def corpus_status(cases_root: Path | str) -> list[CorpusRow]:
                 stale = True
             else:
                 stale = False
+        if exposure_from_root:
+            exposure = root_exposure(case_dir)
 
         rows.append(
             CorpusRow(
@@ -111,8 +133,12 @@ def corpus_status(cases_root: Path | str) -> list[CorpusRow]:
     return rows
 
 
-def render_corpus_status(rows: list[CorpusRow]) -> str:
-    """Renders ASCII table of corpus status and summary tally."""
+def render_corpus_status(rows: list[CorpusRow], store_note: str | None = None) -> str:
+    """Renders ASCII table of corpus status and summary tally.
+
+    016: ``store_note`` is None for byte-identical legacy output; with a
+    note, it is printed as the closing line (the three shapes
+    ``dispatch_corpus`` may pass live there)."""
     lines: list[str] = []
 
     # Table header
@@ -163,5 +189,8 @@ def render_corpus_status(rows: list[CorpusRow]) -> str:
         f"{n_accepted_or_provisional} of {EXIT_CASES} accepted or provisional, "
         f"{n_private} of {EXIT_PRIVATE} private"
     )
+
+    if store_note is not None:
+        lines.append(store_note)
 
     return "\n".join(lines)

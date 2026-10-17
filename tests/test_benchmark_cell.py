@@ -409,3 +409,31 @@ def test_cell_record_writes_oracle_id():
         oracle_id="sha256:fedcba",
     )
     assert rec_with_id.oracle_id == "sha256:fedcba"
+
+
+# --- 016 T003 (RED, chaos): summarize_cell reads the private root --------------
+
+
+def test_summarize_cell_resolves_oracle_id_from_the_private_root(tmp_path, monkeypatch):
+    """D-3 (cell.py:70): a case with oracle/ ONLY in the private root yields
+    that oracle's identity (no records needed); the control, private root
+    unset, keeps oracle_id None."""
+    from sdlc.benchmarks.oracle_id import oracle_identity
+
+    primary = tmp_path / "primary"
+    primary.mkdir()
+    private = tmp_path / "store" / "cases"
+    oracle_dir = private / "zz-private-only" / "oracle"
+    oracle_dir.mkdir(parents=True)
+    (oracle_dir / "test_suite.py").write_text("def test_x(): pass\n", encoding="utf-8")
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    records_dir = tmp_path / "records"
+    cell_id = "zz-private-only#opencode#arm"
+
+    progress = _summarize(records_dir, monkeypatch, cell_id=cell_id)
+    assert progress.oracle_id == oracle_identity(oracle_dir)
+
+    monkeypatch.delenv("SDLC_PRIVATE_CASES_ROOT", raising=False)
+    control = _summarize(records_dir, monkeypatch, cell_id=cell_id)
+    assert control.oracle_id is None
