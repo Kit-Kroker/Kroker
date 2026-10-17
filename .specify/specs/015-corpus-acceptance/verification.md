@@ -500,3 +500,100 @@ Corpus state after R4-r2: 1 of 8 accepted or provisional
 readtime rejected no_separation; hone/stocktrends parked
 (saturated/degenerate), pso unassessed (plan-validation), lice
 rejected/reference. T023's tally and documents update from this state.
+
+## 10. Addendum (2026-10-17): T023 — final records, tally, success criteria
+
+### 10.1 The closing tally (SC-008)
+
+`sdlc benchmark corpus` on `fa1d58a1` (records committed under R4-r2):
+
+```
+cat-cafe-monitoring   corpus   private   provisional
+deveval-geotext       corpus   public    rejected   no_separation
+deveval-lice          corpus   public    rejected   reference
+deveval-readtime      corpus   public    rejected   no_separation
+deveval-hone          parked   public    not_assessed
+deveval-pso           parked   public    not_assessed
+deveval-stocktrends   parked   public    not_assessed
+```
+
+**1 of 8 accepted or provisional, 1 of 2 private** (cat-cafe-monitoring).
+Parked cases with their reasons: deveval-hone — saturated at screening
+(oracle 1.000 on all runs); deveval-stocktrends — degenerate at screening
+(oracle 0.000 on all runs); deveval-particle-swarm-optimization —
+unassessed, two dispatches lost at plan-validation. Lice stays
+`rejected/reference` (upstream template mismatch, excluded from the
+screen). BENCHMARK.md §5.1 and ROADMAP.md carry the same state.
+
+### 10.2 Run inventory (costs and wall-clock from the stored scores)
+
+All round runs at pin `64cd9f54` unless noted; wall-clock is
+last-stage-end minus first-stage-start from the cell records.
+
+| batch | run | cost | wall | result |
+|---|---|---|---|---|
+| R0 | bench-todo-api-greenfield-1792062789 (attempt 14) | $1.70 | 1.11 h | **PASS** (attempts 1–13: §7.1) |
+| R1 | bench-deveval-geotext-1792066788 | $0.00 | ~20 s | lost — scratch repo absent |
+| R1 | bench-deveval-geotext-1792089644 | $2.29 | 2.47 h | 0.778 |
+| R1 | bench-deveval-readtime-1792067990 | $1.65 | 2.22 h | 0.167 |
+| R1 | bench-deveval-hone-1792066860 | $0.00 | ~20 s | lost — scratch repo absent |
+| R1 | bench-deveval-hone-1792098596 | $1.67 | 1.66 h | 1.000 → parked/saturated |
+| R1 | bench-deveval-stocktrends-1792076059 | $1.64 | 2.20 h | 0.000 → parked/degenerate |
+| R1 | bench-deveval-particle-swarm-optimization-1792066918 | $0.38 | 0.28 h | lost — plan-validation (`T7→T6` dangling dep) |
+| R1 | bench-deveval-particle-swarm-optimization-1792104678 | $0.90 | 0.46 h | lost — same class; the single repeat spent |
+| R2 | bench-cat-cafe-monitoring-1792137753 (glm-5.2) | $2.14 | 2.89 h | 0.472 |
+| R2 | bench-cat-cafe-monitoring-1792148180 (glm-5.3-flash) | $2.11 | 3.24 h | 0.833 |
+| R3-era | bench-deveval-geotext-1792161325 (flash) | $1.97 | 2.91 h | 0.222 |
+| R3-era | bench-deveval-readtime-1792171942 (flash) | $2.01 | 2.79 h | 0.250 |
+| extra | bench-deveval-particle-swarm-optimization-1792106358 | $1.16 | 1.40 h | graded 0.500 — never accepted; the case stays parked (one run, one arm cannot separate) |
+
+Screen-and-acceptance spend across the batches above: **≈ $19.9** (plus
+the R0 attempt series of §7.1). The 1792106358 dispatch is recorded for
+completeness: it postdated the §8.3 screen verdict and does not change
+pso's parked status.
+
+### 10.3 Lost runs and why
+
+- geotext/hone first dispatches: per-case scratch repo missing at
+  `D:/own/sdlc-scratch-repos/<case_id>` — now a standing dispatch rule
+  (§8.3); both repeats graded.
+- pso ×2: glm-5.3 systematically violates the plan contract (dangling
+  task deps) — a registered proposer-quality failure class, same shape
+  as todo-api attempt 13's `T4→T3`.
+
+### 10.4 Success criteria
+
+- **SC-008 — PASS.** §10.1 states the line from the committed records
+  and lists each parked case with its reason.
+- **SC-010 — PASS** (vacuously plus guard). No `accepted` verdict exists
+  anywhere in the corpus; the single separation pass (cat-cafe) is
+  recorded `provisional` at n=1 per arm, exactly as the rule requires.
+- **SC-011 — PASS.** All five screened DevEval cases have results and
+  roles that follow from them (geotext 0.778 corpus; readtime 0.167
+  corpus; hone 1.000 parked/saturated; stocktrends 0.000
+  parked/degenerate; pso lost ×2 parked/unassessed); lice
+  rejected/reference before the screen.
+- **SC-012 — PASS.** cat-cafe has one graded run per arm on the grown
+  36-test oracle and a separation verdict — under the R4-r1 labels
+  `provisional` (margin +0.361); the R2-era no_separation verdict was
+  superseded by R4-r2 (§9.4), which also assessed geotext and readtime
+  on their stored pairs.
+
+### 10.5 Baseline manifest check
+
+`baseline-records.sha256` (111 files) re-verified byte-identical against
+`runs/benchmarks/` on `fa1d58a1` — 111 OK, 0 failures (the manifest
+carries CRLF line endings; verification strips them before hashing, the
+record files themselves are untouched).
+
+### 10.6 Round close
+
+The round ends here per the plan's run tail. Not cleared / not run:
+fresh strong-arm runs on the new pin (optional top-up under §9.4 —
+accept averages whole cells, so the stored flash runs remain in every
+future mean), `glm-5-turbo` as a second pair (fallback only), and the
+Phase 4 `accepted`-tier baseline (needs ≥3 graded runs per arm). Known
+residuals carried out of the round: the §12 stored-score pins (16 stale
+figures pre-dating R1/R2/R4-r2), the proposer 429 backoff, the
+plan-validation dangling-dependency failure class, and fix D (image
+prune after worker rebuilds).

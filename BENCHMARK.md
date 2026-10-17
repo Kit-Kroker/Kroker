@@ -571,14 +571,27 @@ Acceptance into the corpus is determined by `sdlc benchmark accept --case <id>`:
    - `not_assessed`: separation has no runs yet or case has no oracle.
 
 **Corpus table:**
-Run `sdlc benchmark corpus` to display status across all cases:
-- `cat-cafe-monitoring`: `corpus`, `private`, `not_assessed` (reference 36/36, floor 0/36)
-- `deveval-geotext`: `corpus`, `public`, `not_assessed` (reference 9/9, floor 0/2)
-- `deveval-hone`: `corpus`, `public`, `not_assessed` (reference 12/12, floor 0/3)
+Run `sdlc benchmark corpus` to display status across all cases (state after the
+round 015 run batches closed on R4-r2, 2026-10-17 — tally: **1 of 8 accepted or
+provisional, 1 of 2 private**):
+- `cat-cafe-monitoring`: `corpus`, `private`, **`provisional`** (strong
+  `glm-5.3-flash` 0.833 vs weak `glm-5.2` 0.472, margin +0.361, n=1 per arm —
+  the only case where the harness agrees with the public model ordering)
+- `deveval-geotext`: `corpus`, `public`, **`rejected` (`no_separation`)** (flash
+  0.222 vs glm-5.2 0.778, margin −0.556 — the harness inverts the public
+  ordering here; its R2-era `provisional` was an artifact of the inverted arm
+  labels, see R4-r2)
+- `deveval-hone`: `parked`, `public` — saturated at screening (oracle 1.000 =
+  strong arm 1.0 on all runs; nothing left to separate)
 - `deveval-lice`: `corpus`, `public`, `rejected` (`reference`, 30/31 passed, failed `test_package_template` due to upstream template mismatch; excluded from R1 screen)
-- `deveval-particle-swarm-optimization`: `corpus`, `public`, `not_assessed` (reference 6/6, floor 0/3)
-- `deveval-readtime`: `corpus`, `public`, `not_assessed` (reference 12/12, floor 0/4)
-- `deveval-stocktrends`: `corpus`, `public`, `not_assessed` (reference 9/9, floor 0/4)
+- `deveval-particle-swarm-optimization`: `parked`, `public` — unassessed (lost
+  twice at plan-validation: glm-5.3 emits dangling task deps, `T7→T6`; the
+  single repeat was spent)
+- `deveval-readtime`: `corpus`, `public`, **`rejected` (`no_separation`)** (flash
+  0.250 vs glm-5.2 0.167, margin +0.083 < 0.15 — a near-tie under either
+  labeling)
+- `deveval-stocktrends`: `parked`, `public` — degenerate at screening (oracle
+  0.000 on all runs)
 - `todo-api-greenfield`: `smoke`, `private`
 - `add-login-greenfield`: `probe`, `private`
 - `crew-probe`: `probe`, `private`
