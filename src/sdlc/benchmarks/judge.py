@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,11 +22,27 @@ from pathlib import Path
 import httpx
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.settings import ModelSettings
 from temporalio import activity
 
 from ..agents.model_ids import resolve_model
 from .models import QualityScore
 from .vetoes import check, parse_vetoes
+
+# 016 ruling R3 (Names "Judge"): the judge's output budget. Without it the
+# provider default applies and pydantic-ai surfaces truncation as
+# "(provider default)" (V1: _agent_graph.py prints last_max_tokens or that
+# text exactly when max_tokens is None). 16000 is the working start; the
+# offline proof (step 6) may move it and rewrite this constant.
+JUDGE_MAX_TOKENS_ENV = "SDLC_JUDGE_MAX_TOKENS"
+DEFAULT_JUDGE_MAX_TOKENS = 16000
+
+
+def judge_max_tokens() -> int:
+    """The judge's max_tokens, read at call time (paths house style):
+    SDLC_JUDGE_MAX_TOKENS when set to a non-empty value, else the default."""
+    value = os.environ.get(JUDGE_MAX_TOKENS_ENV, "")
+    return int(value) if value.strip() else DEFAULT_JUDGE_MAX_TOKENS
 
 
 @dataclass
@@ -180,7 +197,14 @@ def _run_judge_agent(model, system_prompt: str, user_prompt: str) -> str:
     """
     if isinstance(model, str):
         model = resolve_model(model)
-    agent = Agent(model, name="benchmark_judge", system_prompt=system_prompt)
+    agent = Agent(
+        model,
+        name="benchmark_judge",
+        system_prompt=system_prompt,
+        # R3: the output budget, so truncation surfaces as a number, not
+        # "(provider default)". Read at call time (env overridable).
+        model_settings=ModelSettings(max_tokens=judge_max_tokens()),
+    )
     for attempt in range(len(_JUDGE_RETRY_DELAYS) + 1):
         try:
             result = agent.run_sync(user_prompt)
