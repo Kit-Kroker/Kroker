@@ -33,3 +33,11 @@ repos:
         entry: python scripts/check_file_size.py
         language: system
         pass_filenames: true
+      # 016 rule 1: no private store content in a commit. Skips with a
+      # note when no store is configured on the machine.
+      - id: check-private-leak
+        name: private-store leak guard
+        entry: python scripts/check_private_leak.py --staged
+        language: system
+        pass_filenames: false
+        always_run: true
