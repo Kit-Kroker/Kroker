@@ -24,3 +24,21 @@ services:
   # (compose reads that file for interpolation) so pipeline exports,
   # benchmark records and host-side tooling all see the same tree:
   #   KROKER_RUNS_BIND=/path/to/this/checkout/runs
+
+  # Round 016: the private cases store, read alongside the in-repo
+  # corpus (SDLC_PRIVATE_CASES_ROOT). <store> is a host directory
+  # OUTSIDE this repository holding private benchmark cases as
+  # <store>/cases/<case_id>/... — never commit its path or its content.
+  # The worker mounts it read-only and learns it via environment (an
+  # explicit entry here wins over env_file); kroker-dev mounts it
+  # read-write because `sdlc benchmark accept` writes acceptance.yaml
+  # into the case dir. Also add to the host .env (for the host CLI):
+  #   SDLC_PRIVATE_CASES_ROOT=<store>\cases
+  # worker:
+  #   volumes:
+  #     - <store>/cases:/srv/private-cases:ro
+  #   environment:
+  #     SDLC_PRIVATE_CASES_ROOT: /srv/private-cases
+  # kroker-dev:
+  #   volumes:
+  #     - <store>/cases:/srv/private-cases

@@ -600,6 +600,54 @@ Cases parked by screening runs keep role `parked` and their reason; they enter n
 the active corpus count nor the exit tally. Rounds 016 and 017 will expand the corpus
 with private multi-step decomposition katas and brownfield anchors.
 
+### 5.2 The private store (round 016, in progress)
+
+Round 016 adds a second cases root read alongside the in-repo corpus: the
+**private store**, a directory outside this repository (written `<store>` here;
+its real path lives only in the git-ignored `docker-compose.override.yml` and
+the host `.env`). What lives there: private cases in the same shape as in-repo
+ones — `case.yaml`, `tasks.yaml`, `rubrics`, a held-out `oracle/`, a
+`reference/`, plus authoring-time material the repo never carries
+(`review/`, `verification/`). Nothing of a store case may reach this repo:
+a pre-commit hook (`check-private-leak`, always on, skipping with a note when
+no store is configured) scans every commit's added lines against the store's
+tokens — oracle test names, requirement ids and features, reference symbols,
+and 8-word runs of the case text and rubrics.
+
+- **Resolution and exposure.** `SDLC_PRIVATE_CASES_ROOT` names the store's
+  `cases/` root; every reader (oracle, task suite, judge assets, report,
+  corpus, `accept`/`verify-case`/`corpus` at the CLI) resolves a case id in
+  either root, refusing duplicates. A case found in the store reports exposure
+  `isolated`; in-repo cases stay `repo_public`. The corpus tally still counts
+  by `visibility`, so a private store case counts in both numbers exactly as
+  an in-repo private case does. With no store configured, every behaviour is
+  exactly as before.
+- **Running a private case.** Mount the store (see
+  `docker-compose.override.example.yml`: the worker read-only at
+  `/srv/private-cases` plus `SDLC_PRIVATE_CASES_ROOT`, `kroker-dev`
+  read-write because `sdlc benchmark accept --case <id>` writes
+  `acceptance.yaml` into the case dir in the store) and put
+  `SDLC_PRIVATE_CASES_ROOT=<store>\cases` in the host `.env`. A run takes the
+  store case's `case.yaml` path directly (`--case /srv/private-cases/<id>/case.yaml`);
+  the by-id CLI subcommands resolve across both roots. Labelling private cases
+  is unsupported this round (labels stay on the primary root).
+- **Research is off for private cases.** An invented kata has nothing public to
+  research; the research stage would send the case text to external search
+  providers (a publication path) and costs about a third of a run's stage
+  dollars for nothing. Private corpus cases are authored with
+  `research_enabled: false` and no research rubric.
+- **New environment variables (round 016).** `SDLC_PRIVATE_CASES_ROOT` (the
+  store, above; unset = no store), `SDLC_RAW_STREAM_DIR` (opt-in raw opencode
+  stream capture to `<dir>/<safe run_id>/<task>-a<attempt>.jsonl`, default
+  off, R0-only tooling), and `SDLC_JUDGE_MAX_TOKENS` (the rubric judge's
+  output budget; default 16000, proven on the stored cat-cafe plans — without
+  a budget the judge hits the provider default and records
+  `judge=error` instead of a score).
+
+No corpus row or tally change yet: the round's own case lands in the closing
+commit (T023) with its verdict, as the run batches (R0/R1) are cleared
+separately and nothing has been run at document-writing time.
+
 **Case layout note (round 012).** A case's `oracle/` directory may ship a
 `requirements.txt` — the oracle's own test dependencies (e.g. `httpx`,
 `pytest-asyncio`), installed into the per-grade environment after the
