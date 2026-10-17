@@ -156,7 +156,11 @@ def _case_tokens(case_dir: Path) -> set[str]:
     ref_dir = case_dir / "reference"
     if ref_dir.is_dir():
         for py in sorted(ref_dir.rglob("*.py")):
-            tokens.add(py.stem)  # module names: few, high-signal
+            # Stems go through the same id filter as every other name:
+            # the frozen contract forces an app.py, and short generic
+            # stems (app, holds, sales) carry no private signal.
+            if _keeps_identifier(py.stem):
+                tokens.add(py.stem)
             try:
                 tree = ast.parse(py.read_text(encoding="utf-8"))
             except (OSError, SyntaxError):

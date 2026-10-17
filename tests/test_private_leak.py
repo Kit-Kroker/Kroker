@@ -59,10 +59,15 @@ def _build_synthetic_store(tmp_path: Path) -> Path:
         "    feature: seat map\n",
         encoding="utf-8",
     )
-    (case / "reference" / "pricing.py").write_text(
+    (case / "reference" / "resale_pricing.py").write_text(
         "def apply_discount(total):\n    return total\n\n\nclass PriceTiers:\n    pass\n",
         encoding="utf-8",
     )
+    # guard-fix 2 regression material: a module whose stem the frozen
+    # contract forces ('app', short and generic), beside a distinctive one
+    # that passes Names' id-token filter ('hold_resale': '_' and >= 8).
+    (case / "reference" / "app.py").write_text("APP STUB\n", encoding="utf-8")
+    (case / "reference" / "hold_resale.py").write_text("HOLD RESALE STUB\n", encoding="utf-8")
     (case / "case.yaml").write_text(
         yaml.safe_dump(
             {
@@ -94,7 +99,7 @@ def test_collect_tokens_covers_oracle_tasks_reference_and_shingles(tmp_path):
     assert "release-holds-after-refund" in tokens
     assert "seat map" in tokens
     # reference: the module name and its top-level function and class names
-    assert "pricing" in tokens
+    assert "resale_pricing" in tokens  # stems pass the same id filter as names
     assert "apply_discount" in tokens
     assert "PriceTiers" in tokens
     # 8-word shingles of the description and of the rubric
@@ -108,6 +113,16 @@ def test_collect_tokens_excludes_error_classes_and_domain_words(tmp_path):
         assert name not in tokens, f"error-class name {name!r} must not be a token"
     for word in DOMAIN_WORDS:
         assert word not in tokens, f"domain word {word!r} must not be a token"
+
+
+def test_collect_tokens_filters_short_generic_module_stems(tmp_path):
+    """guard-fix 2 (T018 finding): Names' id-token filter governs module
+    stems like every other identifier. 'app' -- the stem the frozen
+    contract forces, short and generic -- must not be a token, while a
+    distinctive stem is."""
+    tokens = collect_tokens(_build_synthetic_store(tmp_path))
+    assert "app" not in tokens, "the generic stem 'app' must be filtered like any other identifier"
+    assert "hold_resale" in tokens
 
 
 def test_scan_flags_a_reference_name_line_and_a_description_run(tmp_path):
