@@ -567,6 +567,57 @@ def test_load_case_assets_missing_registered_rubric_raises(monkeypatch, tmp_path
     assert str(absent_abs) in str(excinfo_abs.value)
 
 
+# --- 016 T004 (RED): the A5 cause line for a case in no cases root ------------
+
+
+def test_load_case_assets_case_in_no_root_says_private_root_no(monkeypatch, tmp_path):
+    """D-6/A5: a case id that exists in NO cases root raises the same
+    non-retryable MissingCaseAsset error, and its message ends with a
+    cause line naming every searched root; with no store configured that
+    line says 'private root configured: no'."""
+    from temporalio.exceptions import ApplicationError
+
+    primary = tmp_path / "primary-cases"
+    primary.mkdir()
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.delenv("SDLC_PRIVATE_CASES_ROOT", raising=False)
+
+    with pytest.raises(ApplicationError) as excinfo:
+        asyncio.run(judge_mod.load_case_assets("absent-case", {"architect": "rubric.md"}))
+    exc = excinfo.value
+    assert exc.type == "MissingCaseAsset"
+    assert exc.non_retryable is True
+    message = str(exc)
+    assert "case absent-case is in no cases root" in message
+    assert str(primary) in message
+    assert message.endswith("; private root configured: no")
+
+
+def test_load_case_assets_case_in_no_root_says_private_root_yes(monkeypatch, tmp_path):
+    """D-6/A5: with the store configured (even though it does not hold the
+    case either) the cause line says 'private root configured: yes' and
+    names the private root beside the primary one."""
+    from temporalio.exceptions import ApplicationError
+
+    primary = tmp_path / "primary-cases"
+    primary.mkdir()
+    private = tmp_path / "store" / "cases"
+    private.mkdir(parents=True)
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+
+    with pytest.raises(ApplicationError) as excinfo:
+        asyncio.run(judge_mod.load_case_assets("absent-case", {"architect": "rubric.md"}))
+    exc = excinfo.value
+    assert exc.type == "MissingCaseAsset"
+    assert exc.non_retryable is True
+    message = str(exc)
+    assert "case absent-case is in no cases root" in message
+    assert str(primary) in message
+    assert str(private) in message
+    assert message.endswith("; private root configured: yes")
+
+
 def test_load_case_assets_empty_maps_return_empty_without_raising():
     """contract §1.5: a case registering no rubrics at all passes through
     load_case_assets untouched — no failure, empty dict."""
@@ -790,3 +841,47 @@ def test_judge_agent_retries_a_read_timeout(monkeypatch):
 
     assert raw == "ok"
     assert len(calls) == 2
+
+
+# --- 016 T004 (RED, chaos): the A5 cause line stays off the pin boundary ------
+
+
+def test_load_case_assets_existing_case_missing_rubric_keeps_todays_exact_message(
+    monkeypatch, tmp_path
+):
+    """D-6 PIN: the cause line is appended only when the case directory
+    exists in NO root. Here the directory exists (tmp primary root) and one
+    registered rubric file is missing: the message is exactly today's
+    check_case_assets line, with no appended cause."""
+    from temporalio.exceptions import ApplicationError
+
+    primary = tmp_path / "primary-cases"
+    case = primary / "present-case"
+    case.mkdir(parents=True)
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.delenv("SDLC_PRIVATE_CASES_ROOT", raising=False)
+
+    with pytest.raises(ApplicationError) as excinfo:
+        asyncio.run(judge_mod.load_case_assets("present-case", {"architect": "rubric.md"}))
+    exc = excinfo.value
+    assert exc.type == "MissingCaseAsset"
+    assert exc.non_retryable is True
+    message = exc.message
+    assert message == f"rubric 'architect': {case / 'rubric.md'} is missing"
+    assert "is in no cases root" not in message
+
+
+def test_load_case_assets_empty_rubrics_for_a_case_in_no_root_returns_empty_dict(
+    monkeypatch, tmp_path
+):
+    """D-6 PIN: nothing registered means nothing missing. A case id in no
+    root with an empty rubrics map keeps today's result -- no raise, {}."""
+    primary = tmp_path / "primary-cases"
+    primary.mkdir()
+    private = tmp_path / "store" / "cases"
+    private.mkdir(parents=True)
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+
+    result = asyncio.run(judge_mod.load_case_assets("absent-case", {}))
+    assert result == {}

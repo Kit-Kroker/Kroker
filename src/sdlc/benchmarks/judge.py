@@ -301,14 +301,24 @@ async def load_case_assets(case_id: str, rubric_files: dict[str, str]) -> dict[s
     """
     from temporalio.exceptions import ApplicationError
 
-    from .paths import MISSING_CASE_ASSET, check_case_assets
+    from .paths import MISSING_CASE_ASSET, case_roots, check_case_assets, private_cases_dir
     from .paths import case_dir as resolve_case_dir
 
-    problems = check_case_assets(rubric_files, {}, resolve_case_dir(case_id))
+    resolved = resolve_case_dir(case_id)
+    problems = check_case_assets(rubric_files, {}, resolved)
+    # 016 A5 (D-6): when the case directory exists in no root, the missing
+    # rubric is a symptom -- the cause is the case itself. Append one line
+    # so a worker that cannot see the store says so. Only appended to an
+    # existing problem list: an empty registration keeps today's behaviour.
+    if problems and not resolved.is_dir():
+        roots = ", ".join(str(r) for r in case_roots())
+        configured = "yes" if private_cases_dir() is not None else "no"
+        problems.append(
+            f"case {case_id} is in no cases root ({roots}); private root configured: {configured}"
+        )
     if problems:
         raise ApplicationError("\n".join(problems), type=MISSING_CASE_ASSET, non_retryable=True)
 
-    resolved = resolve_case_dir(case_id)
     out: dict[str, str] = {}
     for stage, rel in rubric_files.items():
         p = Path(rel) if Path(rel).is_absolute() else resolved / rel
