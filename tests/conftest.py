@@ -138,6 +138,14 @@ def _llm_api_keys(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_private_cases_root(monkeypatch):
+    """016 D-12: a kroker-dev with the private store bound must run the
+    fast tier exactly as CI. Autouse-unset SDLC_PRIVATE_CASES_ROOT so no
+    test sees the machine's store; the resolver tests set it explicitly."""
+    monkeypatch.delenv("SDLC_PRIVATE_CASES_ROOT", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _reset_fake_model_resolutions():
     """004 T006: the fake agents record every (agent name, model id)
     resolver call into ``tests.fakes.fake_agents.MODEL_RESOLUTIONS``.

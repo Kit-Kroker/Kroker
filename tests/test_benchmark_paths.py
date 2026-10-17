@@ -428,3 +428,239 @@ def test_shipped_corpus_passes_check_case_assets():
         spec = load_case_spec(str(case_dir / "case.yaml"))
         problems = check_case_assets(spec.rubrics, spec.vetoes, case_dir)
         assert problems == [], f"{case_dir.name}: {problems}"
+
+
+# --- 016 T002 (RED): the private store is a second cases root ----------------
+
+
+def test_private_cases_dir_is_none_when_unset_or_empty(monkeypatch):
+    monkeypatch.delenv("SDLC_PRIVATE_CASES_ROOT", raising=False)
+    assert paths.private_cases_dir() is None
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", "")
+    assert paths.private_cases_dir() is None
+
+
+def test_private_cases_dir_is_path_of_the_string_when_set(tmp_path, monkeypatch):
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(tmp_path / "store"))
+    assert paths.private_cases_dir() == Path(os.environ["SDLC_PRIVATE_CASES_ROOT"])
+
+
+def test_private_cases_dir_follows_a_mid_test_env_change(tmp_path, monkeypatch):
+    """Call-time read (house style, cases_dir): the SAME imported module
+    follows SDLC_PRIVATE_CASES_ROOT when it changes between two calls."""
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(first))
+    assert paths.private_cases_dir() == Path(first)
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(second))
+    assert paths.private_cases_dir() == Path(second)
+
+
+def test_case_roots_is_the_primary_root_alone_without_a_private_root(monkeypatch):
+    monkeypatch.delenv("SDLC_PRIVATE_CASES_ROOT", raising=False)
+    assert paths.case_roots() == [paths.cases_dir()]
+
+
+def test_case_roots_appends_the_private_root_even_when_absent(tmp_path, monkeypatch):
+    """Names: case_roots() adds private_cases_dir() when configured,
+    'whether or not it exists' -- configuration is not existence."""
+    private = tmp_path / "never-created"
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    assert paths.case_roots() == [paths.cases_dir(), private]
+
+
+def test_case_dir_returns_the_primary_dir_when_only_there(tmp_path, monkeypatch):
+    primary = tmp_path / "primary"
+    private = tmp_path / "private-cases"
+    primary.mkdir()
+    private.mkdir()
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    case = _write_case(primary, "primary-only-case")
+    assert paths.case_dir("primary-only-case") == case
+
+
+def test_case_dir_returns_the_private_dir_when_only_there(tmp_path, monkeypatch):
+    primary = tmp_path / "primary"
+    private = tmp_path / "private-cases"
+    primary.mkdir()
+    private.mkdir()
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    case = _write_case(private, "private-only-case")
+    assert paths.case_dir("private-only-case") == case
+
+
+def test_case_dir_lenient_fallback_is_cases_dir_join(tmp_path, monkeypatch):
+    """Names: in neither root, case_dir returns cases_dir()/case_id --
+    today's path, no raise -- so every caller that tolerates absence
+    behaves as before (D-2)."""
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(tmp_path / "primary"))
+    monkeypatch.delenv("SDLC_PRIVATE_CASES_ROOT", raising=False)
+    assert paths.case_dir("absent-case") == paths.cases_dir() / "absent-case"
+
+
+def test_case_dir_duplicate_in_both_roots_raises_duplicate_case(tmp_path, monkeypatch):
+    """Names: DuplicateCase, and its message names both paths."""
+    primary = tmp_path / "primary"
+    private = tmp_path / "private-cases"
+    primary.mkdir()
+    private.mkdir()
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    _write_case(primary, "dup-case")
+    private_case = _write_case(private, "dup-case")
+    with pytest.raises(paths.DuplicateCase) as exc:
+        paths.case_dir("dup-case")
+    message = str(exc.value)
+    assert str(primary / "dup-case") in message
+    assert str(private_case) in message
+
+
+def test_require_case_dir_raises_case_not_found_naming_every_root(tmp_path, monkeypatch):
+    primary = tmp_path / "primary"
+    private = tmp_path / "private-cases"
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    with pytest.raises(paths.CaseNotFound) as exc:
+        paths.require_case_dir("absent-case")
+    message = str(exc.value)
+    assert str(primary) in message
+    assert str(private) in message
+
+
+def test_require_case_dir_notes_an_unreadable_private_root(tmp_path, monkeypatch):
+    """Names: when the private root is configured but not a directory,
+    CaseNotFound adds 'private store configured at <p> but not readable'."""
+    primary = tmp_path / "primary"
+    private = tmp_path / "store" / "cases"
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    with pytest.raises(paths.CaseNotFound) as exc:
+        paths.require_case_dir("absent-case")
+    assert f"private store configured at {private} but not readable" in str(exc.value)
+
+
+def test_root_exposure_isolated_under_the_private_root(tmp_path, monkeypatch):
+    private = tmp_path / "store" / "cases"
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    assert paths.root_exposure(private / "some-case") == "isolated"
+
+
+def test_root_exposure_repo_public_under_the_primary_root(tmp_path, monkeypatch):
+    primary = tmp_path / "cases"
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(tmp_path / "store" / "cases"))
+    assert paths.root_exposure(primary / "some-case") == "repo_public"
+
+
+def test_root_exposure_repo_public_with_no_private_root(tmp_path, monkeypatch):
+    """With no private root configured at all, everything is repo_public."""
+    monkeypatch.delenv("SDLC_PRIVATE_CASES_ROOT", raising=False)
+    assert paths.root_exposure(tmp_path / "cases" / "some-case") == "repo_public"
+
+
+def test_iter_case_dirs_spans_both_roots_sorted_by_case_id(tmp_path, monkeypatch):
+    """Ids chosen so the sort is observable ACROSS roots: the private root
+    holds 'a-private' and 'c-private', the primary 'b-primary' and
+    'd-primary'; the interleave proves one global sort, not per-root
+    chunks. Only <root>/*/case.yaml counts (no case.yaml, no case)."""
+    primary = tmp_path / "primary"
+    private = tmp_path / "private-cases"
+    primary.mkdir()
+    private.mkdir()
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    a = _write_case(private, "a-private")
+    b = _write_case(primary, "b-primary")
+    c = _write_case(private, "c-private")
+    d = _write_case(primary, "d-primary")
+    (private / "zz-no-manifest").mkdir()
+    assert paths.iter_case_dirs() == [(private, a), (primary, b), (private, c), (primary, d)]
+
+
+def _two_roots(tmp_path, monkeypatch):
+    primary = tmp_path / "primary"
+    private = tmp_path / "private-cases"
+    primary.mkdir()
+    private.mkdir()
+    monkeypatch.setenv("SDLC_CASES_ROOT", str(primary))
+    monkeypatch.setenv("SDLC_PRIVATE_CASES_ROOT", str(private))
+    return primary, private
+
+
+def test_iter_case_dirs_duplicate_id_in_both_roots_raises_naming_both(tmp_path, monkeypatch):
+    primary, private = _two_roots(tmp_path, monkeypatch)
+    primary_case = _write_case(primary, "dup-case")
+    private_case = _write_case(private, "dup-case")
+    with pytest.raises(paths.DuplicateCase) as exc:
+        paths.iter_case_dirs()
+    message = str(exc.value)
+    assert str(primary_case) in message
+    assert str(private_case) in message
+
+
+def test_iter_case_dirs_duplicate_is_an_error_not_a_merge(tmp_path, monkeypatch):
+    """Unique ids around the duplicate must not rescue the call: the
+    duplicate id wins over returning the union."""
+    primary, private = _two_roots(tmp_path, monkeypatch)
+    _write_case(primary, "a-only-primary")
+    _write_case(primary, "dup-case")
+    _write_case(private, "dup-case")
+    _write_case(private, "z-only-private")
+    with pytest.raises(paths.DuplicateCase):
+        paths.iter_case_dirs()
+
+
+def test_require_case_dir_duplicate_in_both_roots_raises_duplicate_case(tmp_path, monkeypatch):
+    """Names: the strict form behaves as case_dir except for not-found."""
+    primary, private = _two_roots(tmp_path, monkeypatch)
+    primary_case = _write_case(primary, "dup-case")
+    private_case = _write_case(private, "dup-case")
+    with pytest.raises(paths.DuplicateCase) as exc:
+        paths.require_case_dir("dup-case")
+    message = str(exc.value)
+    assert str(primary_case) in message
+    assert str(private_case) in message
+
+
+def test_case_dir_ignores_a_file_named_like_the_case(tmp_path, monkeypatch):
+    """A FILE <root>/<case_id> is not a directory: no hit, no raise, even
+    with a real case of that id in the other root being absent."""
+    primary, private = _two_roots(tmp_path, monkeypatch)
+    (private / "file-case").write_text("not a dir", encoding="utf-8")
+    assert paths.case_dir("file-case") == paths.cases_dir() / "file-case"
+
+
+def test_case_dir_file_in_one_root_does_not_make_a_duplicate(tmp_path, monkeypatch):
+    primary, private = _two_roots(tmp_path, monkeypatch)
+    real = _write_case(primary, "mixed-case")
+    (private / "mixed-case").write_text("not a dir", encoding="utf-8")
+    assert paths.case_dir("mixed-case") == real
+
+
+def test_iter_case_dirs_skips_a_file_named_like_a_case(tmp_path, monkeypatch):
+    primary, private = _two_roots(tmp_path, monkeypatch)
+    real = _write_case(primary, "real-case")
+    (private / "file-case").write_text("not a dir", encoding="utf-8")
+    (primary / "file-case").write_text("not a dir", encoding="utf-8")
+    assert paths.iter_case_dirs() == [(primary, real)]
+
+
+def test_duplicate_case_is_a_value_error(tmp_path, monkeypatch):
+    primary, private = _two_roots(tmp_path, monkeypatch)
+    _write_case(primary, "dup-case")
+    _write_case(private, "dup-case")
+    with pytest.raises(ValueError) as exc:
+        paths.case_dir("dup-case")
+    assert isinstance(exc.value, paths.DuplicateCase)
+    assert issubclass(paths.DuplicateCase, ValueError)
+
+
+def test_case_not_found_is_a_lookup_error(tmp_path, monkeypatch):
+    _two_roots(tmp_path, monkeypatch)
+    with pytest.raises(LookupError) as exc:
+        paths.require_case_dir("absent-case")
+    assert isinstance(exc.value, paths.CaseNotFound)
+    assert issubclass(paths.CaseNotFound, LookupError)
+    assert not issubclass(paths.CaseNotFound, ValueError)
