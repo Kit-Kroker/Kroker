@@ -32,6 +32,11 @@ class TaskSpec(BaseModel):
     error_class: str
     oracle_tests: list[str] = Field(default_factory=list)
     rubric: str | None = None
+    # 016 A3 (Names "Mapping"): optional decomposition tier and feature
+    # tag for the per-tier credit report; absent means untiered, and the
+    # suite-level all-or-none rule keeps a mapping from half-tagging.
+    tier: Literal["basic", "rule", "cross"] | None = None
+    feature: str | None = None
 
     @field_validator("error_class")
     @classmethod
@@ -62,6 +67,16 @@ class TaskSuite(BaseModel):
         dupes = sorted({i for i in ids if ids.count(i) > 1})
         if dupes:
             raise ValueError(f"duplicate task ids: {dupes}")
+        return self
+
+    @model_validator(mode="after")
+    def _tier_all_or_none(self) -> TaskSuite:
+        """016 A3: tier is a suite-wide decision. If any task sets it,
+        every task must — the error names exactly the tasks without."""
+        if any(t.tier is not None for t in self.tasks):
+            missing = [t.id for t in self.tasks if t.tier is None]
+            if missing:
+                raise ValueError(f"tasks without a tier: {missing}")
         return self
 
 
