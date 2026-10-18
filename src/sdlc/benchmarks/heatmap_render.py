@@ -70,13 +70,20 @@ def _cell_td(cell: LayerCell | None) -> str:
     return f'<td class="hm-s{step_for(cell.layer, value)}">{text}</td>'
 
 
+def _mark_span(m: OracleMark) -> str:
+    # total == 0: the oracle suite collected no tests, so no ratio exists
+    # (`Run.partial_credit` is None for total <= 0) — the mark takes no
+    # colour step (steps classify values; 0/0 is valueless) and renders
+    # grey like the other unstep-able cells, the figure kept.
+    if m.total == 0:
+        return f'<span class="hm-none">{m.passed}/{m.total}</span>'
+    return f'<span class="hm-s{step_for("oracle", m.passed / m.total)}">{m.passed}/{m.total}</span>'
+
+
 def _marks_td(marks: list[OracleMark]) -> str:
     if not marks:
         return _TD_EMPTY
-    spans = ", ".join(
-        f'<span class="hm-s{step_for("oracle", m.passed / m.total)}">{m.passed}/{m.total}</span>'
-        for m in marks
-    )
+    spans = ", ".join(_mark_span(m) for m in marks)
     return f"<td>{spans}</td>"
 
 
@@ -138,6 +145,7 @@ th{{background:#f3f3f3}} small{{font-weight:400;color:#555}}
 .hm-s3{{background:hsl(35,75%,52%)}}
 .hm-s4{{background:hsl(35,75%,40%)}}
 .hm-low{{background:hsl(0,0%,87%);color:#555}}
+.hm-none{{background:hsl(0,0%,87%);color:#555}}
 </style></head><body>
 <h1>Benchmark heatmap</h1>
 {body}

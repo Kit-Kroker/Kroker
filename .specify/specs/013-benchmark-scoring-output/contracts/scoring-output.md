@@ -143,7 +143,9 @@ take the grey class, whatever their value; `blank` cells have no text and
 no fill; `copy` cells read `copy of code`. Every `value` and `low_n` cell
 prints the value and `num/den`. Oracle marks print `passed/total` and take
 their step's class; the grey rule applies to the group figures (§1.8), not
-to marks.
+to marks. A mark with `total == 0` (the oracle suite collected no tests, so
+no ratio exists) keeps the `0/0` figure and takes the grey `hm-none` class,
+no step.
 
 4.4 The five step classes are one hue at five lightness levels. The
 stylesheet uses no red and green pair. The same value gives the same

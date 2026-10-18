@@ -95,6 +95,24 @@ def _oracle(run_id, passed, total, start=_T2, **kw):
     )
 
 
+def _zero_oracle(run_id, start=_T2, **kw):
+    """An oracle-scope record whose suite collected zero tests (0/0).
+
+    `_oracle` divides for its score field, so the 0/0 record is built
+    directly (bug heatmap-zero-total).
+    """
+    kw.setdefault("scope", BenchmarkScope.ORACLE)
+    return _record(
+        run_id=run_id,
+        stage="oracle",
+        role="oracle",
+        model="openai/gpt-5.2",
+        quality=QualityScore(score=0.0, judge="oracle", components={"passed": 0, "total": 0}),
+        speed=SpeedBag(wall_clock_s=1.0, started_at=start, ended_at=start),
+        **kw,
+    )
+
+
 def _cell(
     run_id, start, last_stage, *, code_finished=True, pipeline_finished=True, grading="graded"
 ):
@@ -338,6 +356,95 @@ def test_html_oracle_mark_prints_passed_total():
     assert '<span class="hm-s2">3/4</span>' in html
 
 
+def test_html_oracle_mark_zero_total_takes_the_grey_no_step_class():
+    """Bug heatmap-zero-total: a graded run whose oracle suite collected
+    zero tests (total == 0) is a legitimate evidence shape -- the model
+    layer already guards it (`Run.partial_credit` is None for total <= 0)
+    -- so the renderer must not divide by zero. The mark keeps its 0/0
+    text and takes the grey no-step class."""
+    from sdlc.benchmarks.heatmap import HeatmapRow, LayeredHeatmap, OracleMark
+    from sdlc.benchmarks.heatmap_render import _marks_td, render_heatmap_html
+
+    row = HeatmapRow(
+        key="c1 / opencode / a1 / 012",
+        case_id="c1",
+        harness="opencode",
+        arm="a1",
+        generation="012",
+        language="",
+        started=1,
+        lost_before_code=0,
+        lost_tokens=None,
+        no_stage_recorded=0,
+    )
+    mark = OracleMark(row=row.key, run_id="b1/c1#opencode#a1", passed=0, total=0)
+    hm = LayeredHeatmap(rows=(row,), stages=("oracle",), oracle_marks=(mark,))
+
+    # the exact span pins the grey hm-none class, the kept 0/0 text, and
+    # that no hm-s{0..4} step class rides on a valueless mark
+    assert '<span class="hm-none">0/0</span>' in _marks_td([mark])
+    assert '<span class="hm-none">0/0</span>' in render_heatmap_html(hm)
+
+
+def test_html_zero_total_oracle_mark_from_records_renders_grey_without_crashing():
+    """Path level (bug heatmap-zero-total): a graded run whose oracle
+    record carries components={"passed": 0, "total": 0} flows
+    build_runs -> build_layers -> render_heatmap_html without the
+    ZeroDivisionError that kills report finalization. `_oracle` itself
+    divides for the score field, so the 0/0 record is built directly."""
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.heatmap_render import render_heatmap_html
+    from sdlc.benchmarks.runs import build_runs
+
+    run_id = "b1/c1#opencode#a1"
+    records = [
+        _stage(run_id, "analyze", _T0, wall=12.0, **_ids()),
+        _record(
+            run_id=run_id,
+            scope=BenchmarkScope.ORACLE,
+            stage="oracle",
+            role="oracle",
+            model="openai/gpt-5.2",
+            quality=QualityScore(score=0.0, judge="oracle", components={"passed": 0, "total": 0}),
+            speed=SpeedBag(wall_clock_s=1.0, started_at=_T0, ended_at=_T0),
+            **_ids(),
+        ),
+    ]
+    html = render_heatmap_html(build_layers(build_runs(records)))
+
+    assert '<span class="hm-none">0/0</span>' in html
+
+
+def test_html_valued_mark_keeps_its_step_class_beside_a_zero_total_mark():
+    """Neighbour pin: two graded runs of one row group -- one 0/0, one
+    3/4 -- share one oracle td; the valued mark still renders exactly as
+    today. Mark order inside the td is not pinned, each span is."""
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.heatmap_render import render_heatmap_html
+    from sdlc.benchmarks.runs import build_runs
+
+    zero_run = "b1/c1#opencode#a1"
+    records = [
+        _stage(zero_run, "analyze", _T0, wall=12.0, **_ids()),
+        _record(
+            run_id=zero_run,
+            scope=BenchmarkScope.ORACLE,
+            stage="oracle",
+            role="oracle",
+            model="openai/gpt-5.2",
+            quality=QualityScore(score=0.0, judge="oracle", components={"passed": 0, "total": 0}),
+            speed=SpeedBag(wall_clock_s=1.0, started_at=_T0, ended_at=_T0),
+            **_ids(),
+        ),
+        # a second graded run of the same case/arm/generation: 3/4 -> step 2
+        *_graded("b2/c1#opencode#a1", _T1, passed=3, total=4, commit="x"),
+    ]
+    html = render_heatmap_html(build_layers(build_runs(records)))
+
+    assert '<span class="hm-none">0/0</span>' in html
+    assert '<span class="hm-s2">3/4</span>' in html
+
+
 def test_same_value_gives_the_same_class_in_any_report():
     """SC-007 / contract 4.4: two heatmaps from different data whose cells
     hold the same ratio 0.25 render the same step class."""
@@ -463,3 +570,81 @@ def test_removed_heatmap_names_are_gone():
         "render_heatmap_html",  # moved to heatmap_render (data-model section 3)
     ):
         assert not hasattr(hm_mod, name), name
+
+
+# --- bug heatmap-zero-total: adversarial regression (RED) ---------------------------
+
+
+def test_html_row_of_only_zero_marks_renders_every_mark():
+    """Bug heatmap-zero-total: a row group whose every mark is 0/0 (both
+    graded runs' oracle suites collected zero tests) renders without the
+    ZeroDivisionError -- one grey span per mark, no valued mark to hide
+    behind."""
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.heatmap_render import render_heatmap_html
+    from sdlc.benchmarks.runs import build_runs
+
+    records = []
+    for run_id, start in (("b1/c1#opencode#a1", _T0), ("b2/c1#opencode#a1", _T1)):
+        records.append(_stage(run_id, "analyze", start, wall=12.0, **_ids()))
+        records.append(_zero_oracle(run_id, start, **_ids()))
+    html = render_heatmap_html(build_layers(build_runs(records)))
+
+    assert html.count('<span class="hm-none">0/0</span>') == 2
+
+
+def test_stylesheet_gains_hm_none_and_keeps_the_old_rules():
+    """Bug heatmap-zero-total, styling lock: the document stylesheet
+    gains a `.hm-none` rule while the pre-existing `.hm-low` / `.hm-s0`
+    rules survive unchanged -- the fix must style the new class, not
+    repurpose an old one. The stylesheet is static, so any document
+    carries it, valued data included."""
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.heatmap_render import render_heatmap_html
+    from sdlc.benchmarks.runs import build_runs
+
+    html = render_heatmap_html(build_layers(build_runs(_n_graded(5))))
+
+    assert ".hm-none{" in html
+    assert ".hm-low{" in html
+    assert ".hm-s0{" in html
+
+
+def test_render_heatmap_json_keeps_the_zero_total_mark():  # PIN:
+    """Bug heatmap-zero-total, data layer: `render_heatmap_json` never
+    divides, so a 0/0 mark serializes today; pin that the fix cannot
+    silently drop marks from heatmap.json."""
+    from sdlc.benchmarks.heatmap import build_layers, render_heatmap_json
+    from sdlc.benchmarks.runs import build_runs
+
+    run_id = "b1/c1#opencode#a1"
+    records = [
+        _stage(run_id, "analyze", _T0, wall=12.0, **_ids()),
+        _zero_oracle(run_id, _T0, **_ids()),
+    ]
+    data = json.loads(render_heatmap_json(build_layers(build_runs(records))))
+
+    marks = [m for m in data["oracle_marks"] if m["run_id"] == run_id]
+    assert len(marks) == 1
+    assert marks[0]["passed"] == 0
+    assert marks[0]["total"] == 0
+
+
+def test_html_zero_total_mark_render_keeps_empty_cells():
+    """Bug heatmap-zero-total, immunity: a render holding both a 0/0
+    mark and stages with no data (a row of only analyze + oracle
+    records) still prints its `<td class="hm-empty"></td>` cells -- the
+    crash fix must not disturb empty-cell rendering."""
+    from sdlc.benchmarks.heatmap import build_layers
+    from sdlc.benchmarks.heatmap_render import render_heatmap_html
+    from sdlc.benchmarks.runs import build_runs
+
+    run_id = "b1/c1#opencode#a1"
+    records = [
+        _stage(run_id, "analyze", _T0, wall=12.0, **_ids()),
+        _zero_oracle(run_id, _T0, **_ids()),
+    ]
+    html = render_heatmap_html(build_layers(build_runs(records)))
+
+    assert '<span class="hm-none">0/0</span>' in html
+    assert '<td class="hm-empty"></td>' in html
