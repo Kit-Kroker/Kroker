@@ -200,3 +200,9 @@ T010 → T014                                 (guard before any private content)
 | T022 | FR-026, FR-027, US4, SC-005, SC-007 |
 | T023 | FR-027, FR-029, FR-030, SC-005 |
 | rules, every task | FR-030 (manifest), FR-021 (hook), SC-007 (no oracle edits after scores) |
+
+---
+
+## Phase 11: Convergence
+
+- [x] T024 Integrate the two post-merge guard-fix commits (`dc6962a7`, `f955b955`) with main's golden-tick-race fix (`2b2f175b`), per plan A6 "one commit under test": merge main into the branch (no history rewrite), run the full gates on the integrated tree (fast tier with the store bound, `pytest -m temporal tests/replay`, ruff, format check, mypy, file size, the baseline-records manifest), confirm the replay golden-tick deviation recorded in verification.md part 1 §1.1 no longer fails, and hand the integrated commit to the orchestrator as the R0/R1 commit under test. (partial)
