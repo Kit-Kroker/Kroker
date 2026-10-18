@@ -21,6 +21,7 @@ from pydantic_ai.capabilities import ResolveModelId
 from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models.test import TestModel
 from temporalio import activity
+from temporalio.api.enums.v1 import EventType
 from temporalio.exceptions import ApplicationError
 
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
@@ -82,6 +83,11 @@ Handle = Any
 
 # ---- driver helpers (by name) -------------------------------------------------
 
+# golden-tick-race knobs: how the gate-timer pin polls and how long it waits
+# before failing loudly (monkeypatch these in tests).
+GATE_TIMER_PIN_POLL_S = 0.02
+GATE_TIMER_PIN_TIMEOUT_S = 30.0
+
 
 async def wait_for(handle: Handle, target: str, timeout_s: float = 30.0) -> None:
     deadline = asyncio.get_event_loop().time() + timeout_s
@@ -94,14 +100,72 @@ async def wait_for(handle: Handle, target: str, timeout_s: float = 30.0) -> None
     raise AssertionError(f"timed out waiting for {target!r} (last={last!r})")
 
 
+def _pending_remind_timer(events: Any, notify_anchor: bool) -> tuple[int, int | None]:
+    """(anchor, pending remind-timer id) for the gate-timer pin (bug
+    golden-tick-race). The anchor is the latest OPENED ``notify`` scheduling
+    -- every awaiting gate schedules one in the same workflow task that sets
+    ``awaiting:<gate>``, so the latest on record belongs to the gate the
+    driver is about to decide (or 0, to accept any timer: the clarify
+    question wait). A timer qualifies when it starts after the anchor and no
+    later TIMER_CANCELED/TIMER_FIRED resolves it. Why pending matters: a
+    remind timer the driver's signal beats out of the history leaves NO
+    TIMER_STARTED at all -- core elides a start+cancel pair issued within
+    one workflow-task completion -- and the capture lands one ``timer`` short
+    of the golden (SG-3). Holding the signal until a pending timer exists
+    pins the interleaving every recorded golden carries."""
+    anchor = 0
+    timer: int | None = None
+    for ev in events:
+        if ev.event_type == EventType.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
+            if notify_anchor and (
+                ev.activity_task_scheduled_event_attributes.activity_type.name == "notify"
+            ):
+                anchor = ev.event_id
+                if timer is not None and timer < anchor:
+                    timer = None  # that timer predates this gate's opening
+        elif ev.event_type == EventType.EVENT_TYPE_TIMER_STARTED:
+            if ev.event_id > anchor:
+                timer = ev.event_id
+        elif (
+            ev.event_type in (EventType.EVENT_TYPE_TIMER_CANCELED, EventType.EVENT_TYPE_TIMER_FIRED)
+            and timer is not None
+            and ev.event_id > timer
+        ):
+            timer = None  # resolved (a previous gate's remind timer)
+    return anchor, timer
+
+
+async def _await_gate_timer_pin(handle: Handle, label: str, *, notify_anchor: bool) -> None:
+    """golden-tick-race: hold the driver's signal until the pending gate's
+    remind TIMER_STARTED is on record. Bounded by GATE_TIMER_PIN_TIMEOUT_S;
+    expiry raises a named AssertionError -- never an unbounded or silent
+    wait, and never a signal."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + GATE_TIMER_PIN_TIMEOUT_S
+    anchor = 0
+    while loop.time() < deadline:
+        history = await handle.fetch_history()
+        anchor, timer = _pending_remind_timer(history.events, notify_anchor)
+        if timer is not None:
+            return
+        await asyncio.sleep(GATE_TIMER_PIN_POLL_S)
+    raise AssertionError(
+        f"golden-tick-race: no pending remind TIMER_STARTED for {label!r} within "
+        f"{GATE_TIMER_PIN_TIMEOUT_S}s (notify anchor event id {anchor}) -- "
+        "decision signal withheld"
+    )
+
+
 async def answer_clarify(handle: Handle) -> None:
     await wait_for(handle, "awaiting:clarify")
+    await _await_gate_timer_pin(handle, "clarify", notify_anchor=False)
     for qid in QUESTION_IDS:
         await handle.signal("answer_question", args=[qid, "yes"])
 
 
 async def decide(handle: Handle, gate: str, round_: int, outcome: GateOutcome, **kw: Any) -> None:
     await wait_for(handle, f"awaiting:{gate}")
+    await _await_gate_timer_pin(handle, gate, notify_anchor=True)
     await handle.signal(
         "submit_gate_decision",
         GateDecision(gate=gate, round=round_, outcome=outcome, decided_by="human", **kw),
