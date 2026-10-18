@@ -719,7 +719,12 @@ resumes from its last checkpoint instead of starting over (§11).
   second objective quality axis rides the same records
   (`benchmarks/axis.py`, `rules/verbosity/`): erosion and verbosity of
   the produced diff, measured once at run end and read like any other
-  record — never inside a quality, composite or gate figure.
+  record — never inside a quality, composite or gate figure. Since round
+  016 a case id resolves across the in-repo corpus and an out-of-repo
+  private store (`SDLC_PRIVATE_CASES_ROOT`, exposure `isolated`;
+  `BENCHMARK.md` §5.2), the rubric judge carries an output budget
+  (`SDLC_JUDGE_MAX_TOKENS`), and `scripts/decomposition_report.py` turns
+  stored plans and grades into an aggregates-only decomposition report.
 - **Trajectory harvesting (P5 seam):** Temporal history + artifacts +
   handoffs + gate decisions already constitute complete trajectories
   (actions, tool calls, costs, outcomes, human feedback). The observability
@@ -837,7 +842,8 @@ Kroker/
 │   ├── benchmarks/            # eval harness: judge, scoring, runs, grid, gate_oracle,
 │   │                          #   sc_rollup, drift, oracle, heatmap_render; the matrices
 │   │                          #   (error/task/waste/agreement); importers/
-│   │                          #   provenance.py, cell.py, paths.py  # record trust (012): commit/prompt hash, cell record, one cases root
+│   │                          #   provenance.py, cell.py, paths.py  # record trust (012): commit/prompt hash, cell record;
+│   │                          #   paths.py resolves cases across two roots: in-repo + SDLC_PRIVATE_CASES_ROOT store (016)
 │   │                          #   axis.py, rules/verbosity/  # quality axis (015): erosion, verbosity
 │   ├── assessment/            # Tier 2 EDCR: scan/ signals, discover/, risk/
 │   ├── triage/                # Tier 0: admission, signals/, delta, advisories

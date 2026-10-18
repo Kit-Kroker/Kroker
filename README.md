@@ -282,6 +282,7 @@ not be evaluated is `errored` and never counts as a pass.
   - `python -m sdlc.cli benchmark accept --case <id> [--offline]`: evaluates reference, floor, and separation checks, persisting `<case>/acceptance.yaml`.
   - `python -m sdlc.cli benchmark corpus`: displays current corpus case status, roles, exposure, verdicts, stale state, and Phase 3 exit tally.
   - `python -m sdlc.cli benchmark run --case <id> [--arm <arm> | --all-arms]`: runs matrix execution gated on a valid smoke stamp.
+  - Private cases live in an out-of-repo store (`SDLC_PRIVATE_CASES_ROOT`); the by-id subcommands (`accept`, `corpus`, `verify-case`) resolve ids across the in-repo corpus and the store — see [`BENCHMARK.md`](BENCHMARK.md) §5.2.
 - Generated documentation site — built from the living sources on every push
   (`mkdocs build --strict` in CI, published to GitHub Pages at
   https://kit-kroker.github.io/Kroker/). Local preview: `pip install -e ".[docs]"`

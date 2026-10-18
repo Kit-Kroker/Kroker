@@ -644,6 +644,15 @@ and 8-word runs of the case text and rubrics.
   a budget the judge hits the provider default and records
   `judge=error` instead of a score).
 
+- **Decomposition report.** `scripts/decomposition_report.py` reads the
+  stored plan artifacts and per-requirement oracle grades of a case's runs
+  and writes an aggregates-only report — plan shape (tasks, dependency
+  edges, longest chain), optionally beside a baseline plan, and partial
+  credit per requirement tier (`basic`/`rule`/`cross`) per arm, each with
+  its denominator. It names no test and quotes no requirement text; its
+  numbers are copied by hand into this document and the round's
+  `verification.md`.
+
 No corpus row or tally change yet: the round's own case lands in the closing
 commit (T023) with its verdict, as the run batches (R0/R1) are cleared
 separately and nothing has been run at document-writing time.
