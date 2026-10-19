@@ -1,9 +1,19 @@
 """E-38: opencode --format json event stream -> canonical HarnessSession."""
 
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from sdlc.benchmarks.models import WasteBag
+from sdlc.benchmarks.models import (
+    BenchmarkOutcome,
+    BenchmarkRecord,
+    BenchmarkScope,
+    QualityScore,
+    SpeedBag,
+    WasteBag,
+    waste_measured,
+)
+from sdlc.core.models import HarnessKind
 from sdlc.harness.opencode import OpenCodeHarness
 from sdlc.harness.session import digest_of
 
@@ -210,3 +220,33 @@ def test_normalise_error_only_stream_digests_to_a_measured_zero():
     assert bag.tool_calls == 0
     # The consequence pin: an error-only stream is a MEASURED zero (marked
     # bag), never an unmeasured blank — and the error itself is not waste.
+
+
+# FR-041 convergence T004: the end-to-end chain from the REAL captured
+# fixture to the record-level measured/blank decision. The rule's branches
+# are covered by tests/test_benchmark_waste_bag.py (test_waste_measured_rule,
+# with its _record() helper showing the minimal BenchmarkRecord); what this
+# pins is the fixture-derived bag itself — capture_rev 1, tool_calls 7 —
+# reading as MEASURED on an opencode record, never an unmeasured blank.
+_T = datetime(2026, 10, 19, 10)
+
+
+def test_bench_stream_bag_is_measured_on_an_opencode_record():
+    d = digest_of(OpenCodeHarness().normalise_session(BENCH_CAPTURED))
+    bag = WasteBag.from_digest(d)
+    assert bag is not None
+    record = BenchmarkRecord(
+        run_id="r1",
+        bench_run_id="b1",
+        case_id="c1",
+        scope=BenchmarkScope.STAGE,
+        stage="code",
+        role="dev",
+        harness=HarnessKind.OPENCODE,
+        model="m",
+        quality=QualityScore(score=1.0, judge="contract"),
+        speed=SpeedBag(wall_clock_s=1.0, started_at=_T, ended_at=_T + timedelta(seconds=1)),
+        outcome=BenchmarkOutcome.PASS,
+        waste=bag,
+    )
+    assert waste_measured(record) is True
