@@ -19,7 +19,7 @@ class TestGeotext(unittest.TestCase):
 
         text = """São Paulo é a capital do estado de São Paulo. As cidades de Barueri
                   e Carapicuíba fazem parte da Grade São Paulo. O Rio de Janeiro
-                  continua lindo. No carnaval eu vou para Salvador. No reveillon eu 
+                  continua lindo. No carnaval eu vou para Salvador. No reveillon eu
                   quero ir para Santos."""
         result = GeoText(text).cities
         expected = [
@@ -28,14 +28,14 @@ class TestGeotext(unittest.TestCase):
         self.assertEqual(result, expected)
 
         brazillians_northeast_capitals = """As capitais do nordeste brasileiro são:
-                                            Salvador na Bahia, 
-                                            Recife em Pernambuco, 
-                                            Natal fica no Rio Grande do Norte, 
-                                            João Pessoa fica na Paraíba, 
-                                            Fortaleza fica no Ceará, 
-                                            Teresina no Piauí, 
+                                            Salvador na Bahia,
+                                            Recife em Pernambuco,
+                                            Natal fica no Rio Grande do Norte,
+                                            João Pessoa fica na Paraíba,
+                                            Fortaleza fica no Ceará,
+                                            Teresina no Piauí,
                                             Aracaju em Sergipe,
-                                            Maceió em Alagoas e 
+                                            Maceió em Alagoas e
                                             São Luís no Maranhão."""
         result = GeoText(brazillians_northeast_capitals).cities
         # PS: 'Rio Grande' is not a northeast city, but is a brazilian city
@@ -45,8 +45,8 @@ class TestGeotext(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-        brazillians_north_capitals = """As capitais dos estados do norte brasileiro são: 
-                                        Manaus no Amazonas, 
+        brazillians_north_capitals = """As capitais dos estados do norte brasileiro são:
+                                        Manaus no Amazonas,
                                         Palmas em Tocantins,
                                         Belém no Pará,
                                         Acre no Rio Branco."""
@@ -68,8 +68,8 @@ class TestGeotext(unittest.TestCase):
         ]
         self.assertEqual(result, expected)
 
-        brazillians_central_capitals = """As capitais da região centro-oeste do Brasil são: 
-                                          Goiânia em Goiás, 
+        brazillians_central_capitals = """As capitais da região centro-oeste do Brasil são:
+                                          Goiânia em Goiás,
                                           Brasília no Distrito Federal,
                                           Campo Grande no Mato Grosso do Sul,
                                           Cuiabá no Mato Grosso."""
@@ -81,7 +81,7 @@ class TestGeotext(unittest.TestCase):
 
         brazillians_south_capitals = """As capitais da região sul são:
                                         Porto Alegre no Rio Grande do Sul,
-                                        Floripa em Santa Catarina, 
+                                        Floripa em Santa Catarina,
                                         Curitiba no Paraná"""
         result = GeoText(brazillians_south_capitals).cities
         # PS: 'Rio Grande' is not a south city, but is a brazilian city
@@ -93,7 +93,7 @@ class TestGeotext(unittest.TestCase):
         result = GeoText('Rio de Janeiro y Havana', 'BR').cities
         expected = [
             'Rio de Janeiro'
-        ]                
+        ]
         self.assertEqual(result, expected)
 
     def test_nationalities(self):

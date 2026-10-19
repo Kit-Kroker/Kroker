@@ -36,5 +36,3 @@ class BaseTestCase(unittest.TestCase):
         with self.assertRaises(Exception) as e:
             readtime.utils.read_time('Some simple text', format=123)
         self.assertEqual(str(e.exception), 'Unsupported format: 123')
-
-

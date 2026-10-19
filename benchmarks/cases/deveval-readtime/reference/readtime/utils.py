@@ -34,7 +34,7 @@ def read_time(content, format=None, wpm=265):
 
     Returns:
         Result: An instance of the Result class containing the calculated reading time in seconds and the reading speed in words per minute.
-    
+
     Raises:
         Exception: If the specified format is not supported.
     """

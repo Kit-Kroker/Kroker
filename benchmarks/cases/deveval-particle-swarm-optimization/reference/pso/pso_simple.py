@@ -51,7 +51,7 @@ class Particle:
 
         Parameters:
             pos_best_g (list): The global best position.
-        
+
         Returns:
             None
         """

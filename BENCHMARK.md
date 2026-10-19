@@ -572,7 +572,7 @@ Acceptance into the corpus is determined by `sdlc benchmark accept --case <id>`:
 
 **Corpus table:**
 Run `sdlc benchmark corpus` to display status across all cases (state after the
-round 015 run batches closed on R4-r2, 2026-10-17 — tally: **1 of 8 accepted or
+round 016 run batch closed, 2026-10-18 — tally: **1 of 8 accepted or
 provisional, 1 of 2 private**):
 - `cat-cafe-monitoring`: `corpus`, `private`, **`provisional`** (strong
   `glm-5.3-flash` 0.833 vs weak `glm-5.2` 0.472, margin +0.361, n=1 per arm —
@@ -592,6 +592,13 @@ provisional, 1 of 2 private**):
   labeling)
 - `deveval-stocktrends`: `parked`, `public` — degenerate at screening (oracle
   0.000 on all runs)
+- `theatre-box-office`: `corpus`, `private`, `isolated`, **`rejected`
+  (`no_separation`)** (round 016, pin `1e697522`, oracle `a66c0c4e`: strong
+  flash 0.0179 vs weak glm-5.2 0.0179, margin 0, n=1 per arm — both arms
+  graded but failed at `merge`, so the oracle scored broken integration trees;
+  plan shapes differed — flash 9 tasks/chain 7, glm-5.2 12 tasks/chain 10, no
+  dangling deps — while per-tier credit was ~0 everywhere: the case did not
+  discriminate at n=1; see the follow-up on grading merge-failed runs)
 - `todo-api-greenfield`: `smoke`, `private`
 - `add-login-greenfield`: `probe`, `private`
 - `crew-probe`: `probe`, `private`
@@ -600,7 +607,7 @@ Cases parked by screening runs keep role `parked` and their reason; they enter n
 the active corpus count nor the exit tally. Rounds 016 and 017 will expand the corpus
 with private multi-step decomposition katas and brownfield anchors.
 
-### 5.2 The private store (round 016, in progress)
+### 5.2 The private store (round 016)
 
 Round 016 adds a second cases root read alongside the in-repo corpus: the
 **private store**, a directory outside this repository (written `<store>` here;

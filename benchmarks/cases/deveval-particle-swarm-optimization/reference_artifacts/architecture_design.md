@@ -1,5 +1,5 @@
 # Architecture Design
-Below is a text-based representation of the file tree. 
+Below is a text-based representation of the file tree.
 ```bash
 ├── .gitignore
 ├── examples
@@ -18,8 +18,8 @@ To use the PSO algorithm, run `sh ./examples/demo.sh`. An example of the script 
 #! /bin/bash
 
 # Run the demo
-python examples/demo.py 
-``` 
+python examples/demo.py
+```
 
 `pso_simple.py`:
 - class Particle(x0): initialize the model structure and parameters.

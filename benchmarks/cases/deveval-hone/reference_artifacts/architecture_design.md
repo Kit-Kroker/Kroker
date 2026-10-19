@@ -63,7 +63,7 @@ The outputs folder is not included in this structure, as the Hone tool outputs J
 #! /bin/bash
 
 # Run the demo
-python examples/demo.py 
+python examples/demo.py
 ```
 
 ## License and Readme:

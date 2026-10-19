@@ -46,7 +46,7 @@ Generate a BSD-3 license, specifying the year and organization to be used::
     ...
 
 Generate a BSD-3 license, formatted for python source file::
- 
+
     $ lice -l py
 
     # Copyright (c) 2012, Sunlight Foundation
@@ -57,7 +57,7 @@ Generate a BSD-3 license, formatted for python source file::
     ...
 
 Generate a python source file with a BSD-3 license commented in the header::
- 
+
     $ lice -l py -f test
     $ ls
     test.py

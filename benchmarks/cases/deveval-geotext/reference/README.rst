@@ -7,7 +7,7 @@ geotext
 
 .. image:: https://img.shields.io/pypi/pyversions/geotext.svg
         :target: https://pypi.python.org/pypi/geotext
-        
+
 .. image:: https://travis-ci.org/elyase/geotext.png?branch=master
         :target: https://travis-ci.org/elyase/geotext
 
@@ -22,7 +22,7 @@ Usage
 .. code-block:: python
 
         from geotext import GeoText
-        
+
         places = GeoText("London is a great city")
         places.cities
         # "London"
@@ -30,7 +30,7 @@ Usage
         # filter by country code
         result = GeoText('I loved Rio de Janeiro and Havana', 'BR').cities
         # 'Rio de Janeiro'
-        
+
         GeoText('New York, Texas, and also China').country_mentions
         # OrderedDict([(u'US', 2), (u'CN', 1)])
 

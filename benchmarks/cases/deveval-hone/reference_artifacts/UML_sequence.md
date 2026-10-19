@@ -21,4 +21,3 @@ Hone-->>main: json_struct
 main->>JSONUtils: output_json(json_struct, args.json_filepath)
 
 ```
-

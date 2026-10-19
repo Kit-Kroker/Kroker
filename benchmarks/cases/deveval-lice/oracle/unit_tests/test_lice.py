@@ -8,7 +8,7 @@ import sys
 from lice import core
 from lice.core import (
     LICENSES, clean_path, extract_vars, generate_license,
-    format_license,get_suffix,load_file_template, 
+    format_license,get_suffix,load_file_template,
     load_template,valid_year)
 
 

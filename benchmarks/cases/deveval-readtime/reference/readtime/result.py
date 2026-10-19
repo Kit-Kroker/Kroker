@@ -33,7 +33,7 @@ class Result:
         """
         Returns the total number of seconds in the delta.
 
-        Returns: 
+        Returns:
             int: The total number of seconds.
         """
         return int(self.delta.total_seconds())

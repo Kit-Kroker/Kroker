@@ -31,7 +31,7 @@ def test_get_bar_ohlc_data_close():
     The test function that tests the get_bar_ohlc_data method of the PnF class. It checks if the method returns the correct data shape based on the given parameters.
     """
     df = pd.read_csv('unit_samples/HDFCLIFE.csv')
-    df.columns = [i.lower() for i in df.columns]  
+    df.columns = [i.lower() for i in df.columns]
     pnf = indicators.PnF(df)
     pnf.box_size = 10
     data = pnf.get_bar_ohlc_data(source='close')
@@ -42,7 +42,7 @@ def test_get_bar_ohlc_data_hl():
     The test function that tests the get_bar_ohlc_data method of the PnF class. It checks if the method returns the correct data shape based on the given parameters.
     """
     df = pd.read_csv('unit_samples/HDFCLIFE.csv')
-    df.columns = [i.lower() for i in df.columns]  
+    df.columns = [i.lower() for i in df.columns]
     pnf = indicators.PnF(df)
     pnf.box_size = 10
     data = pnf.get_bar_ohlc_data(source='hl')
@@ -53,7 +53,7 @@ def test_get_ohlc_data_close():
     The test function that tests the get_ohlc_data method of the PnF class. It checks if the method returns the correct data shape based on the given parameters.
     """
     df = pd.read_csv('unit_samples/HDFCLIFE.csv')
-    df.columns = [i.lower() for i in df.columns]  
+    df.columns = [i.lower() for i in df.columns]
     pnf = indicators.PnF(df)
     pnf.box_size = 10
     data = pnf.get_ohlc_data(source='close')

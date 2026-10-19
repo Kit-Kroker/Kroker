@@ -1,4 +1,4 @@
 #! /bin/bash
 
 # Run the demo
-python examples/demo.py 
+python examples/demo.py

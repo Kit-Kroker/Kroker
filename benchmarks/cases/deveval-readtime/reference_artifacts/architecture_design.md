@@ -1,5 +1,5 @@
 # Architecture Design
-Below is a text-based representation of the file tree. 
+Below is a text-based representation of the file tree.
 ```bash
 ├── examples
 │   ├── demo.py
@@ -19,8 +19,8 @@ To estimate reading time, run `sh ./examples/demo.sh`. An example of the script 
 #! /bin/bash
 
 # Run the demo
-python examples/demo.py 
-``` 
+python examples/demo.py
+```
 
 `api.py`:
 - of_text(text, wpm): calculate the reading time of a given text.

@@ -21,7 +21,7 @@ class AcceptanceTestCSVtoJSON(unittest.TestCase):
         with open(json_paths[0], 'r') as json_file:
             expected_result = json.load(json_file)
         self.assertEqual(actual_result, expected_result, "The conversion for the small cats dataset did not match the expected output.")
-    
+
     def test_full_conversion_comma_test(self):
         """Test conversion for dataset with complex comma usage."""
         hone_instance = Hone()
@@ -29,7 +29,7 @@ class AcceptanceTestCSVtoJSON(unittest.TestCase):
         with open(json_paths[1], 'r') as json_file:
             expected_result = json.load(json_file)
         self.assertEqual(actual_result, expected_result, "The conversion for the comma test did not match the expected output.")
-    
+
     def test_full_conversion_quotes_test(self):
         """Test conversion for dataset with complex quoting."""
         hone_instance = Hone()

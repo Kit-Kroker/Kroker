@@ -33,4 +33,3 @@ sequenceDiagram
   deactivate Global_functions
 
 ```
-

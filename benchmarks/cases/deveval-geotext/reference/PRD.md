@@ -38,7 +38,7 @@ The `geotext` project, designed to extract city and country mentions from texts,
 #! /bin/bash
 
 # Run the demo
-python examples/demo.py 
+python examples/demo.py
 ```
 
 ## Requirements
@@ -56,4 +56,3 @@ As a backend library, `geotext` does not have a GUI. The interface will be throu
 ## Acceptance Criteria
 - Each feature must pass unit tests with 95% code coverage.
 - Performance benchmarks must demonstrate that large texts can be processed within acceptable time frames.
-

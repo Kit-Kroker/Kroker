@@ -1,5 +1,5 @@
 # Architecture Design
-Below is a text-based representation of the file tree. 
+Below is a text-based representation of the file tree.
 ```bash
 ├── .gitignore
 ├── examples
@@ -23,13 +23,13 @@ To use the `GeoText`, run `sh ./examples/demo.sh`. An example of the script `dem
 #! /bin/bash
 
 # Run the demo
-python examples/demo.py 
+python examples/demo.py
 ```
 
  `geotext.py` :
 
 - `get_data_path(path)`: A utility function to construct a file path by joining the root directory with a given path, specifically used to access data files.
-  
+
 - `read_table(filename, usecols, sep, comment, encoding, skip)`: Parses data files from the `data_file` directory to create dictionaries mapping terms to their corresponding values based on the specified columns.
 
 - `build_index()`: Loads data from text files in the `data_file` directory and creates an index of nationalities, cities, and countries in the form of a namedtuple.

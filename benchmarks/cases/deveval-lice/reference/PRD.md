@@ -19,11 +19,11 @@ The `lice` project, aimed at automating the creation of license files for softwa
 
 **`./templates` Folder:**
 
-- **License Templates:** 
+- **License Templates:**
   - Includes a wide range of license templates, such as `template-afl3.txt`, `template-agpl3.txt`, `template-apache.txt`, `template-bsd2.txt`, `template-cc_by.txt`, and many others.
   - Each template corresponds to a different type of open-source license, covering common licenses like Apache, GPL, MIT, BSD, and Creative Commons variants.
 
-- **Header Templates:** 
+- **Header Templates:**
   - Contains header templates like `template-agpl3-header.txt`, `template-apache-header.txt`, `template-cc_by-header.txt`, and more.
   - These templates are designed to insert license information into the headers of source files, catering to different programming languages and file types.
 

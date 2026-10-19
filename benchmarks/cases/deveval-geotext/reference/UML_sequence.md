@@ -25,4 +25,3 @@ sequenceDiagram
     deactivate GeoText
 
 ```
-

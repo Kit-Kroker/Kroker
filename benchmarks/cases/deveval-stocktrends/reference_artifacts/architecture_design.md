@@ -1,5 +1,5 @@
 # Architecture Design
-Below is a text-based representation of the file tree. 
+Below is a text-based representation of the file tree.
 ```bash
 ├── acceptance_tests
 │   ├── HOOLI.csv
@@ -29,8 +29,8 @@ To generate indicators, run `sh ./examples/demo.sh`. An example of the script `d
 #! /bin/bash
 
 # Run the demo
-python examples/demo.py 
-``` 
+python examples/demo.py
+```
 
 `indicators.py`:
 - class Instrument(df): initialize the model structure and parameters.
@@ -49,5 +49,3 @@ python examples/demo.py
     - roundit(x. base): rounds the input `x` to the nearest multiple of `base` and returns the result as an integer.
     - get_ohlc_data(source): retrieves the PnF data in the form of an OHLC DataFrame.
     - get_bar_ohlc_data(source): retrieves bar OHLC (Open, High, Low, Close) data.
-
-
