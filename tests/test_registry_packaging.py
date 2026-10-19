@@ -37,12 +37,20 @@ def test_non_editable_install_resolves_registry_via_env(tmp_path):
     probe = "from sdlc.agents.loader import load_registry; load_registry()"
     # cwd=tmp_path: OUTSIDE the repo, so discovery cannot rescue us and only
     # SDLC_AGENTS_DIR can work.
+    # The shipped research role is provider: exa, and load_registry fails
+    # closed without EXA_API_KEY (the registry's own key check, not an
+    # import-time read) -- the same dummy conftest.py sets for import-only.
+    # PATH stays empty: the test is about SDLC_AGENTS_DIR, not PATH rescue.
     done = subprocess.run(
         [str(py), "-c", probe],
         cwd=tmp_path,
         capture_output=True,
         text=True,
-        env={"SDLC_AGENTS_DIR": str(REPO / "agents"), "PATH": ""},
+        env={
+            "SDLC_AGENTS_DIR": str(REPO / "agents"),
+            "EXA_API_KEY": "test-dummy",
+            "PATH": "",
+        },
     )
     assert done.returncode == 0, done.stderr
 
