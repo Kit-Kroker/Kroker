@@ -12,6 +12,7 @@ GREEN is the expected outcome. A genuinely RED test is a parser-gap
 finding: leave it failing, report it, never weaken it.
 """
 
+import json
 from collections import Counter
 from pathlib import Path
 
@@ -86,3 +87,68 @@ def test_normalise_and_digest_are_pure_over_the_same_text():
     s2 = OpenCodeHarness().normalise_session(CAPTURED)
     assert s1 == s2
     assert digest_of(s1) == digest_of(s2)
+
+
+# T2 (FR-041 FR-2, orchestrator ruling pre-approved): opencode can emit a
+# TOP-LEVEL type:error event -- no `part` key, fatal, in the wild the only
+# event of its stream (verbatim from runs/ops/raw-stream/
+# 01a14ede-c54d-747d-bef0-45f97eeec493/T1-a1.jsonl, one of the 30 lost
+# R0 attempt-4 batch). The ruling: an error event advances no work and is
+# NOT waste -- keep dropping it from events, but it must not crash the
+# parser nor surface as parsed text.
+ERROR_LINE = '{"type":"error","timestamp":1792327419106,"sessionID":"ses_eb0f6013fffeHw7mJg4Ekz5rFA","error":{"name":"UnknownError","data":{"message":"Unexpected server error. Check server logs for details.","ref":"err_395fdec0"}}}'  # noqa: E501
+
+
+def test_error_only_stream_yields_empty_session_without_text():
+    # THE spec test: the fatal error event is the whole stream. The parser
+    # must return an empty-event session -- no crash, and the error message
+    # body must not surface anywhere (not as model_turn text, not as any
+    # event kind). The error message and ref are asserted absent verbatim:
+    # any surfacing path would have to carry them.
+    s = OpenCodeHarness().normalise_session(ERROR_LINE)
+    assert s.events == []
+    for ev in s.events:  # vacuous over [], but guards a future event type
+        assert "Unexpected server error" not in (ev.text or "")
+        assert "err_395fdec0" not in (ev.target or "")
+    # The stream is still attributed to its session: the parser reads the
+    # sessionID of the error event even though the event itself is dropped.
+    assert s.session_id == "ses_eb0f6013fffeHw7mJg4Ekz5rFA"
+
+
+def test_error_line_dropped_from_mixed_stream_without_poisoning():
+    # Prepend + append the error line around a minimal healthy stream: the
+    # error is dropped and everything else is still counted exactly (one
+    # model_turn, token sums intact). The error line here carries the
+    # healthy stream's sessionID on purpose: session-id precedence (first
+    # event wins) is not part of the FR-2 ruling, so it is held fixed to
+    # isolate the drop mechanics.
+    healthy = "\n".join(
+        [
+            json.dumps(
+                {
+                    "type": "text",
+                    "sessionID": "oc-healthy",
+                    "part": {"text": "Working on it."},
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "step_finish",
+                    "sessionID": "oc-healthy",
+                    "part": {"tokens": {"input": 10, "output": 5}, "cost": 0.01},
+                }
+            ),
+        ]
+    )
+    error_same_session = ERROR_LINE.replace("ses_eb0f6013fffeHw7mJg4Ekz5rFA", "oc-healthy")
+    for mixed in (
+        error_same_session + "\n" + healthy,  # prepended
+        healthy + "\n" + error_same_session,  # appended
+    ):
+        s = OpenCodeHarness().normalise_session(mixed)
+        assert s.session_id == "oc-healthy"
+        assert [e.kind for e in s.events] == ["model_turn"]
+        assert s.events[0].text == "Working on it."
+        assert s.input_tokens == 10 and s.output_tokens == 5
+        assert s.cost_usd == 0.01
+        assert "Unexpected server error" not in (s.events[0].text or "")

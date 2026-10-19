@@ -254,6 +254,19 @@ class OpenCodeHarness(CodingHarness):
         return 1 if state.get("status") == "error" else None
 
     def normalise_session(self, stdout: str) -> HarnessSession:
+        """Normalise an opencode ``--format json`` event stream.
+
+        Ruling on top-level ``type: "error"`` events (FR-041 FR-2,
+        orchestrator pre-approved): opencode emits a fatal error as a
+        TOP-LEVEL ``error`` object (``name`` + ``data.message`` +
+        ``data.ref``, no ``part`` key) and nothing else in that stream
+        (30 "Unexpected server error" captures from the lost R0
+        attempt-4 batch, opencode 1.18.35). Such an event advances no
+        work and is NOT waste, so this parser DROPS it: no event, no
+        text, no crash — the session still picks up the stream's
+        ``sessionID`` and digests to a measured all-zero (``capture_rev``
+        marked). Pinned by the FR-041 error-stream tests.
+        """
         events: list[SessionEvent] = []
         session_id = None
         in_tok = out_tok = 0

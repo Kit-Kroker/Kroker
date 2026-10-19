@@ -163,3 +163,50 @@ def test_normalise_bench_stream_write_targets():
         "requirements-dev.txt",
         "requirements.txt",
     ]
+
+
+# FR-041 T2 (spec FR-2, orchestrator ruling): opencode can emit a TOP-LEVEL
+# "error" event — an error object (name + data.message + data.ref), NO
+# `part` key, fatal, and in the wild the ONLY event of its stream (30
+# occurrences in the lost R0 attempt-4 batch). Ruling: an error event
+# advances no work and is NOT waste — the parser keeps dropping it, but it
+# must not crash nor be reported as parsed text. Verbatim one-line stream
+# from runs/ops/raw-stream/01a14ede-c54d-747d-bef0-45f97eeec493/T1-a1.jsonl.
+ERROR_ONLY = '{"type":"error","timestamp":1792327419106,"sessionID":"ses_eb0f6013fffeHw7mJg4Ekz5rFA","error":{"name":"UnknownError","data":{"message":"Unexpected server error. Check server logs for details.","ref":"err_395fdec0"}}}'  # noqa: E501
+
+
+def test_normalise_error_only_stream_drops_the_event():
+    s = OpenCodeHarness().normalise_session(ERROR_ONLY)  # must not crash
+    assert s.events == []
+    # The session is still identified from the event's sessionID field.
+    assert s.session_id == "ses_eb0f6013fffeHw7mJg4Ekz5rFA"
+    # No text anywhere: the error is never reported as parsed text.
+    assert not any(e.text for e in s.events)
+    # No step_finish in the stream -> saw_tokens/saw_cost never set -> the
+    # not-measured None, exactly like an empty stream.
+    assert s.input_tokens is None
+    assert s.output_tokens is None
+    assert s.cost_usd is None
+
+
+def test_normalise_error_only_stream_digests_to_a_measured_zero():
+    s = OpenCodeHarness().normalise_session(ERROR_ONLY)
+    d = digest_of(s)
+    # All-zero counters, but stamped capture_rev 1: the stream WAS parsed.
+    assert d.tool_calls == 0
+    assert d.file_reads == 0
+    assert d.file_rereads == 0
+    assert d.files_written == 0
+    assert d.rewrite_churn == 0
+    assert d.failed_commands == 0
+    assert d.model_turns == 0
+    assert d.denials == 0
+    assert d.escalations == 0
+    assert d.compacted is False
+    assert d.capture_rev == 1
+    bag = WasteBag.from_digest(d)
+    assert bag is not None
+    assert bag.capture_rev == 1
+    assert bag.tool_calls == 0
+    # The consequence pin: an error-only stream is a MEASURED zero (marked
+    # bag), never an unmeasured blank — and the error itself is not waste.
