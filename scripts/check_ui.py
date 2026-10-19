@@ -30,6 +30,17 @@ from pathlib import Path
 DASH = "sdlc-dashboard"
 UI = "@kroker/ui"
 
+# T2 (sbatch 2026-10-19): the per-test budget the wrapper forwards to the
+# two vitest steps. vitest's 5000 ms default is a container-load trap: the
+# 006 SG-2 fire failed the wrapper 3/3 on one jsdom-heavy file timing out
+# (environment setup alone measured ~30 s in kroker-dev) while the direct
+# `npx vitest run` passed 374/374 twice — the timeout tracks wrapper +
+# container load, not test content (.workspace/tmp/executor-006-SG2-report.md).
+# 60 s = 12x the default and 2x the worst observed setup, still a real hang
+# detector. The flag rides after the bare `--` so npm forwards it to vitest
+# instead of consuming it; a value <= 5000 would be a no-op dressed as a fix.
+VITEST_TEST_TIMEOUT_MS = 60_000
+
 # (label, npm argv). Cheapest first, same principle as verify.py GATES.
 STEPS: tuple[tuple[str, list[str]], ...] = (
     ("install", ["ci"]),
@@ -40,13 +51,19 @@ STEPS: tuple[tuple[str, list[str]], ...] = (
     # ds-bundle's vite.preview() serves next -- without it, build-ds-bundle.ts
     # silently falls back to a URL with nothing listening on it.
     ("build-ui", ["run", "build", "--workspace", UI]),
-    ("vitest-dashboard", ["run", "test", "--workspace", DASH]),
+    (
+        "vitest-dashboard",
+        ["run", "test", "--workspace", DASH, "--", f"--testTimeout={VITEST_TEST_TIMEOUT_MS}"],
+    ),
     ("playwright-browser", ["exec", "--", "playwright", "install", "--with-deps", "chromium"]),
     # Populates dist-ds/ (gitignored, spec C Task 12/13's DesignSync payload)
     # before vitest-ui runs: build-ds-bundle.spec.ts asserts against those
     # files and has no fixture of its own.
     ("ds-bundle", ["run", "ds:bundle", "--workspace", UI]),
-    ("vitest-ui", ["run", "test", "--workspace", UI]),
+    (
+        "vitest-ui",
+        ["run", "test", "--workspace", UI, "--", f"--testTimeout={VITEST_TEST_TIMEOUT_MS}"],
+    ),
     ("playwright", ["run", "test:pw", "--workspace", UI]),
 )
 
