@@ -61,6 +61,18 @@ RESEARCH_SQ_ACT = workflow.ActivityConfig(
         backoff_coefficient=2.0,
         maximum_interval=timedelta(seconds=60),
         maximum_attempts=6,
+        # T4 (sbatch 2026-10-19): DEAD BY DESIGN — kept as belt-and-braces.
+        # The sub-question handler (stage.py `_research_subquestion_impl`)
+        # catches both types and returns a degraded finding, never
+        # re-raising, so this list cannot trigger today. It stays for two
+        # reasons: (a) if a future handler refactor narrows that catch, a
+        # leaked cap stop would otherwise burn all 6 attempts against a
+        # persisted, already-exhausted budget (the exact waste the handler
+        # comment warns about); (b) the never-re-recorded replay history
+        # research_retain_grounded.json embeds this list in its recorded
+        # ScheduleActivity command — removing it changes the command and
+        # breaks replay (SG-1 territory). Pinned by
+        # tests/research/test_sq_retry_policy.py.
         non_retryable_error_types=["BudgetExceeded", "UsageLimitExceeded"],
     ),
 )
