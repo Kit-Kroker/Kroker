@@ -69,7 +69,17 @@ a defect, it is listed for the orchestrator, not fixed here (006-B4).
   retried as before, and an attempt that raises still loses its spend.
 - REVISE past `max_refine_rounds`, or any exception during refine, breaks
   out with the last good brief — which is then retained, judged and
-  recorded PASS (`step.py`).
+  recorded PASS (`step.py`). "Last good" is not one brief everywhere
+  (009 + T8 sbatch-2026-10-19): retention uses `verified_brief`, but the
+  judge call and the returned `ResearchOutcome` read the `brief` local.
+  On the path where a refine round's `synthesize_brief` returns and
+  `_fold_research_usage` then raises, `brief` is already rebound to the
+  new, unverified brief while `brief_digest_val`/`verified_brief` still
+  belong to the previous round — so the stage judges and RETURNS the
+  new, unverified brief under the old digest, while retention keeps the
+  verified pair (pinned by `test_research_retain_pairing.py` case 4).
+  Accepted residual (research.md Residual 4, "not known to be
+  reachable"); no behaviour change implied.
 - `verify_brief_activity` is the one non-fail-soft call: outside every
   `try`, `maximum_attempts=1` (`step.py`) — a verifier raise fails the
   workflow, not the stage.
