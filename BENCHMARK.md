@@ -433,6 +433,15 @@ measure work that didn't advance the goal.
   the capture mark (`capture_rev`), so a marked bag's zero is a measured
   zero. Tool events are parsed from opencode streams pending a captured
   stream — round 013's parser task waits on one.
+- *Round 016 / FR-041:* the round-013 residual is closed. Opencode waste
+  counters have filled end to end since rounds 013/014: the capture feeds the
+  digest, and the digest feeds the `WasteBag`. A real stream now pins this:
+  `tests/fixtures/opencode/bench-todo-api-greenfield-1792335476-T-001-a1.jsonl`
+  is the scrubbed round-016 R0 capture of todo-api T-001 attempt 1 (opencode
+  1.18.35, `--format json`). Unit tests in `tests/test_opencode_normalise.py`
+  and `tests/test_opencode_captured_stream.py` run it through
+  `normalise_session`, `digest_of`, `WasteBag.from_digest` and
+  `waste_measured`.
 
 ### 4.4 The error heatmap (Abdullin's prioritisation instrument)
 
