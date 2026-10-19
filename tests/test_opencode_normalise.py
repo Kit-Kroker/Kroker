@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+from sdlc.benchmarks.models import WasteBag
 from sdlc.harness.opencode import OpenCodeHarness
 from sdlc.harness.session import digest_of
 
@@ -93,3 +94,72 @@ def test_normalise_captured_stream_has_model_turn_text():
     s = OpenCodeHarness().normalise_session(CAPTURED)
     turns = [e for e in s.events if e.kind == "model_turn" and e.text]
     assert any("hello.txt" in (e.text or "") for e in turns)
+
+
+# FR-041: the same parser on the REAL captured benchmark stream from the
+# passing round-016 R0 smoke (opencode 1.18.35, --format json; todo-api
+# T-001 attempt 1, scrubbed: paths, user value, session ids redacted — see
+# the fixture). This is the full real event vocabulary: tool_use with
+# part.tool, step_finish with tokens+cost per step, and the scrubbed
+# `"<worktrees>/..."` write targets. FR-3 expects NO parser change — these
+# tests PIN current behaviour; a RED here is a finding, not a fix trigger
+# inside this task.
+BENCH_CAPTURED = (
+    Path(__file__).resolve().parent
+    / "fixtures"
+    / "opencode"
+    / "bench-todo-api-greenfield-1792335476-T-001-a1.jsonl"
+).read_text(encoding="utf-8")
+
+
+def test_normalise_bench_stream_digest_counters():
+    d = digest_of(OpenCodeHarness().normalise_session(BENCH_CAPTURED))
+    assert d.tool_calls == 7  # 3 write + 4 bash, none dropped
+    assert d.file_reads == 0
+    assert d.file_rereads == 0
+    assert d.files_written == 3
+    assert d.rewrite_churn == 0
+    assert d.failed_commands == 0  # every bash exit is 0
+    assert d.model_turns == 5
+    assert d.denials == 0
+    assert d.escalations == 0
+    assert d.compacted is False
+    assert d.capture_rev == 1
+
+
+def test_normalise_bench_stream_token_cost_summation():
+    s = OpenCodeHarness().normalise_session(BENCH_CAPTURED)
+    assert s.input_tokens == 3652  # summed across all six step_finish events
+    assert s.output_tokens == 875
+    # Six step_finish events each carry cost: 0 — a MEASURED zero (saw_cost
+    # semantics), never readable as the not-measured None.
+    assert s.cost_usd == 0.0
+    assert s.cost_usd is not None
+
+
+def test_normalise_bench_stream_waste_bag_projection():
+    d = digest_of(OpenCodeHarness().normalise_session(BENCH_CAPTURED))
+    bag = WasteBag.from_digest(d)
+    assert bag is not None
+    assert bag.tool_calls == 7
+    assert bag.file_reads == 0
+    assert bag.file_rereads == 0
+    assert bag.files_written == 3
+    assert bag.rewrite_churn == 0
+    assert bag.failed_commands == 0
+    assert bag.model_turns == 5
+    assert bag.denials == 0
+    assert bag.escalations == 0
+    assert bag.compacted is False
+    assert bag.capture_rev == 1
+
+
+def test_normalise_bench_stream_write_targets():
+    s = OpenCodeHarness().normalise_session(BENCH_CAPTURED)
+    targets = [(e.target or "") for e in s.events if e.kind == "file_write"]
+    # Scrubbed paths keep their basenames; match on those, not full equality.
+    assert sorted(t.split("/")[-1] for t in targets) == [
+        ".gitignore",
+        "requirements-dev.txt",
+        "requirements.txt",
+    ]
