@@ -112,7 +112,15 @@ async def get_task_diff(inp: DiffInput) -> dict:
         )
         if len(parts) == 3 and parts[0].startswith("R")
     ]
-    return {"stat": stat, "patch": patch[: inp.max_chars], "files": files, "renames": renames}
+    # T3 (sbatch 2026-10-19): a cut patch must carry a visible marker —
+    # the oracle's pattern (benchmarks/oracle.py _truncate_diff): keep
+    # exactly the first max_chars chars, then say how much was omitted, so
+    # a reviewer or lens reading the tail knows the diff continued. A cut
+    # at exactly max_chars is no cut (oracle semantics: <= passes through).
+    patch_out = patch[: inp.max_chars]
+    if len(patch) > inp.max_chars:
+        patch_out += f"\n...[diff truncated, {len(patch) - inp.max_chars} chars omitted]"
+    return {"stat": stat, "patch": patch_out, "files": files, "renames": renames}
 
 
 @dataclass
