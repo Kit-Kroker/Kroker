@@ -8,11 +8,20 @@ export const useFleetStore = defineStore('fleet', () => {
   const runs = ref<Run[]>([])
   const loading = ref(false)
   const lastFetched = ref<number | null>(null)
+  const loaded = ref(false)
+  const loadError = ref<string | null>(null)
 
-  async function refresh() {
+  // T5 (010 R-6 pattern): a refresh never rejects — a failed read keeps the
+  // last known fleet and surfaces through loadError, so the poll in App.vue
+  // cannot die on an outage. loaded flips on the first successful read only.
+  async function refresh(): Promise<void> {
     loading.value = true
     try {
       runs.value = await api.listRuns()
+      loadError.value = null
+      loaded.value = true
+    } catch (e) {
+      loadError.value = String(e)
     } finally {
       loading.value = false
       lastFetched.value = Date.now()
@@ -46,5 +55,8 @@ export const useFleetStore = defineStore('fleet', () => {
     return { usd, excluded }
   })
 
-  return { runs, loading, lastFetched, refresh, getOrLoad, startRun, blockedCount, activeCount, totalCost }
+  return {
+    runs, loading, lastFetched, loaded, loadError, refresh, getOrLoad,
+    startRun, blockedCount, activeCount, totalCost,
+  }
 })

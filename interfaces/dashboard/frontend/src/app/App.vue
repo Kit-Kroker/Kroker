@@ -12,12 +12,18 @@ const inbox = useInboxStore()
 const catalog = useCatalogStore()
 let pollId: ReturnType<typeof setInterval> | null = null
 
-onMounted(async () => {
-  await Promise.all([catalog.load(), fleet.refresh(), inbox.refresh()])
+onMounted(() => {
+  // T5: a failed first read must not stop the poll. Every store owns its
+  // error state (catalog.load, inbox.refresh, and fleet.refresh never
+  // reject), so the first refreshes run fire-and-forget and the interval
+  // starts unconditionally.
+  void catalog.load()
+  void fleet.refresh()
+  void inbox.refresh()
   pollId = setInterval(() => {
     if (document.visibilityState === 'visible') {
-      fleet.refresh()
-      inbox.refresh()
+      void fleet.refresh()
+      void inbox.refresh()
     }
   }, 5000)
 })

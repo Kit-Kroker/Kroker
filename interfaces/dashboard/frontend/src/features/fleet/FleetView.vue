@@ -13,7 +13,24 @@ const summary = computed(() => `${fleet.runs.length} runs · ${fleet.blockedCoun
       <h1 class="title">Fleet</h1>
       <span class="summary">{{ summary }}</span>
     </div>
-    <FleetTable />
+    <!-- T5 (010 inbox pattern): three honest states before the table. -->
+    <div v-if="!fleet.loaded && !fleet.loadError" class="state" data-testid="fleet-loading">loading…</div>
+    <div
+      v-else-if="!fleet.loaded && fleet.loadError"
+      class="state"
+      data-testid="fleet-load-error"
+    >The fleet could not be loaded.</div>
+    <template v-else>
+      <!-- A stale banner must not lie that the list is current. -->
+      <div
+        v-if="fleet.loadError"
+        class="incomplete"
+        data-testid="fleet-incomplete"
+      >
+        <p class="line">The fleet could not be refreshed; showing the last known list.</p>
+      </div>
+      <FleetTable />
+    </template>
   </main>
 </template>
 
@@ -34,6 +51,22 @@ const summary = computed(() => `${fleet.runs.length} runs · ${fleet.blockedCoun
   font-size: 15px;
   font-weight: 600;
   color: var(--ink-primary);
+}
+.state {
+  color: var(--ink-subtle);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.incomplete {
+  border: 1px solid var(--status-blocked);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.incomplete .line {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink-secondary);
 }
 .summary {
   font-family: var(--font-mono);

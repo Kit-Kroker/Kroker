@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { api } from '../api/client'
 import type { Run } from '../api/types'
 
 vi.mock('../api/client', () => {
@@ -120,5 +121,45 @@ describe('totalCost is the honest header total (011 T008)', () => {
     fleet.runs = [mkRun({ id: 'a', cost: null, roles: [] }), mkRun({ id: 'b', cost: null, roles: [] })] as never
     expect(fleet.totalCost.usd).toBeNull()
     expect(fleet.totalCost.excluded).toBe(0)
+  })
+})
+
+// --- T5 (sbatch-2026-10-19, RED): refresh never rejects (010 R-6 pattern) ---
+// A failed first fleet read must not stop App.vue's poll: refresh catches
+// (loadError set, last known runs stay), clears loadError and sets loaded
+// on success, and NEVER rejects -- the same treatment inbox.store got in
+// 010. RED today: refresh is try/finally with no catch, and the store has
+// no loaded / loadError at all.
+
+describe('refresh survives a failed read (T5)', () => {
+  it('never rejects when listRuns rejects; sets loadError and keeps the last known runs', async () => {
+    const fleet = useFleetStore()
+    await fleet.refresh() // seed the last known list through the default mock
+    expect(fleet.runs).toHaveLength(2)
+
+    vi.mocked(api.listRuns).mockRejectedValueOnce(new Error('backend down'))
+    await expect(fleet.refresh()).resolves.toBeUndefined()
+
+    expect(fleet.loadError).toBeTruthy()
+    expect(fleet.runs).toHaveLength(2) // the last known list stays
+  })
+
+  it('loaded stays false through failures and turns true on the first success, which clears loadError', async () => {
+    const fleet = useFleetStore()
+
+    vi.mocked(api.listRuns).mockRejectedValueOnce(new Error('down'))
+    await fleet.refresh().catch(() => undefined) // today: rejects; post-fix: resolves
+    expect(fleet.loaded).toBe(false)
+    expect(fleet.loadError).toBeTruthy()
+
+    await fleet.refresh() // the default mock resolves the two fake runs
+    expect(fleet.loaded).toBe(true)
+    expect(fleet.loadError).toBeNull()
+
+    // a later failure after a success keeps loaded (last known) and re-sets the error
+    vi.mocked(api.listRuns).mockRejectedValueOnce(new Error('blip'))
+    await fleet.refresh().catch(() => undefined)
+    expect(fleet.loaded).toBe(true)
+    expect(fleet.loadError).toBeTruthy()
   })
 })
