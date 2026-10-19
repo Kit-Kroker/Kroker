@@ -18,14 +18,16 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
+from typing import Any, cast
 
 import httpx
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.models import Model, ModelResolutionContext
 from pydantic_ai.settings import ModelSettings
 from temporalio import activity
 
-from ..agents.model_ids import resolve_model
+from ..agents.model_ids import single_retry_layer
 from .models import QualityScore
 from .vetoes import check, parse_vetoes
 
@@ -193,10 +195,25 @@ def _run_judge_agent(model, system_prompt: str, user_prompt: str) -> str:
     helper rather than the ``Agent`` class. 005 T012 (plan D2 site 6,
     contract C7): a string model resolves through the shared seam first, so
     a ``zai:`` judge id reaches the coding endpoint; non-zai strings build
-    exactly as the framework builds them.
+    exactly as the framework builds them. T1 (sbatch 2026-10-19): that
+    resolution runs through the single-retry layer, so the provider SDK
+    keeps no retry layer of its own beneath the loop below.
     """
     if isinstance(model, str):
-        model = resolve_model(model)
+        # T1 (sbatch 2026-10-19): resolve the string through the
+        # single-retry seam. ``single_retry_layer()``'s resolver is the
+        # resolve_model chain — infer_model over the shared provider
+        # factory, 005 zai URL policy included — with the provider
+        # client's SDK retry count zeroed, so the backoff loop below is
+        # the only retry layer inside one judge call (was: SDK default
+        # max_retries=2 stacked under it, up to 12 HTTP requests per
+        # always-429 call against the loop's budget of 4). The ctx argument
+        # is None by design: the shared resolver ignores it, and no agent
+        # exists yet at this eager resolution site (the repo's capability
+        # tests pass None for the same reason).
+        resolved = single_retry_layer().resolver(cast("ModelResolutionContext[Any]", None), model)
+        assert isinstance(resolved, Model), "the single-retry resolver returned no model"
+        model = resolved
     agent = Agent(
         model,
         name="benchmark_judge",

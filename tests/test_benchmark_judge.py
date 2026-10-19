@@ -648,6 +648,7 @@ def test_judge_artifact_runs_the_sync_judge_off_the_event_loop(monkeypatch):
     'This event loop is already running' RuntimeError), so the
     staged_rubric assertion fails; the fix moves the sync judge off the
     loop (to_thread-style) and this test must go green."""
+    from pydantic_ai.capabilities import ResolveModelId
     from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart
     from pydantic_ai.models.function import FunctionModel
 
@@ -667,14 +668,20 @@ def test_judge_artifact_runs_the_sync_judge_off_the_event_loop(monkeypatch):
             )
         return ModelResponse(parts=[TextPart('{"score": 0.5, "components": {}}')])
 
-    monkeypatch.setattr(judge_mod, "resolve_model", lambda _model: FunctionModel(_handler))
+    # T1 (sbatch 2026-10-19): the string-model seam moved from resolve_model
+    # to the single-retry layer; stub the capability factory the same way.
+    monkeypatch.setattr(
+        judge_mod,
+        "single_retry_layer",
+        lambda: ResolveModelId(lambda _ctx, _model_id: FunctionModel(_handler)),
+    )
     _set_judge_fn(None)  # the production default must run, no injected fn
 
     inp = JudgeInput(
         artifact_json='{"summary": "login"}',
         rubric="score clarity 0..1",
         author_model="anthropic:claude-sonnet-4-6",
-        judge_model="test-stub",  # non-empty; resolve_model is stubbed above
+        judge_model="test-stub",  # non-empty; the model seam is stubbed above
         vetoes_yaml="",
     )
     judge_mod._clear_step_cache()  # generate_steps must really run the stub
