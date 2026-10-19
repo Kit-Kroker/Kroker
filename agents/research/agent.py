@@ -61,6 +61,22 @@ def build(
         model_settings=model_settings,
         system_prompt=instructions,
         capabilities=[*capabilities, *own_capabilities],
+        # pydantic_ai's default output-retry budget is 1. The
+        # research-partial-salvage assessment measured a live
+        # "Exceeded maximum output retries (1)": one malformed final
+        # brief killed the whole sub-question attempt, which then
+        # restarted from scratch and burned its remaining request
+        # budget. On a retry pydantic_ai re-prompts with the exact
+        # validation error — a far stronger correction signal than the
+        # original prompt — so a budget of 1 spends its only retry on
+        # the first, uncorrected attempt and gives the self-correction
+        # loop no room. Scoped to `output` only (same shape and value
+        # as the planner's agents/planner/agent.py:40): tool-result
+        # retries aren't this role's failure mode, and the retry must
+        # also leave room for a future "conclude on the last request"
+        # mechanism, where a schema retry on the forced turn becomes
+        # request N+1 and dies at a budget of 1.
+        retries={"output": 3},
     )
     for path in tool_paths:
         if "web_search" in path or "fetch_page" in path:
