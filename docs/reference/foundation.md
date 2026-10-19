@@ -45,9 +45,11 @@ every task from `base_branch` and still gates fresh sessions on
   (repo-scoped, short-TTL) credentials — never the worker's full environment.
 - **`context_window_for(model)`** / `CONTEXT_WINDOWS`: best-effort model →
   window lookup, filled into `HarnessRunResult.context_window` in the base
-  `run()`. Both adapters parse `usage.{input,output}_tokens` from the harness
-  JSON. (opencode's usage keys are assumed to mirror Claude's — confirm
-  against a live run when the harness is wired.)
+  `run()`. Claude's adapter parses `usage.{input,output}_tokens` from the
+  harness JSON; opencode's sums `part.tokens.{input,output}` over its
+  `step_finish` events, confirmed against a live capture (round-016 R0
+  fixture `tests/fixtures/opencode/bench-todo-api-greenfield-1792335476-T-001-a1.jsonl`,
+  pinned by `tests/test_opencode_normalise.py`, FR-041).
 
 ### `sdlc/activities.py` — git activities (Finding #1)
 
