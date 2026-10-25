@@ -261,7 +261,10 @@ def _oracle_task_records(
     not_evaluated oracle record and nothing here)."""
     out: list[BenchmarkRecord] = []
     for t in grade.task_grades:
-        outcome = BenchmarkOutcome.PASS if (t.score or 0.0) >= 1.0 else BenchmarkOutcome.FAIL
+        if t.score is None:
+            outcome = BenchmarkOutcome.NOT_EVALUATED
+        else:
+            outcome = BenchmarkOutcome.PASS if t.score >= 1.0 else BenchmarkOutcome.FAIL
         out.append(
             BenchmarkRecord(
                 run_id=run_id,

@@ -252,9 +252,11 @@ def build_root_cause(
                     total_no_req_results += 1
                 else:
                     for rec in ot_recs:
-                        requirements_graded += 1
                         score = rec.quality.score if rec.quality else None
-                        if score is not None and score >= 1.0:
+                        if score is None:
+                            continue
+                        requirements_graded += 1
+                        if score >= 1.0:
                             continue
                         task_id = rec.task_id or ""
                         lbl = labels_map.get((run.run_id, task_id))
