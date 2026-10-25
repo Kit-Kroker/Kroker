@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from temporalio import activity
 
+from ...artifacts.generated import GENERATED_DIRS
 from ...change_scope import FindingKey, delta, normalize_line, normalize_path, rename_map
 from ...measurement import CollectionState
 from ...process import kill_process_tree
@@ -571,7 +572,7 @@ _SECURITY_SCAN_EXTENSIONS = (".py", ".js", ".ts", ".go", ".rb", ".java")
 # had run (bench-todo-api-greenfield-1785444047: 14 critical findings, all 14
 # inside .sdlc-venv, none from produced code). The rest are the equivalent
 # conventions a produced project brings on its own.
-_SCAN_SKIP_DIRS = frozenset(
+_SCAN_SKIP_DIRS = GENERATED_DIRS | frozenset(
     {
         ".git",
         _VENV_DIR_NAME,
@@ -579,10 +580,6 @@ _SCAN_SKIP_DIRS = frozenset(
         "venv",
         "env",
         "node_modules",
-        "__pycache__",
-        ".tox",
-        ".mypy_cache",
-        ".pytest_cache",
         "site-packages",
         "vendor",
         "dist",

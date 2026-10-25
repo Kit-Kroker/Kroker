@@ -122,3 +122,29 @@ def test_a_not_collected_report_cannot_carry_findings():
         ScopedSecurityReport(state=CollectionState.NOT_COLLECTED, reason="x", preexisting=3)
     with pytest.raises(ValueError):
         ScopedSecurityReport(state=CollectionState.NOT_COLLECTED)
+
+
+def test_scan_skips_listed_paths_pinned(tmp_path):
+    """PIN: test scan_paths skips all designated generated dirs."""
+    for d in [
+        ".git",
+        ".sdlc-venv",
+        ".venv",
+        "venv",
+        "env",
+        "node_modules",
+        "__pycache__",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "site-packages",
+        "vendor",
+        "dist",
+        "build",
+        ".next",
+    ]:
+        p = tmp_path / d
+        p.mkdir(parents=True, exist_ok=True)
+        (p / "evil.py").write_text(f"{EVAL}1)\n", encoding="utf-8")
+        assert scan_paths(str(tmp_path), [f"{d}/evil.py"]).findings == []

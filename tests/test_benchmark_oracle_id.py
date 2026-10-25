@@ -91,3 +91,47 @@ def test_oracle_identity_missing_dir_raises(tmp_path):
     nonexistent = tmp_path / "does_not_exist"
     with pytest.raises(FileNotFoundError):
         oracle_identity(nonexistent)
+
+
+def test_oracle_identity_cases_pinned():
+    """PIN: oracle_identity(case/oracle) must remain byte-identical for all cases."""
+    from pathlib import Path
+
+    cases_dir = Path("benchmarks/cases")
+    expected = [
+        (
+            "cat-cafe-monitoring",
+            "sha256:f9a25268b472a6c0f0c4a475082b19b0e63e3450fbeb12519b537defc2643f28",
+        ),
+        (
+            "deveval-geotext",
+            "sha256:432171468574f494c0a0d455ad699b38fcfedc00f4365c0e03dd793194a3ab3d",
+        ),
+        (
+            "deveval-hone",
+            "sha256:4a79366c4ed4356feef714732b492f36a0ba4d187bb439eefb5b6c4d30d5e6d2",
+        ),
+        (
+            "deveval-lice",
+            "sha256:ad85e7f2920feed676aa98ed9918b18d7d4599387df9cb5f8d7bcd32cb84bc49",
+        ),
+        (
+            "deveval-particle-swarm-optimization",
+            "sha256:688ea3a76c9b7fb5301ef3ee4848fad92d791d0d721adc7e0de73db03bfabde4",
+        ),
+        (
+            "deveval-readtime",
+            "sha256:7335319053ea7fca22f89fc95332d7671d5ba0542b653afb31731b650b8561cf",
+        ),
+        (
+            "deveval-stocktrends",
+            "sha256:fe4e7d8044cdb6fade5825537d4c987e027c5655ff1d84e2aa3d88f837f1c33f",
+        ),
+        (
+            "todo-api-greenfield",
+            "sha256:89319bb7f2c16107133b912274c7098f906ae61c8ddf7015a12fe95c2f2fe769",
+        ),
+    ]
+    for name, exp_hash in expected:
+        oracle_path = cases_dir / name / "oracle"
+        assert oracle_identity(oracle_path) == exp_hash

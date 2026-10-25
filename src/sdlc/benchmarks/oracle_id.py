@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-IGNORED_DIRS = ("__pycache__", ".pytest_cache")
+from sdlc.artifacts.generated import GENERATED_DIRS
+
+IGNORED_DIRS = tuple(sorted(GENERATED_DIRS))
 
 
 def oracle_identity(oracle_dir: Path | str) -> str:
@@ -19,7 +21,7 @@ def oracle_identity(oracle_dir: Path | str) -> str:
         if not p.is_file():
             continue
         rel = p.relative_to(path)
-        if any(part in IGNORED_DIRS for part in rel.parts):
+        if any(part in IGNORED_DIRS or part.endswith(".egg-info") for part in rel.parts):
             continue
         if p.suffix == ".pyc":
             continue
