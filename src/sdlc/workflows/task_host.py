@@ -281,7 +281,7 @@ class TaskHost:
             **ACT,
         )
         handoff_notes = _handoff_notes(prior_handoffs)
-        return await code_step(
+        result = await code_step(
             self._ctx,  # type: ignore[attr-defined]
             cfg=cfg,
             task=task,
@@ -298,3 +298,4 @@ class TaskHost:
             handoff_agent=t_handoff,
             session_refs=self._session_refs,
         )
+        return result.model_copy(update={"start_ref": handle.branch_point or from_ref})

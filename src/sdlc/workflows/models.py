@@ -65,6 +65,7 @@ class TaskResult(BaseModel):
     deep_review: DeepReviewReport | None = None  # E-39: advisory lens
     lens_outcomes: list[LensOutcome] = Field(default_factory=list)  # C8: lens-absence tombstones
     plan_drift: PlanDrift | None = None  # E4: drift evidence for the merge gate
+    start_ref: str | None = None  # 017: branch point or from_ref for per-task diff
     notes: str = ""
 
 
