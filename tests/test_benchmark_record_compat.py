@@ -59,6 +59,7 @@ def test_stored_benchmark_records_compat_and_trace_none():
                 assert record.trace is None
                 assert record.tasks_total is None
                 assert record.blocking_checks is None
+                assert record.stage_reach is None
                 validated += 1
 
     assert validated > 0

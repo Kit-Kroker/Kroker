@@ -25,8 +25,10 @@ from .models import (
     GraphAttribution,
     QualityScore,
     SpeedBag,
+    StageReach,
     cell_progress,
     grading_from_score,
+    stage_reach_from,
 )
 from .oracle_id import oracle_identity
 from .paths import case_dir
@@ -48,10 +50,13 @@ class CellProgress:
     last_stage: str | None
     code_finished: bool
     oracle_id: str | None = None
+    stage_reach: StageReach | None = None
 
 
 @activity.defn
-async def summarize_cell(bench_run_id: str, cell_id: str) -> CellProgress:
+async def summarize_cell(
+    bench_run_id: str, cell_id: str, final_stage: str | None = None
+) -> CellProgress:
     """Read the cell's record file (the recorder's records root honours
     SDLC_BENCHMARKS_ROOT) and report how far the cell got.
 
@@ -66,6 +71,7 @@ async def summarize_cell(bench_run_id: str, cell_id: str) -> CellProgress:
     one body serves the 012 writer and the 013 reader."""
     records = RecordStore(bench_run_id=bench_run_id, cell_id=cell_id).read_all()
     last_stage, code_finished = cell_progress(records)
+    stage_reach = stage_reach_from(records, final_stage)
     case_id = cell_id.split("#", 1)[0]
     oracle_dir = case_dir(case_id) / "oracle"
     oracle_id: str | None = None
@@ -73,7 +79,12 @@ async def summarize_cell(bench_run_id: str, cell_id: str) -> CellProgress:
         oracle_id = oracle_identity(oracle_dir)
     except Exception:
         oracle_id = None
-    return CellProgress(last_stage=last_stage, code_finished=code_finished, oracle_id=oracle_id)
+    return CellProgress(
+        last_stage=last_stage,
+        code_finished=code_finished,
+        oracle_id=oracle_id,
+        stage_reach=stage_reach,
+    )
 
 
 GradingStatus = Literal["graded", "not_graded", "grading_failed", "no_oracle"]
@@ -105,6 +116,7 @@ def cell_record(
     provenance: Provenance | None,
     graph_sha: str | None = None,
     oracle_id: str | None = None,
+    stage_reach: StageReach | None = None,
 ) -> BenchmarkRecord:
     """contract §3.4: the one cell record — scope cell, stage cell, role
     cell, no quality score (judge contract: the status IS the judgment),
@@ -141,4 +153,5 @@ def cell_record(
         cell=status,
         graph=graph,
         oracle_id=oracle_id,
+        stage_reach=stage_reach,
     )

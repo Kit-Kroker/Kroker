@@ -47,6 +47,8 @@ with workflow.unsafe.imports_passed_through():
         GraphAttribution,
         QualityScore,
         SpeedBag,
+        StageReach,
+        with_final_stage,
     )
     from .oracle import OracleGrade, OracleInput, grade_oracle
     from .provenance import Provenance, resolve_provenance
@@ -168,6 +170,7 @@ def _oracle_record(
     graph_sha: str | None = None,
     provenance: Provenance | None = None,
     oracle_id: str | None = None,
+    stage_reach: StageReach | None = None,
 ) -> BenchmarkRecord:
     """Build the stage='oracle' record from a grade. An integrity breach
     (held-out or language mismatch) sets .error so it surfaces in the
@@ -223,6 +226,7 @@ def _oracle_record(
         error=err,
         graph=(GraphAttribution(graph_sha=graph_sha) if graph_sha else None),
         oracle_id=oracle_id,
+        stage_reach=stage_reach,
     )
 
 
@@ -368,6 +372,7 @@ class BenchmarkWorkflow:
                 progress = await workflow.execute_activity(
                     summarize_cell, args=[bench_run_id, cell.cell_id], **RECORD_ACT
                 )
+                reach = with_final_stage(progress.stage_reach, spec)
                 has_oracle = spec.language is not None
                 grade: OracleGrade | None = None
                 if spec.language is not None and progress.code_finished:
@@ -398,6 +403,7 @@ class BenchmarkWorkflow:
                             graph_sha=arm_graph_sha,
                             provenance=provenance,
                             oracle_id=progress.oracle_id,
+                            stage_reach=reach,
                         ),
                         **RECORD_ACT,
                     )
@@ -436,6 +442,7 @@ class BenchmarkWorkflow:
                         provenance,
                         arm_graph_sha,
                         oracle_id=progress.oracle_id,
+                        stage_reach=reach,
                     ),
                     **RECORD_ACT,
                 )

@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -257,6 +257,21 @@ class TraceBag(BaseModel):
     truncated: bool = False
 
 
+class StageReach(BaseModel):
+    """The cell's progression through pipeline stages (017 data-model §2.3)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    last_stage: str | None = None
+    last_stage_outcome: Literal["pass", "fail", "other"]
+    final_stage: str | None = None
+    tasks_total: int | None = None
+    tasks_qa_passed: int = 0
+    tasks_not_finished: int | None = None
+    merge_outcome: str | None = None
+    merge_blocking_checks: list[str] = Field(default_factory=list)
+
+
 class BenchmarkRecord(BaseModel):
     # identity
     run_id: str
@@ -308,6 +323,8 @@ class BenchmarkRecord(BaseModel):
     # 017 (Phase 7, US2): plan record carries tasks_total; merge record carries blocking_checks
     tasks_total: int | None = None
     blocking_checks: list[str] | None = None
+    # 017 (Phase 7, US2): cell record and oracle record carry stage_reach
+    stage_reach: StageReach | None = None
 
 
 class CompositeWeights(BaseModel):
@@ -468,6 +485,132 @@ def cell_progress(records: Iterable[BenchmarkRecord]) -> tuple[str | None, bool]
     last_stage = max(known, key=lambda s: order[s], default=None)
     code_finished = any(r.stage in POST_CODE_STAGES for r in records)
     return last_stage, code_finished
+
+
+def final_stage_for(spec: Any) -> str | None:
+    """The configured final stage for a benchmark case (spec §4.2, data-model §2.3)."""
+    if spec is None:
+        return None
+    if isinstance(spec, dict):
+        deploy_enabled = spec.get("deploy_enabled")
+    else:
+        deploy_enabled = getattr(spec, "deploy_enabled", None)
+    if deploy_enabled is None and not isinstance(spec, (CaseSpec, dict)):
+        return None
+    return "deploy" if deploy_enabled else "merge"
+
+
+def with_final_stage(reach: StageReach | None, spec: Any) -> StageReach | None:
+    """Stamp the resolved final stage onto a StageReach record (advisor-unlock-20)."""
+    if reach is None:
+        return None
+    return reach.model_copy(update={"final_stage": final_stage_for(spec)})
+
+
+def stage_reach_from(
+    records: Iterable[BenchmarkRecord], final_stage: str | None = None
+) -> StageReach:
+    """Compute StageReach from records of a cell run (017 data-model §2.3)."""
+    recs = list(records)
+    last_stage, _ = cell_progress(recs)
+
+    last_stage_outcome: Literal["pass", "fail", "other"] = "other"
+    if last_stage is not None:
+        stage_recs = [r for r in recs if r.stage == last_stage]
+        is_per_task = last_stage in TASK_LOOP_STAGES or any(
+            r.task_id is not None for r in stage_recs
+        )
+        if not is_per_task:
+            if stage_recs:
+                val = (
+                    stage_recs[-1].outcome.value
+                    if hasattr(stage_recs[-1].outcome, "value")
+                    else str(stage_recs[-1].outcome)
+                ).lower()
+                if val == "pass":
+                    last_stage_outcome = "pass"
+                elif val == "fail":
+                    last_stage_outcome = "fail"
+                else:
+                    last_stage_outcome = "other"
+        else:
+            task_last: dict[str, BenchmarkRecord] = {}
+            for r in stage_recs:
+                if r.task_id is not None:
+                    task_last[r.task_id] = r
+            if task_last:
+                outcomes = [
+                    (r.outcome.value if hasattr(r.outcome, "value") else str(r.outcome)).lower()
+                    for r in task_last.values()
+                ]
+                if any(o == "fail" for o in outcomes):
+                    last_stage_outcome = "fail"
+                elif all(o == "pass" for o in outcomes):
+                    last_stage_outcome = "pass"
+                else:
+                    last_stage_outcome = "other"
+
+    plan_recs = [r for r in recs if r.stage == "plan"]
+    tasks_total: int | None = plan_recs[-1].tasks_total if plan_recs else None
+
+    qa_task_last: dict[str, BenchmarkRecord] = {}
+    for r in recs:
+        if r.stage == "qa" and r.task_id is not None:
+            qa_task_last[r.task_id] = r
+    tasks_qa_passed = sum(
+        1
+        for r in qa_task_last.values()
+        if (r.outcome.value if hasattr(r.outcome, "value") else str(r.outcome)).lower() == "pass"
+    )
+
+    code_task_last: dict[str, BenchmarkRecord] = {}
+    for r in recs:
+        if r.stage == "code" and r.task_id is not None:
+            code_task_last[r.task_id] = r
+    all_task_ids = set(code_task_last.keys()) | set(qa_task_last.keys())
+    finished = sum(
+        1
+        for t in all_task_ids
+        if (
+            t in code_task_last
+            and (
+                code_task_last[t].outcome.value
+                if hasattr(code_task_last[t].outcome, "value")
+                else str(code_task_last[t].outcome)
+            ).lower()
+            == "pass"
+            and t in qa_task_last
+            and (
+                qa_task_last[t].outcome.value
+                if hasattr(qa_task_last[t].outcome, "value")
+                else str(qa_task_last[t].outcome)
+            ).lower()
+            == "pass"
+        )
+    )
+    tasks_not_finished = None if tasks_total is None else (tasks_total - finished)
+
+    merge_recs = [r for r in recs if r.stage == "merge"]
+    merge_outcome: str | None = None
+    merge_blocking_checks: list[str] = []
+    if merge_recs:
+        m_rec = merge_recs[-1]
+        merge_outcome = (
+            m_rec.outcome.value if hasattr(m_rec.outcome, "value") else str(m_rec.outcome)
+        ).lower()
+        if m_rec.blocking_checks is not None:
+            merge_blocking_checks = list(m_rec.blocking_checks)
+
+    return StageReach(
+        last_stage=last_stage,
+        last_stage_outcome=last_stage_outcome,
+        final_stage=final_stage,
+        tasks_total=tasks_total,
+        tasks_qa_passed=tasks_qa_passed,
+        tasks_not_finished=tasks_not_finished,
+        merge_outcome=merge_outcome,
+        merge_blocking_checks=merge_blocking_checks,
+    )
 
 
 def grading_from_score(has_oracle: bool, code_finished: bool, score: float | None) -> str:
