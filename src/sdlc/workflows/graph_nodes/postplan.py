@@ -12,7 +12,6 @@ with workflow.unsafe.imports_passed_through():
     from ...core.models import PipelineConfig
     from ...graph.router import Activation
     from ...stages import analyze, deploy, merge
-    from ...stages.analyze.models import untraced_criteria
     from ...stages.plan.validation import validate_task_graph
     from ...vcs import DiffInput, get_task_diff
     from ..build import run_tasks
@@ -72,10 +71,7 @@ async def analyze_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
         **ACT,
     )
     done = {r.task_id: r for r in results.task_results}
-    authoritative: list[tuple[str, str]] = [
-        (t.id, c) for t in plan.tasks for c in t.acceptance_criteria
-    ]
-    analysis = await analyze.step(
+    outcome = await analyze.step(
         nc.ctx,
         cfg=cfg,
         plan=plan,
@@ -83,14 +79,15 @@ async def analyze_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
         diff=integration_diff,
         integration_wt=integration.worktree_path,
         base_branch=nc.facts.idea.base_branch,
+        base_sha=nc.facts.base_sha,
         analyst_agent=t_analyst,
         analyst_model=resolve_role_model(cfg, "analyze"),
     )
     return NodeResult(
         port="analysis",
         payload=AnalyzeResult(
-            report=analysis,
-            untraced=untraced_criteria(authoritative, analysis),
+            report=outcome.report,
+            untraced=outcome.untraced,
             integration_diff=integration_diff,
         ),
     )

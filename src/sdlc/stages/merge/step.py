@@ -457,7 +457,7 @@ async def step(
             not untraced,
             CheckClass.ADVISORY,
             detail=(
-                f"{len(untraced)} criterion(s) without a test: {untraced[:10]}"
+                f"{len(untraced)} criterion(s) without traced evidence: {untraced[:10]}"
                 if untraced
                 else "every acceptance criterion traces to >=1 test"
             ),

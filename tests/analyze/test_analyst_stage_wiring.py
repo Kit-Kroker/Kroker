@@ -14,7 +14,7 @@ def test_analyze_stage_calls_analyst_and_builds_both_checks():
     # Analyst invoked
     assert "t_analyst," in src
     # Enforcement helper used (not an LLM verdict)
-    assert "untraced_criteria(" in src
+    assert "outcome.untraced" in src
     # Both advisory checks built in merge stage
     assert "build_check(" in MERGE_SRC and '"traceability"' in MERGE_SRC
     assert '"coverage"' in MERGE_SRC

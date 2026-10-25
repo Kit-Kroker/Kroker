@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from .activities import ACTIVITIES, InventoryInput, TaskBranchRef, build_trace_inventory
-from .models import AnalysisReport, CriterionTrace, untraced_criteria
+from .models import AnalysisReport, AnalyzeOutcome, CriterionTrace, untraced_criteria
 from .step import step
 
 __all__ = [
     "ACTIVITIES",
     "AnalysisReport",
+    "AnalyzeOutcome",
     "CriterionTrace",
     "InventoryInput",
     "TaskBranchRef",

@@ -58,7 +58,6 @@ with workflow.unsafe.imports_passed_through():
     from ..stages import (
         plan as plan_stage,
     )
-    from ..stages.analyze.models import untraced_criteria
     from ..stages.architecture.models import ArchitectureSpec
     from ..stages.clarify.models import ClarifiedRequirements
     from ..stages.code.models import HandoffSummary
@@ -525,10 +524,7 @@ class FeatureWorkflow(
             DiffInput(worktree=self._integration_wt, branch_point=self._base_sha),
             **ACT,
         )
-        authoritative: list[tuple[str, str]] = [
-            (t.id, c) for t in plan.tasks for c in t.acceptance_criteria
-        ]
-        analysis = await analyze.step(
+        outcome = await analyze.step(
             self._ctx,
             cfg=cfg,
             plan=plan,
@@ -536,10 +532,11 @@ class FeatureWorkflow(
             diff=integration_diff,
             integration_wt=self._integration_wt,
             base_branch=idea.base_branch,
+            base_sha=self._base_sha,
             analyst_agent=t_analyst,
             analyst_model=resolve_role_model(cfg, "analyze"),
         )
-        untraced = untraced_criteria(authoritative, analysis)
+        untraced = outcome.untraced
 
         await self._check_budget(cfg)  # E-33: serial boundary after analyst
 

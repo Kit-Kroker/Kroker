@@ -17,6 +17,7 @@ import asyncio
 import importlib
 import re
 from types import SimpleNamespace
+from typing import Any
 
 from sdlc.benchmarks.models import BenchmarkOutcome
 from sdlc.core.models import PipelineConfig
@@ -41,7 +42,7 @@ def _tasks():
 class _FakeCtx:
     def __init__(self, report: AnalysisReport) -> None:
         self.report = report
-        self.records = []
+        self.records: list[Any] = []
 
     def stage(self, *a, **k):
         pass

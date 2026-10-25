@@ -84,8 +84,8 @@ async def test_analyze_step_clean_context_execution():
     )
 
     assert ctx.role_called is True
-    assert isinstance(res, AnalysisReport)
-    assert res.summary == "all traced"
+    assert isinstance(res, analyze.AnalyzeOutcome)
+    assert res.report.summary == "all traced"
     assert len(ctx.records) == 1
     # Untraced is empty, so no GOTCHA retained
     assert not any(kind == MemoryKind.GOTCHA for kind, *_ in ctx.retained)

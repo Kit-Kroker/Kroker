@@ -48,7 +48,7 @@ Each scoped report carries a `CollectionState`, and a check passes only when its
 ## Failure modes
 
 - **Absolute gate failure**: Failing integration tests, lint failure, uncollected security scan, or critical security vulnerabilities terminate execution immediately without override.
-- **Advisory gate rejection**: Failing review approval, untraced criteria, below-threshold diff coverage, or unacknowledged plan drift rejected by the human reviewer.
+- **Advisory gate rejection**: Failing review approval, untraced criteria (criteria without traced evidence), below-threshold diff coverage, or unacknowledged plan drift rejected by the human reviewer.
 - **Soft verdict rejection**: LLM merge verdict rejection or sub-threshold confidence rejected upon escalation to the human reviewer.
 - **Missing required check**: a name in `MERGE_REQUIRED_CHECKS` that never reached the gate is synthesized as a failing `MISCONFIGURED` check at its manifest classification — terminal if absolute, human-waivable if advisory (MERGE-1.6).
 - **Lens never ran**: a gating lens with no recorded outcome, or one that was enabled and reached but returned nothing, fails `review_lenses_present` — human-waivable through the audited override path (MERGE-1.8).

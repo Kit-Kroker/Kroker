@@ -47,7 +47,8 @@ from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
 from sdlc.pricing import PriceUsageInput
 from sdlc.pricing import price_usage as real_price_usage
-from sdlc.stages.analyze.models import AnalysisReport, CriterionTrace
+from sdlc.stages.analyze.activities import InventoryInput
+from sdlc.stages.analyze.models import AnalysisReport, CriterionTrace, TraceInventory
 from sdlc.stages.architecture.models import ArchitectureSpec, ValidationContract
 from sdlc.stages.clarify.models import ClarifyRoute, OpenQuestion, ProbeResult
 from sdlc.stages.code.activities import CodingTaskInput
@@ -347,11 +348,30 @@ class Scenario:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+@activity.defn(name="build_trace_inventory")
+async def fake_build_trace_inventory(inp: InventoryInput) -> TraceInventory:
+    """Stub trace inventory (017 T010, advisor-unlock-19) keeping canned analysis traced."""
+    tests = [
+        "tests/test_hello.py::test_hello_returns_200",
+        "tests/test_t1.py::test_t1_returns_200",
+        "tests/test_t2.py::test_t2_returns_200",
+    ]
+    return TraceInventory(
+        changed_files=["src/app.py"],
+        tests=tests,
+        tree=["src/app.py", "tests/test_hello.py", "tests/test_t1.py", "tests/test_t2.py"],
+        task_changed={t.task_id: 1 for t in inp.tasks},
+        task_files={t.task_id: ["src/app.py"] for t in inp.tasks},
+        truncated={"changed_files": False, "tests": False, "tree": False, "task_changed": False},
+    )
+
+
 def _base_activities(specs: list = AGENT_SPECS) -> list:
     return [
         evaluate_gate,
         export_run_artifacts,
         fake_notify,
+        fake_build_trace_inventory,
         *GIT_FAKES,
         *DEPLOY_FAKES,
         *fake_agent_activities(specs),
@@ -578,6 +598,7 @@ def _research_tool_activities() -> list:
         evaluate_gate,
         export_run_artifacts,
         fake_notify,
+        fake_build_trace_inventory,
         *GIT_FAKES,
         *DEPLOY_FAKES,
         *fake_agent_activities([s for s in AGENT_SPECS if s[0] != "architect_agent"]),
@@ -596,6 +617,7 @@ def _fanout_activities() -> list:
         evaluate_gate,
         export_run_artifacts,
         fake_notify,
+        fake_build_trace_inventory,
         *GIT_FAKES,
         *DEPLOY_FAKES,
         *fake_agent_activities(
@@ -625,6 +647,7 @@ SCENARIOS: tuple[Scenario, ...] = (
             evaluate_gate,
             export_run_artifacts,
             fake_notify,
+            fake_build_trace_inventory,
             fake_resolve_tree,
             *SCAN_FAKES,
             *GIT_FAKES,
@@ -675,6 +698,7 @@ SCENARIOS: tuple[Scenario, ...] = (
             evaluate_gate,
             export_run_artifacts,
             fake_notify,
+            fake_build_trace_inventory,
             *GIT_FAKES,
             *fake_agent_activities(AGENT_SPECS),
         ],
@@ -697,6 +721,7 @@ SCENARIOS: tuple[Scenario, ...] = (
             evaluate_gate,
             export_run_artifacts,
             fake_notify,
+            fake_build_trace_inventory,
             *git_fakes_except("run_coding_task", "attach_task_evidence"),
             _staggered_coding_task(),
             _t1_gated_evidence(),
@@ -714,6 +739,7 @@ SCENARIOS: tuple[Scenario, ...] = (
             evaluate_gate,
             export_run_artifacts,
             fake_notify,
+            fake_build_trace_inventory,
             *GIT_FAKES,
             *DEPLOY_FAKES,
             *fake_agent_activities(
@@ -752,6 +778,7 @@ SCENARIOS: tuple[Scenario, ...] = (
             export_run_artifacts,
             fake_notify,
             fake_plan_research,
+            fake_build_trace_inventory,
             *GIT_FAKES,
             *DEPLOY_FAKES,
             *_research_fake_activities(),

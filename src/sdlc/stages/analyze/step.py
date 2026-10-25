@@ -19,19 +19,55 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from ...agents.loader import model_id
     from ...agents.model_ids import forwarded_model
-    from ...benchmarks.models import BenchmarkOutcome
+    from ...benchmarks.models import BenchmarkOutcome, TraceBag
     from ...benchmarks.record_builder import stage_record
     from ...core.context import StageContext
     from ...core.models import PipelineConfig, RoleUsage
     from ...memory.models import MemoryKind
     from ...vcs.git import DiffInput, get_task_diff
-    from .models import AnalysisReport, untraced_criteria
-    from .prompts import analyst_prompt
+    from .activities import InventoryInput, TaskBranchRef, build_trace_inventory
+    from .models import (
+        AnalysisReport,
+        AnalyzeOutcome,
+        criterion_keys,
+        enforce_traces,
+        untraced_criteria,
+    )
+    from .prompts import analyst_prompt, analyst_prompt_v2
 
 if TYPE_CHECKING:
     from ...workflows.models import TaskResult
     from ..architecture.models import ValidationContract
     from ..plan.models import DevTask, ImplementationPlan
+
+ANALYZE_EVIDENCE_PATCH = "017-analyze-evidence"
+
+
+def _in_workflow() -> bool:
+    try:
+        workflow.info()
+        return True
+    except Exception:
+        return False
+
+
+def _EVIDENCE_V2() -> bool:
+    """Return True if patched in workflow; False outside workflow by default."""
+    if not _in_workflow():
+        return False
+    return workflow.patched(ANALYZE_EVIDENCE_PATCH)
+
+
+async def _exec_activity(activity_fn: Any, arg: Any, **kwargs: Any) -> Any:
+    if _in_workflow():
+        return await workflow.execute_activity(activity_fn, arg, **kwargs)
+    res = activity_fn(arg)
+    import inspect
+
+    if inspect.isawaitable(res):
+        return await res
+    return res
+
 
 _ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10),
@@ -64,19 +100,21 @@ async def step(
     diff: dict[str, str] | None = None,
     contract: ValidationContract | None = None,
     base_branch: str = "main",
+    base_sha: str | None = None,
     analyst_agent: Any = None,
     analyst_model: str | None = None,
-) -> AnalysisReport:
+) -> AnalyzeOutcome:
     """Execute the analyze stage.
 
     Runs the clean-context Analyst proposer role against the integrated changes
-    and returns the AnalysisReport artifact.
+    and returns the AnalyzeOutcome artifact.
     """
     ctx.stage("analyzing", "analyze")
     _an_started = _now()
+    patched = _EVIDENCE_V2()
 
     if diff is None:
-        diff = await workflow.execute_activity(
+        diff = await _exec_activity(
             get_task_diff,
             DiffInput(worktree=integration_wt, branch_point=base_branch),
             **_ACT,
@@ -89,8 +127,6 @@ async def step(
         authoritative = [(t.id, c) for t in plan.tasks for c in t.acceptance_criteria]
     elif contract is not None:
         authoritative = [(contract.task_id, a) for a in contract.assertions]
-
-    _criteria_lines = "\n".join(f"- [{tid}] {crit}" for tid, crit in authoritative)
 
     if isinstance(task_results, dict):
         results_iter = list(task_results.values())
@@ -133,22 +169,90 @@ async def step(
     diff_stat = diff.get("stat", "") if diff is not None else ""
     diff_patch = diff.get("patch", "") if diff is not None else ""
 
+    if patched:
+        crit_objects = criterion_keys(authoritative)
+        task_refs = [
+            TaskBranchRef(
+                task_id=r.task_id,
+                branch=getattr(r, "branch", "") or "",
+                start_ref=getattr(r, "start_ref", None),
+            )
+            for r in results_iter
+        ]
+        if tasks is not None:
+            task_order = [t.id for t in tasks]
+        elif plan is not None:
+            task_order = [t.id for t in plan.tasks]
+        else:
+            task_order = [r.task_id for r in results_iter]
+
+        inv = await _exec_activity(
+            build_trace_inventory,
+            InventoryInput(
+                integration_wt=integration_wt,
+                base_sha=base_sha or base_branch,
+                tasks=task_refs,
+            ),
+            **_ACT,
+        )
+        prompt_text = analyst_prompt_v2(
+            crit_objects,
+            inv,
+            task_order,
+            _qa_lines,
+            diff_stat,
+            diff_patch,
+        )
+    else:
+        _criteria_lines = "\n".join(f"- [{tid}] {crit}" for tid, crit in authoritative)
+        prompt_text = analyst_prompt(
+            _criteria_lines,
+            _qa_lines,
+            diff_stat,
+            diff_patch,
+        )
+
     res = await ctx.run_role(
         cfg,
         "analyst",
         resolved_model,
         analyst_agent,
-        analyst_prompt(
-            _criteria_lines,
-            _qa_lines,
-            diff_stat,
-            diff_patch,
-        ),
+        prompt_text,
         into=analyst_spend,
     )
     analysis: AnalysisReport = res.output
 
-    untraced = untraced_criteria(authoritative, analysis)
+    if patched:
+        enforcement = enforce_traces(crit_objects, analysis, inv)
+        untraced = enforcement.untraced
+        trace_bag: TraceBag | None = TraceBag(
+            traced_by_test=enforcement.buckets.get("test", 0),
+            traced_by_file=enforcement.buckets.get("file", 0),
+            traced_by_command=enforcement.buckets.get("command", 0),
+            untraced=len(untraced),
+            criteria_trace=enforcement.criteria_trace,
+            truncated=enforcement.truncated,
+        )
+        command_only_set = set(enforcement.command_only)
+        error_text = (
+            None
+            if not untraced
+            else f"{len(untraced)} untraced criterion(s): "
+            + "; ".join(
+                f"{lbl} (command only)" if lbl in command_only_set else lbl for lbl in untraced[:3]
+            )
+            + ("; ..." if len(untraced) > 3 else "")
+        )
+    else:
+        untraced = untraced_criteria(authoritative, analysis)
+        trace_bag = None
+        error_text = (
+            None
+            if not untraced
+            else f"{len(untraced)} untraced criterion(s): "
+            + "; ".join(untraced[:3])
+            + ("; ..." if len(untraced) > 3 else "")
+        )
 
     await ctx.record(
         cfg,
@@ -163,15 +267,8 @@ async def step(
             outcome=(BenchmarkOutcome.PASS if not untraced else BenchmarkOutcome.FAIL),
             model=resolved_model,
             spend=analyst_spend,
-            # 012 (contract §6.1): a failing record names the number of
-            # untraced criteria and up to three of them.
-            error=(
-                None
-                if not untraced
-                else f"{len(untraced)} untraced criterion(s): "
-                + "; ".join(untraced[:3])
-                + ("; ..." if len(untraced) > 3 else "")
-            ),
+            trace=trace_bag,
+            error=error_text,
         ),
     )
 
@@ -193,4 +290,4 @@ async def step(
             metadata={"stage": "analyze", "run_id": run_id},
         )
 
-    return analysis
+    return AnalyzeOutcome(report=analysis, untraced=untraced)

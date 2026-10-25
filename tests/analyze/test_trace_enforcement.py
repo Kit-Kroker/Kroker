@@ -336,6 +336,25 @@ def test_criteria_trace_cap_and_ref_shortening():
     assert len(res_long.criteria_trace[0].evidence[0].ref) == 200
 
 
+def test_command_only_populated_and_untraced():
+    kc1 = _kc("T1#1", "T1", "command criterion")
+    kc2 = _kc("T1#2", "T1", "empty criterion")
+    report = _report(
+        CriterionTrace(
+            key="T1#1",
+            task_id="T1",
+            criterion="command criterion",
+            evidence=[Evidence(kind="command", ref="pytest tests/")],
+        )
+    )
+    inv = _inventory()
+    res = enforce_traces([kc1, kc2], report, inv)
+    assert res.buckets["command"] == 1
+    assert res.buckets["empty"] == 1
+    assert res.untraced == ["T1: command criterion", "T1: empty criterion"]
+    assert res.command_only == ["T1: command criterion"]
+
+
 def test_analysis_report_json_schema_contains_evidence_and_no_workflow_fields():
     """D-1 schema check: AnalysisReport has evidence and key, but no workflow-computed fields."""
     schema = AnalysisReport.model_json_schema()

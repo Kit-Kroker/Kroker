@@ -101,6 +101,7 @@ class TraceEnforcement(BaseModel):
 
     buckets: dict[str, int] = Field(default_factory=dict)
     untraced: list[str] = Field(default_factory=list)
+    command_only: list[str] = Field(default_factory=list)
     criteria_trace: list[CriterionAudit] = Field(default_factory=list)
     truncated: bool = False
 
@@ -152,6 +153,7 @@ def enforce_traces(
 
     buckets = {"test": 0, "file": 0, "command": 0, "empty": 0}
     untraced: list[str] = []
+    command_only: list[str] = []
     audits: list[CriterionAudit] = []
     any_ref_cut = False
 
@@ -222,8 +224,11 @@ def enforce_traces(
             bucket = "empty"
 
         buckets[bucket] += 1
+        label = f"{kc.task_id}: {kc.criterion}"
+        if bucket == "command":
+            command_only.append(label)
         if bucket in ("command", "empty"):
-            untraced.append(f"{kc.task_id}: {kc.criterion}")
+            untraced.append(label)
 
         audits.append(CriterionAudit(key=kc.key, bucket=bucket, evidence=audit_ev))
 
@@ -233,6 +238,7 @@ def enforce_traces(
     return TraceEnforcement(
         buckets=buckets,
         untraced=untraced,
+        command_only=command_only,
         criteria_trace=criteria_trace,
         truncated=truncated,
     )
