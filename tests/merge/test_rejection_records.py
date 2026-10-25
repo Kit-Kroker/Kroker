@@ -117,6 +117,7 @@ async def test_absolute_rejection_record_names_the_blocking_checks():
     assert rec.outcome is BenchmarkOutcome.FAIL
     assert rec.error is not None, "the absolute record must name what blocked"
     assert "build_integration_green" in rec.error
+    assert rec.blocking_checks == ["build_integration_green"]
 
 
 # --- (2) the advisory rejection writes one record before the return ----------
@@ -164,6 +165,7 @@ async def test_advisory_rejection_writes_one_record_naming_the_kind():
     assert rec.outcome is BenchmarkOutcome.FAIL
     assert rec.error is not None and "advisory" in rec.error
     assert "review_severity" in rec.error
+    assert rec.blocking_checks == ["review_severity"]
     # GATE_DECIDED belongs to the override path, not this one
     assert all(str(kind) != "GATE_DECIDED" for kind, _kw in ctx.emitted)
 
@@ -209,6 +211,7 @@ async def test_soft_verdict_rejection_writes_one_record_naming_the_kind():
     assert rec.quality.score == 0.0
     assert rec.outcome is BenchmarkOutcome.FAIL
     assert rec.error is not None and "soft-verdict" in rec.error
+    assert rec.blocking_checks == []
 
 
 # --- (4) an ordinary run rides the same record path --------------------------
@@ -259,3 +262,34 @@ async def test_ordinary_run_rejection_records_are_ordinary_records():
     assert advisory_rec.case_id == "_unknown", (
         "an ordinary run's rejection record carries no benchmark identity"
     )
+
+
+# --- (5) passing merge record carries empty blocking_checks ------------------
+
+
+@pytest.mark.asyncio
+async def test_passing_merge_record_carries_empty_blocking_checks():
+    passing_gate = GateReport(passed=True, checks=[], blocking=[], overridden=[])
+    ctx = _FullRecordCtx()
+    with (
+        patch("sdlc.stages.merge.step.evaluate_gate", new_callable=AsyncMock) as mock_eg,
+        patch("sdlc.stages.merge.step.run_integration_checks", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.measure_coverage", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.scoped_security_scan", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.prepare_base_worktree", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.open_pull_request", new_callable=AsyncMock) as mock_pr,
+    ):
+        mock_eg.return_value = passing_gate
+        mock_pr.return_value = "https://example.com/pr/1"
+        res = await merge.step(
+            ctx,
+            cfg=PipelineConfig(),
+            task_results=_results(),
+            integration_wt="/wt",
+            idea=_idea(),
+        )
+    assert res == "https://example.com/pr/1"
+    recs = _merge_records(ctx)
+    assert len(recs) == 1
+    assert recs[0].outcome is BenchmarkOutcome.PASS
+    assert recs[0].blocking_checks == []

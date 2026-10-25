@@ -507,6 +507,7 @@ async def step(
                 judge="contract",
                 outcome=BenchmarkOutcome.FAIL,
                 model="deterministic",
+                blocking_checks=list(gate_report.blocking),
                 error=(
                     f"merge blocked (absolute): {','.join(absolute_blocking)}; "
                     "details: "
@@ -547,6 +548,7 @@ async def step(
                     judge="contract",
                     outcome=BenchmarkOutcome.FAIL,
                     model="deterministic",
+                    blocking_checks=list(gate_report.blocking),
                     error=(
                         f"merge rejected (advisory): {','.join(advisory_blocking)}; "
                         "override declined"
@@ -632,6 +634,7 @@ async def step(
                             judge="contract",
                             outcome=BenchmarkOutcome.FAIL,
                             model="deterministic",
+                            blocking_checks=list(gate_report.blocking),
                             error=(
                                 "merge rejected (soft-verdict): "
                                 "merge verdict disapproved and gate declined"
@@ -653,6 +656,7 @@ async def step(
             judge="contract",
             outcome=(BenchmarkOutcome.REVISED if overrides else BenchmarkOutcome.PASS),
             model="deterministic",
+            blocking_checks=[],
         ),
     )
     await ctx.retain(

@@ -300,6 +300,7 @@ def test_finish_judge_gets_prep_model_and_quality_lands_in_record():
     assert rec.model == "m-plan"
     assert rec.quality.score == 0.9
     assert rec.quality.judge == "contract"
+    assert rec.tasks_total == len(PLAN.tasks)
 
 
 def test_finish_retain_message_counts_tasks():

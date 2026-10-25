@@ -305,6 +305,9 @@ class BenchmarkRecord(BaseModel):
     axis: AxisBag | None = None
     # 017 (Phase 4, US1): set only on the analyze record (patched path).
     trace: TraceBag | None = None
+    # 017 (Phase 7, US2): plan record carries tasks_total; merge record carries blocking_checks
+    tasks_total: int | None = None
+    blocking_checks: list[str] | None = None
 
 
 class CompositeWeights(BaseModel):

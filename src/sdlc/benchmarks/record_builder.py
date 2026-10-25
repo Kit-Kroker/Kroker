@@ -44,6 +44,8 @@ def stage_record(
     waste: WasteBag | None = None,
     plan_drift: PlanDrift | None = None,
     trace: TraceBag | None = None,
+    tasks_total: int | None = None,
+    blocking_checks: list[str] | None = None,
     error: str | None = None,
     run_id: str | None = None,
 ) -> BenchmarkRecord:
@@ -95,6 +97,8 @@ def stage_record(
         waste=waste,
         plan_drift=plan_drift,
         trace=trace,
+        tasks_total=tasks_total,
+        blocking_checks=blocking_checks,
         outcome=outcome,
         fix_attempts=fix_attempts,
         error=error,

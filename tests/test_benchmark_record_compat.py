@@ -57,6 +57,8 @@ def test_stored_benchmark_records_compat_and_trace_none():
                         continue
                     raise
                 assert record.trace is None
+                assert record.tasks_total is None
+                assert record.blocking_checks is None
                 validated += 1
 
     assert validated > 0
@@ -103,6 +105,31 @@ def test_stage_record_with_trace_round_trips():
     dumped = record.model_dump_json()
     loaded = BenchmarkRecord.model_validate_json(dumped)
     assert loaded.trace == trace
+
+
+def test_stage_record_with_tasks_total_and_blocking_checks_round_trips():
+    cfg = PipelineConfig()
+    now = datetime.now(UTC)
+    record = stage_record(
+        cfg=cfg,
+        stage="plan",
+        role="planner",
+        started=now,
+        ended=now,
+        quality_score=1.0,
+        judge="contract",
+        outcome=BenchmarkOutcome.PASS,
+        model="test-model",
+        tasks_total=3,
+        blocking_checks=["lint", "coverage"],
+    )
+    assert record.tasks_total == 3
+    assert record.blocking_checks == ["lint", "coverage"]
+
+    dumped = record.model_dump_json()
+    loaded = BenchmarkRecord.model_validate_json(dumped)
+    assert loaded.tasks_total == 3
+    assert loaded.blocking_checks == ["lint", "coverage"]
 
 
 @pytest.mark.parametrize(

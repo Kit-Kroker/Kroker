@@ -159,6 +159,7 @@ async def finish(
             outcome=(BenchmarkOutcome.PASS if gate.approved else BenchmarkOutcome.REVISED),
             model=prep.resolved_model,
             spend=prep.spend,
+            tasks_total=len(artifact.tasks),
         ),
     )
     await ctx.retain(
