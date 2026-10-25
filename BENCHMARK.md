@@ -121,6 +121,28 @@ Measurement pieces already in the tree, per `ROADMAP.md` and `SDLC-spec-v2.md`:
   (`<run>/<cell_id>.jsonl`); pre-012 records (no `kroker_commit`) load
   unchanged but are marked **pre-012 (untrusted)** by every report and are
   never averaged together with 012 rows.
+- **Record extensions (round 017).** Stage records and cell outputs carry
+  extended observability fields:
+  - `trace` (`TraceBag` on analyze records): captures evidence counts
+    (`traced_by_test`, `traced_by_file`, `traced_by_command`, `untraced`),
+    `criteria_trace` (`list[CriterionAudit]` entries with criteria keys, buckets,
+    and evidence), and `truncated` (if trace exceeded the size cap). Note: criteria
+    that no available evidence form can express remain untraced by contract; this
+    reflects a plan-authoring outcome, not an analyze execution defect.
+  - `tasks_total` (`int` on plan records): total tasks planned. `StageReach`
+    carries `tasks_not_finished = tasks_total - finished`.
+  - `blocking_checks` (`list[str]` on merge records): names of gating checks
+    that failed and blocked merge completion.
+  - `stage_reach` (`StageReach` on cell and oracle records): deterministic record
+    of pipeline progression: `last_stage`, `last_stage_outcome`, `final_stage`,
+    `tasks_total`, `tasks_qa_passed`, `tasks_not_finished`, `merge_outcome`, and
+    `merge_blocking_checks`.
+  - Oracle collection/import error signals: oracle records capture `exit_code`
+    and `errors` (JUnit error count) in `quality.components`. When pytest exits
+    with code 2 or 4, or JUnit errors constitute at least half the total tests
+    (2E >= N > 0), `quality.detail` records `"collection/import errors: E of N"`,
+    distinguishing environment/collection failure from test assertions without
+    altering partial credit.
 - **Memoization that is eval-aware** — `content_key` keys on
   `prompt_sha + model_id + recall_snapshot` (FR-103, NFR-6), so a benchmark
   cell that changes a prompt or a role's model invalidates exactly the affected
@@ -394,6 +416,14 @@ should emit a **row per run** with these fields, aggregated across the matrix.
 - **Context-ceiling events** — `input_tokens > fraction × context_window` and
   `compacted=true` counts, from `HarnessRunResult` (SDLC-spec §4, ADR-13). A
   harness that keeps hitting its ceiling is a signal to decompose smaller.
+- **Research spend split (round 017, FR-034 / A-1).** Trace-derived surfaces
+  include all research spend (planner, sub-question execution, synthesis, and
+  dead-attempt ledger folds): the run summary (`RunSummary.roles`), the live
+  `run_state` role view and total (`cost_usd_total`), the Cost tab, and
+  benchmark records (`BenchmarkRecord.cost`). In contrast, `_role_usage`-derived
+  surfaces exclude research spend: `_check_budget` (the pipeline budget gate),
+  `budget_counted_usd`, and per-activation `graph_view` spend. The E-75 §4.3
+  invariant `attributed + unattributed == sum(_role_usage)` continues to hold.
 
 ### 4.3 Coordination & waste (the factory's analogue of swarm thrash)
 
@@ -577,7 +607,12 @@ Acceptance into the corpus is determined by `sdlc benchmark accept --case <id>`:
    - `provisional`: all checks pass with <3 runs per arm.
    - `rejected`: with reason `reference`, `floor`, `saturated` (strong arm 1.0 on all runs),
      `degenerate` (strong arm 0.0 on all runs), or `no_separation`.
-   - `not_assessed`: separation has no runs yet or case has no oracle.
+   - `not_assessed`: separation has no runs yet, case has no oracle, or `stalled`
+     (both arms stalled at the same unfinished stage with partial credit <= 0.05;
+     note: `"not separable: stalled at <stage>"`). The stalled rule fires only when
+     every run has `stage_reach`, credit <= 0.05, all share one `last_stage`, and
+     that stage was completed by no run in either arm. `ArmEvidence.stall_points`
+     records each run's `last_stage` (empty for pre-017 runs).
 
 **Corpus table:**
 Run `sdlc benchmark corpus` to display status across all cases (state after the
@@ -602,12 +637,13 @@ provisional, 1 of 2 private**):
 - `deveval-stocktrends`: `parked`, `public` — degenerate at screening (oracle
   0.000 on all runs)
 - `theatre-box-office`: `corpus`, `private`, `isolated`, **`rejected`
-  (`no_separation`)** (round 016, pin `1e697522`, oracle `a66c0c4e`: strong
+  (`no_separation`)** on round 016 pre-017 records (pin `1e697522`, oracle `a66c0c4e`: strong
   flash 0.0179 vs weak glm-5.2 0.0179, margin 0, n=1 per arm — both arms
   graded but failed at `merge`, so the oracle scored broken integration trees;
   plan shapes differed — flash 9 tasks/chain 7, glm-5.2 12 tasks/chain 10, no
-  dangling deps — while per-tier credit was ~0 everywhere: the case did not
-  discriminate at n=1; see the follow-up on grading merge-failed runs)
+  dangling deps — while per-tier credit was ~0 everywhere; under round 017's
+  stalled verdict rule, runs carrying `stage_reach` that stall together at merge
+  evaluate to `not_assessed` (`stalled`) rather than `no_separation`)
 - `todo-api-greenfield`: `smoke`, `private`
 - `add-login-greenfield`: `probe`, `private`
 - `crew-probe`: `probe`, `private`
