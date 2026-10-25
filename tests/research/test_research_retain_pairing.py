@@ -207,10 +207,10 @@ async def test_failure_after_reassignment_retains_the_verified_brief_s_findings(
     refine_usage = _usage("refine-model")  # the exact object the fold receives
     real_fold = step_module._fold_research_usage
 
-    async def _fold_exploding_on_refine_usage(cfg, usage, into):
+    async def _fold_exploding_on_refine_usage(ctx, cfg, usage, into, *, calls=1):
         if usage is refine_usage:
             raise RuntimeError("fold exploded after the refine synthesis")
-        return await real_fold(cfg, usage, into)
+        return await real_fold(ctx, cfg, usage, into, calls=calls)
 
     monkeypatch.setattr(step_module, "_fold_research_usage", _fold_exploding_on_refine_usage)
     _script_activities(

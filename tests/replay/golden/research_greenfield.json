@@ -5,6 +5,7 @@
   "activity:setup_integration_branch",
   "activity:plan_research",
   "activity:verify_brief_activity",
+  "activity:read_dead_attempt_usage",
   "activity:agent__clarify_agent__model_request",
   "activity:price_usage",
   "timer",

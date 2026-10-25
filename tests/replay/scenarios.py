@@ -350,20 +350,20 @@ class Scenario:
 
 @activity.defn(name="build_trace_inventory")
 async def fake_build_trace_inventory(inp: InventoryInput) -> TraceInventory:
-    """Stub trace inventory (017 T010, advisor-unlock-19) keeping canned analysis traced."""
-    tests = [
-        "tests/test_hello.py::test_hello_returns_200",
-        "tests/test_t1.py::test_t1_returns_200",
-        "tests/test_t2.py::test_t2_returns_200",
-    ]
+    t = [f"tests/test_{x}.py::test_{x}_returns_200" for x in ("hello", "t1", "t2")]
     return TraceInventory(
         changed_files=["src/app.py"],
-        tests=tests,
-        tree=["src/app.py", "tests/test_hello.py", "tests/test_t1.py", "tests/test_t2.py"],
-        task_changed={t.task_id: 1 for t in inp.tasks},
-        task_files={t.task_id: ["src/app.py"] for t in inp.tasks},
-        truncated={"changed_files": False, "tests": False, "tree": False, "task_changed": False},
+        tests=t,
+        tree=["src/app.py", *t],
+        task_changed={x.task_id: 1 for x in inp.tasks},
+        task_files={x.task_id: ["src/app.py"] for x in inp.tasks},
+        truncated=dict.fromkeys(["changed_files", "tests", "tree", "task_changed"], False),
     )
+
+
+@activity.defn(name="read_dead_attempt_usage")
+async def fake_read_dead_attempt_usage(run_id: str) -> list[Any]:
+    return []
 
 
 def _base_activities(specs: list = AGENT_SPECS) -> list:
@@ -778,6 +778,7 @@ SCENARIOS: tuple[Scenario, ...] = (
             export_run_artifacts,
             fake_notify,
             fake_plan_research,
+            fake_read_dead_attempt_usage,
             fake_build_trace_inventory,
             *GIT_FAKES,
             *DEPLOY_FAKES,

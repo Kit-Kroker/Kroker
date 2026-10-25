@@ -29,6 +29,7 @@ with workflow.unsafe.imports_passed_through():
         ResearchConfig,
         RoleUsage,
     )
+    from ...observability.trace import RunEventKind
     from ...pricing import PriceUsageInput, price_usage
     from .deps import ResearchDeps
     from .models import (
@@ -44,6 +45,7 @@ with workflow.unsafe.imports_passed_through():
         SubQuestionInput,
         SynthesizeInput,
         plan_research,
+        read_dead_attempt_usage,
         research_subquestion,
         synthesize_brief,
     )
@@ -90,6 +92,27 @@ PRICE_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(seconds=30),
     retry_policy=RetryPolicy(maximum_attempts=2),
 )
+
+READ_LEDGER_ACT = workflow.ActivityConfig(
+    start_to_close_timeout=timedelta(minutes=1),
+    retry_policy=RetryPolicy(maximum_attempts=2),
+)
+
+RESEARCH_LEDGER_PATCH = "017-research-ledger"
+
+
+def _ledger_v2() -> bool:
+    if not workflow.in_workflow():
+        return False
+    return workflow.patched(RESEARCH_LEDGER_PATCH)
+
+
+async def _exec_activity(activity_fn: Any, *args: Any, **kwargs: Any) -> Any:
+    if workflow.in_workflow():
+        return await workflow.execute_activity(activity_fn, *args, **kwargs)
+    if asyncio.iscoroutinefunction(activity_fn):
+        return await activity_fn(*args)
+    return activity_fn(*args)
 
 
 class ResearchOutcome(ResearchBrief):
@@ -147,13 +170,20 @@ def _workflow_id() -> str:
         return ""
 
 
-async def _fold_research_usage(cfg: PipelineConfig, usage: RoleUsage, into: RoleUsage) -> None:
+async def _fold_research_usage(
+    ctx: StageContext,
+    cfg: PipelineConfig,
+    usage: RoleUsage,
+    into: RoleUsage,
+    *,
+    calls: int = 1,
+) -> None:
     """Fold usage from activity returns into stage spend."""
     if not (usage.input_tokens or usage.output_tokens):
         return
     usd: float | None = None
     try:
-        usd = await workflow.execute_activity(
+        usd = await _exec_activity(
             price_usage,
             PriceUsageInput(
                 model=usage.model,
@@ -166,7 +196,7 @@ async def _fold_research_usage(cfg: PipelineConfig, usage: RoleUsage, into: Role
         )
     except Exception:
         usd = None
-    into.calls += 1
+    into.calls += calls
     into.input_tokens += usage.input_tokens
     into.output_tokens += usage.output_tokens
     into.cache_read_tokens += usage.cache_read_tokens
@@ -174,8 +204,42 @@ async def _fold_research_usage(cfg: PipelineConfig, usage: RoleUsage, into: Role
     if usd is not None:
         into.cost_usd = (into.cost_usd or 0.0) + usd
 
+    if hasattr(ctx, "emit") and callable(ctx.emit):
+        emit_kwargs: dict[str, str] = {
+            "stage": "research",
+            "role": "research",
+            "model": usage.model,
+            "calls": str(calls),
+            "input_tokens": str(usage.input_tokens),
+            "output_tokens": str(usage.output_tokens),
+            "cache_read_tokens": str(usage.cache_read_tokens),
+            "cache_write_tokens": str(usage.cache_write_tokens),
+        }
+        if usd is not None:
+            emit_kwargs["cost_usd"] = str(usd)
+        ctx.emit(RunEventKind.MODEL_USAGE, **emit_kwargs)
+
+
+async def _fold_dead_attempts(
+    ctx: StageContext,
+    cfg: PipelineConfig,
+    run_id: str,
+    research_spend: RoleUsage,
+) -> None:
+    """Fold accumulated dead attempts from disk under 017-research-ledger."""
+    if not _ledger_v2():
+        return
+    dead_usages: list[RoleUsage] = await _exec_activity(
+        read_dead_attempt_usage,
+        run_id,
+        **READ_LEDGER_ACT,
+    )
+    for du in dead_usages:
+        await _fold_research_usage(ctx, cfg, du, research_spend, calls=du.calls)
+
 
 async def _fan_out_research(
+    ctx: StageContext,
     cfg: PipelineConfig,
     idea: IdeaBrief,
     deps: ResearchDeps,
@@ -200,7 +264,7 @@ async def _fan_out_research(
         ),
         **RESEARCH_PLAN_ACT,
     )
-    await _fold_research_usage(cfg, plan.usage, spend)
+    await _fold_research_usage(ctx, cfg, plan.usage, spend)
 
     results = await asyncio.gather(
         *[
@@ -222,7 +286,7 @@ async def _fan_out_research(
 
     findings = _findings_from_results(plan.sub_questions, results)
     for f in findings:
-        await _fold_research_usage(cfg, f.usage, spend)
+        await _fold_research_usage(ctx, cfg, f.usage, spend)
     return findings
 
 
@@ -264,7 +328,9 @@ async def step(
     research_spend = RoleUsage(role="research", model=resolved_model)
 
     try:
-        findings = await _fan_out_research(cfg, idea, deps, research_spend, model=resolved_model)
+        findings = await _fan_out_research(
+            ctx, cfg, idea, deps, research_spend, model=resolved_model
+        )
         if all(f.failed for f in findings):
             brief = _degraded_research_brief(RuntimeError("every sub-question failed"))
         else:
@@ -277,7 +343,7 @@ async def step(
                 ),
                 **RESEARCH_SYNTH_ACT,
             )
-            await _fold_research_usage(cfg, synth_usage, research_spend)
+            await _fold_research_usage(ctx, cfg, synth_usage, research_spend)
     except Exception as exc:
         brief = _degraded_research_brief(exc)
         findings = []
@@ -291,6 +357,7 @@ async def step(
     if violations:
         ctx.stage("research_failed", "research")
         err = "; ".join(f"{v.kind}: {v.source}: {v.quote[:80]!r}" for v in violations)
+        await _fold_dead_attempts(ctx, cfg, run_id_val, research_spend)
         await ctx.record(
             cfg,
             stage_record(
@@ -323,6 +390,7 @@ async def step(
         gaps, conflicts = _refine_seed(brief)
         try:
             findings += await _fan_out_research(
+                ctx,
                 cfg,
                 idea,
                 deps,
@@ -342,7 +410,7 @@ async def step(
                 ),
                 **RESEARCH_SYNTH_ACT,
             )
-            await _fold_research_usage(cfg, synth_usage, research_spend)
+            await _fold_research_usage(ctx, cfg, synth_usage, research_spend)
         except Exception:
             break
         verified_brief, violations = (
@@ -357,6 +425,8 @@ async def step(
             break
         brief_digest_val = brief_digest(brief)
         round_n += 1
+
+    await _fold_dead_attempts(ctx, cfg, run_id_val, research_spend)
 
     if brief_digest_val:
         for item in verified_findings_to_retain(
