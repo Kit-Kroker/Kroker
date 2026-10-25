@@ -181,6 +181,18 @@ total but not `errors` (`B/oracle.py:31-58`).
 - The score is untouched (FR-026). `OracleGrade` is an activity result,
   and the new fields default for old histories.
 - It is built only after T-finding (FR-027) confirms or amends the signal.
+- **Amendment (T003 finding, 2026-10-25).** The R1 1/56 was not a collection
+  or import failure. On both arms pytest exited 1 with errors=0 and
+  failures=55. The models broke the case's stated `POST /productions`
+  contract, and one shared test helper (`make_performance`) raised before any
+  assertion, so every test that uses it failed. FR-025's signal (exit 2/4,
+  errors ≥ half) would not have flagged it, and is not meant to. The signal is
+  kept as designed: it guards a different, real failure mode (an unimportable
+  or uncollectable tree). It does not explain or detect R1's mode.
+  Detecting a shared-setup failure (a high share of failures with one common
+  first failing frame) is out of FR-025's scope. Adding it would change the
+  FR-025 text (spec amendment, orchestrator/user call). It is not built in
+  this round unless that call is made.
 
 ## D-9. Research dead-attempt ledger (FR-030 to FR-032)
 
