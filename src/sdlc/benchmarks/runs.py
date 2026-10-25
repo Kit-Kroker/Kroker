@@ -27,6 +27,7 @@ from .models import (
     BenchmarkOutcome,
     BenchmarkRecord,
     BenchmarkScope,
+    StageReach,
     arm_label,
     cell_progress,
     grading_from_score,
@@ -86,6 +87,8 @@ class Run(BaseModel):
     axis: AxisBag | None = None
     records: tuple[BenchmarkRecord, ...] = Field(exclude=True)
     oracle_id: str | None = None
+    # 017: stage reach of the run's cell record (data-model §3)
+    stage_reach: StageReach | None = None
 
     @property
     def partial_credit(self) -> float | None:
@@ -387,6 +390,7 @@ def _build_run(run_id: str, records: list[BenchmarkRecord]) -> Run:
     arm, arm_recovered = _arm_of(records, run_id)
     parsed = parse_run_id(run_id)
     axis_records = [r for r in records if r.scope is BenchmarkScope.AXIS]
+    stage_reach = cell_records[0].stage_reach if cell_records else None
     return Run(
         run_id=run_id,
         bench_run_id=first.bench_run_id,
@@ -412,6 +416,7 @@ def _build_run(run_id: str, records: list[BenchmarkRecord]) -> Run:
         axis=(axis_records[-1].axis if axis_records else None),
         records=tuple(records),
         oracle_id=oracle_id,
+        stage_reach=stage_reach,
     )
 
 

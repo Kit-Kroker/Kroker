@@ -7,12 +7,13 @@ from typing import TYPE_CHECKING, Literal
 import yaml
 from pydantic import BaseModel, Field
 
-from sdlc.benchmarks.models import CaseRole, CaseVisibility
+from sdlc.benchmarks.models import CaseRole, CaseVisibility, StageReach
 
 if TYPE_CHECKING:
     from sdlc.benchmarks.runs import Run
 
 SEPARATION_MARGIN = 0.15
+STALL_EPSILON = 0.05
 MIN_RUNS_PER_ARM = 3
 
 Exposure = Literal["repo_public", "isolated"]
@@ -29,6 +30,7 @@ class Reason(StrEnum):
     REFERENCE = "reference"
     FLOOR = "floor"
     SATURATED = "saturated"
+    STALLED = "stalled"
     DEGENERATE = "degenerate"
     NO_SEPARATION = "no_separation"
 
@@ -45,6 +47,8 @@ class ArmEvidence(BaseModel):
     run_ids: list[str] = Field(default_factory=list)
     scores: list[float] = Field(default_factory=list)
     mean: float | None = None
+    stall_points: list[str] = Field(default_factory=list)
+    reaches: list[StageReach | None] = Field(default_factory=list, exclude=True)
 
 
 class SeparationCheck(BaseModel):
@@ -89,8 +93,12 @@ def separation(
 
     strong_runs: list[str] = []
     strong_scores: list[float] = []
+    strong_stall_points: list[str] = []
+    strong_reaches: list[StageReach | None] = []
     weak_runs: list[str] = []
     weak_scores: list[float] = []
+    weak_stall_points: list[str] = []
+    weak_reaches: list[StageReach | None] = []
     not_comparable = 0
 
     for r in runs:
@@ -103,9 +111,15 @@ def separation(
         if r.arm == strong:
             strong_runs.append(r.run_id)
             strong_scores.append(r.partial_credit if r.partial_credit is not None else 0.0)
+            if r.stage_reach is not None and r.stage_reach.last_stage is not None:
+                strong_stall_points.append(r.stage_reach.last_stage)
+            strong_reaches.append(r.stage_reach)
         elif weak is not None and r.arm == weak:
             weak_runs.append(r.run_id)
             weak_scores.append(r.partial_credit if r.partial_credit is not None else 0.0)
+            if r.stage_reach is not None and r.stage_reach.last_stage is not None:
+                weak_stall_points.append(r.stage_reach.last_stage)
+            weak_reaches.append(r.stage_reach)
         else:
             not_comparable += 1
 
@@ -123,6 +137,8 @@ def separation(
         run_ids=strong_runs,
         scores=strong_scores,
         mean=strong_mean,
+        stall_points=strong_stall_points,
+        reaches=strong_reaches,
     )
     weak_ev = (
         ArmEvidence(
@@ -130,6 +146,8 @@ def separation(
             run_ids=weak_runs,
             scores=weak_scores,
             mean=weak_mean,
+            stall_points=weak_stall_points,
+            reaches=weak_reaches,
         )
         if weak is not None
         else None
@@ -171,6 +189,41 @@ def decide(
     if separation.strong and separation.strong.scores:
         if all(s == 1.0 for s in separation.strong.scores):
             return (Verdict.REJECTED, Reason.SATURATED, None)
+
+        # Stalled verdict (017 FR-024, C-4, D-7, advisor-unlock-21):
+        # Fires between SATURATED and DEGENERATE when all four hold:
+        # 1. every graded run in both arms has stage_reach;
+        # 2. every run's partial credit is <= STALL_EPSILON (0.05);
+        # 3. all runs share one last_stage (and that stage is not None);
+        # 4. that stage did not complete: for all runs, last_stage_outcome != "pass"
+        #    or last_stage != final_stage.
+        if (
+            separation.weak
+            and separation.weak.scores
+            and separation.strong.reaches
+            and separation.weak.reaches
+            and all(r is not None for r in separation.strong.reaches + separation.weak.reaches)
+        ):
+            all_scores = separation.strong.scores + separation.weak.scores
+            if all(s <= (STALL_EPSILON + 1e-9) for s in all_scores):
+                all_reaches = [
+                    r
+                    for r in (separation.strong.reaches + separation.weak.reaches)
+                    if r is not None
+                ]
+                all_stages = [r.last_stage for r in all_reaches]
+                if all_stages and all_stages[0] is not None and len(set(all_stages)) == 1:
+                    stalled_stage = all_stages[0]
+                    if all(
+                        r.last_stage_outcome != "pass" or r.last_stage != r.final_stage
+                        for r in all_reaches
+                    ):
+                        return (
+                            Verdict.NOT_ASSESSED,
+                            Reason.STALLED,
+                            f"not separable: stalled at {stalled_stage}",
+                        )
+
         if all(s == 0.0 for s in separation.strong.scores):
             return (Verdict.REJECTED, Reason.DEGENERATE, None)
 

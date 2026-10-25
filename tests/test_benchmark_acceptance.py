@@ -74,6 +74,7 @@ def test_constants_of_names():
         "reference",
         "floor",
         "saturated",
+        "stalled",
         "degenerate",
         "no_separation",
     }
