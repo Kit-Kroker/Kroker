@@ -194,6 +194,21 @@ def _oracle_record(
                 f"detected={grade.language_detected}"
             )
         outcome = BenchmarkOutcome.PASS if grade.score >= 1.0 else BenchmarkOutcome.FAIL
+    components: dict[str, float] = {
+        "passed": float(grade.passed),
+        "total": float(grade.total),
+        "held_out_ok": float(grade.held_out_ok),
+        "language_match": float(grade.language_match),
+    }
+    quality_detail: str | None = None
+    if grade.exit_code is not None:
+        components["exit_code"] = float(grade.exit_code)
+        components["errors"] = float(grade.errors)
+        if grade.exit_code in (2, 4) or (grade.total > 0 and 2 * grade.errors >= grade.total):
+            quality_detail = f"collection/import errors: {grade.errors} of {grade.total}"
+    elif grade.total > 0 and 2 * grade.errors >= grade.total:
+        quality_detail = f"collection/import errors: {grade.errors} of {grade.total}"
+
     return BenchmarkRecord(
         run_id=run_id,
         bench_run_id=bench_run_id,
@@ -212,12 +227,8 @@ def _oracle_record(
         quality=QualityScore(
             score=grade.score,
             judge="oracle",
-            components={
-                "passed": float(grade.passed),
-                "total": float(grade.total),
-                "held_out_ok": float(grade.held_out_ok),
-                "language_match": float(grade.language_match),
-            },
+            components=components,
+            detail=quality_detail,
         ),
         speed=SpeedBag(
             wall_clock_s=(ended - started).total_seconds(), started_at=started, ended_at=ended

@@ -4,6 +4,7 @@ from sdlc.benchmarks.oracle import (
     _truncate_diff,
     grade_from_junit,
     held_out_ok,
+    junit_errors,
     language_match,
 )
 
@@ -192,3 +193,15 @@ def test_truncate_diff_truncates_long_text_with_marker():
     assert len(out) > 20000  # marker appended
     assert "truncated" in out
     assert "5000" in out  # chars omitted count
+
+
+def test_junit_errors_parsing():
+    assert junit_errors("") == 0
+    assert junit_errors("<unparseable") == 0
+    assert junit_errors(JUNIT_MIXED) == 1
+    assert junit_errors(JUNIT_ROOT_SUITE) == 0
+    multi = (
+        '<testsuites><testsuite tests="2" failures="0" errors="2"/>'
+        '<testsuite tests="3" failures="0" errors="3"/></testsuites>'
+    )
+    assert junit_errors(multi) == 5

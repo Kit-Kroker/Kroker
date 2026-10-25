@@ -28,6 +28,33 @@ from .paths import case_dir
 from .tasks import TaskGrade, grade_tasks, load_task_suite
 
 
+def _junit_counts(xml_text: str) -> tuple[int, int, int, int] | None:
+    """Parse JUnit XML suites into (tests, failures, errors, skipped).
+
+    Returns None if empty or unparseable.
+    """
+    if not xml_text.strip():
+        return None
+    try:
+        root = DET.fromstring(xml_text)
+        suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+        tests = fails = errs = skips = 0
+        for s in suites:
+            tests += int(s.get("tests", "0") or "0")
+            fails += int(s.get("failures", "0") or "0")
+            errs += int(s.get("errors", "0") or "0")
+            skips += int(s.get("skipped", "0") or "0")
+        return tests, fails, errs, skips
+    except Exception:
+        return None
+
+
+def junit_errors(xml_text: str) -> int:
+    """Parse JUnit XML report and return the errors count, 0 if empty or unparseable."""
+    counts = _junit_counts(xml_text)
+    return counts[2] if counts is not None else 0
+
+
 def grade_from_junit(xml_text: str) -> tuple[float | None, int, int, str]:
     """Parse a JUnit XML report into (score, passed, graded_total, detail).
 
@@ -40,17 +67,10 @@ def grade_from_junit(xml_text: str) -> tuple[float | None, int, int, str]:
     by untrusted code in the integration worktree."""
     if not xml_text.strip():
         return None, 0, 0, "no junit report"
-    try:
-        root = DET.fromstring(xml_text)
-        suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
-        tests = fails = errs = skips = 0
-        for s in suites:
-            tests += int(s.get("tests", "0") or "0")
-            fails += int(s.get("failures", "0") or "0")
-            errs += int(s.get("errors", "0") or "0")
-            skips += int(s.get("skipped", "0") or "0")
-    except Exception:
+    counts = _junit_counts(xml_text)
+    if counts is None:
         return None, 0, 0, "junit report unparseable"
+    tests, fails, errs, skips = counts
     graded = tests - skips
     if graded <= 0:
         return None, 0, 0, "oracle produced no gradable tests"
@@ -180,10 +200,22 @@ class OracleGrade:
     # 012 (data-model §1.6): files changed against the base branch.
     # 0 with a zero score = the empty-diff guard fired (contract §4.5).
     changed_files: int = 0
+    # 017 (data-model §3, FR-025): oracle test command exit code and JUnit errors count
+    exit_code: int | None = None
+    errors: int = 0
 
 
 def _grade(
-    score, passed, total, lang, detected, held, detail, task_grades: list[TaskGrade] | None = None
+    score,
+    passed,
+    total,
+    lang,
+    detected,
+    held,
+    detail,
+    task_grades: list[TaskGrade] | None = None,
+    exit_code: int | None = None,
+    errors: int = 0,
 ) -> OracleGrade:
     return OracleGrade(
         score=score,
@@ -195,6 +227,8 @@ def _grade(
         held_out_ok=held,
         detail=detail,
         task_grades=task_grades or [],
+        exit_code=exit_code,
+        errors=errors,
     )
 
 
@@ -324,7 +358,7 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
 
         copy_case_tree(oracle_src, os.path.join(wt, "oracle"))
         report = os.path.join(wt, "oracle-report.xml")
-        await _bounded_shell(
+        exit_code, _ = await _bounded_shell(
             adapter.oracle_test_cmd("oracle", report), wt, inp.test_timeout_s, env=run_env
         )
         try:
@@ -332,6 +366,7 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
         except OSError:
             xml_text = ""
         score, passed, total, detail = grade_from_junit(xml_text)
+        errors = junit_errors(xml_text)
         task_grades: list[TaskGrade] = []
         try:
             suite = load_task_suite(inp.case_id)
@@ -385,6 +420,8 @@ async def grade_oracle(inp: OracleInput) -> OracleGrade:
             held,
             detail + "; oracle env: isolated",
             task_grades=task_grades,
+            exit_code=exit_code,
+            errors=errors,
         )
         grade_final.changed_files = len(changed)
         return grade_final
