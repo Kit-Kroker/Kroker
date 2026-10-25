@@ -8,6 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from ...benchmarks.models import AuditEvidence, CriterionAudit
 from ..review.models import ReviewFinding
 
 
@@ -93,23 +94,6 @@ class TraceInventory(BaseModel):
     task_changed: dict[str, int | None] = Field(default_factory=dict)
     task_files: dict[str, list[str]] = Field(default_factory=dict)
     truncated: dict[str, bool] = Field(default_factory=dict)
-
-
-class AuditEvidence(BaseModel):
-    """Evaluated evidence item recorded on a criterion audit (workflow-side)."""
-
-    kind: Literal["test", "file", "task_unchanged", "command"]
-    ref: str | None = None
-    expect: Literal["present", "absent"] | None = None
-    valid: bool
-
-
-class CriterionAudit(BaseModel):
-    """Audit of one criterion's enforcement result."""
-
-    key: str
-    bucket: Literal["test", "file", "command", "empty"]
-    evidence: list[AuditEvidence] = Field(default_factory=list)
 
 
 class TraceEnforcement(BaseModel):

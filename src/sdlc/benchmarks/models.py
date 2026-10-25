@@ -229,6 +229,34 @@ class AxisBag(BaseModel):
         return self
 
 
+class AuditEvidence(BaseModel):
+    """Evaluated evidence item recorded on a criterion audit (017 data-model §1.5)."""
+
+    kind: Literal["test", "file", "task_unchanged", "command"]
+    ref: str | None = None
+    expect: Literal["present", "absent"] | None = None
+    valid: bool
+
+
+class CriterionAudit(BaseModel):
+    """Audit of one criterion's enforcement result (017 data-model §1.5)."""
+
+    key: str
+    bucket: Literal["test", "file", "command", "empty"]
+    evidence: list[AuditEvidence] = Field(default_factory=list)
+
+
+class TraceBag(BaseModel):
+    """Trace figures on the analyze record (017 data-model §2.2)."""
+
+    traced_by_test: int
+    traced_by_file: int
+    traced_by_command: int
+    untraced: int
+    criteria_trace: list[CriterionAudit] = Field(default_factory=list)
+    truncated: bool = False
+
+
 class BenchmarkRecord(BaseModel):
     # identity
     run_id: str
@@ -275,6 +303,8 @@ class BenchmarkRecord(BaseModel):
     # 015: set only on the axis record (scope AXIS). None = no axis record —
     # every stored run, read as not measured with reason "no axis record".
     axis: AxisBag | None = None
+    # 017 (Phase 4, US1): set only on the analyze record (patched path).
+    trace: TraceBag | None = None
 
 
 class CompositeWeights(BaseModel):

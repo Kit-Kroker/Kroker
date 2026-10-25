@@ -18,6 +18,7 @@ with workflow.unsafe.imports_passed_through():
         JudgeKind,
         QualityScore,
         SpeedBag,
+        TraceBag,
         WasteBag,
     )
     from .provenance import UNKNOWN_COMMIT, prompt_sha_for
@@ -42,6 +43,7 @@ def stage_record(
     attempt: int | None = None,
     waste: WasteBag | None = None,
     plan_drift: PlanDrift | None = None,
+    trace: TraceBag | None = None,
     error: str | None = None,
     run_id: str | None = None,
 ) -> BenchmarkRecord:
@@ -92,6 +94,7 @@ def stage_record(
         ),
         waste=waste,
         plan_drift=plan_drift,
+        trace=trace,
         outcome=outcome,
         fix_attempts=fix_attempts,
         error=error,
