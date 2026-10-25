@@ -10,12 +10,12 @@ file carries only what is true *here*.
 - Cross-stage calls are banned. The analyze stage does not call other stages.
 - The step signature takes `ctx: StageContext` as first argument, never the workflow instance.
 - The step never calls `ctx.gate`: analyze is proposer-only and runs prior to the merge gate.
-- The clean-context Analyst role proposes criterion->test mappings; workflow-side `untraced_criteria` enforces them.
-- The slice exports `step` and `ACTIVITIES = []`.
+- The clean-context Analyst role proposes criterion traces; workflow-side `enforce_traces` (and legacy `untraced_criteria`) enforces them.
+- The slice exports `step` and `ACTIVITIES = [build_trace_inventory]`.
 
 ## Temporal notes for this slice
 
-- `ACTIVITIES = []`.
+- `ACTIVITIES = [build_trace_inventory]`.
 - Rule 3 passthrough set: this slice passes through `core/models.py`, `workflows/models.py`, and upstream artifact models.
 
 ## State

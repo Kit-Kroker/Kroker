@@ -15,7 +15,8 @@ from sdlc.stages.plan.models import DevTask
 def test_slice_exports_step_and_activities():
     assert callable(analyze.step)
     assert isinstance(analyze.ACTIVITIES, list)
-    assert len(analyze.ACTIVITIES) == 0
+    assert len(analyze.ACTIVITIES) == 1
+    assert analyze.ACTIVITIES == [analyze.build_trace_inventory]
 
 
 @pytest.mark.clause("ANALYZE-1.1")
