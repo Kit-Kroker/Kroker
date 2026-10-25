@@ -49,6 +49,8 @@ from ..measurement import CollectionState, Measurement
 from ..notify.contract import NotifyInput, Results
 from ..observability.activities import export_run_artifacts
 from ..pricing import price_usage
+from ..stages.analyze.activities import InventoryInput
+from ..stages.analyze.models import TraceInventory
 from ..stages.code.activities import CodingTaskInput
 from ..stages.context.activities import DeltaCheckInput, RepoProbeInput
 from ..stages.deploy.models import SmokeCheckResult, SmokeState
@@ -276,6 +278,19 @@ async def deploy_rollback(inp: RollbackInput) -> None:
     return None
 
 
+@activity.defn(name="build_trace_inventory")
+async def build_trace_inventory(inp: InventoryInput) -> TraceInventory:
+    t = [f"tests/test_{x}.py::test_{x}_returns_200" for x in ("hello", "t1", "t2")]
+    return TraceInventory(
+        changed_files=["src/app.py"],
+        tests=t,
+        tree=["src/app.py", *t],
+        task_changed={x.task_id: 1 for x in inp.tasks},
+        task_files={x.task_id: ["src/app.py"] for x in inp.tasks},
+        truncated=dict.fromkeys(["changed_files", "tests", "tree", "task_changed"], False),
+    )
+
+
 SCRIPTED: list[Callable[..., Any]] = [
     classify_repo,
     check_brownfield_delta,
@@ -301,6 +316,7 @@ SCRIPTED: list[Callable[..., Any]] = [
     deploy_apply,
     smoke_check,
     deploy_rollback,
+    build_trace_inventory,
 ]
 
 # Production activities the dry run keeps: pure code, or a write under the

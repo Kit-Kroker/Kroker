@@ -434,6 +434,7 @@ async def _grade_with_stub(monkeypatch, tmp_path, repo, run_id, junit=_PASS_JUNI
     async def fake_shell(cmd, cwd, timeout_s, env=None):
         calls.append((cmd, env))
         Path(cwd, "oracle-report.xml").write_text(junit, encoding="utf-8")
+        return (0, "")
 
     monkeypatch.setattr(oracle_mod, "_bounded_shell", fake_shell)
     cases = tmp_path / f"cases-{run_id.replace('/', '_').replace('#', '_')}"
@@ -499,6 +500,7 @@ async def test_passing_grade_then_empty_branch_in_one_process_scores_zero(monkey
     async def fake_shell(cmd, cwd, timeout_s, env=None):  # 012 T016: env kwarg
         first_calls.append(cmd)
         Path(cwd, "oracle-report.xml").write_text(_PASS_JUNIT, encoding="utf-8")
+        return (0, "")
 
     monkeypatch.setattr(oracle_mod, "_bounded_shell", fake_shell)
     cases = tmp_path / "cases"

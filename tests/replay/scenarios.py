@@ -47,8 +47,7 @@ from sdlc.notify.contract import NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
 from sdlc.pricing import PriceUsageInput
 from sdlc.pricing import price_usage as real_price_usage
-from sdlc.stages.analyze.activities import InventoryInput
-from sdlc.stages.analyze.models import AnalysisReport, CriterionTrace, TraceInventory
+from sdlc.stages.analyze.models import AnalysisReport, CriterionTrace
 from sdlc.stages.architecture.models import ArchitectureSpec, ValidationContract
 from sdlc.stages.clarify.models import ClarifyRoute, OpenQuestion, ProbeResult
 from sdlc.stages.code.activities import CodingTaskInput
@@ -348,30 +347,11 @@ class Scenario:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
-@activity.defn(name="build_trace_inventory")
-async def fake_build_trace_inventory(inp: InventoryInput) -> TraceInventory:
-    t = [f"tests/test_{x}.py::test_{x}_returns_200" for x in ("hello", "t1", "t2")]
-    return TraceInventory(
-        changed_files=["src/app.py"],
-        tests=t,
-        tree=["src/app.py", *t],
-        task_changed={x.task_id: 1 for x in inp.tasks},
-        task_files={x.task_id: ["src/app.py"] for x in inp.tasks},
-        truncated=dict.fromkeys(["changed_files", "tests", "tree", "task_changed"], False),
-    )
-
-
-@activity.defn(name="read_dead_attempt_usage")
-async def fake_read_dead_attempt_usage(run_id: str) -> list[Any]:
-    return []
-
-
 def _base_activities(specs: list = AGENT_SPECS) -> list:
     return [
         evaluate_gate,
         export_run_artifacts,
         fake_notify,
-        fake_build_trace_inventory,
         *GIT_FAKES,
         *DEPLOY_FAKES,
         *fake_agent_activities(specs),
@@ -598,7 +578,6 @@ def _research_tool_activities() -> list:
         evaluate_gate,
         export_run_artifacts,
         fake_notify,
-        fake_build_trace_inventory,
         *GIT_FAKES,
         *DEPLOY_FAKES,
         *fake_agent_activities([s for s in AGENT_SPECS if s[0] != "architect_agent"]),
@@ -617,7 +596,6 @@ def _fanout_activities() -> list:
         evaluate_gate,
         export_run_artifacts,
         fake_notify,
-        fake_build_trace_inventory,
         *GIT_FAKES,
         *DEPLOY_FAKES,
         *fake_agent_activities(
@@ -647,7 +625,6 @@ SCENARIOS: tuple[Scenario, ...] = (
             evaluate_gate,
             export_run_artifacts,
             fake_notify,
-            fake_build_trace_inventory,
             fake_resolve_tree,
             *SCAN_FAKES,
             *GIT_FAKES,
@@ -698,7 +675,6 @@ SCENARIOS: tuple[Scenario, ...] = (
             evaluate_gate,
             export_run_artifacts,
             fake_notify,
-            fake_build_trace_inventory,
             *GIT_FAKES,
             *fake_agent_activities(AGENT_SPECS),
         ],
@@ -721,7 +697,6 @@ SCENARIOS: tuple[Scenario, ...] = (
             evaluate_gate,
             export_run_artifacts,
             fake_notify,
-            fake_build_trace_inventory,
             *git_fakes_except("run_coding_task", "attach_task_evidence"),
             _staggered_coding_task(),
             _t1_gated_evidence(),
@@ -739,7 +714,6 @@ SCENARIOS: tuple[Scenario, ...] = (
             evaluate_gate,
             export_run_artifacts,
             fake_notify,
-            fake_build_trace_inventory,
             *GIT_FAKES,
             *DEPLOY_FAKES,
             *fake_agent_activities(
@@ -778,8 +752,6 @@ SCENARIOS: tuple[Scenario, ...] = (
             export_run_artifacts,
             fake_notify,
             fake_plan_research,
-            fake_read_dead_attempt_usage,
-            fake_build_trace_inventory,
             *GIT_FAKES,
             *DEPLOY_FAKES,
             *_research_fake_activities(),

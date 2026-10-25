@@ -411,7 +411,7 @@ def test_oracle_task_records_error_grade_carries_its_reason():
     assert r02.error is None
 
 
-def test_oracle_task_records_none_score_is_fail():
+def test_oracle_task_records_none_score_is_not_evaluated():
     from sdlc.benchmarks.models import BenchmarkOutcome as BO
 
     t0 = datetime(2026, 7, 23, tzinfo=UTC)
@@ -420,7 +420,7 @@ def test_oracle_task_records_none_score_is_fail():
         TaskGrade(task_id="t01", error_class="functional", score=None, judge="error", detail="oops")
     )
     recs = _oracle_task_records(_cell(), grade, "b1", "run1", t0, t1, provenance=_PROV)
-    assert recs[0].outcome is BO.FAIL
+    assert recs[0].outcome is BO.NOT_EVALUATED
     assert recs[0].quality.score is None
 
 

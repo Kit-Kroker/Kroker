@@ -58,6 +58,7 @@ with workflow.unsafe.imports_passed_through():
     from ..stages import (
         plan as plan_stage,
     )
+    from ..stages.analyze.models import untraced_criteria as untraced_criteria
     from ..stages.architecture.models import ArchitectureSpec
     from ..stages.clarify.models import ClarifiedRequirements
     from ..stages.code.models import HandoffSummary
