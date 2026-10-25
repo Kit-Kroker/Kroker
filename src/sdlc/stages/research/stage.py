@@ -22,6 +22,7 @@ from ...agents.model_ids import single_retry_layer
 from ...core.models import (
     RoleUsage,
 )
+from .budget_store import append_dead_attempt, read_dead_attempts
 from .deps import BudgetExceeded, ResearchDeps
 from .merge import merge_briefs
 from .models import (
@@ -269,92 +270,102 @@ async def _research_subquestion_impl(
 
     run_usage = RunUsage()
     try:
-        async with _heartbeating():
-            usage_limits = UsageLimits(request_limit=inp.max_requests)
-            if _model is not None:
-                result = await agent.run(
-                    sub_question_prompt(sub.question),
-                    deps=deps,
-                    usage_limits=usage_limits,
-                    model=_model,
-                    usage=run_usage,
-                )
-            else:
-                # 004 T032 (D7a/FR-001 path b): inp.model is the run's
-                # resolved research model, already an activity input — the
-                # wire is unchanged. Forward it only when it differs from the
-                # registry model; an equal or absent override calls exactly as
-                # before (E1), so no-override behaviour and replays are
-                # untouched.
-                from sdlc.agents.roles import REGISTRY
-
-                registry_model = REGISTRY["research"].model
-                if registry_model is not None and inp.model != registry_model:
+        try:
+            async with _heartbeating():
+                usage_limits = UsageLimits(request_limit=inp.max_requests)
+                if _model is not None:
                     result = await agent.run(
                         sub_question_prompt(sub.question),
                         deps=deps,
                         usage_limits=usage_limits,
-                        model=inp.model,
+                        model=_model,
                         usage=run_usage,
                     )
                 else:
-                    result = await agent.run(
-                        sub_question_prompt(sub.question),
-                        deps=deps,
-                        usage_limits=usage_limits,
-                        usage=run_usage,
-                    )
-    except (BudgetExceeded, UsageLimitExceeded) as exc:
-        # Expected exhaustion: degrade. NEVER re-raise -- the counter is
-        # persisted, so a retry hits the same exhausted cap and burns six
-        # attempts with backoff for a guaranteed failure. The caller-owned
-        # run_usage survives the abort and holds every completed request's
-        # spend, so the finding reports and prices it (008 FR-001/FR-002);
-        # a run refused before any request completed returns today's zero
-        # object and the workflow's fold still skips it (EC1).
-        activity.logger.info("sub-question %s degraded: %s", sub.id, exc)
-        if run_usage.input_tokens or run_usage.output_tokens:
-            usage = _role_usage(run_usage, inp.model, calls=1)
-        else:
-            usage = RoleUsage(role="research", model=inp.model)
-        return SubQuestionFinding(sub_question=sub, brief=_degraded(sub, str(exc)), usage=usage)
-    except UnexpectedModelBehavior as exc:
-        # 008 D4 (FR-003/FR-004): the run died in retry exhaustion (or any
-        # other model-behaviour dead end) AFTER a refused charge -- the
-        # record on the run's own deps is the evidence. The counter is
-        # persisted, so a retry would burn five more attempts against a cap
-        # that stays exhausted: degrade ONCE, naming the refused bound and
-        # the terminal error. With an EMPTY record this is not
-        # budget-caused: the bare raise keeps today's retry path (FR-005).
-        if not deps.refusals:
-            raise
-        reason = f"{deps.refusals[0]}; then {_first_sentence(str(exc))}"
-        activity.logger.warning(
-            "sub-question %s degraded after a refused charge: %s (terminal error: %s)",
-            sub.id,
-            deps.refusals[0],
-            exc,
-        )
-        if run_usage.input_tokens or run_usage.output_tokens:
-            usage = _role_usage(run_usage, inp.model, calls=1)
-        else:
-            usage = RoleUsage(role="research", model=inp.model)
-        return SubQuestionFinding(sub_question=sub, brief=_degraded(sub, reason), usage=usage)
-    except asyncio.CancelledError:
-        # Graceful shutdown cancels in-flight activities. Heartbeat on the way
-        # out so the server learns immediately rather than waiting out
-        # start_to_close before rescheduling.
-        activity.heartbeat()
-        activity.logger.warning("sub-question %s cancelled mid-flight", sub.id)
-        raise
+                    # 004 T032 (D7a/FR-001 path b): inp.model is the run's
+                    # resolved research model, already an activity input — the
+                    # wire is unchanged. Forward it only when it differs from the
+                    # registry model; an equal or absent override calls exactly as
+                    # before (E1), so no-override behaviour and replays are
+                    # untouched.
+                    from sdlc.agents.roles import REGISTRY
 
-    # The research agent's output_type IS ResearchBrief; the generic run()
-    # result is untyped, so state the contract here.
-    return SubQuestionFinding(
-        sub_question=sub,
-        brief=cast(ResearchBrief, result.output),
-        usage=_usage_of(result, inp.model),
-    )
+                    registry_model = REGISTRY["research"].model
+                    if registry_model is not None and inp.model != registry_model:
+                        result = await agent.run(
+                            sub_question_prompt(sub.question),
+                            deps=deps,
+                            usage_limits=usage_limits,
+                            model=inp.model,
+                            usage=run_usage,
+                        )
+                    else:
+                        result = await agent.run(
+                            sub_question_prompt(sub.question),
+                            deps=deps,
+                            usage_limits=usage_limits,
+                            usage=run_usage,
+                        )
+        except (BudgetExceeded, UsageLimitExceeded) as exc:
+            # Expected exhaustion: degrade. NEVER re-raise -- the counter is
+            # persisted, so a retry hits the same exhausted cap and burns six
+            # attempts with backoff for a guaranteed failure. The caller-owned
+            # run_usage survives the abort and holds every completed request's
+            # spend, so the finding reports and prices it (008 FR-001/FR-002);
+            # a run refused before any request completed returns today's zero
+            # object and the workflow's fold still skips it (EC1).
+            activity.logger.info("sub-question %s degraded: %s", sub.id, exc)
+            if run_usage.input_tokens or run_usage.output_tokens:
+                usage = _role_usage(run_usage, inp.model, calls=1)
+            else:
+                usage = RoleUsage(role="research", model=inp.model)
+            return SubQuestionFinding(sub_question=sub, brief=_degraded(sub, str(exc)), usage=usage)
+        except UnexpectedModelBehavior as exc:
+            # 008 D4 (FR-003/FR-004): the run died in retry exhaustion (or any
+            # other model-behaviour dead end) AFTER a refused charge -- the
+            # record on the run's own deps is the evidence. The counter is
+            # persisted, so a retry would burn five more attempts against a cap
+            # that stays exhausted: degrade ONCE, naming the refused bound and
+            # the terminal error. With an EMPTY record this is not
+            # budget-caused: the bare raise keeps today's retry path (FR-005).
+            if not deps.refusals:
+                raise
+            reason = f"{deps.refusals[0]}; then {_first_sentence(str(exc))}"
+            activity.logger.warning(
+                "sub-question %s degraded after a refused charge: %s (terminal error: %s)",
+                sub.id,
+                deps.refusals[0],
+                exc,
+            )
+            if run_usage.input_tokens or run_usage.output_tokens:
+                usage = _role_usage(run_usage, inp.model, calls=1)
+            else:
+                usage = RoleUsage(role="research", model=inp.model)
+            return SubQuestionFinding(sub_question=sub, brief=_degraded(sub, reason), usage=usage)
+        except asyncio.CancelledError:
+            # Graceful shutdown cancels in-flight activities. Heartbeat on the way
+            # out so the server learns immediately rather than waiting out
+            # start_to_close before rescheduling.
+            activity.heartbeat()
+            activity.logger.warning("sub-question %s cancelled mid-flight", sub.id)
+            raise
+
+        # The research agent's output_type IS ResearchBrief; the generic run()
+        # result is untyped, so state the contract here.
+        return SubQuestionFinding(
+            sub_question=sub,
+            brief=cast(ResearchBrief, result.output),
+            usage=_usage_of(result, inp.model),
+        )
+    except BaseException:
+        if run_usage.input_tokens or run_usage.output_tokens:
+            try:
+                append_dead_attempt(deps.run_id, _role_usage(run_usage, inp.model, calls=1))
+            except Exception as exc:
+                activity.logger.warning(
+                    "failed to record dead attempt spend for %s: %s", deps.run_id, exc
+                )
+        raise
 
 
 @activity.defn(name="research_subquestion")
@@ -363,6 +374,12 @@ async def research_subquestion(inp: SubQuestionInput) -> SubQuestionFinding:
     why the `_model`/`_agent` test seams cannot live on the registered
     activity's own signature."""
     return await _research_subquestion_impl(inp)
+
+
+@activity.defn(name="read_dead_attempt_usage")
+async def read_dead_attempt_usage(run_id: str) -> list[RoleUsage]:
+    """Read accumulated dead attempt token spend from disk for run_id (FR-030)."""
+    return read_dead_attempts(run_id)
 
 
 class _SynthesisOutput(BaseModel):

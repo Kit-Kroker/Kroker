@@ -12,11 +12,11 @@ file carries only what is true *here*.
 - The step interacts with the human research gate through `ctx.gate("research", ...)` and does not bypass it.
 - Research executes fan-out activities (`plan_research`, parallel `research_subquestion`, `synthesize_brief`).
 - Grounding verification is enforced via `verify_brief_activity`; ungrounded briefs degrade the stage and are not retained.
-- The slice exports `step` and `ACTIVITIES = [plan_research, research_subquestion, synthesize_brief, verify_brief_activity]`.
+- The slice exports `step` and `ACTIVITIES = [plan_research, research_subquestion, synthesize_brief, verify_brief_activity, read_dead_attempt_usage]`.
 
 ## Temporal notes for this slice
 
-- Activities: `plan_research`, `research_subquestion`, `synthesize_brief`, `verify_brief_activity`.
+- Activities: `plan_research`, `research_subquestion`, `synthesize_brief`, `verify_brief_activity`, `read_dead_attempt_usage`.
 - Rule 3 passthrough set: this slice passes through `core/models.py`, `workflows/models.py`, and upstream artifact models.
 - Single retry layer (004): the planner and synthesis agents constructed in
   `stage.py` are built through `sdlc.agents.model_ids.single_retry_layer()`
@@ -66,7 +66,10 @@ a defect, it is listed for the orchestrator, not fixed here (006-B4).
   of zeroed. A run that ends in retry exhaustion after a refused charge
   degrades the same way, in one attempt (`UnexpectedModelBehavior` with a
   refusal noted on the run's own deps record); any other error is
-  retried as before, and an attempt that raises still loses its spend.
+  retried as before, with dead-attempt spend recorded to disk
+  (`dead-attempts.jsonl`) and folded at stage end (FR-030). Known limits
+  where spend is not recovered: SIGKILL of the worker process, hard worker
+  timeout, and early human gate-REJECT returns before the fold.
 - REVISE past `max_refine_rounds`, or any exception during refine, breaks
   out with the last good brief — which is then retained, judged and
   recorded PASS (`step.py`). "Last good" is not one brief everywhere

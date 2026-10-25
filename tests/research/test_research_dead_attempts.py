@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -139,3 +140,149 @@ def test_concurrent_thread_appends(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert total.output_tokens == 100
     assert total.cache_read_tokens == 40
     assert total.cache_write_tokens == 20
+
+
+from unittest.mock import MagicMock
+
+from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.usage import RunUsage
+from temporalio import activity
+
+from sdlc.stages.research.deps import BudgetExceeded, ResearchDeps
+from sdlc.stages.research.models import ResearchBrief, SubQuestion
+from sdlc.stages.research.stage import SubQuestionInput, _research_subquestion_impl
+
+
+class _StubAgent:
+    def __init__(self, exc: BaseException | None = None, tokens: int = 0) -> None:
+        self.exc = exc
+        self.tokens = tokens
+
+    async def run(self, prompt: str, *, deps=None, usage=None, **kwargs) -> Any:
+        if usage is not None and self.tokens:
+            usage.input_tokens = self.tokens
+            usage.output_tokens = self.tokens // 2
+        if self.exc is not None:
+            raise self.exc
+        return MagicMock(output=ResearchBrief(summary="done"), usage=usage or RunUsage())
+
+
+def _make_inp(run_id: str) -> SubQuestionInput:
+    sub = SubQuestion(id="sq-1", question="What is X?")
+    deps = ResearchDeps(
+        run_id=run_id,
+        provider="fake",
+        max_searches=5,
+        max_fetches=5,
+        max_cost_usd=1.0,
+    )
+    return SubQuestionInput(
+        sub_question=sub,
+        deps=deps,
+        model="test-model",
+        max_requests=10,
+        max_run_cost_usd=1.0,
+    )
+
+
+@pytest.mark.asyncio
+async def test_subquestion_impl_spends_then_raises_model_http_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
+    run_id = "run-http-err"
+    inp = _make_inp(run_id)
+    agent = _StubAgent(
+        exc=ModelHTTPError(status_code=503, model_name="test-model", body="overloaded"),
+        tokens=120,
+    )
+
+    with pytest.raises(ModelHTTPError):
+        await _research_subquestion_impl(inp, _agent=agent)
+
+    records = read_dead_attempts(run_id)
+    assert len(records) == 1
+    assert records[0].model == "test-model"
+    assert records[0].input_tokens == 120
+    assert records[0].output_tokens == 60
+    assert records[0].calls == 1
+
+
+@pytest.mark.asyncio
+async def test_subquestion_impl_raise_zero_usage_no_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
+    run_id = "run-zero-usage"
+    inp = _make_inp(run_id)
+    agent = _StubAgent(
+        exc=ModelHTTPError(status_code=503, model_name="test-model", body="overloaded"),
+        tokens=0,
+    )
+
+    with pytest.raises(ModelHTTPError):
+        await _research_subquestion_impl(inp, _agent=agent)
+
+    records = read_dead_attempts(run_id)
+    assert records == []
+
+
+@pytest.mark.asyncio
+async def test_subquestion_impl_ledger_write_error_still_reraises_original(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
+    run_id = "run-write-err"
+    inp = _make_inp(run_id)
+    agent = _StubAgent(
+        exc=ModelHTTPError(status_code=503, model_name="test-model", body="overloaded"),
+        tokens=100,
+    )
+
+    monkeypatch.setattr(
+        "sdlc.stages.research.stage.append_dead_attempt",
+        MagicMock(side_effect=TimeoutError("ledger locked")),
+    )
+
+    with pytest.raises(ModelHTTPError):
+        await _research_subquestion_impl(inp, _agent=agent)
+
+
+@pytest.mark.asyncio
+async def test_subquestion_impl_cancelled_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import asyncio
+
+    monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
+    monkeypatch.setattr(activity, "heartbeat", lambda: None)
+    run_id = "run-cancelled"
+    inp = _make_inp(run_id)
+    agent = _StubAgent(exc=asyncio.CancelledError(), tokens=80)
+
+    with pytest.raises(asyncio.CancelledError):
+        await _research_subquestion_impl(inp, _agent=agent)
+
+    records = read_dead_attempts(run_id)
+    assert len(records) == 1
+    assert records[0].model == "test-model"
+    assert records[0].input_tokens == 80
+    assert records[0].output_tokens == 40
+
+
+@pytest.mark.asyncio
+async def test_subquestion_impl_budget_exceeded_degrade_path_no_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
+    run_id = "run-budget-degrade"
+    inp = _make_inp(run_id)
+    agent = _StubAgent(exc=BudgetExceeded("search limit reached"), tokens=100)
+
+    res = await _research_subquestion_impl(inp, _agent=agent)
+    assert "search limit reached" in res.brief.summary
+    assert res.usage.input_tokens == 100
+
+    # Degrade returns normally, so no dead attempt line is written
+    records = read_dead_attempts(run_id)
+    assert records == []

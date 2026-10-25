@@ -30,7 +30,7 @@ from sdlc.stages.research.models import (
 def test_slice_exports_step_and_activities():
     assert callable(research.step)
     assert isinstance(research.ACTIVITIES, list)
-    assert len(research.ACTIVITIES) == 4
+    assert len(research.ACTIVITIES) == 5
     act_names = {
         getattr(a, "__temporal_activity_definition", MagicMock()).name for a in research.ACTIVITIES
     }
@@ -39,6 +39,7 @@ def test_slice_exports_step_and_activities():
         "research_subquestion",
         "synthesize_brief",
         "verify_brief_activity",
+        "read_dead_attempt_usage",
     }.issubset(act_names)
 
 
