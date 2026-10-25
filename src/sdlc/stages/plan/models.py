@@ -6,8 +6,20 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from ...artifacts.generated import is_generated
 from ...core.models import ArtifactRef
 from ..architecture.models import ValidationContract
+
+PLAN_DRIFT_PATCH = "017-plan-drift-generated"
+
+
+def _DRIFT_V2() -> bool:
+    """Return True outside workflow (new runs) or workflow.patched in-flight."""
+    from temporalio import workflow
+
+    if not workflow.in_workflow():
+        return True
+    return workflow.patched(PLAN_DRIFT_PATCH)
 
 
 class DevTask(BaseModel):
@@ -48,10 +60,14 @@ def _norm_path(p: str) -> str:
     return p.replace("\\", "/").strip().lstrip("./")
 
 
-def compute_plan_drift(task: DevTask, files_touched: list[str]) -> PlanDrift | None:
+def compute_plan_drift(
+    task: DevTask, files_touched: list[str], *, drop_generated: bool = False
+) -> PlanDrift | None:
     """Pure. None when either side is absent -- a prediction that was never
     made cannot be adhered to, and a diff that does not exist cannot be
     compared."""
+    if drop_generated:
+        files_touched = [p for p in files_touched if not is_generated(p)]
     if not task.files_hint or not files_touched:
         return None
     hinted = {_norm_path(p) for p in task.files_hint}

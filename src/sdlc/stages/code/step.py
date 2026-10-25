@@ -51,7 +51,7 @@ with workflow.unsafe.imports_passed_through():
     from ...pending import GateContext
     from ...vcs import DiffInput, DriftInput, DriftReport, check_test_drift, get_task_diff
     from ...workflows.crew import FS_ACT, CrewTaskInput, CrewTaskWorkflow
-    from ..plan.models import DevTask, compute_plan_drift
+    from ..plan.models import _DRIFT_V2, DevTask, compute_plan_drift
     from ..qa import step as qa_step
     from ..qa.activities import QAInput, run_test_suite
     from ..qa.step import _fix_loop_issues
@@ -775,7 +775,7 @@ async def step(
         )
 
         task_passed = bool(qa_raw.tests_passed and not qa.issues and not drift.found)
-        plan_drift = compute_plan_drift(task, diff.get("files", []))
+        plan_drift = compute_plan_drift(task, diff.get("files", []), drop_generated=_DRIFT_V2())
 
         await ctx.record(
             cfg,
