@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import json
 import os
 import time
 from pathlib import Path
 
+from ...core.models import RoleUsage
 from .deps import Budget, BudgetExceeded, ResearchDeps, charge
 
 _LOCK_TIMEOUT_S = 10.0
@@ -185,3 +187,93 @@ async def charge_scoped(
             run_lock.unlink(missing_ok=True)
     finally:
         scope_lock.unlink(missing_ok=True)
+
+
+def dead_attempts_path(run_id: str) -> Path:
+    """runs/<run_id>/research/dead-attempts.jsonl. Root from $SDLC_RUNS_ROOT."""
+    root = Path(os.environ.get("SDLC_RUNS_ROOT", "runs"))
+    return root / run_id / "research" / "dead-attempts.jsonl"
+
+
+def append_dead_attempt(run_id: str, usage: RoleUsage) -> None:
+    """Append one JSON line for a failed/cancelled research attempt.
+
+    Uses a single os.write on an O_APPEND file descriptor without locks
+    so concurrent sub-question attempts can append safely and CancelledError
+    handlers never stall.
+    """
+    path = dead_attempts_path(run_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "model": usage.model,
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cache_read_tokens": usage.cache_read_tokens,
+        "cache_write_tokens": usage.cache_write_tokens,
+        "calls": usage.calls or 1,
+    }
+    line = (json.dumps(payload) + "\n").encode("utf-8")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+    if hasattr(os, "O_BINARY"):
+        flags |= os.O_BINARY
+    fd = os.open(path, flags, 0o666)
+    try:
+        os.write(fd, line)
+    finally:
+        os.close(fd)
+
+
+def read_dead_attempts(run_id: str) -> list[RoleUsage]:
+    """Read dead-attempt ledger, summing usage per model in first-seen order.
+
+    Skips corrupt lines and returns [] if the file does not exist.
+    """
+    path = dead_attempts_path(run_id)
+    if not path.is_file():
+        return []
+
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    totals: dict[str, RoleUsage] = {}
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            data = json.loads(line)
+            if not isinstance(data, dict):
+                continue
+            model = data["model"]
+            if not isinstance(model, str) or not model:
+                continue
+            calls = int(data.get("calls", 1))
+            in_tok = int(data.get("input_tokens", 0))
+            out_tok = int(data.get("output_tokens", 0))
+            cr_tok = int(data.get("cache_read_tokens", 0))
+            cw_tok = int(data.get("cache_write_tokens", 0))
+        except Exception:
+            continue
+
+        if model not in totals:
+            totals[model] = RoleUsage(
+                role="research",
+                model=model,
+                calls=calls,
+                input_tokens=in_tok,
+                output_tokens=out_tok,
+                cache_read_tokens=cr_tok,
+                cache_write_tokens=cw_tok,
+                cost_usd=None,
+            )
+        else:
+            existing = totals[model]
+            existing.calls += calls
+            existing.input_tokens += in_tok
+            existing.output_tokens += out_tok
+            existing.cache_read_tokens += cr_tok
+            existing.cache_write_tokens += cw_tok
+
+    return list(totals.values())
