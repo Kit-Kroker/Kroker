@@ -47,6 +47,7 @@ IN_SCOPE_PREFIXES = (
 EXEMPT_PATTERNS = (
     "docs/superpowers/*",  # write-once historical records
     "records/*",  # verbatim Claude Design exports
+    "docs/reports/*.html",  # generated artifacts: design-tool and benchmark exports
     "benchmarks/*",  # the measurement instrument's vendored corpus
     "tests/fixtures/hindsight-openapi.json",  # verbatim vendored schema
     "*/__fixtures__/*",  # generated fixture dumps (AGENTS.md)
