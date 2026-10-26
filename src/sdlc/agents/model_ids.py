@@ -129,8 +129,9 @@ def single_retry_layer() -> ResolveModelId[Any]:
     005 A5), and then sets the provider client's SDK retry count to 0 when
     the client exposes an integer ``max_retries`` (anthropic/openai style;
     a client with no such knob has opt-in-only retries and is left
-    untouched). The workflow engine's attempt budget is then the only
-    retry layer (FR-007..FR-009).
+    untouched). Resolved models are wrapped in ``RetryBackoffModel`` so
+    transient 429 and 5xx errors back off activity-side with jitter
+    before failing non-retryable to the workflow engine (FR-007..FR-009, 017).
 
     Builds no HTTP client; credentials and timeouts stay the SDK's own
     defaults (FR-009). No import happens until first resolution.
@@ -138,10 +139,13 @@ def single_retry_layer() -> ResolveModelId[Any]:
     from pydantic_ai.capabilities import ResolveModelId
     from pydantic_ai.models import infer_model
 
+    from .retry_policy import RetryBackoffModel
+
     def _resolve(ctx: Any, model_id: str):
-        return infer_model(
+        model = infer_model(
             model_id, provider_factory=lambda name: _provider_for(name, single_retry=True)
         )
+        return RetryBackoffModel(model)
 
     return ResolveModelId(_resolve)
 

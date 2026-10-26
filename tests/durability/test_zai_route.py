@@ -43,10 +43,18 @@ from sdlc.agents.model_ids import (
     single_retry_layer,
     zai_base_url,
 )
-from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG, AGENT_ACTIVITY_MAX_ATTEMPTS, REGISTRY
+from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG, REGISTRY
 from sdlc.agents.runner import SdlcPydanticAIPlugin
 
 from ._http_stub import ProviderStub
+
+
+@pytest.fixture(autouse=True)
+def _zero_retry_delays(monkeypatch):
+    import sdlc.agents.retry_policy as retry_policy_mod
+
+    monkeypatch.setattr(retry_policy_mod, "DEFAULT_LADDER", (0.0, 0.0, 0.0))
+
 
 _ZAI_ID = "zai:glm-5.3"
 _GATEWAY = "https://gateway.example.com/zai"
@@ -137,7 +145,7 @@ def test_single_retry_layer_zeroes_sdk_retries_for_zai():
     assert model.client.max_retries == 0, (
         f"single_retry_layer() resolved {_ZAI_ID!r} with max_retries="
         f"{model.client.max_retries!r}; the engine's attempt budget must be "
-        f"the only retry layer (C3, FR-006, 004 contract unchanged)"
+        f"the single-retry seam (C3, FR-006, 017 backoff model wrapping)"
     )
 
 
@@ -392,10 +400,11 @@ async def test_durable_zai_always_429_costs_exactly_the_attempt_budget():
     none — every call lands on /chat/completions under the stub base, and
     exhaustion fails through the activity carrying the 429 (FR-011)."""
     _, count, paths, failure = await _run_one_durable_call("always_429")
-    assert count == AGENT_ACTIVITY_MAX_ATTEMPTS, (
+    # 017: 429 retries activity-side with exponential backoff (1 initial + 3 retries
+    # from DEFAULT_LADDER), then fails non-retryable without engaging Temporal activity retries.
+    assert count == 4, (
         f"always-429 stub saw {count} HTTP requests for one durable model "
-        f"request; the budget is {AGENT_ACTIVITY_MAX_ATTEMPTS} — the SDK "
-        f"must add none beneath the engine (FR-006)"
+        f"request; expected 4 (1 initial + 3 backoff retries, then non-retryable failure)"
     )
     assert paths and all(p.endswith("/chat/completions") for p in paths), (
         f"observed paths {paths!r}; every durable attempt must ride the zai "
@@ -424,10 +433,11 @@ async def test_durable_zai_always_400_costs_one_request_per_engine_attempt():
     assert "ApplicationError" in chain, (
         f"expected the activity's ApplicationError in the failure chain, got:\n{chain}"
     )
-    assert count == AGENT_ACTIVITY_MAX_ATTEMPTS, (
-        f"always-400 stub saw {count} HTTP requests; the SDK must add no "
-        f"retries for a non-retryable provider error — one request per "
-        f"engine attempt ({AGENT_ACTIVITY_MAX_ATTEMPTS}; E7, 004-corrected)"
+    # 017: non-transient 4xx errors fail fast immediately without activity-side
+    # or engine-side retries (raised as non-retryable ApplicationError).
+    assert count == 1, (
+        f"always-400 stub saw {count} HTTP requests; non-transient 4xx errors "
+        f"must fail fast on the first attempt without retries (017)"
     )
     assert paths and all(p.endswith("/chat/completions") for p in paths), (
         f"observed paths {paths!r}; only the stub route may be tried — a "

@@ -20,14 +20,19 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
 
-import httpx
 from pydantic_ai import Agent
-from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.models import Model, ModelResolutionContext
 from pydantic_ai.settings import ModelSettings
 from temporalio import activity
 
 from ..agents.model_ids import single_retry_layer
+from ..agents.retry_policy import (
+    DEFAULT_LADDER,
+    DEFAULT_TRANSIENT_STATUSES,
+    RetryBackoffModel,
+    extract_status_and_retry_after,
+    is_transient,
+)
 from .models import QualityScore
 from .vetoes import check, parse_vetoes
 
@@ -108,30 +113,27 @@ _LOGGER = logging.getLogger(__name__)
 # runs died to gemini-3.5-flash 503s with zero retries — _judge_sync turns
 # the exception into a graceful error score and the activity then completes
 # "successfully", so Temporal's retry policy never engages. Transient
-# statuses retry here, at the seam both staged phases share; anything else
-# (or the last attempt) still raises into the fail-safe in _judge_sync.
-_JUDGE_RETRY_DELAYS: tuple[float, ...] = (5.0, 30.0, 120.0)
-_JUDGE_RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+# statuses retry in RetryBackoffModel when wrapped via single_retry_layer
+# (or in the legacy loop below for raw unwrapped models), at the seam both
+# staged phases share; anything else (or the last attempt) still raises into
+# the fail-safe in _judge_sync.
+_JUDGE_RETRY_DELAYS: tuple[float, ...] = DEFAULT_LADDER
+_JUDGE_RETRY_STATUSES = DEFAULT_TRANSIENT_STATUSES
 
 
 def _status_of(exc: Exception) -> int | None:
     """The HTTP status behind a model-call failure, whatever the provider
     stack raised: pydantic-ai's ModelHTTPError or the raw httpx error."""
-    if isinstance(exc, ModelHTTPError):
-        return exc.status_code
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code
-    return None
+    status, _, _ = extract_status_and_retry_after(exc)
+    return status
 
 
 def _transient(exc: Exception) -> bool:
     """Worth a backoff retry: a transient HTTP status, or a provider hang
     (read timeout) — the R0 attempt-5 probe watched a toy prompt time out
     minutes after an identical probe returned 200."""
-    if isinstance(exc, httpx.TimeoutException):
-        return True
-    status = _status_of(exc)
-    return status is not None and status in _JUDGE_RETRY_STATUSES
+    status, _, timed_out = extract_status_and_retry_after(exc)
+    return is_transient(status, timed_out=timed_out)
 
 
 _JUDGE_SYSTEM_PROMPT = (
@@ -222,6 +224,9 @@ def _run_judge_agent(model, system_prompt: str, user_prompt: str) -> str:
         # "(provider default)". Read at call time (env overridable).
         model_settings=ModelSettings(max_tokens=judge_max_tokens()),
     )
+    if isinstance(model, RetryBackoffModel):
+        return agent.run_sync(user_prompt).output
+
     for attempt in range(len(_JUDGE_RETRY_DELAYS) + 1):
         try:
             result = agent.run_sync(user_prompt)

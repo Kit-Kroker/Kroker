@@ -523,9 +523,10 @@ def test_run_judge_agent_builds_a_google_string_through_the_framework(monkeypatc
         "(plan D2 site 6, contract C7)"
     )
     reference = infer_model("google:gemini-2.5-pro")  # the plain framework path
-    assert type(built) is type(reference), (
+    inner = getattr(built, "wrapped", built)
+    assert type(inner) is type(reference), (
         "the judge site built a different model class than the framework's "
-        f"own path ({type(built).__name__} vs {type(reference).__name__}); a "
+        f"own path ({type(inner).__name__} vs {type(reference).__name__}); a "
         "non-zai string must be built exactly as infer_model builds it (C4)"
     )
     assert built.model_name == reference.model_name, (

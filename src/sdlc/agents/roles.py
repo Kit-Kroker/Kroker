@@ -33,7 +33,7 @@ from .payload_guard import payload_guard
 # never resolves and the stage HANGS instead of failing into its degrade /
 # fail-closed path; every other activity config in this repo was already
 # bounded and this was the sole outlier. Errors raised non-retryable (e.g.
-# ApplicationError(non_retryable=True), the e2e exception-test contract)
+# ApplicationError(non_retryable=True), such as non-transient 4xx or exhausted 429/5xx backoff)
 # still fail on the first attempt -- Temporal honors that flag regardless
 # of the policy -- so the bound only turns "retries forever" into
 # "retries, exhausts, raises".

@@ -13,9 +13,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+
 from sdlc.agents.retry_policy import (
     DEFAULT_CAP,
     DEFAULT_LADDER,
+    extract_status_and_retry_after,
     is_transient,
     parse_retry_after,
     retry_delay,
@@ -230,3 +232,104 @@ class TestRetryWrapperPin:
                 f"Judge call on always-429 saw {stub.count} requests; "
                 f"pin <= 4 must hold without multiplication between wrapper and judge loop"
             )
+
+    @pytest.mark.asyncio
+    async def test_wrapper_honors_retry_after_and_succeeds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Wrapper retries after Retry-After header and succeeds on attempt 2."""
+        from pydantic_ai import Agent
+
+        from sdlc.agents.model_ids import single_retry_layer
+        from tests.durability._http_stub import ProviderStub
+
+        monkeypatch.setattr("sdlc.agents.retry_policy.DEFAULT_LADDER", (0.0, 0.0, 0.0))
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "stub-key")
+        with ProviderStub(mode="retry_after_once") as stub:
+            monkeypatch.setenv("ANTHROPIC_BASE_URL", stub.base_url)
+            model = single_retry_layer().resolver(None, "anthropic:claude-sonnet-5")  # type: ignore[arg-type]
+            agent = Agent(model)
+            res = await agent.run("ping")
+            assert res.output == "ok"
+            assert stub.count == 2, f"expected 2 requests on retry_after_once, got {stub.count}"
+
+    @pytest.mark.asyncio
+    async def test_wrapper_fails_fast_on_excessive_retry_after(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Wrapper fails fast on attempt 1 when Retry-After exceeds 120s cap."""
+        from pydantic_ai import Agent
+        from pydantic_ai.exceptions import ModelHTTPError
+
+        from sdlc.agents.model_ids import single_retry_layer
+        from tests.durability._http_stub import ProviderStub
+
+        monkeypatch.setenv("OPENAI_API_KEY", "stub-key")
+        with ProviderStub(mode="always_429_excessive_retry_after") as stub:
+            monkeypatch.setenv("OPENAI_BASE_URL", stub.base_url)
+            model = single_retry_layer().resolver(None, "openai:gpt-5.2")  # type: ignore[arg-type]
+            agent = Agent(model)
+            with pytest.raises(ModelHTTPError) as exc_info:
+                await agent.run("ping")
+            assert exc_info.value.status_code == 429
+            assert stub.count == 1, (
+                f"expected fail-fast on attempt 1 with Retry-After > 120s, got {stub.count}"
+            )
+
+
+class TestExtractStatusAndRetryAfter:
+    def test_model_http_error_with_numeric_retry_after(self) -> None:
+        from pydantic_ai.exceptions import ModelHTTPError
+
+        err = ModelHTTPError(429, "test-model", headers={"retry-after": "12.5"})
+        status, delay, timed_out = extract_status_and_retry_after(err)
+        assert status == 429
+        assert delay == 12.5
+        assert not timed_out
+
+    def test_model_http_error_with_date_retry_after(self) -> None:
+        from pydantic_ai.exceptions import ModelHTTPError
+
+        err = ModelHTTPError(
+            503, "test-model", headers={"retry-after": "Wed, 21 Oct 2026 07:28:00 GMT"}
+        )
+        status, delay, timed_out = extract_status_and_retry_after(err)
+        assert status == 503
+        assert delay is not None
+        assert not timed_out
+
+    def test_model_http_error_without_headers(self) -> None:
+        from pydantic_ai.exceptions import ModelHTTPError
+
+        err = ModelHTTPError(400, "test-model")
+        status, delay, timed_out = extract_status_and_retry_after(err)
+        assert status == 400
+        assert delay is None
+        assert not timed_out
+
+    def test_httpx_status_error_with_headers(self) -> None:
+        import httpx
+
+        req = httpx.Request("POST", "http://example.com")
+        resp = httpx.Response(429, headers={"retry-after": "45"}, request=req)
+        err = httpx.HTTPStatusError("rate limited", request=req, response=resp)
+        status, delay, timed_out = extract_status_and_retry_after(err)
+        assert status == 429
+        assert delay == 45.0
+        assert not timed_out
+
+    def test_httpx_timeout_exception(self) -> None:
+        import httpx
+
+        err = httpx.ReadTimeout("hang")
+        status, delay, timed_out = extract_status_and_retry_after(err)
+        assert status is None
+        assert delay is None
+        assert timed_out
+
+    def test_arbitrary_exception(self) -> None:
+        err = RuntimeError("something broke")
+        status, delay, timed_out = extract_status_and_retry_after(err)
+        assert status is None
+        assert delay is None
+        assert not timed_out

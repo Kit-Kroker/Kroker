@@ -86,8 +86,11 @@ class ProviderStub:
     """Counting stub server. ``base_url`` is what ANTHROPIC_BASE_URL /
     OPENAI_BASE_URL should be set to."""
 
-    def __init__(self, mode: str = "always_429") -> None:
+    def __init__(
+        self, mode: str = "always_429", extra_headers: dict[str, str] | None = None
+    ) -> None:
         self.mode = mode
+        self.extra_headers = extra_headers
         self.count = 0
         self.requests: list[tuple[str, str]] = []  # (path, mode-at-request)
         self.bodies: list[bytes] = []  # raw request bodies, in arrival order
@@ -97,13 +100,20 @@ class ProviderStub:
         class _Handler(BaseHTTPRequestHandler):
             protocol_version = "HTTP/1.1"
 
-            def _reply(self, status: int, body: dict[str, object]) -> None:
+            def _reply(
+                self,
+                status: int,
+                body: dict[str, object],
+                extra_headers: dict[str, str] | None = None,
+            ) -> None:
                 payload = json.dumps(body).encode()
                 self.send_response(status)
-                # Deliberately NO retry-after: the SDK's retry decision must
-                # be driven by the status code alone.
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(payload)))
+                hdrs = extra_headers or stub.extra_headers
+                if hdrs:
+                    for k, v in hdrs.items():
+                        self.send_header(k, v)
                 self.end_headers()
                 self.wfile.write(payload)
 
@@ -122,6 +132,13 @@ class ProviderStub:
                 if mode == "always_429":
                     self._reply(429, _ANTHROPIC_429 if anthropic else _OPENAI_429)
                     return
+                if mode == "always_429_excessive_retry_after":
+                    self._reply(
+                        429,
+                        _ANTHROPIC_429 if anthropic else _OPENAI_429,
+                        extra_headers={"Retry-After": "300"},
+                    )
+                    return
                 if mode == "always_400":
                     self._reply(400, _ANTHROPIC_400 if anthropic else _OPENAI_400)
                     return
@@ -136,6 +153,21 @@ class ProviderStub:
                 if mode == "fail_once":
                     if stub.count == 1:
                         self._reply(429, _ANTHROPIC_429 if anthropic else _OPENAI_429)
+                        return
+                    if anthropic:
+                        self._reply(200, _ANTHROPIC_VALID)
+                    elif self.path.endswith("/v1/responses"):
+                        self._reply(200, _OPENAI_RESPONSES_VALID)
+                    else:
+                        self._reply(200, _OPENAI_CHAT_VALID)
+                    return
+                if mode == "retry_after_once":
+                    if stub.count == 1:
+                        self._reply(
+                            429,
+                            _ANTHROPIC_429 if anthropic else _OPENAI_429,
+                            extra_headers={"Retry-After": "0"},
+                        )
                         return
                     if anthropic:
                         self._reply(200, _ANTHROPIC_VALID)

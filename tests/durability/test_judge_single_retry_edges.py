@@ -37,6 +37,15 @@ from sdlc.benchmarks.judge import _run_judge_agent
 
 from ._http_stub import ProviderStub
 
+
+@pytest.fixture(autouse=True)
+def _zero_retry_delays(monkeypatch):
+    import sdlc.agents.retry_policy as retry_policy_mod
+
+    monkeypatch.setattr(retry_policy_mod, "DEFAULT_LADDER", (0.0, 0.0, 0.0))
+    monkeypatch.setattr(judge_mod, "_JUDGE_RETRY_DELAYS", (0.0, 0.0, 0.0))
+
+
 # The judge's production provider family (anthropic:), resolved through the
 # seam and pointed at the counting stub via the SDK's own base-url env. The
 # dummy key satisfies client construction and never reaches the wire. (The

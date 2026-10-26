@@ -52,6 +52,14 @@ from ._http_stub import ProviderStub
 
 pytestmark = [pytest.mark.temporal]
 
+
+@pytest.fixture(autouse=True)
+def _zero_retry_delays(monkeypatch):
+    import sdlc.agents.retry_policy as retry_policy_mod
+
+    monkeypatch.setattr(retry_policy_mod, "DEFAULT_LADDER", (0.0, 0.0, 0.0))
+
+
 _REGISTRY_MODEL = REGISTRY["architect"].model
 assert _REGISTRY_MODEL is not None
 
@@ -132,7 +140,9 @@ async def _run_one_call(mode: str) -> tuple[str | None, int, BaseException | Non
 @pytest.mark.asyncio
 async def test_always_429_requests_are_bounded_by_the_attempt_budget():
     _, count, failure = await _run_one_call("always_429")
-    assert count <= AGENT_ACTIVITY_MAX_ATTEMPTS, (
+    # 017: 429 retries activity-side with exponential backoff (1 initial + 3 retries
+    # from DEFAULT_LADDER), then fails non-retryable without engaging Temporal activity retries.
+    assert count == 4, (
         f"always-429 stub saw {count} HTTP requests for one model request; "
         f"the engine's attempt budget is {AGENT_ACTIVITY_MAX_ATTEMPTS} — the "
         f"provider SDK is still stacking retries beneath it (FR-008)"
@@ -167,7 +177,9 @@ async def test_always_400_costs_one_request_per_engine_attempt():
     # E7, base-measured (baseline.md): the SDK never retries a 400, the
     # engine attempts the activity exactly its budget times — so one HTTP
     # request per engine attempt. A stacked SDK would exceed this.
-    assert count == AGENT_ACTIVITY_MAX_ATTEMPTS, (
+    # 017: non-transient 4xx errors fail fast immediately without activity-side
+    # or engine-side retries (raised as non-retryable ApplicationError).
+    assert count == 1, (
         f"always-400 stub saw {count} HTTP requests; the SDK must add no "
         f"retries for a non-retryable provider error — expected exactly one "
         f"request per engine attempt ({AGENT_ACTIVITY_MAX_ATTEMPTS}; E7)"
@@ -321,7 +333,9 @@ async def test_override_provider_always_429_is_bounded_by_the_attempt_budget():
     assert "ApplicationError" in chain and "429" in chain, (
         f"expected the activity failure carrying the 429, got:\n{chain}"
     )
-    assert stub.count <= AGENT_ACTIVITY_MAX_ATTEMPTS, (
+    # 017: 429 retries activity-side with exponential backoff (1 initial + 3 retries
+    # from DEFAULT_LADDER), then fails non-retryable without engaging Temporal activity retries.
+    assert stub.count == 4, (
         f"always-429 stub saw {stub.count} HTTP requests for one model request "
         f"through the override's provider; the budget is "
         f"{AGENT_ACTIVITY_MAX_ATTEMPTS} and the SDK must add none beneath it "

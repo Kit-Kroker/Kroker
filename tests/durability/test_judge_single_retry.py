@@ -114,6 +114,9 @@ def test_judge_call_always_429_is_bounded_by_the_judge_loop_budget(monkeypatch):
     RED on main: resolve_model keeps the openai SDK default max_retries=2,
     so the stub sees 4 loop attempts x 3 SDK requests = 12."""
     delays = (0.0, 0.0, 0.0)  # instant backoff: every loop attempt still runs
+    import sdlc.agents.retry_policy as retry_policy_mod
+
+    monkeypatch.setattr(retry_policy_mod, "DEFAULT_LADDER", delays)
     monkeypatch.setattr(judge_mod, "_JUDGE_RETRY_DELAYS", delays)
     # The openai client is built inside the call and reads both at
     # construction; a dummy key never reaches the stub's wire.
