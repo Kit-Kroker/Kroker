@@ -1,2 +1,2 @@
 kind: proposer
-model: anthropic:claude-sonnet-4-5
+model: zai:glm-5.3-flash

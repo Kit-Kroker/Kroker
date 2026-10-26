@@ -3,8 +3,9 @@
 # expensive error is a false approve.
 #
 # The model must not BE dev's or reviewer's model (check_adversary_model,
-# by model id -- NOT by provider prefix; see spec OQ-A4). claude-sonnet-4-6
-# is genuinely different weights from glm-5.2 and ARCHITECTURE section 4 puts
-# adversarial instruction-following on exactly this tier.
+# by model id -- NOT by provider prefix; see spec OQ-A4). glm-5.3-flash is a
+# different model id from dev (glm-5.3) and reviewer (glm-5.3), which is all
+# the check requires; it is the same vendor family, so the decorrelation is
+# weaker than the claude-sonnet-4-6 it replaced.
 kind: proposer
-model: anthropic:claude-sonnet-4-6
+model: zai:glm-5.3-flash

@@ -69,8 +69,8 @@ def test_shipped_registry_models_are_the_005_targets():
     flipped models exactly — the 11 glm proposer roles on ``zai:glm-5.3``,
     dev and devops on ``zai-coding-plan/glm-5.3`` (moved off glm-5.2 by
     7f5191d0, test stays on ``zai-coding-plan/glm-5.2``), adversary on
-    ``anthropic:claude-sonnet-4-6`` and discover/risk on
-    ``anthropic:claude-sonnet-4-5`` — and ADR-6 still holds on the flipped
+    ``zai:glm-5.3-flash`` and discover/risk on
+    ``zai:glm-5.3-flash`` — and ADR-6 still holds on the flipped
     registry (validate_registry does not raise)."""
     roles = load_registry()
     for name in (
@@ -95,9 +95,9 @@ def test_shipped_registry_models_are_the_005_targets():
             f"{name} ships {roles[name].model!r}; the harness default is "
             f"'{_HARNESS_MODELS[name]}' (dev/devops glm-5.3 since 7f5191d0)"
         )
-    assert roles["adversary"].model == "anthropic:claude-sonnet-4-6"
-    assert roles["discover"].model == "anthropic:claude-sonnet-4-5"
-    assert roles["risk"].model == "anthropic:claude-sonnet-4-5"
+    assert roles["adversary"].model == "zai:glm-5.3-flash"
+    assert roles["discover"].model == "zai:glm-5.3-flash"
+    assert roles["risk"].model == "zai:glm-5.3-flash"
     validate_registry(roles)  # must not raise: ADR-6 on the flipped registry
 
 
