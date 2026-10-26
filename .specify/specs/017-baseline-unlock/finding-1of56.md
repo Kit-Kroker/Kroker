@@ -35,7 +35,7 @@ Runs analyzed:
    - In both runs, exactly 55 of 56 tests call the shared helper `make_performance`, and all 55 failed at that call site:
      - **glm-5.3-flash (`1792347162`)**: `app.py:412` required `"name"` and rejected `"title"` with 400 Bad Request (`{"error":{"code":"invalid_name","message":"name is required"}}`).
      - **glm-5.2 (`1792359046`)**: `app.py:628` returned `{"id": production_id}` instead of `{"production_id": ...}`, causing `KeyError: 'production_id'`.
-   - In both runs, the only passing test was `oracle/test_catalogue.py::test_unknown_performance_is_refused` (`client.get("/performances/unknown-id/seats")`), which does not call `make_performance` and correctly received a 404/refusal response.
+   - In both runs, the only passing test was the one that requests the seats of an unknown performance id, which does not call `make_performance` and correctly received a 404/refusal response.
 
 4. **Pipeline stage localization**:
    - Inspected run pipeline artifacts under `runs/pipeline/bench-theatre-box-office-*`:
