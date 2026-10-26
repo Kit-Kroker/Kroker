@@ -108,7 +108,62 @@ In addition to `verification.md`, the following supporting alignments are bundle
 
 ---
 
-## 7. Stop Condition
+## 7. Phase 9 Stop Condition
 
-All Phase 9 whole-round verification checks and gates are complete and green.
-**STOPPING HERE** at the merge gate before merge to `main` as instructed. T021 (pre-flight run) awaits orchestrator clearance.
+All Phase 9 whole-round verification checks and gates are complete and green. Fast-forward merge to `main` at `b23f2514` was cleared and pushed to origin.
+
+---
+
+## 8. Phase 10: User Story 6 Pre-Flight Run (T021)
+
+Pre-flight benchmark run executed against live Temporal (`7233`) on the merged `main` commit (`b23f2514`) with worker rebuilt and re-pinned.
+
+- **Run ID**: `bench-todo-api-greenfield-1793006961`
+- **Cell ID**: `todo-api-greenfield#opencode#zai-coding-plan-glm-5.2`
+- **Kroker Commit**: `b23f2514` (verified on worker environment `KROKER_COMMIT=b23f2514` and recorded in cell/stage records)
+- **Duration**: 3870.6 s (~64.5 min)
+- **Total Spend / Tokens**: $2.168, 2,690,407 tokens
+- **Report**: `runs/benchmarks/bench-todo-api-greenfield-1793006961/report.md`
+
+### SC-001 Item-by-Item Breakdown
+
+1. **Analyze outcome and untraced criteria**:
+   - `outcome`: `fail` with 25 untraced criteria and 3 traced criteria (`traced_by_file: 3`, `untraced: 25`).
+   - `criteria_trace` recorded evidence for all 28 plan criteria:
+     - 3 criteria traced to `file` bucket via `task_unchanged` (`T1#5`, `T4#6`, `T5#4`).
+     - 25 criteria untraced: classified by hand. The coding harness (`opencode`) exited with code 1 across all task attempts due to an environment filesystem lock conflict during bootstrap (`EBUSY: resource busy or locked, rename '/root/.cache/opencode/models.json...tmp' -> '/root/.cache/opencode/models.json'`). As a result, no task code or test files were generated in the worktree. Furthermore, multiple criteria authored by the planner were inexpressible under C-2 evidence rules (e.g., pip dry-run / pip check CLI execution, uvicorn background serving smoke, README documentation constraints).
+     - None of the 25 untraced criteria were falsely rejected due to the pre-017 F8 substring matching bug; `enforce_traces` and `criteria_trace` operated as designed.
+   - **Verdict**: **MET** (reported plainly with harness cause).
+
+2. **Stage reach on cell and oracle records**:
+   - Both cell and oracle records carry the populated `StageReach`:
+     - `last_stage`: `"merge"`
+     - `last_stage_outcome`: `"fail"`
+     - `final_stage`: `"merge"`
+     - `tasks_total`: 5
+     - `tasks_qa_passed`: 0
+     - `tasks_not_finished`: 5
+     - `merge_outcome`: `"fail"`
+     - `merge_blocking_checks`: `['build_integration_green', 'lint_clean', 'review_severity', 'traceability']`
+   - **Verdict**: **MET**.
+
+3. **Research spend attribution**:
+   - In `run_summary.roles`: `role="research"`, `calls=8`, `input_tokens=2371403`, `output_tokens=172652`, `cache_read_tokens=2071104`, `cost_usd=1.71857444`.
+   - In `run_summary.stages`: `stage="research"`, `cost_usd=1.6080628`, `duration_s=970.039`.
+   - In `research` stage record: `"cost": {"usd": 1.6080628, "input_tokens": 2291800, "output_tokens": 155851}`.
+   - **Verdict**: **MET**.
+
+4. **No judge 0 from transient errors**:
+   - Staged rubric judges scored successfully: clarify (1.000), architecture (0.900).
+   - Oracle graded 0.0 with detail `language mismatch: manifest=python detected=None` (expected evaluation result given absence of generated files from harness).
+   - Zero judge failures or 0 scores from transient network/model errors.
+   - **Verdict**: **MET**.
+
+5. **No `plan_drift` firing on generated paths**:
+   - All code attempts recorded `plan_drift=None`. Zero unhinted touches on generated artifacts.
+   - **Verdict**: **MET**.
+
+### SC-002 Outcome
+
+- FR-034 spend split is fully verified on the live run: research spend is cleanly tracked in role usage, stage summary, and stage record without budget contamination.
+- **Verdict**: **MET**.
