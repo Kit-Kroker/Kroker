@@ -342,6 +342,12 @@ def test_failure_types_is_exactly_the_temporal_and_plugin_set():
         expected.add(UnsupportedEventLoopError)
     except ImportError:
         pass
+    try:
+        from pydantic_ai.workspaces import WorkspaceError
+
+        expected.add(WorkspaceError)  # joined the plugin's list in pydantic-ai 2.61
+    except ImportError:
+        pass
     assert set(FAILURE_TYPES) == expected
     assert len(FAILURE_TYPES) == len(expected)  # no extras, no duplicates
     assert all(isinstance(t, type) and issubclass(t, BaseException) for t in FAILURE_TYPES)

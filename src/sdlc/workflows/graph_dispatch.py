@@ -32,6 +32,15 @@ with workflow.unsafe.imports_passed_through():
     except ImportError:
         _PLUGIN_EXTRAS = ()
 
+    # WorkspaceError joined the plugin's list in pydantic-ai 2.61 (a workspace
+    # that is gone or refused a call); same conditional-import contract.
+    try:
+        from pydantic_ai.workspaces import WorkspaceError
+
+        _PLUGIN_EXTRAS = (*_PLUGIN_EXTRAS, WorkspaceError)
+    except ImportError:
+        pass
+
     from ..core.models import NodeFailure, PipelineConfig
     from ..graph.model import PipelineGraph
     from ..graph.node_types import NodeTypeSpec, resolve_stage

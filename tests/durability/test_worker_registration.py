@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 
 from sdlc.worker import get_worker_activities
+from tests.durability._upgrade_delta import ADDED_ACTIVITY_SUFFIXES
 
 _FIXTURE = (
     Path(__file__).resolve().parents[1]
@@ -80,9 +81,9 @@ def test_registered_agent_delta_matches_expectation():
                 f"{gone} disappeared without a removed_suffix"
             )
         for fresh in (n for n in actual if n not in old):
-            assert any(fresh.endswith(s) for s in delta["added_suffixes"]), (
-                f"{fresh} appeared without an added_suffix"
-            )
+            assert any(
+                fresh.endswith(s) for s in (*delta["added_suffixes"], *ADDED_ACTIVITY_SUFFIXES)
+            ), f"{fresh} appeared without an added_suffix"
         for kept in old:
             if not any(kept.endswith(s) for s in delta["removed_suffixes"]):
                 assert kept in actual, f"{kept} did not survive the migration"

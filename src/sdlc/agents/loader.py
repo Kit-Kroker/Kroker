@@ -574,8 +574,20 @@ def build_agents(
                 )
             else:
                 agent = build(cfg.model, cfg.instructions, model_settings, **build_kwargs)
-        except TypeError as exc:
+        except Exception as exc:
             if durability_factory is None:
+                raise
+            # pydantic-ai 2.61 rejects a second durable-execution engine while
+            # constructing the Agent (before from_agent could); same fail-closed
+            # RegistryError as _verify_durability, naming the role.
+            from pydantic_ai.exceptions import UserError
+
+            if isinstance(exc, UserError):
+                raise RegistryError(
+                    f"role '{name}': {exc} Only the loader's durability_factory may "
+                    f"supply TemporalDurability; forward it, never add a second one."
+                ) from exc
+            if not isinstance(exc, TypeError):
                 raise
             # A pre-003 build signature rejects the capabilities keyword: the
             # contract fails this closed as a registry error naming the role,

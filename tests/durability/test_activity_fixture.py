@@ -18,6 +18,7 @@ from pathlib import Path
 from pydantic_ai.durable_exec.temporal import TemporalDurability
 
 from sdlc.agents.roles import ALL_TEMPORAL_AGENTS
+from tests.durability._upgrade_delta import ADDED_ACTIVITY_SUFFIXES, ADDED_NON_RETRYABLE
 
 _FIXTURE = (
     Path(__file__).resolve().parents[1]
@@ -90,7 +91,12 @@ def test_registered_delta_matches_expected_registered_delta():
         for gone in sorted(old - actual):
             assert any(gone.endswith(s) for s in delta["removed_suffixes"]), (name, gone)
         for fresh in sorted(actual - old):
-            assert any(fresh.endswith(s) for s in delta["added_suffixes"]), (name, fresh)
+            assert any(
+                fresh.endswith(s) for s in (*delta["added_suffixes"], *ADDED_ACTIVITY_SUFFIXES)
+            ), (
+                name,
+                fresh,
+            )
         for kept in entry["registered"]:
             if not any(kept.endswith(s) for s in delta["removed_suffixes"]):
                 assert kept in actual, (name, kept)
@@ -116,7 +122,9 @@ def test_model_command_attributes_equal():
             "heartbeat_s": heartbeat.total_seconds() if heartbeat is not None else 0,
             "max_attempts": retry.maximum_attempts if retry is not None else None,
             "non_retryable": (
-                sorted(retry.non_retryable_error_types or []) if retry is not None else []
+                sorted(set(retry.non_retryable_error_types or []) - ADDED_NON_RETRYABLE)
+                if retry is not None
+                else []
             ),
             "arg_count": len(inspect.signature(bound.request_activity).parameters),
         }

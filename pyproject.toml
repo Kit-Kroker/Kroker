@@ -21,13 +21,13 @@ dependencies = [
     # changes (the research role imports harness.exa._toolset) landed on every
     # rebuild. Keep the bound, uv.lock, and the adapters' assumptions moving
     # together in one upgrade PR.
-    "pydantic-ai-slim[anthropic,openai,google,temporal]>=2.51,<2.52",
+    "pydantic-ai-slim[anthropic,openai,google,temporal]>=2.61,<2.62",
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
     "httpx>=0.27",
     "defusedxml>=0.7",
     "genai-prices>=0.0.60",
-    "pydantic-ai-harness[codemode,exa]>=0.36,<0.37",
+    "pydantic-ai-harness[codemode,exa]>=0.61,<0.62",
     "fastapi>=0.141.1",
     "uvicorn>=0.30",
     # Round 015 quality axis: erosion (radon) and verbosity (ast-grep)
