@@ -28,10 +28,10 @@ models:
   - zai-coding-plan/glm-5.3
   - zai-coding-plan/glm-5.3-flash
 judge_model: anthropic:claude-sonnet-5     # different family than the author (ADR-6); gemini free tier lost R0 attempts 5, 8, 10, 11 to 503 waves and daily 429 quota
-# extra_args_by_model dropped 2026-10-26: z.ai removed glm-5.2 from the
-# models.dev catalog (and likely the coding endpoint), and glm-5.3 /
-# glm-5.3-flash declare no opencode variants, so the old `--variant max`
-# for glm-5.2 has no successor.
+# extra_args_by_model dropped 2026-10-26: z.ai marked glm-5.2 deprecated
+# in the models.dev catalog (opencode filters deprecated models at
+# resolution), and glm-5.3 / glm-5.3-flash declare no opencode variants,
+# so the old `--variant max` for glm-5.2 has no successor.
 rubrics:
   architect: rubric-architect.md
   clarifier: rubric-clarifier.md
