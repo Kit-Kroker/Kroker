@@ -10,14 +10,20 @@ services:
       - /path/to/your/repos:/srv/scratch-repos
 
       # The harness roles (dev, test, devops) run `opencode`, which
-      # authenticates from its own login rather than from .env. Log in on the
-      # host once (`opencode auth login`) and share the result read-only, so
+      # authenticates from its own login rather than from .env. Log in on
+      # the host once (`opencode auth login`) and share the result read-only, so
       # the container can resolve the provider without clobbering host state.
       # Linux/macOS:
       - ~/.local/share/opencode/auth.json:/root/.local/share/opencode/auth.json:ro
-      - ~/.cache/opencode/models.json:/root/.cache/opencode/models.json:ro
-      # Windows: the same two files live under C:/Users/<you>/.local/share/
-      # and C:/Users/<you>/.cache/.
+      # Windows: the same file lives under
+      # C:/Users/<you>/.local/share/opencode/auth.json.
+      #
+      # Do NOT add ~/.cache/opencode/models.json here
+      # (opencode-bootstrap-ebusy-models-json): opencode REPLACES that
+      # cache via write-tmp + rename at bootstrap, and a single-file bind
+      # mount turns the rename target into a mount point — the rename
+      # fails EBUSY and every coding attempt dies. Share auth.json only;
+      # the worker fetches models.dev itself into its own writable layer.
 
   # One shared runs/ tree: docker-compose.yml mounts a named volume at
   # /app/runs unless KROKER_RUNS_BIND names a host path. Set it in .env
