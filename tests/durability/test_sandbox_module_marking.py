@@ -43,6 +43,7 @@ _PINNED_MODULES = {
     "loader",
     "model_ids",
     "payload_guard",
+    "retry_policy",
     "roles",
     "runner",
     "settings",
