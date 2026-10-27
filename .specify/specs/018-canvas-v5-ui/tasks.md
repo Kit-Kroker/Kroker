@@ -195,14 +195,14 @@
 
 **Independent test**: `graph_canvas.spec.ts`, `rail.spec.ts`, `step_list.spec.ts`, `costRail.adapter.test.ts`, `railEvents.adapter.test.ts`, `graphCanvas.adapter.test.ts`, `RunView.test.ts`; app tier CONSOLE-4, 6, 24–26, 30–32, 35, 49, 51, 52.
 
-- [ ] T021 [P] [US1] RED: in `U/src/components/graph_canvas/graph_canvas.spec.ts` add:
+- [x] T021 [P] [US1] RED: in `U/src/components/graph_canvas/graph_canvas.spec.ts` add:
   - a `kind: 'sink'` node renders its outcome label and `sub`, lit or unlit;
   - `CanvasEdge.payload` renders only when `showPayloads` is on, or the edge is selected, or it is backward;
   - `CanvasEdge.note` renders on the edge;
   - `grid` toggles the dot-grid class.
 
   Existing GRAPH_CANVAS clauses are PINs. Fails.
-- [ ] T022 [P] [US1] Extend `U/src/components/graph_canvas/` (`types.ts`, `GraphCanvas.vue`, `.md` new clauses, `.profiles.ts` one profile per sink outcome, `.pw.ts`) per data-model §4.1. Grid dots use `--grid-dot`, wires `--edge`, and nodes `--ground-node`. T021 goes green. Commit T021 + T022.
+- [x] T022 [P] [US1] Extend `U/src/components/graph_canvas/` (`types.ts`, `GraphCanvas.vue`, `.md` new clauses, `.profiles.ts` one profile per sink outcome, `.pw.ts`) per data-model §4.1. Grid dots use `--grid-dot`, wires `--edge`, and nodes `--ground-node`. T021 goes green. Commit T021 + T022.
 - [ ] T023 [P] [US1] RED: create `U/src/components/rail/rail.spec.ts`:
   - the head renders title, state, rows and the budget (with `limit: null` it renders "off" and no bar);
   - the tabs switch the visible section slot;

@@ -54,6 +54,26 @@ replace the renderer's element lists; only a structural change (keys,
 positions, ports, endpoints, backward) does, so edges persist across
 run-state updates. [FR-1205]
 
+### GRAPH_CANVAS-10
+A node with `kind: 'sink'` renders its outcome label and its `sub`; a
+sink with `lit: true` carries `cmp-graph-sink-lit`. A plain node never
+renders sink elements, whatever its status. [FR-1205]
+
+### GRAPH_CANVAS-11
+An edge's `payload` renders only when `showPayloads` is on, the edge is
+selected (`selectedKey`), or the edge is a revise loop (`backward`) --
+and only when a payload exists; the toggle fabricates nothing.
+[FR-1205]
+
+### GRAPH_CANVAS-12
+An edge's `note` (for example "next revise escalates the run") renders
+on the edge regardless of direction or selection. [FR-1205]
+
+### GRAPH_CANVAS-13
+The `grid` prop toggles the dot-grid background (`--grid-dot`) behind
+the canvas; wires stroke `--edge` and node surfaces `--ground-node`.
+[FR-1205]
+
 ## Failure modes
 
 Layout throws: existing positions are kept, unpositioned nodes go on a grid,

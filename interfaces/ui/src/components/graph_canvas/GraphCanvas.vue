@@ -3,7 +3,7 @@
 // primitives only; decides no legality. The single connection rule it runs
 // is the caller's `connectable` (GRAPH_CANVAS-6).
 import { computed, ref, shallowRef, watch } from 'vue'
-import { VueFlow, Handle, Position, BaseEdge, getBezierPath } from '@vue-flow/core'
+import { VueFlow, Handle, Position, BaseEdge, EdgeLabelRenderer, getBezierPath } from '@vue-flow/core'
 import type { Connection, Edge, Node, NodeDragEvent } from '@vue-flow/core'
 import { CANVAS_STATUSES, type CanvasEdge, type CanvasNode, type Point, type PortRef } from './types'
 import { backwardPath, isFinitePoint, layoutGraph, NODE_WIDTH } from './graph_layout'
@@ -17,8 +17,14 @@ const props = withDefaults(
     connectable?: (from: PortRef, to: PortRef) => boolean
     selectedKey?: string | null
     tidyRequest?: number
+    /** 018 data-model §4.1 (S3): edge payloads on every edge, not only selected or revise loops. */
+    showPayloads?: boolean
+    /** 018 data-model §4.1 (S3): mark terminal stages (nodes with no outgoing edge). */
+    showTerminals?: boolean
+    /** 018 data-model §4.1 (S3): the dot grid behind the canvas. */
+    grid?: boolean
   }>(),
-  { editable: false, connectable: () => false, selectedKey: null, tidyRequest: 0 },
+  { editable: false, connectable: () => false, selectedKey: null, tidyRequest: 0, showPayloads: false, showTerminals: false, grid: false },
 )
 
 const emit = defineEmits<{
@@ -74,6 +80,19 @@ assertStatuses(props.nodes)
 watch(() => props.nodes, assertStatuses)
 const nodeByKey = computed(() => new Map(props.nodes.map((n) => [n.key, n])))
 const edgeByKey = computed(() => new Map(props.edges.map((e) => [e.key, e])))
+
+// 018 data-model §4.1: a payload shows under the toggle, the selection,
+// or on a revise loop (backward) — never otherwise.
+function payloadVisible(key: string): boolean {
+  const e = edgeByKey.value.get(key)
+  if (!e || e.payload === undefined) return false
+  return props.showPayloads || props.selectedKey === key || e.backward
+}
+
+// 018 data-model §4.1: terminal stages are nodes with no outgoing edge.
+const terminalKeys = computed(
+  () => new Set(props.nodes.filter((n) => !props.edges.some((e) => e.from.node === n.key)).map((n) => n.key)),
+)
 
 const flowNodes = shallowRef<Node[]>([])
 const flowEdges = shallowRef<Edge[]>([])
@@ -153,7 +172,7 @@ defineExpose({ relayout })
   <div
     ref="root"
     class="cmp-graph-canvas"
-    :class="{ 'is-editable': editable }"
+    :class="{ 'is-editable': editable, 'cmp-graph-canvas--grid': grid }"
     tabindex="0"
     data-testid="graph-canvas"
     @keydown="onKey"
@@ -180,13 +199,27 @@ defineExpose({ relayout })
         <div
           v-if="nodeByKey.get(id)"
           class="cmp-graph-node"
-          :class="[nodeByKey.get(id)!.status ? `cmp-graph-node-${nodeByKey.get(id)!.status}` : '', { 'is-readonly': nodeByKey.get(id)!.readonly, 'is-selected': id === selectedKey }]"
+          :class="[
+            nodeByKey.get(id)!.status ? `cmp-graph-node-${nodeByKey.get(id)!.status}` : '',
+            {
+              'is-readonly': nodeByKey.get(id)!.readonly,
+              'is-selected': id === selectedKey,
+              'cmp-graph-sink': nodeByKey.get(id)!.kind === 'sink',
+              'cmp-graph-sink-lit': nodeByKey.get(id)!.sink?.lit === true,
+              'cmp-graph-node-terminal': showTerminals && terminalKeys.has(id),
+            },
+          ]"
           data-testid="graph-node"
           :data-key="id"
         >
           <div class="head">
             <span class="title">{{ nodeByKey.get(id)!.title }}</span>
             <span v-if="nodeByKey.get(id)!.issueCount > 0" class="issues" data-testid="node-issues">{{ nodeByKey.get(id)!.issueCount }}</span>
+          </div>
+          <!-- 018 data-model §4.1: a sink renders its outcome and sub instead of a body. -->
+          <div v-if="nodeByKey.get(id)!.sink" class="sink-block">
+            <div class="sink-outcome" data-testid="sink-outcome">{{ nodeByKey.get(id)!.sink!.outcome }}</div>
+            <div class="sink-sub" data-testid="sink-sub">{{ nodeByKey.get(id)!.sink!.sub }}</div>
           </div>
           <div v-if="nodeByKey.get(id)!.subtitle" class="subtitle">{{ nodeByKey.get(id)!.subtitle }}</div>
           <div v-if="nodeByKey.get(id)!.metrics" class="metrics" data-testid="node-metrics">
@@ -226,6 +259,10 @@ defineExpose({ relayout })
             :label-y="getBezierPath(edge)[2]"
             :label="edgeText(edge.id)"
           />
+          <EdgeLabelRenderer>
+            <div v-if="payloadVisible(edge.id)" class="edge-chip" data-testid="edge-payload">{{ edgeByKey.get(edge.id)!.payload }}</div>
+            <div v-if="edgeByKey.get(edge.id)?.note" class="edge-note" data-testid="edge-note">{{ edgeByKey.get(edge.id)!.note }}</div>
+          </EdgeLabelRenderer>
         </g>
       </template>
 
@@ -243,6 +280,10 @@ defineExpose({ relayout })
             :label-y="backwardPath(edge.sourceX, edge.sourceY, edge.targetX, edge.targetY)[2]"
             :label="edgeText(edge.id)"
           />
+          <EdgeLabelRenderer>
+            <div v-if="payloadVisible(edge.id)" class="edge-chip" data-testid="edge-payload">{{ edgeByKey.get(edge.id)!.payload }}</div>
+            <div v-if="edgeByKey.get(edge.id)?.note" class="edge-note" data-testid="edge-note">{{ edgeByKey.get(edge.id)!.note }}</div>
+          </EdgeLabelRenderer>
         </g>
       </template>
     </VueFlow>
@@ -257,13 +298,14 @@ defineExpose({ relayout })
 .cmp-graph-canvas .vue-flow { position: relative; width: 100%; height: 100%; overflow: hidden; z-index: 0; direction: ltr; }
 .cmp-graph-canvas .vue-flow__container { position: absolute; height: 100%; width: 100%; left: 0; top: 0; }
 .cmp-graph-canvas .vue-flow__pane { z-index: 1; }
+.cmp-graph-canvas.cmp-graph-canvas--grid .vue-flow__pane { background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px); background-size: 22px 22px; }
 .cmp-graph-canvas .vue-flow__pane.draggable { cursor: grab; }
 .cmp-graph-canvas .vue-flow__transformationpane { transform-origin: 0 0; z-index: 2; pointer-events: none; }
 .cmp-graph-canvas .vue-flow__viewport { z-index: 4; overflow: clip; }
 .cmp-graph-canvas .vue-flow__edge-labels { position: absolute; width: 100%; height: 100%; pointer-events: none; user-select: none; }
 .cmp-graph-canvas .vue-flow__edges { pointer-events: none; overflow: visible; }
 .cmp-graph-canvas .vue-flow__edge-path,
-.cmp-graph-canvas .vue-flow__connection-path { stroke: var(--line-strong); stroke-width: 1.5; fill: none; }
+.cmp-graph-canvas .vue-flow__connection-path { stroke: var(--edge); stroke-width: 1.5; fill: none; }
 .cmp-graph-canvas .vue-flow__edge { pointer-events: visibleStroke; cursor: pointer; }
 .cmp-graph-canvas .cmp-graph-edge.is-selected .vue-flow__edge-path { stroke: var(--accent); }
 .cmp-graph-canvas .cmp-graph-edge.has-issues .vue-flow__edge-path { stroke: var(--status-failed); }
@@ -284,7 +326,7 @@ defineExpose({ relayout })
 <style scoped>
 .cmp-graph-canvas { position: relative; width: 100%; height: 100%; min-height: 360px; background: var(--ground-1); outline: none; }
 .cmp-graph-node {
-  width: 190px; background: var(--ground-3); border: 1px solid var(--line); border-radius: 6px;
+  width: 190px; background: var(--ground-node); border: 1px solid var(--line); border-radius: 6px;
   color: var(--ink-secondary); font-family: var(--font-sans); font-size: 12px;
 }
 .cmp-graph-node.is-readonly { border-style: dashed; }
@@ -310,4 +352,20 @@ defineExpose({ relayout })
 .cmp-graph-node-running,
 .cmp-graph-node-blocked { animation: fc-pulse 1.6s infinite; }
 @keyframes fc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+/* 018 data-model §4.1 (T022): sinks, edge chips, the dot grid, terminals. */
+.cmp-graph-sink .sink-block { padding: 6px 8px; }
+.cmp-graph-sink .sink-outcome { font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-subtle); }
+.cmp-graph-sink .sink-sub { font-family: var(--font-mono); font-size: 11px; color: var(--ink-subtle); }
+.cmp-graph-sink-lit { border-color: var(--accent); }
+.cmp-graph-sink-lit .sink-outcome { color: var(--ink-primary); }
+.cmp-graph-node-terminal { border-color: var(--ink-tertiary); }
+.edge-chip, .edge-note {
+  position: absolute; transform: translate(-50%, -50%);
+  padding: 1px 6px; border-radius: 4px;
+  background: var(--ground-3); border: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-tertiary);
+}
+.edge-note { color: var(--status-waiting); }
+.vue-flow__edge-labelrenderer { pointer-events: none; }
 </style>

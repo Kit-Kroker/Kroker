@@ -79,5 +79,41 @@ export default defineProfiles({
       summary: 'A closed execution cancels the node it held mid-flight.',
       props: { nodes: pipeline({ intake: 'done', architect: 'done', architecture: 'cancelled', planner: 'idle' }), edges: wires(1) },
     },
+    // 018 T022 (data-model §4.1): one profile per sink outcome, lit and
+    // unlit, with the v5 edge decorations riding the failed leg.
+    {
+      name: 'sink-completed',
+      summary: 'A completed run lights the completed sink; the dot grid is on.',
+      props: {
+        nodes: [...pipeline({ intake: 'done', architect: 'done', architecture: 'done', planner: 'done' }), node('outcome', 1040, [], { kind: 'sink', sink: { outcome: 'completed', lit: true, sub: 'deploy · pr merged' } })],
+        edges: [...wires(0), edge('planner', 'plan', 'outcome', 'in')],
+        grid: true,
+      },
+    },
+    {
+      name: 'sink-rejected',
+      summary: 'A rejected run lights the rejected sink.',
+      props: {
+        nodes: [...pipeline({ intake: 'done', architect: 'done', architecture: 'blocked', planner: 'idle' }), node('outcome', 1040, [], { kind: 'sink', sink: { outcome: 'rejected', lit: true, sub: 'gate rejected: scope' } })],
+        edges: [...wires(1), edge('planner', 'plan', 'outcome', 'in')],
+      },
+    },
+    {
+      name: 'sink-failed',
+      summary: 'A halted run lights the failed sink; payloads shown, revise loop noted.',
+      props: {
+        nodes: [...pipeline({ intake: 'done', architect: 'failed', architecture: 'idle', planner: 'idle' }), node('outcome', 1040, [], { kind: 'sink', sink: { outcome: 'failed', lit: true, sub: 'failed:quarantined-tasks' } })],
+        edges: [...wires(2).map((e, i) => (i === 3 ? { ...e, note: 'next revise escalates the run' } : e)), edge('planner', 'plan', 'outcome', 'in', { payload: 'plan.json' })],
+        showPayloads: true,
+      },
+    },
+    {
+      name: 'sink-escalated',
+      summary: 'An escalated run leaves its sink unlit.',
+      props: {
+        nodes: [...pipeline({ intake: 'done', architect: 'done', architecture: 'blocked', planner: 'idle' }), node('outcome', 1040, [], { kind: 'sink', sink: { outcome: 'escalated', lit: false, sub: 'escalated to owner' } })],
+        edges: [...wires(2), edge('planner', 'plan', 'outcome', 'in')],
+      },
+    },
   ],
 })

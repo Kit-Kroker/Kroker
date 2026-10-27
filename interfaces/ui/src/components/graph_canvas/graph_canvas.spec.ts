@@ -120,3 +120,147 @@ describe('GraphCanvas', () => {
     expect(foreign.emitted('drop-type')).toBeUndefined()
   })
 })
+
+// --- v5 sinks and edge labels (018 T021 RED; data-model §4.1) ---------------
+// CanvasNode gains kind?: 'node' | 'sink' and sink?: { outcome, lit, sub };
+// CanvasEdge gains payload?: string and note?: string; the canvas gains
+// showPayloads?: boolean and grid?: boolean. None exist yet — that is the RED.
+
+describe('GraphCanvas v5 sinks and edge labels (018 T021 RED)', () => {
+  // Unique stub (the PIN tests above own 'VueFlowStub'): renders the node
+  // template for 'a' AND the edge template for every flow edge, forward or
+  // backward, mirroring how VueFlow invokes the named slots. Coordinates are
+  // supplied so BaseEdge's path math stays finite in jsdom.
+  const VueFlowEdgesStub = {
+    name: 'VueFlowEdgesStub',
+    props: { edges: { type: Array, default: () => [] } },
+    setup: (
+      p: Record<string, unknown>,
+      { slots }: { slots: Record<string, ((args: Record<string, unknown>) => unknown) | undefined> },
+    ) =>
+      () => [
+        slots['node-kroker']?.({ id: 'a' }),
+        ...(((p.edges as Array<Record<string, unknown>> | undefined) ?? []).map((e) =>
+          (e.type === 'backward' ? slots['edge-backward'] : slots['edge-forward'])?.({
+            ...e,
+            sourceX: 0,
+            sourceY: 0,
+            targetX: 120,
+            targetY: 80,
+          }),
+        )),
+      ],
+  }
+
+  const edge = (key: string, extra: Record<string, unknown> = {}) => ({
+    key,
+    from: { node: 'a', port: 'out' },
+    to: { node: 'a', port: 'in' },
+    backward: false,
+    issueCount: 0,
+    ...extra,
+  })
+
+  const mountV5 = (props: Record<string, unknown>) =>
+    mount(GraphCanvas, {
+      props: { nodes: [node('a')], edges: [], ...props },
+      global: { stubs: { VueFlow: VueFlowEdgesStub } },
+    })
+
+  it("renders a lit sink's outcome and sub, and the same texts unlit without the lit class", () => {  // clause: GRAPH_CANVAS-10
+    const lit = mountV5({
+      nodes: [node('a', { kind: 'sink', sink: { outcome: 'failed', lit: true, sub: 'failed:quarantined-tasks' } })],
+    })
+    expect(lit.find('[data-testid="sink-outcome"]').text()).toBe('failed')
+    expect(lit.find('[data-testid="sink-sub"]').text()).toBe('failed:quarantined-tasks')
+    expect(lit.find('[data-testid="graph-node"]').classes()).toContain('cmp-graph-sink-lit')
+
+    const unlit = mountV5({
+      nodes: [node('a', { kind: 'sink', sink: { outcome: 'failed', lit: false, sub: 'failed:quarantined-tasks' } })],
+    })
+    expect(unlit.find('[data-testid="sink-outcome"]').text()).toBe('failed')
+    expect(unlit.find('[data-testid="sink-sub"]').text()).toBe('failed:quarantined-tasks')
+    expect(unlit.find('[data-testid="graph-node"]').classes()).not.toContain('cmp-graph-sink-lit')
+  })
+
+  it('renders an edge payload when showPayloads is on, the edge is selected, or the edge is backward — and never otherwise', () => {  // clause: GRAPH_CANVAS-11
+    const shown = mountV5({ edges: [edge('e1', { payload: 'plan.json' })], showPayloads: true })
+    expect(shown.find('[data-testid="edge-payload"]').text()).toBe('plan.json')
+
+    const selected = mountV5({ edges: [edge('e1', { payload: 'plan.json' })], selectedKey: 'e1' })
+    expect(selected.find('[data-testid="edge-payload"]').text()).toBe('plan.json')
+
+    const backward = mountV5({ edges: [edge('e1', { payload: 'plan.json', backward: true })] })
+    expect(backward.find('[data-testid="edge-payload"]').text()).toBe('plan.json')
+
+    const hidden = mountV5({ edges: [edge('e1', { payload: 'plan.json' })] })
+    expect(hidden.find('[data-testid="edge-payload"]').exists()).toBe(false)
+  })
+
+  it('renders an edge note on the edge, and no note element without one', () => {  // clause: GRAPH_CANVAS-12
+    const noted = mountV5({ edges: [edge('e1', { note: 'next revise escalates the run' })] })
+    expect(noted.find('[data-testid="edge-note"]').text()).toBe('next revise escalates the run')
+
+    const bare = mountV5({ edges: [edge('e1')] })
+    expect(bare.find('[data-testid="edge-note"]').exists()).toBe(false)
+  })
+
+  it('toggles the dot-grid class on the canvas with the grid prop', () => {  // clause: GRAPH_CANVAS-13
+    const gridded = mountV5({ grid: true })
+    expect(gridded.find('[data-testid="graph-canvas"]').classes()).toContain('cmp-graph-canvas--grid')
+    const plain = mountV5({})
+    expect(plain.find('[data-testid="graph-canvas"]').classes()).not.toContain('cmp-graph-canvas--grid')
+  })
+
+  // --- chaos (018 T021 RED) ------------------------------------------------
+
+  it('a sink with an empty-string sub renders sink-sub present and EMPTY, never undefined', () => {  // clause: GRAPH_CANVAS-10
+    const w = mountV5({
+      nodes: [node('a', { kind: 'sink', sink: { outcome: 'failed', lit: true, sub: '' } })],
+    })
+    const sub = w.find('[data-testid="sink-sub"]')
+    expect(sub.exists()).toBe(true)
+    expect(sub.text()).toBe('')
+  })
+
+  it('a plain node (no sink, no kind) renders no sink elements or lit class even when done', () => {  // clause: GRAPH_CANVAS-10
+    const w = mountV5({ nodes: [node('a', { status: 'done' as never })] })
+    expect(w.find('[data-testid="sink-outcome"]').exists()).toBe(false)
+    expect(w.find('[data-testid="sink-sub"]').exists()).toBe(false)
+    expect(w.find('[data-testid="graph-node"]').classes()).not.toContain('cmp-graph-sink-lit')
+  })
+
+  it('showPayloads true does not fabricate a payload for an edge without one', () => {  // clause: GRAPH_CANVAS-11
+    const w = mountV5({ edges: [edge('e1')], showPayloads: true })
+    expect(w.find('[data-testid="edge-payload"]').exists()).toBe(false)
+  })
+
+  it('backward shows its payload regardless of selection and toggles; deselection hides a selection-shown forward payload', () => {  // clause: GRAPH_CANVAS-11
+    // backward beats everything: shown with no selection and showPayloads false.
+    const backward = mountV5({
+      edges: [edge('e1', { payload: 'plan.json', backward: true })],
+      selectedKey: null,
+      showPayloads: false,
+    })
+    expect(backward.find('[data-testid="edge-payload"]').text()).toBe('plan.json')
+
+    // A forward edge shown only by selection hides again when deselected.
+    const shown = mountV5({ edges: [edge('e1', { payload: 'plan.json' })], selectedKey: 'e1' })
+    expect(shown.find('[data-testid="edge-payload"]').exists()).toBe(true)
+    const deselected = mountV5({ edges: [edge('e1', { payload: 'plan.json' })], selectedKey: null })
+    expect(deselected.find('[data-testid="edge-payload"]').exists()).toBe(false)
+  })
+
+  it('a note on a backward edge renders without selection or the payloads toggle', () => {  // clause: GRAPH_CANVAS-12
+    const w = mountV5({ edges: [edge('e1', { note: 'next revise escalates the run', backward: true })] })
+    expect(w.find('[data-testid="edge-note"]').text()).toBe('next revise escalates the run')
+  })
+
+  it('explicit grid false and explicit showPayloads false behave exactly like unset', () => {  // clause: GRAPH_CANVAS-13
+    const ungridded = mountV5({ grid: false })
+    expect(ungridded.find('[data-testid="graph-canvas"]').classes()).not.toContain('cmp-graph-canvas--grid')
+
+    const explicitOff = mountV5({ edges: [edge('e1', { payload: 'plan.json' })], showPayloads: false })
+    expect(explicitOff.find('[data-testid="edge-payload"]').exists()).toBe(false)
+  })
+})

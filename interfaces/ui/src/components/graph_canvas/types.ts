@@ -27,6 +27,16 @@ export interface CanvasNode {
   position?: { x: number; y: number }
   /** A node whose type is not in the catalog: handles render, none connect. */
   readonly?: boolean
+  /** 018 data-model §4.1: a run-outcome sink node ('node' by default). */
+  kind?: 'node' | 'sink'
+  sink?: CanvasSink
+}
+
+/** 018 data-model §4.1: a sink lights for the outcome the run took. */
+export interface CanvasSink {
+  outcome: 'completed' | 'rejected' | 'failed' | 'escalated'
+  lit: boolean
+  sub: string
 }
 
 export interface PortRef {
@@ -42,6 +52,10 @@ export interface CanvasEdge {
   backward: boolean
   counter?: { used: number; max: number }
   issueCount: number
+  /** 018 data-model §4.1: shown under the payloads toggle, selection or a revise loop. */
+  payload?: string
+  /** 018 data-model §4.1: e.g. "next revise escalates the run". */
+  note?: string
 }
 
 export interface Point {

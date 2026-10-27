@@ -54,3 +54,28 @@ test('canvas colours resolve through tokens', async ({ page }) => {  // clause: 
   const linked = await page.evaluate(() => [...document.styleSheets].some((s) => (s.href ?? '').includes('vue-flow')))
   expect(linked).toBe(false)
 })
+
+// --- 018 T022 (data-model §4.1): sinks and edge decorations ---------------
+test('a lit sink renders its outcome and sub; an unlit sink the same texts without the lit class', async ({ page }) => {  // clause: GRAPH_CANVAS-10
+  const failed = page.locator(`${at('sink-failed')} [data-testid="graph-node"][data-key="outcome"]`)
+  await expect(failed).toBeVisible()
+  await expect(failed.locator('[data-testid="sink-outcome"]')).toHaveText('failed')
+  await expect(failed.locator('[data-testid="sink-sub"]')).toHaveText('failed:quarantined-tasks')
+  await expect(page.locator(`${at('sink-failed')} .cmp-graph-sink-lit`)).toHaveCount(1)
+  await expect(page.locator(`${at('sink-escalated')} [data-testid="sink-outcome"]`)).toHaveText('escalated')
+  await expect(page.locator(`${at('sink-escalated')} .cmp-graph-sink-lit`)).toHaveCount(0)
+})
+
+test('edge payloads show under the toggle, and never without one', async ({ page }) => {  // clause: GRAPH_CANVAS-11
+  await expect(page.locator(`${at('sink-failed')} [data-testid="edge-payload"]`)).toHaveText('plan.json')
+  await expect(page.locator(`${at('run-looped')} [data-testid="edge-payload"]`)).toHaveCount(0)
+})
+
+test('an edge note renders on the revise loop', async ({ page }) => {  // clause: GRAPH_CANVAS-12
+  await expect(page.locator(`${at('sink-failed')} [data-testid="edge-note"]`)).toHaveText('next revise escalates the run')
+})
+
+test('the grid prop toggles the dot-grid class on the canvas', async ({ page }) => {  // clause: GRAPH_CANVAS-13
+  await expect(page.locator(`${at('sink-completed')} .cmp-graph-canvas--grid`)).toHaveCount(1)
+  await expect(page.locator(`${at('run-mid-flight')} .cmp-graph-canvas--grid`)).toHaveCount(0)
+})
