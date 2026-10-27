@@ -2,6 +2,13 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testMatch: '**/*.pw.ts',
+  // 018 T019: the default (cores/2 = 4 here) opens four Chromium contexts
+  // at once; under scripts/check_ui.py — npm ci, vitest for two workspaces
+  // and two preview servers on the same machine — the commit charge peaks
+  // near 12 GB of pagefile and Chromium dies mid-suite with "Target
+  // crashed" on random tests. One worker keeps the peak inside the box's
+  // headroom; the suite trades minutes for not crashing.
+  workers: 1,
   use: {
     baseURL: 'http://localhost:4173',
   },

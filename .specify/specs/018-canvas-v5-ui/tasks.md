@@ -171,7 +171,7 @@
 
   Create `U/src/components/toggle_menu/toggle_menu.spec.ts`: each item renders its label, description and a check when `on`; a click emits `toggle(id)`. Both fail.
 - [x] T017 [P] [US8] Create the five files of `command_palette` and of `toggle_menu` (data-model §4.2; tokens only). Register them in the showcase and the index. T016 goes green. Commit T016 + T017.
-- [ ] T018 [US8] RED: create `F/app/commands.test.ts`. `commandsOf(state)` returns v5's commands in v5's order (S11):
+- [x] T018 [US8] RED: create `F/app/commands.test.ts`. `commandsOf(state)` returns v5's commands in v5's order (S11):
   - "Review …" one per pending item of the run in context, with hint `waiting`;
   - "Open Inbox" with hint `<n> pending`;
   - "Open Fleet";
@@ -184,7 +184,7 @@
   - "Harness interfaces".
 
   Commands whose target is not `available` in `navManifest` are omitted. "Switch to Design", "Design <graph>" and "Validate graph" are omitted while `designAvailable` is false (data-model §5); T063 sets it true. Fails.
-- [ ] T019 [US8] Create `F/app/commands.ts`. Mount `CommandPalette` and `ToggleMenu` in `F/app/App.vue`, bound to `prefs.store` (theme, payloads, terminals, grid) and to global ⌘K or Ctrl+K and Escape. T018 goes green. Commit T018 + T019.
+- [x] T019 [US8] Create `F/app/commands.ts`. Mount `CommandPalette` and `ToggleMenu` in `F/app/App.vue`, bound to `prefs.store` (theme, payloads, terminals, grid) and to global ⌘K or Ctrl+K and Escape. T018 goes green. Commit T018 + T019.
 - [ ] T020 [US8] App tier: add CONSOLE-47 to `U/app.md`, and a test in `U/app.shell.pw.ts`: Ctrl+K, type "inbox", Enter lands on `/#/inbox`; ⋯ → Light theme sets `data-theme="light"` on `html`. `check_clauses.py`. Commit.
 
 ---

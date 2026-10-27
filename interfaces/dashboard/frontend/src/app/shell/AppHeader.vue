@@ -28,11 +28,21 @@ const primary = computed<NavItem[]>(() =>
   navManifest.slice(0, 3).map((item) => (item.id === 'run' ? runEntry.value : item)),
 )
 const secondary = navManifest.slice(3)
+
+// 018 T019 (S11): the header's Search opens the command palette and ⋯ the
+// session menu; the shell only re-emits, App.vue owns both.
+const emit = defineEmits<{ search: []; menu: [] }>()
 </script>
 
 <template>
   <div class="shell-header">
-    <AppHeader :primary="primary" :secondary="secondary" :badge="inbox.items.length" @search="ui.openStart()" />
+    <AppHeader
+      :primary="primary"
+      :secondary="secondary"
+      :badge="inbox.items.length"
+      @search="emit('search')"
+      @menu="emit('menu')"
+    />
     <!-- R-1: the Start-run button stays in the shell until slice 6 (T066). -->
     <button data-testid="start-btn" class="start" @click="ui.openStart()">+ START RUN</button>
   </div>
