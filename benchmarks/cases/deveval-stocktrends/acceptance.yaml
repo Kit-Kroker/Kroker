@@ -2,7 +2,7 @@ case_id: deveval-stocktrends
 verdict: not_assessed
 reason: null
 note: separation not assessed for parked case
-oracle_id: sha256:5f9285b290465db9f7089612ef7012ca45e17c031706e6042a9fc93858d9c5a9
+oracle_id: sha256:fe4e7d8044cdb6fade5825537d4c987e027c5655ff1d84e2aa3d88f837f1c33f
 oracle_tests: 9
 reference:
   passed: true
@@ -26,5 +26,5 @@ separation:
 role: parked
 visibility: public
 exposure: repo_public
-kroker_commit: 64cd9f546834ec57c6be92c88ec0c31e98d2661d
-updated: '2026-10-16T07:40:24.321441+00:00'
+kroker_commit: 194e3ec6
+updated: '2026-10-27T20:15:06.510115+00:00'

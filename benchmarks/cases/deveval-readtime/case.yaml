@@ -78,14 +78,19 @@ language: python
 repo_url: /srv/scratch-repos/deveval-readtime
 role: corpus
 visibility: public
-strong_arm: zai-coding-plan-glm-5.3-flash
-weak_arm: zai-coding-plan-glm-5.2
+# R019 2026-10-27: glm-5.2 retired (zai-coding-plan catalog deprecated it;
+# opencode refuses resolution -> ProviderModelNotFoundError). Old pair:
+# strong glm-5.3-flash / weak glm-5.2. New pair (GATE 1 Q0=A): strong
+# glm-5.3 / weak glm-5.3-flash. Prior verdict: rejected no_separation, flash 0.2500 vs glm-5.2 0.1667. Re-proving needs reruns of both
+# arms on one commit (follow-up card 2026-10-27-r019-reprove-separation-reruns).
+strong_arm: zai-coding-plan-glm-5.3
+weak_arm: zai-coding-plan-glm-5.3-flash
 arms:
-  - name: zai-coding-plan-glm-5.2
+  - name: zai-coding-plan-glm-5.3
     role_models:
-      dev: zai-coding-plan/glm-5.2
-      test: zai-coding-plan/glm-5.2
-      devops: zai-coding-plan/glm-5.2
+      dev: zai-coding-plan/glm-5.3
+      test: zai-coding-plan/glm-5.3
+      devops: zai-coding-plan/glm-5.3
   - name: zai-coding-plan-glm-5.3-flash
     role_models:
       dev: zai-coding-plan/glm-5.3-flash
@@ -96,6 +101,7 @@ network_required: false
 harnesses:
 - opencode
 models:
-- zai-coding-plan/glm-5.2
+- zai-coding-plan/glm-5.3
+- zai-coding-plan/glm-5.3-flash
 judge_model: anthropic:claude-sonnet-5
 rubrics: {}

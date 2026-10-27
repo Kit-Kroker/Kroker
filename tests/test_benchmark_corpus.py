@@ -14,16 +14,16 @@ CASES_ROOT = Path(__file__).resolve().parents[1] / "benchmarks" / "cases"
 # autouse fixture clears the variable; the two iterate-all tests re-apply it.
 REAL_PRIVATE_ROOT = os.environ.get("SDLC_PRIVATE_CASES_ROOT")
 
-CORPUS_BASE_CELL_IDS = {
-    "cat-cafe-monitoring": "cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.2",
-    "deveval-geotext": "deveval-geotext#opencode#zai-coding-plan-glm-5.2",
-    "deveval-hone": "deveval-hone#opencode#zai-coding-plan-glm-5.2",
-    "deveval-lice": "deveval-lice#opencode#zai-coding-plan-glm-5.2",
+CORPUS_WEAK_CELL_IDS = {
+    "cat-cafe-monitoring": "cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3-flash",
+    "deveval-geotext": "deveval-geotext#opencode#zai-coding-plan-glm-5.3-flash",
+    "deveval-hone": "deveval-hone#opencode#zai-coding-plan-glm-5.3-flash",
+    "deveval-lice": "deveval-lice#opencode#zai-coding-plan-glm-5.3-flash",
     "deveval-particle-swarm-optimization": (
-        "deveval-particle-swarm-optimization#opencode#zai-coding-plan-glm-5.2"
+        "deveval-particle-swarm-optimization#opencode#zai-coding-plan-glm-5.3-flash"
     ),
-    "deveval-readtime": "deveval-readtime#opencode#zai-coding-plan-glm-5.2",
-    "deveval-stocktrends": "deveval-stocktrends#opencode#zai-coding-plan-glm-5.2",
+    "deveval-readtime": "deveval-readtime#opencode#zai-coding-plan-glm-5.3-flash",
+    "deveval-stocktrends": "deveval-stocktrends#opencode#zai-coding-plan-glm-5.3-flash",
 }
 
 
@@ -101,17 +101,17 @@ def test_seven_corpus_cases_have_two_arms_and_matching_base_cells():
     specs = load_corpus(CASES_ROOT)
     by_id = {s.case_id: s for s in specs}
 
-    for cid, base_cell_id in CORPUS_BASE_CELL_IDS.items():
+    for cid, weak_cell_id in CORPUS_WEAK_CELL_IDS.items():
         spec = by_id[cid]
-        # R4-r1 (2026-10-17): the arms are relabeled — glm-5.3-flash is the
-        # strong arm; the base cell id (from `models:`) stays the glm-5.2
-        # cell and belongs to the weak arm now.
-        assert spec.strong_arm == "zai-coding-plan-glm-5.3-flash"
-        assert spec.weak_arm == "zai-coding-plan-glm-5.2"
+        # R019 (2026-10-27): arms re-paired - glm-5.3 strong, glm-5.3-flash
+        # weak (glm-5.2 retired, catalog-deprecated). Cell ids come from arm
+        # names (matrix.py:136), not from models:.
+        assert spec.strong_arm == "zai-coding-plan-glm-5.3"
+        assert spec.weak_arm == "zai-coding-plan-glm-5.3-flash"
 
         arm_map = {a.name: a for a in spec.arms}
         assert set(arm_map.keys()) == {
-            "zai-coding-plan-glm-5.2",
+            "zai-coding-plan-glm-5.3",
             "zai-coding-plan-glm-5.3-flash",
         }
         for arm in spec.arms:
@@ -121,8 +121,8 @@ def test_seven_corpus_cases_have_two_arms_and_matching_base_cells():
         assert len(cells) == 2
         strong_cell = next(c for c in cells if c.arm_name == spec.strong_arm)
         weak_cell = next(c for c in cells if c.arm_name == spec.weak_arm)
-        assert weak_cell.cell_id == base_cell_id
-        assert strong_cell.cell_id.endswith("#zai-coding-plan-glm-5.3-flash")
+        assert weak_cell.cell_id == weak_cell_id
+        assert strong_cell.cell_id.endswith("#zai-coding-plan-glm-5.3")
 
 
 def test_reference_isolation_fr031(monkeypatch):

@@ -2,7 +2,7 @@ case_id: deveval-hone
 verdict: not_assessed
 reason: null
 note: separation not assessed for parked case
-oracle_id: sha256:ef8df118bef3343bbadac78cc645bac452049e09b77e5cb6b3ac61109cd78df9
+oracle_id: sha256:4a79366c4ed4356feef714732b492f36a0ba4d187bb439eefb5b6c4d30d5e6d2
 oracle_tests: 12
 reference:
   passed: true
@@ -25,5 +25,5 @@ separation:
 role: parked
 visibility: public
 exposure: repo_public
-kroker_commit: 64cd9f546834ec57c6be92c88ec0c31e98d2661d
-updated: '2026-10-16T07:38:59.612734+00:00'
+kroker_commit: 194e3ec6
+updated: '2026-10-27T20:13:53.312429+00:00'

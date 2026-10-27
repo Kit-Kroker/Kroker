@@ -2,7 +2,7 @@ case_id: deveval-lice
 verdict: rejected
 reason: reference
 note: '30/31 oracle tests passed; failed: oracle/unit_tests/test_lice.py::test_package_template'
-oracle_id: sha256:31d9154a2bf518c9f3b35dad0f57cad750e1e73e6b8213edb678ae23a54a8f8e
+oracle_id: sha256:ad85e7f2920feed676aa98ed9918b18d7d4599387df9cb5f8d7bcd32cb84bc49
 oracle_tests: 31
 reference:
   passed: false
@@ -14,9 +14,25 @@ floor:
   tests_passed: 0
   tests_total: 1
   detail: '0/1 oracle tests passed; failed: oracle/unit_tests/test_lice.py::oracle.unit_tests.test_lice'
-separation: null
+separation:
+  passed: null
+  strong:
+    arm: zai-coding-plan-glm-5.3
+    run_ids: []
+    scores: []
+    mean: null
+    stall_points: []
+  weak:
+    arm: zai-coding-plan-glm-5.3-flash
+    run_ids: []
+    scores: []
+    mean: null
+    stall_points: []
+  margin: null
+  not_comparable: 0
+  detail: ''
 role: corpus
 visibility: public
 exposure: repo_public
-kroker_commit: unknown
-updated: '2026-10-11T20:03:57.637302+00:00'
+kroker_commit: 194e3ec6
+updated: '2026-10-27T20:12:59.356882+00:00'
