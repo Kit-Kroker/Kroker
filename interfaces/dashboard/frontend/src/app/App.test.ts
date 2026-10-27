@@ -23,6 +23,7 @@ describe('App shell', () => {
   it('mounts and renders the header brand', async () => {
     const w = mount(App, { global: { plugins: [router] } })
     await new Promise((r) => setTimeout(r, 0))
-    expect(w.text()).toContain('SDLC·FACTORY')
+    // 018 T010: the v5 wordmark (mark + name).
+    expect(w.text()).toContain('Kroker')
   })
 })

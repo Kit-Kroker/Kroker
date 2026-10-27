@@ -17,6 +17,7 @@ import checkRow from '../src/components/check_row/check_row.profiles'
 import fleetRow from '../src/components/fleet_row/fleet_row.profiles'
 import fleetTable from '../src/components/fleet_table/fleet_table.profiles'
 import appHeader from '../src/components/app_header/app_header.profiles'
+import footerBar from '../src/components/footer_bar/footer_bar.profiles'
 import toasts from '../src/components/toasts/toasts.profiles'
 import startRunModal from '../src/components/start_run_modal/start_run_modal.profiles'
 import gateDecision from '../src/components/gate_decision/gate_decision.profiles'
@@ -43,6 +44,7 @@ export const REGISTRY: ProfileSet[] = [
   timeline,
   checkRow,
   appHeader,
+  footerBar,
   tabBar,
   toasts,
   fleetRow,
