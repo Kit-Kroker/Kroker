@@ -472,3 +472,236 @@ def test_render_corpus_status_prints_each_store_note(note):
     )
     rendered = render_corpus_status([row], store_note=note)
     assert note in rendered
+
+
+# --- R019 T007 (RED): arm-drift staleness (FR-009) ---
+
+
+def _arm_case(
+    cases_root,
+    cid,
+    role,
+    strong,
+    weak,
+    rec_strong,
+    rec_weak,
+    separation=True,
+    verdict="provisional",
+):
+    """A corpus-status case whose case.yaml carries explicit arms and whose
+    acceptance record names the arms the oracle actually ran (FR-009)."""
+    from sdlc.benchmarks.acceptance import (
+        AcceptanceRecord,
+        ArmEvidence,
+        SeparationCheck,
+        Verdict,
+        save_acceptance,
+    )
+    from sdlc.benchmarks.models import CaseRole
+    from sdlc.benchmarks.oracle_id import oracle_identity
+
+    cdir = Path(cases_root) / cid
+    cdir.mkdir(parents=True)
+    arms = [strong] + ([weak] if weak is not None else [])
+    arm_blocks = "".join(
+        f"  - name: {arm}\n    role_models:\n      dev: m\n      test: m\n      devops: m\n"
+        for arm in arms
+    )
+    weak_line = f"weak_arm: {weak}\n" if weak is not None else ""
+    (cdir / "case.yaml").write_text(
+        f"case_id: {cid}\n"
+        f"idea_summary: summary of {cid}\n"
+        f"role: {role}\n"
+        f"harnesses: [opencode]\n"
+        f"judge_model: j\n"
+        f"models: [m]\n"
+        f"strong_arm: {strong}\n"
+        f"{weak_line}"
+        f"arms:\n"
+        f"{arm_blocks}",
+        encoding="utf-8",
+    )
+    odir = cdir / "oracle"
+    odir.mkdir()
+    (odir / "test_sample.py").write_text("def test_ok(): pass\n", encoding="utf-8")
+    if separation:
+        sep = SeparationCheck(
+            strong=ArmEvidence(arm=rec_strong) if rec_strong else None,
+            weak=ArmEvidence(arm=rec_weak) if rec_weak else None,
+        )
+    else:
+        sep = None
+    save_acceptance(
+        AcceptanceRecord(
+            case_id=cid,
+            verdict=Verdict(verdict),
+            oracle_id=oracle_identity(cdir / "oracle"),
+            role=CaseRole(role),
+            exposure="repo_public",
+            kroker_commit="abc",
+            updated="2026-10-27",
+            separation=sep,
+        ),
+        cdir,
+    )
+    return cdir
+
+
+def test_arm_drift_t1_strong_changed(tmp_path):
+    """T1 (contract §1): the record's separation ran strong 'A' / weak 'B',
+    but the case now declares strong_arm 'C' -- arm drift must mark the row
+    stale and drop it from the tally, even though the oracle is unchanged."""
+    from sdlc.benchmarks.corpus import corpus_status, render_corpus_status
+
+    cases_root = tmp_path / "cases"
+    _arm_case(cases_root, "drift-t1", "corpus", "C", "B", "A", "B")
+
+    rows = corpus_status(cases_root)
+    by_id = {r.case_id: r for r in rows}
+    assert by_id["drift-t1"].stale is True
+
+    # Not counted: alone and provisional, a fresh case would read 1 of 8;
+    # a drifted one must not.
+    rendered = render_corpus_status(rows)
+    assert "1 of 8 accepted or provisional" not in rendered
+
+
+def test_arm_drift_t7_unchanged_is_fresh_and_counted(tmp_path):
+    """T7 (contract §1): record separation (A, B) against case (A, B) --
+    unchanged arms stay fresh AND the tally counts the provisional row.
+    Built alone (orchestrator ruling on the R019 T007 stop-and-report):
+    with T1 beside it the pre-fix tally would read 2 of 8 and the test
+    could not pin unchanged behaviour at RED. The "not T1's row" negative
+    is pinned by test_arm_drift_t1_strong_changed."""
+    from sdlc.benchmarks.corpus import corpus_status, render_corpus_status
+
+    cases_root = tmp_path / "cases"
+    _arm_case(cases_root, "drift-t7", "corpus", "A", "B", "A", "B")
+
+    rows = corpus_status(cases_root)
+    by_id = {r.case_id: r for r in rows}
+    assert by_id["drift-t7"].stale is False
+
+    # T7's provisional row is counted: the tally reads one of eight.
+    rendered = render_corpus_status(rows)
+    assert "1 of 8 accepted or provisional" in rendered
+
+
+def test_arm_drift_t2_weak_changed(tmp_path):
+    """T2 (contract §1): record separation ran weak 'B', but the case now
+    declares weak_arm 'C' -- the weak arm alone drifting must mark it stale."""
+    from sdlc.benchmarks.corpus import corpus_status
+
+    cases_root = tmp_path / "cases"
+    _arm_case(cases_root, "drift-t2", "corpus", "A", "C", "A", "B")
+
+    rows = corpus_status(cases_root)
+    by_id = {r.case_id: r for r in rows}
+    assert by_id["drift-t2"].stale is True
+
+
+def test_arm_drift_t3_weak_newly_declared(tmp_path):
+    """T3 (contract §1): record separation ran strong 'A' with no weak arm,
+    but the case now declares weak_arm 'B' -- a newly declared weak arm is
+    arm drift and must mark the row stale."""
+    from sdlc.benchmarks.corpus import corpus_status
+
+    cases_root = tmp_path / "cases"
+    _arm_case(cases_root, "drift-t3", "corpus", "A", "B", "A", None)
+
+    rows = corpus_status(cases_root)
+    by_id = {r.case_id: r for r in rows}
+    assert by_id["drift-t3"].stale is True
+
+
+def test_arm_drift_t4_no_strong_record_now_declared(tmp_path):
+    """T4 (contract §1): record separation carries no strong or weak evidence
+    (the record was written before any strong_arm was configured), but the
+    case now declares (A, B) -- arm drift must mark the row stale."""
+    from sdlc.benchmarks.corpus import corpus_status
+
+    cases_root = tmp_path / "cases"
+    _arm_case(cases_root, "drift-t4", "corpus", "A", "B", None, None)
+
+    rows = corpus_status(cases_root)
+    by_id = {r.case_id: r for r in rows}
+    assert by_id["drift-t4"].stale is True
+
+
+def test_arm_drift_t5_null_separation_never_arm_stale(tmp_path):
+    """T5 (contract §1): a record with separation null has no arm evidence to
+    drift from, so totally different arms (C, D) must not mark it stale --
+    the oracle id still matches, so no other staleness cause fires."""
+    from sdlc.benchmarks.corpus import corpus_status
+
+    cases_root = tmp_path / "cases"
+    _arm_case(cases_root, "drift-t5", "corpus", "C", "D", "A", "B", separation=False)
+
+    rows = corpus_status(cases_root)
+    by_id = {r.case_id: r for r in rows}
+    assert by_id["drift-t5"].stale is False
+
+
+def test_arm_drift_t6_parked_not_arm_stale(tmp_path):
+    """T6 (contract §1): a parked case whose record carries the sentinel
+    separation (not assessed for parked) has no arm evidence to drift from,
+    so declared arms (A, B) must not mark it stale. Written inline because
+    _arm_case cannot express the sentinel's passed and detail fields."""
+    from sdlc.benchmarks.acceptance import (
+        AcceptanceRecord,
+        SeparationCheck,
+        Verdict,
+        save_acceptance,
+    )
+    from sdlc.benchmarks.corpus import corpus_status
+    from sdlc.benchmarks.models import CaseRole
+    from sdlc.benchmarks.oracle_id import oracle_identity
+
+    cases_root = tmp_path / "cases"
+    cdir = cases_root / "drift-t6"
+    cdir.mkdir(parents=True)
+    (cdir / "case.yaml").write_text(
+        "case_id: drift-t6\n"
+        "idea_summary: summary of drift-t6\n"
+        "role: parked\n"
+        "harnesses: [opencode]\n"
+        "judge_model: j\n"
+        "models: [m]\n"
+        "strong_arm: A\n"
+        "weak_arm: B\n"
+        "arms:\n"
+        "  - name: A\n"
+        "    role_models:\n"
+        "      dev: m\n"
+        "      test: m\n"
+        "      devops: m\n"
+        "  - name: B\n"
+        "    role_models:\n"
+        "      dev: m\n"
+        "      test: m\n"
+        "      devops: m\n",
+        encoding="utf-8",
+    )
+    odir = cdir / "oracle"
+    odir.mkdir()
+    (odir / "test_sample.py").write_text("def test_ok(): pass\n", encoding="utf-8")
+    save_acceptance(
+        AcceptanceRecord(
+            case_id="drift-t6",
+            verdict=Verdict.NOT_ASSESSED,
+            oracle_id=oracle_identity(odir),
+            role=CaseRole.PARKED,
+            exposure="repo_public",
+            kroker_commit="abc",
+            updated="2026-10-27",
+            separation=SeparationCheck(
+                passed=None,
+                detail="separation not assessed for parked case",
+            ),
+        ),
+        cdir,
+    )
+
+    rows = corpus_status(cases_root)
+    by_id = {r.case_id: r for r in rows}
+    assert by_id["drift-t6"].stale is False

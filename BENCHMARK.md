@@ -617,7 +617,13 @@ Acceptance into the corpus is determined by `sdlc benchmark accept --case <id>`:
 **Corpus table:**
 Run `sdlc benchmark corpus` to display status across all cases (state after the
 round 016 run batch closed, 2026-10-18 — tally: **1 of 8 accepted or
-provisional, 1 of 2 private**):
+provisional, 1 of 2 private**). A row prints `Stale: yes` for either of two
+causes: **oracle drift** (the record's `oracle_id` no longer matches the
+current hash of `oracle/`) and, since R019 (FR-009), **arm drift** (the
+record's separation arms differ from the case's `strong_arm`/`weak_arm`);
+stale rows stay out of the tally. Known limits of the arm rule: it compares
+arm **names** only (a renamed `role_models` payload under the same name does
+not trip it), and records with `separation: null` are exempt.
 - `cat-cafe-monitoring`: `corpus`, `private`, **`provisional`** (strong
   `glm-5.3-flash` 0.833 vs weak `glm-5.2` 0.472, margin +0.361, n=1 per arm —
   the only case where the harness agrees with the public model ordering)

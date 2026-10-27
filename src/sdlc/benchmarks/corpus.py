@@ -71,6 +71,10 @@ def corpus_status(cases_root: Path | str | None = None) -> list[CorpusRow]:
     - If there is an acceptance.yaml:
       - compute current oracle_identity (if oracle/ exists)
       - if record.oracle_id != current identity: stale is True
+      - else if the oracle is gone while the record has one: stale is True
+      - else if the record's separation arms differ from the case's
+        strong_arm/weak_arm (corpus cases with a separation object only,
+        R019 FR-009 arm drift): stale is True
       - else: stale is False
     """
     from .paths import iter_case_dirs, root_exposure
@@ -115,6 +119,21 @@ def corpus_status(cases_root: Path | str | None = None) -> list[CorpusRow]:
                 stale = True
             else:
                 stale = False
+                # R019 FR-009 (data-model §3, research D-6): a record whose
+                # separation arms no longer match the case's declared arms
+                # claims evidence the case no longer collects. Only corpus
+                # cases, and never a record without a separation object.
+                sep = record.separation
+                if (
+                    spec.role == CaseRole.CORPUS
+                    and sep is not None
+                    and (
+                        sep.strong.arm if sep.strong else None,
+                        sep.weak.arm if sep.weak else None,
+                    )
+                    != (spec.strong_arm, spec.weak_arm)
+                ):
+                    stale = True
         if exposure_from_root:
             exposure = root_exposure(case_dir)
 
