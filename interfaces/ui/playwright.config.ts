@@ -16,6 +16,10 @@ export default defineConfig({
       command: 'npm run build --workspace @kroker/ui && npm run preview --workspace @kroker/ui',
       url: 'http://localhost:4173',
       reuseExistingServer: !process.env.CI,
+      // 018 T015: under scripts/check_ui.py the whole machine is busy and
+      // the build alone can exceed the 60s default; the build is the slow
+      // half, the preview binds in seconds.
+      timeout: 240_000,
     },
     {
       // The app tier (app.pw.ts): the real SPA, not the showcase. Vite
@@ -27,6 +31,7 @@ export default defineConfig({
       url: 'http://localhost:4174',
       reuseExistingServer: !process.env.CI,
       env: { VITE_API: 'mock' },
+      timeout: 240_000,
     },
   ],
 })

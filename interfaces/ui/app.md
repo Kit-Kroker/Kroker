@@ -15,9 +15,9 @@ while the provider reports runs, the empty state never shows. Asserted
 against the mock provider on a built SPA. [FR-601]
 
 ### CONSOLE-2
-The header renders the live run counter and spend stats from provider
-state, and the inbox badge appears when the provider reports inbox items.
-[FR-601]
+The header's inbox badge appears when the provider reports inbox items and
+carries the pending count. The v5 header shows no run counter and no spend
+stats — totals live in the footer (CONSOLE-27, CONSOLE-50). [FR-601]
 
 ### CONSOLE-3
 The fleet strip renders one mark per canonical stage the provider's catalog
@@ -140,8 +140,9 @@ the budget does not count; without one it says there is no budget. [FR-001b,
 FR-701]
 
 ### CONSOLE-27
-The header's spend figure totals priced runs only and states how many runs it
-left out. [FR-003]
+The footer's total sums priced runs only and states how many runs it left
+out; when nothing is priced it reads `not priced`, and with no runs `—`.
+The figure never folds a pricing miss in as zero. [FR-003]
 
 ### CONSOLE-28
 The start form accepts an optional budget; a budget that is not a number
@@ -150,6 +151,20 @@ budget shows that budget on its Cost tab. [FR-006, FR-007]
 
 ### CONSOLE-29
 A budget gate entry in the inbox says what approving grants. [FR-008, FR-701]
+
+### CONSOLE-48
+The header shows Fleet · Inbox · run-in-context and Graphs · Compare ·
+Interfaces, each navigating. With no runs, the run entry is disabled and
+reads "No runs". (Slice 1: Compare and Interfaces are not yet available —
+they appear with their routes; the no-runs entry is covered at the unit
+tier until a zero-fleet mock exists.)
+
+### CONSOLE-50
+The footer shows context left and hints right on every screen.
+
+## Retired clauses
+
+(empty for now — slice tasks tombstone retired clauses here)
 
 ## Failure modes
 
