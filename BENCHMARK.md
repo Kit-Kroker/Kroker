@@ -41,7 +41,8 @@
 > `--variant max` entries are dropped (the glm-5.3 family declares no
 > opencode variants). Every touched case was re-labelled online with no
 > spend; the shipped test role moved to glm-5.3 as well (dev == test
-> model, a knowing Q3=A choice). Per-case verdicts, old → new:
+> model, a knowing Q3=A choice; the DevEval importer now defaults new
+> cases to `glm-5.3` too). Per-case verdicts, old → new:
 >
 > | Case | Before | After |
 > |---|---|---|
@@ -651,18 +652,22 @@ Acceptance into the corpus is determined by `sdlc benchmark accept --case <id>`:
 
 **Corpus table:**
 Run `sdlc benchmark corpus` to display status across all cases (state after the
-round 016 run batch closed, 2026-10-18 — tally: **1 of 8 accepted or
-provisional, 1 of 2 private**). A row prints `Stale: yes` for either of two
+R019 arm retirement, 2026-10-27 — tally: **0 of 8 accepted or
+provisional, 0 of 2 private**; the verdicts below are the current ones, and
+the figures in parentheses are the older glm-5.2-era evidence, kept as history
+and now `not_comparable`, see the R019 break marker at the top). A row prints `Stale: yes` for either of two
 causes: **oracle drift** (the record's `oracle_id` no longer matches the
 current hash of `oracle/`) and, since R019 (FR-009), **arm drift** (the
 record's separation arms differ from the case's `strong_arm`/`weak_arm`);
 stale rows stay out of the tally. Known limits of the arm rule: it compares
 arm **names** only (a renamed `role_models` payload under the same name does
 not trip it), and records with `separation: null` are exempt.
-- `cat-cafe-monitoring`: `corpus`, `private`, **`provisional`** (strong
+- `cat-cafe-monitoring`: `corpus`, `private`, **`not_assessed`** (R019: strong
+  `glm-5.3` has no runs yet; formerly `provisional` — strong
   `glm-5.3-flash` 0.833 vs weak `glm-5.2` 0.472, margin +0.361, n=1 per arm —
   the only case where the harness agrees with the public model ordering)
-- `deveval-geotext`: `corpus`, `public`, **`rejected` (`no_separation`)** (flash
+- `deveval-geotext`: `corpus`, `public`, **`not_assessed`** (R019; formerly
+  `rejected` (`no_separation`): flash
   0.222 vs glm-5.2 0.778, margin −0.556 — the harness inverts the public
   ordering here; its R2-era `provisional` was an artifact of the inverted arm
   labels, see R4-r2)
@@ -672,13 +677,15 @@ not trip it), and records with `separation: null` are exempt.
 - `deveval-particle-swarm-optimization`: `parked`, `public` — unassessed (lost
   twice at plan-validation: glm-5.3 emits dangling task deps, `T7→T6`; the
   single repeat was spent)
-- `deveval-readtime`: `corpus`, `public`, **`rejected` (`no_separation`)** (flash
+- `deveval-readtime`: `corpus`, `public`, **`not_assessed`** (R019; formerly
+  `rejected` (`no_separation`): flash
   0.250 vs glm-5.2 0.167, margin +0.083 < 0.15 — a near-tie under either
   labeling)
 - `deveval-stocktrends`: `parked`, `public` — degenerate at screening (oracle
   0.000 on all runs)
-- `theatre-box-office`: `corpus`, `private`, `isolated`, **`rejected`
-  (`no_separation`)** on round 016 pre-017 records (pin `1e697522`, oracle `a66c0c4e`: strong
+- `theatre-box-office`: `corpus`, `private`, `isolated`, **`not_assessed`**
+  since R019 (no strong-arm runs); formerly **`rejected` (`no_separation`)** on
+  round 016 pre-017 records (pin `1e697522`, oracle `a66c0c4e`: strong
   flash 0.0179 vs weak glm-5.2 0.0179, margin 0, n=1 per arm — both arms
   graded but failed at `merge`, so the oracle scored broken integration trees;
   plan shapes differed — flash 9 tasks/chain 7, glm-5.2 12 tasks/chain 10, no
@@ -828,7 +835,7 @@ undercut, not by size.
    current Kroker commit and a clean working tree. Running with `--skip-smoke`
    explicitly overrides the gate and is logged. `parked` cases refuse to run
    unless overridden with `--allow-parked`. For multi-cell cases, `--arm <name>`
-   selects a specific named arm (e.g. `zai-coding-plan-glm-5.2` or
+   selects a specific named arm (e.g. `zai-coding-plan-glm-5.3` or
    `zai-coding-plan-glm-5.3-flash`), or `--all-arms` runs the entire matrix.
 
 6. **Per-role model sweep** — resolve `cfg.roles` at the benchmark boundary
