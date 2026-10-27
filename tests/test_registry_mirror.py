@@ -55,7 +55,7 @@ def test_mirror_error_names_the_role_and_both_values():
         validate_registry(roles)
     assert "test" in str(exc.value)
     assert "zai-coding-plan/drifted" in str(exc.value)
-    assert "zai-coding-plan/glm-5.2" in str(exc.value)
+    assert "zai-coding-plan/glm-5.3" in str(exc.value)
 
 
 def _crew_registry():
@@ -83,7 +83,7 @@ class _CrewDefaultPipelineConfig:
                 lead_harness=HarnessKind.OPENCODE,
                 model="zai-coding-plan/glm-5.3",
             ),
-            "test": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"),
+            "test": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.3"),
             "devops": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.3"),
         }
 

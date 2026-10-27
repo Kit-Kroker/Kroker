@@ -172,12 +172,12 @@ def git_repo(tmp_path, monkeypatch):
     return str(repo)
 
 
-# 7f5191d0 moved dev/devops to glm-5.3 while test stayed on glm-5.2; the
-# fixture mirrors the shipped defaults so the pipeline-mirror boot check
-# (loader.py _validate_pipeline_mirror) passes on a structurally valid tree.
+# 7f5191d0 moved dev/devops to glm-5.3; round 019 moved test to glm-5.3
+# too; the fixture mirrors the shipped defaults so the pipeline-mirror boot
+# check (loader.py _validate_pipeline_mirror) passes on a structurally valid tree.
 _HARNESS_AGENT_YAMLS = {
     "dev": b"kind: harness\nharness: opencode\nmodel: zai-coding-plan/glm-5.3\n",
-    "test": b"kind: harness\nharness: opencode\nmodel: zai-coding-plan/glm-5.2\n",
+    "test": b"kind: harness\nharness: opencode\nmodel: zai-coding-plan/glm-5.3\n",
     "devops": b"kind: harness\nharness: opencode\nmodel: zai-coding-plan/glm-5.3\n",
 }
 _PROPOSER_AGENT_YAML = b"kind: proposer\nmodel: anthropic:glm-5.2\n"

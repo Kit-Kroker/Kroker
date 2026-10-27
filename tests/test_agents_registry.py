@@ -12,10 +12,10 @@ from sdlc.core.models import (
     RoleConfig,
 )
 
-# 7f5191d0 moved dev/devops to glm-5.3; test stayed on glm-5.2.
+# 7f5191d0 moved dev/devops to glm-5.3; round 019 moved test to glm-5.3.
 _HARNESS_MODELS = {
     "dev": "zai-coding-plan/glm-5.3",
-    "test": "zai-coding-plan/glm-5.2",
+    "test": "zai-coding-plan/glm-5.3",
     "devops": "zai-coding-plan/glm-5.3",
 }
 _PROPOSER_MODEL = "anthropic:glm-5.2"
@@ -68,8 +68,8 @@ def test_shipped_registry_models_are_the_005_targets():
     """US1 (005 T019, data-model.md): the SHIPPED agents/ tree declares the
     flipped models exactly — the 11 glm proposer roles on ``zai:glm-5.3``,
     dev and devops on ``zai-coding-plan/glm-5.3`` (moved off glm-5.2 by
-    7f5191d0, test stays on ``zai-coding-plan/glm-5.2``), adversary on
-    ``zai:glm-5.3-flash`` and discover/risk on
+    7f5191d0), test moved to ``zai-coding-plan/glm-5.3`` in round 019,
+    adversary on ``zai:glm-5.3-flash`` and discover/risk on
     ``zai:glm-5.3-flash`` — and ADR-6 still holds on the flipped
     registry (validate_registry does not raise)."""
     roles = load_registry()

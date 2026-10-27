@@ -372,7 +372,7 @@ class PipelineConfig(BaseModel):
     roles: dict[str, RoleConfig] = Field(
         default_factory=lambda: {
             "dev": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.3"),
-            "test": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"),
+            "test": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.3"),
             "devops": RoleConfig(harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.3"),
         }
     )
