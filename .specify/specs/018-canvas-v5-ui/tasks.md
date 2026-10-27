@@ -219,7 +219,7 @@
 
   Fails.
 - [x] T026 [US1] Implement T025 in `F/shared/graphCanvas.adapter.ts`. T025 goes green. Commit T025 + T026.
-- [ ] T027 [P] [US1] RED: create `F/features/run/costRail.adapter.test.ts`, porting every case of `F/features/cost/CostTab.test.ts` that asserts a spec 011 fact onto `costRailOf` output (FR-015a):
+- [x] T027 [P] [US1] RED: create `F/features/run/costRail.adapter.test.ts`, porting every case of `F/features/cost/CostTab.test.ts` that asserts a spec 011 fact onto `costRailOf` output (FR-015a):
   - role rows with calls, tokens and dollars;
   - "not priced";
   - a partial total, never `$0.00`;
@@ -227,7 +227,7 @@
   - "No breakdown recorded".
 
   Add the stage group from `NodeRunState.cost_usd` by `canonical_stage` in `CANONICAL_STAGES` order, with closed runs giving `not measured` (R-5a), and the "Revise traversals" group (S16). Fails.
-- [ ] T028 [P] [US1] Create `F/features/run/costRail.adapter.ts`, reusing `F/shared/cost.ts`. T027 goes green. Commit T027 + T028.
+- [x] T028 [P] [US1] Create `F/features/run/costRail.adapter.ts`, reusing `F/shared/cost.ts`. T027 goes green. Commit T027 + T028.
 - [ ] T029 [P] [US1] RED: create `F/features/run/railEvents.adapter.test.ts` (R-5). From live decisions, pending items, two successive graph states and board events, the result is newest first. Node transitions are labelled `observed`. Closed `RunSummary`-derived decisions come after the timed events, labelled `untimed` and "not approved" where not approved. With no source, the result is the single "Decision history is not available for this run" row. An open run carries the "automatic and timed-out decisions appear when the run ends" note (FR-022). Fails.
 - [ ] T030 [P] [US1] Create `F/features/run/railEvents.adapter.ts`. T029 goes green. Commit T029 + T030.
 - [ ] T031 [US1] RED: rewrite `F/features/run/RunView.test.ts` and `F/features/run/RunView.tabs.test.ts` for v5 Observe (Clauses CONSOLE-4, 6, 24–26, 49, 51, 52; the tab-host unit tests touch CONSOLE-10 and CONSOLE-16 behaviour now, but those clauses' app-tier rewrite lands in T055). In `F/app/RunPage.test.ts`, replace the "fills the cost slot with a live CostTab" case with a test that `RunPage` passes no cost slot:
