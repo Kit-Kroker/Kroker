@@ -180,7 +180,11 @@ class TestRetryWrapperPin:
             monkeypatch.setenv("ANTHROPIC_BASE_URL", stub.base_url)
             model = single_retry_layer().resolver(None, "anthropic:claude-sonnet-5")  # type: ignore[arg-type]
 
-            agent = Agent(model)
+            # pydantic-ai 2.61 upgrades Anthropic requests to streaming when effective
+            # max_tokens exceeds _MAX_NON_STREAMING_TOKENS. ProviderStub serves JSON (not SSE),
+            # so explicit max_tokens is passed to prevent the streaming upgrade. Production
+            # sets max_tokens explicitly (e.g. judge sets judge_max_tokens).
+            agent = Agent(model, model_settings={"max_tokens": 100})
             res = await agent.run("ping")
 
             assert res.output == "ok"
@@ -248,7 +252,11 @@ class TestRetryWrapperPin:
         with ProviderStub(mode="retry_after_once") as stub:
             monkeypatch.setenv("ANTHROPIC_BASE_URL", stub.base_url)
             model = single_retry_layer().resolver(None, "anthropic:claude-sonnet-5")  # type: ignore[arg-type]
-            agent = Agent(model)
+            # pydantic-ai 2.61 upgrades Anthropic requests to streaming when effective
+            # max_tokens exceeds _MAX_NON_STREAMING_TOKENS. ProviderStub serves JSON (not SSE),
+            # so explicit max_tokens is passed to prevent the streaming upgrade. Production
+            # sets max_tokens explicitly (e.g. judge sets judge_max_tokens).
+            agent = Agent(model, model_settings={"max_tokens": 100})
             res = await agent.run("ping")
             assert res.output == "ok"
             assert stub.count == 2, f"expected 2 requests on retry_after_once, got {stub.count}"
