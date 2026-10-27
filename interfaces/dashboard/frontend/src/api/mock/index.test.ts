@@ -27,8 +27,10 @@ describe('mock api decision flows', () => {
     api = createMockApi({ simulateLive: false })
   })
 
-  it('seeds 10 runs and 6 inbox items, including the graph demo run', async () => {
-    expect(await api.listRuns()).toHaveLength(10)
+  it('seeds 14 runs and 6 inbox items, including the graph demo run', async () => {
+    // 018 T033 triage: the four Observe outcome fixtures (halted, escalated,
+    // multi-sink, retention) join the fleet — 10 + 4.
+    expect(await api.listRuns()).toHaveLength(14)
     expect(await api.listInbox()).toHaveLength(6)
   })
 

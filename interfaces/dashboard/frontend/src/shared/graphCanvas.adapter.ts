@@ -170,14 +170,17 @@ export function toCanvas(graph: GraphWire, opts: CanvasOptions): CanvasModel {
 
   // 018 T025 (V1-V3): a final state appends the four outcome sinks — never
   // a 'halted' one; only the outcome's sink lights. A completion point is a
-  // catalog-typed node with an out port no edge routes onward.
+  // catalog-typed node with an out port no edge routes onward AND that is
+  // not itself a run-end port (E-75 §7.4: fail, halt and reject end runs —
+  // only a stranded continuation port means the run completed there).
+  const TERMINAL_PORTS = new Set(['fail', 'halt', 'reject'])
   if (state?.outcome && state.outcome.state !== 'running') {
     const outcome = state.outcome
     const completionPoints = graph.nodes
       .filter((n) => {
         const t = opts.typeOf(n.type)
         if (!t) return false
-        const outs = t.ports.filter((p) => p.direction === 'out').map((p) => p.name)
+        const outs = t.ports.filter((p) => p.direction === 'out' && !TERMINAL_PORTS.has(p.name)).map((p) => p.name)
         return outs.some((name) => !graph.edges.some((e) => e.source === n.id && e.source_port === name))
       })
       .map((n) => n.label ?? n.id)

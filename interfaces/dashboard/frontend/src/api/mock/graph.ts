@@ -20,7 +20,7 @@ import validationRecorded from '../__fixtures__/graph/run_state/validation.recor
 interface Scenario { name: string; yaml: string; parse: ParseWire; serialize: { ok: true; yaml: string } | null }
 interface ObjectRecording { name: string; base: string; graph: GraphWire; parse: ParseWire }
 interface ScriptState { state: GraphStateResponse; on: Partial<Record<GateOutcome, string>> }
-interface RunScript { initial: string; states: Record<string, ScriptState> }
+interface RunScript { initial: string; states: Record<string, ScriptState>; graph?: GraphResponse }
 
 const scenarioModules = import.meta.glob('../__fixtures__/graph/scenarios/*.json', { eager: true, import: 'default' })
 const objectModules = import.meta.glob('../__fixtures__/graph/objects/*.json', { eager: true, import: 'default' })
@@ -37,6 +37,32 @@ const VALIDATION: Record<string, ValidationWire> = {
 const RECORDED_RESPONSE = graphResponseJson as unknown as GraphResponse
 const RECORDED_STATES = graphStateJson as unknown as Record<string, GraphStateResponse>
 
+const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x))
+
+/** V1: the recorded completed projection, halted at the code node's fail port. */
+function haltedIntoFailed(base: GraphStateResponse): GraphStateResponse {
+  const s = clone(base)
+  if (s.kind !== 'state') return s
+  s.outcome = { state: 'failed', reason: null, result: 'failed:quarantined-tasks' }
+  if (s.nodes.code) s.nodes.code = { ...s.nodes.code, status: 'failed' }
+  return s
+}
+
+/** V3: the recorded completed projection on a graph whose plan leg is cut — two completion points. */
+function multiSinkCompletion(base: GraphStateResponse): GraphStateResponse {
+  return clone(base)
+}
+
+/** V3: the recorded default graph with plan_check's `ok` fan-out cut — plan_check
+ *  and deploy both become completion points. */
+function multiSinkGraph(): GraphResponse {
+  const g = clone(RECORDED_RESPONSE)
+  if (g.kind === 'graph') {
+    g.graph = { ...g.graph, edges: g.graph.edges.filter((e) => !(e.source === 'plan_check' && e.source_port === 'ok')) }
+  }
+  return g
+}
+
 const RUN_SCRIPTS: Record<string, RunScript> = {
   // The recorded blocked_at_architecture run: the pending architecture#1
   // gate approves to the recorded completed state, rejects to the recorded
@@ -52,6 +78,34 @@ const RUN_SCRIPTS: Record<string, RunScript> = {
       rejected_at_architecture: { state: RECORDED_STATES.rejected_at_architecture, on: {} },
     },
   },
+  // 018 T033: the Observe outcome fixtures (V1-V3, R-5a). Mock logic over
+  // recorded states — the escalated projection is the RECORDING itself; the
+  // halted and multi-sink states derive from the recorded completed one
+  // (outcome, result, the code node's status, one removed edge); the
+  // retention fixture answers unavailable. Nothing here pretends to be a
+  // new Python recording.
+  'feature-halted-demo': {
+    initial: 'halted',
+    states: {
+      halted: {
+        state: haltedIntoFailed(RECORDED_STATES.completed),
+        on: {},
+      },
+    },
+  },
+  'feature-escalated-demo': {
+    initial: 'escalated',
+    states: { escalated: { state: RECORDED_STATES.escalated_revise_exhausted, on: {} } },
+  },
+  'feature-multisink-demo': {
+    initial: 'completed',
+    states: { completed: { state: multiSinkCompletion(RECORDED_STATES.completed), on: {} } },
+    graph: multiSinkGraph(),
+  },
+  'feature-retired-demo': {
+    initial: 'retired',
+    states: { retired: { state: { kind: 'unavailable', reason: 'retention_expired', problems: [] }, on: {} } },
+  },
 }
 
 // A LOOKUP KEY ONLY: object keys sorted, arrays untouched. Never a sha, never
@@ -66,8 +120,6 @@ function lookupKey(value: unknown): string {
         : v
   return JSON.stringify(norm(value)) ?? ''
 }
-
-const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x))
 
 const UNRECORDED_VALIDATION: ValidationWire = {
   issues: [{ code: 'mock.unrecorded', severity: 'warning', message: 'mock: no recorded validation for this graph', target: { kind: 'graph' } }],
@@ -176,9 +228,11 @@ export function createMockGraph(): MockGraph {
     },
 
     async getRunGraph(runId): Promise<GraphResponse> {
-      // The recorded run graph of the shipped default pipeline (E-75 §7.1).
-      if (!RUN_SCRIPTS[runId]) return { kind: 'no_graph', reason: 'legacy_run' }
-      return clone(RECORDED_RESPONSE)
+      // The recorded run graph of the shipped default pipeline (E-75 §7.1);
+      // a script may carry its own graph (the T033 outcome fixtures).
+      const script = RUN_SCRIPTS[runId]
+      if (!script) return { kind: 'no_graph', reason: 'legacy_run' }
+      return clone(script.graph ?? RECORDED_RESPONSE)
     },
 
     subscribeGraphState(runId, cb) {

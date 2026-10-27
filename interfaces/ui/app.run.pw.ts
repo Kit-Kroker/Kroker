@@ -96,8 +96,135 @@ test('a gate decision shows its busy window before the state clears it', async (
   await expect(gate).toHaveCount(0)  // then the next state clears the whole control
 })
 
-// --- The Cost tab is retired (018 T032, S3): the CONSOLE-24/25/26 tests
-// were deleted with the CostTab they drove (their cases were ported to
-// costRail.adapter.test.ts in T027); T033 restores the clauses on the
-// rail's Cost section. The budget run remains the seeded
-// feature-graph-demo; the no-budget run feature-dark-mode.
+// --- The rail's Cost section (018 T033, S3): the CONSOLE-24/25/26 rules
+// restored from the retired CostTab (their unit-tier port lives in
+// costRail.adapter.test.ts). The budget run is feature-graph-demo; the
+// no-budget closed run is feature-dark-mode.
+
+test('the Cost section lists the roles, the total, and both deep links open it', async ({ page }) => {  // clause: CONSOLE-24
+  await page.goto('/#/runs/feature-graph-demo?rail=cost')
+  const cost = page.locator('[data-testid="rail-cost"]')
+  await expect(cost).toBeVisible()
+  await expect(cost.locator('.cost-role')).toHaveCount(3)
+  await expect(cost.locator('[data-testid="rail-cost-total"]')).toContainText('2.60')
+  // The legacy ?tab=cost deep link lands on the same section (SC-005).
+  await page.goto('/#/runs/feature-graph-demo?tab=cost')
+  await expect(page.locator('[data-testid="rail-cost"]')).toBeVisible()
+})
+
+test('a missing price reads "not priced" and no figure in the Cost section is $0.00', async ({ page }) => {  // clause: CONSOLE-25
+  await page.goto('/#/runs/feature-graph-demo?rail=cost')
+  const cost = page.locator('[data-testid="rail-cost"]')
+  await expect(cost.locator('.cost-role .price', { hasText: 'not priced' })).toBeVisible()
+  await expect(cost.locator('[data-testid="rail-cost-total"]')).toContainText('partial')
+  const prices = cost.locator('.cost-role .price, [data-testid="rail-cost-total"]')
+  const count = await prices.count()
+  expect(count).toBeGreaterThan(0)
+  for (let i = 0; i < count; i++) {
+    expect(await prices.nth(i).textContent()).not.toContain('$0.00')
+  }
+})
+
+test('the budget figures render in the Cost section, or the no-budget sentence', async ({ page }) => {  // clause: CONSOLE-26
+  await page.goto('/#/runs/feature-graph-demo?rail=cost')
+  const budget = page.locator('[data-testid="rail-cost"] [data-testid="rail-budget"]')
+  await expect(budget).toContainText('20.00')
+  await expect(budget).toContainText('40.00')
+  await expect(budget).toContainText('2.60')
+  await expect(budget).toContainText('6%')
+  await expect(budget).toContainText('1')
+  await expect(budget.locator('.note')).not.toBeEmpty()
+  // A closed run without a budget says so and how one is set.
+  await page.goto('/#/runs/feature-dark-mode?rail=cost')
+  await expect(page.locator('[data-testid="rail-cost"]')).toContainText('No budget')
+  await expect(page.locator('[data-testid="rail-cost"]')).toContainText('start form')
+})
+
+// --- The Observe outcome fixtures (018 T033, V1-V3/V6). Each V test
+// asserts the right element AND the absence of the wrong one (R-11).
+
+test('V1: a halted run lights the failed sink with its result; nothing is labelled halted', async ({ page }) => {  // clause: CONSOLE-30
+  await page.goto('/#/runs/feature-halted-demo')
+  const failedSink = page.locator('[data-testid="graph-node"][data-key="sink-failed"]')
+  await expect(failedSink).toBeVisible()
+  await expect(failedSink.locator('[data-testid="sink-outcome"]')).toHaveText('failed')
+  await expect(failedSink.locator('[data-testid="sink-sub"]')).toHaveText('failed:quarantined-tasks')
+  await expect(failedSink).toHaveClass(/cmp-graph-sink-lit/)
+  // The wrong outcomes stay unlit and nothing anywhere reads 'halted'.
+  await expect(page.locator('[data-testid="run-view"] .cmp-graph-sink-lit')).toHaveCount(1)
+  const sinks = page.locator('[data-testid="run-view"] [data-testid="sink-outcome"]')
+  await expect(sinks).toHaveCount(4)
+  for (const wrong of ['halted', 'sink-halted']) {
+    await expect(page.locator(`[data-testid="run-view"] [data-testid="graph-node"][data-key="${wrong}"]`)).toHaveCount(0)
+  }
+  expect(await page.locator('[data-testid="run-view"]').innerText()).not.toContain('halted')
+})
+
+test('V2: a revise edge at its limit warns, and the escalated sink lights', async ({ page }) => {  // clause: CONSOLE-31
+  await page.goto('/#/runs/feature-escalated-demo')
+  await expect(page.locator('[data-testid="run-view"] [data-testid="edge-note"]')).toHaveText('next revise escalates the run')
+  const escalated = page.locator('[data-testid="graph-node"][data-key="sink-escalated"]')
+  await expect(escalated).toHaveClass(/cmp-graph-sink-lit/)
+  await expect(page.locator('[data-testid="graph-node"][data-key="sink-failed"]')).not.toHaveClass(/cmp-graph-sink-lit/)
+})
+
+test('V3: the completed sink lists every node that completed the run', async ({ page }) => {  // clause: CONSOLE-32
+  await page.goto('/#/runs/feature-multisink-demo')
+  const completed = page.locator('[data-testid="graph-node"][data-key="sink-completed"]')
+  await expect(completed).toHaveClass(/cmp-graph-sink-lit/)
+  const sub = await completed.locator('[data-testid="sink-sub"]').innerText()
+  expect(sub).toContain('plan')
+  expect(sub).toContain('deploy')
+  // The wrong outcomes stay unlit.
+  await expect(page.locator('[data-testid="run-view"] .cmp-graph-sink-lit')).toHaveCount(1)
+})
+
+test('V6: with no budget the rail reads off and draws no bar', async ({ page }) => {  // clause: CONSOLE-35
+  await page.goto('/#/runs/feature-dark-mode')
+  await expect(page.locator('[data-testid="rail-budget"]')).toContainText('off')
+  await expect(page.locator('[data-testid="rail-budget-bar"]')).toHaveCount(0)
+})
+
+// --- The inspector (018 T033, S13/CONSOLE-49) and the rail's remaining
+// sections (CONSOLE-51/52).
+
+test('the inspector marks a configured-vs-answering difference; the code node shows the read-only inner loop', async ({ page }) => {  // clause: CONSOLE-49
+  await page.goto('/#/runs/feature-graph-demo')
+  // dispatchEvent: the node can sit partly clipped by the canvas pane's
+  // overflow; a plain DOM click still bubbles to vue-flow's node handler.
+  await page.locator('[data-testid="graph-node"][data-key="architect"]').dispatchEvent('click')
+  const inspector = page.locator('[data-testid="run-inspector"]')
+  await expect(inspector).toBeVisible()
+  // The mock seeds the architect role on model 'm'; the catalog's default
+  // is 'architect' — the difference is marked.
+  await expect(inspector.locator('[data-testid="inspector-configured"]')).toHaveText('architect')
+  await expect(inspector.locator('[data-testid="inspector-answering"]')).toHaveText('m')
+  await expect(inspector.locator('[data-testid="inspector-model-diff"]')).toBeVisible()
+  // The code node: the inner loop is read-only (the empty list is honest —
+  // its step wire arrives with the card slice; assert the list is present
+  // with no button anywhere).
+  await page.locator('[data-testid="graph-node"][data-key="code"]').dispatchEvent('click')
+  await expect(page.locator('[data-testid="run-inspector"] .cmp-step-list')).toBeAttached()
+  await expect(page.locator('[data-testid="run-inspector"] button')).toHaveCount(0)
+})
+
+test('a retention-expired state shows its reason under the run block, with an empty canvas', async ({ page }) => {  // clause: CONSOLE-51
+  await page.goto('/#/runs/feature-retired-demo')
+  const note = page.locator('[data-testid="run-graph-state-unavailable"]')
+  await expect(note).toBeVisible()
+  await expect(note).toContainText('no longer available')
+  // R-5a: the reason lives under the rail's run block.
+  await expect(note).toHaveClass(/banner/)
+  expect(await note.evaluate((el) => (el.closest('[data-testid="rail"]') as HTMLElement | null) !== null)).toBe(true)
+  await expect(page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')).toHaveCount(0)
+  // The mock never fails a provider read, so the "could not load" half of
+  // the clause stays pinned at the unit tier (RunView.test.ts), as
+  // CONSOLE-15's positive path is.
+})
+
+test('the Cost section lists each revise edge used against max', async ({ page }) => {  // clause: CONSOLE-52
+  await page.goto('/#/runs/feature-graph-demo?rail=cost')
+  const cost = page.locator('[data-testid="rail-cost"]')
+  await expect(cost).toContainText('architecture.revise>architect.guidance')
+  await expect(cost).toContainText('0/2')
+})

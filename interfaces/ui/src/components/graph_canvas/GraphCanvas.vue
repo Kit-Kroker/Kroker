@@ -97,6 +97,13 @@ const terminalKeys = computed(
 const flowNodes = shallowRef<Node[]>([])
 const flowEdges = shallowRef<Edge[]>([])
 
+// 018 T033: vue-flow does not apply node ADDITIONS after its initial render
+// (the run view's outcome sinks arrive with the first final state, after the
+// graph). A changed element KEY SET remounts the flow; decoration-only
+// updates (statuses, metrics, counters — GRAPH_CANVAS-9) keep the key and
+// with it the mounted element list.
+const structureKey = computed(() => `${props.nodes.map((n) => n.key).join('|')}#${props.edges.map((e) => e.key).join('|')}`)
+
 const positionOf = (n: CanvasNode): Point => (isFinitePoint(n.position) ? n.position : laid.value[n.key] ?? { x: 0, y: 0 })
 
 watch(
@@ -180,6 +187,7 @@ defineExpose({ relayout })
     @drop.prevent="onDrop"
   >
     <VueFlow
+      :key="structureKey"
       :nodes="flowNodes"
       :edges="flowEdges"
       :nodes-draggable="editable"

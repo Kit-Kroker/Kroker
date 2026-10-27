@@ -261,7 +261,9 @@ function onRailSelect(id: string) {
         <p v-if="runGraph.error" class="banner error" data-testid="run-graph-error">could not load</p>
         <p v-else-if="!catalog.can('run_graph')" class="banner" data-testid="run-graph-unavailable">Graph view is not available on this server.</p>
 
-        <div v-if="model" class="observe-body">
+        <!-- CONSOLE-51: with an unprojectable state the canvas shows its
+             empty state — no graph is drawn for a run whose state is gone. -->
+        <div v-if="model && runGraph.state?.kind !== 'unavailable'" class="observe-body">
           <div class="canvas-wrap">
             <GraphCanvas
               :nodes="model.nodes"

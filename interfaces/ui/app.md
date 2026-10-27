@@ -44,8 +44,9 @@ controls once the provider's next run state no longer lists it. [FR-1205,
 FR-301/302]
 
 ### CONSOLE-6
-The run view of a run that predates graph execution shows the no-graph empty
-state and still renders the stage strip. [FR-1205, E-76 U7]
+A legacy run shows the no-graph empty state; the rail still shows the
+run block. The run header's stage strip is gone — v5 draws none on the
+run. [FR-1205, E-76 U7]
 
 ### CONSOLE-8
 The run view offers no edit affordance; its "open copy in editor" link lands
@@ -124,20 +125,20 @@ A gate decided in the inbox is no longer offered for decision on that run's
 canvas. [FR-601, FR-302]
 
 ### CONSOLE-24
-The run page's Cost tab lists one row per role with its calls, tokens and
-dollars, and a total; `?tab=cost` opens it and a copied URL reopens it.
-[FR-001, FR-701]
+The rail's Cost section: one row per role with calls, tokens and
+dollars, and a total. `?rail=cost` opens it, and the legacy `?tab=cost`
+deep link still lands on it (S3). [FR-001, FR-701]
 
 ### CONSOLE-25
-A role or total that has tokens and no price reads "not priced", and a total
-that mixes priced and unpriced roles is marked partial; no such figure reads
-`$0.00`. [FR-003, FR-701]
+A role or total that has tokens and no price reads "not priced", and a
+total that mixes priced and unpriced roles is marked partial; no such
+figure reads `$0.00` — the same rules in the rail's Cost section.
+[FR-003, FR-701]
 
 ### CONSOLE-26
-With a budget, the Cost tab shows the budget, the dollars counted toward it,
-the share of the current limit used, the number of crossings, and which spend
-the budget does not count; without one it says there is no budget. [FR-001b,
-FR-701]
+The budget figures — amount, limit, counted, share, crossings, the
+scope note — or "no budget": the same facts in the rail's budget block
+and Cost section. [FR-001b, FR-701]
 
 ### CONSOLE-27
 The footer's total sums priced runs only and states how many runs it left
@@ -166,6 +167,40 @@ The footer shows context left and hints right on every screen.
 The command palette opens on ⌘K or Ctrl+K, filters v5's commands, and
 runs the chosen one. The ⋯ menu's light theme switches `data-theme` on
 the document.
+
+### CONSOLE-30
+V1 — A run that ended on a `halt` port lights the failed sink, which
+shows the node's result string. No element is labelled `halted`.
+
+### CONSOLE-31
+V2 — A revise edge at its limit states that the next revise escalates
+the run. An escalated run lights the escalated sink.
+
+### CONSOLE-32
+V3 — The completed sink lists every node that completed the run. (In
+Design, an edgeless non-terminal out-port warns that it becomes a
+completion sink, and the terminal copy reads "rejected, failed or
+escalated" — with the Design slice.)
+
+### CONSOLE-35
+V6 — With no budget the rail reads "off" with no bar. A
+`rejected:budget` run shows that result string on Fleet (slice 4
+extends the test).
+
+### CONSOLE-49
+The Observe inspector of a node whose configured model differs from the
+answering model shows both ids and marks the difference. The `code`
+node shows the inner loop read-only.
+
+### CONSOLE-51
+A run whose state cannot be projected (retention expired, registry
+drift) shows its reason under the rail's run block. The canvas shows
+its empty state, and a provider failure reads "could not load", not
+empty.
+
+### CONSOLE-52
+The rail's Cost section has a "Revise traversals" group with one row
+per revise edge, used against max (S16).
 
 ## Retired clauses
 

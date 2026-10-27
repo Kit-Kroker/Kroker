@@ -79,6 +79,80 @@ function seedRuns(): Run[] {
       projectKey: 'kroker',
     },
     {
+      // 018 T033 (V1): the Observe halted-into-failed fixture — the run
+      // ended on the code node's fail port; the failed sink carries the
+      // result string (mock/graph.ts over the recorded completed state).
+      id: 'feature-halted-demo',
+      title: 'Halted at the code node',
+      mode: 'greenfield',
+      repo: 'git@github.com:acme/graph-demo',
+      activeStages: [],
+      stageMarks: null,
+      status: 'failed',
+      blocker: '',
+      cost: 1.2,
+      budget: null,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
+      age: '1h 05m',
+      decisions: [],
+      projectKey: null,
+    },
+    {
+      // 018 T033 (V2): the escalated fixture — the recorded
+      // escalated_revise_exhausted projection served as-is.
+      id: 'feature-escalated-demo',
+      title: 'Escalated after revise exhaustion',
+      mode: 'greenfield',
+      repo: 'git@github.com:acme/graph-demo',
+      activeStages: [],
+      stageMarks: null,
+      status: 'failed',
+      blocker: '',
+      cost: 2.0,
+      budget: null,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
+      age: '3h 40m',
+      decisions: [],
+      projectKey: null,
+    },
+    {
+      // 018 T033 (V3): the multi-sink completion — the recorded completed
+      // projection on a graph whose plan leg is cut, so plan and deploy
+      // both complete the run.
+      id: 'feature-multisink-demo',
+      title: 'Completed at two sinks',
+      mode: 'greenfield',
+      repo: 'git@github.com:acme/graph-demo',
+      activeStages: [],
+      stageMarks: null,
+      status: 'done',
+      blocker: '',
+      cost: 3.4,
+      budget: null,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
+      age: '2h 30m',
+      decisions: [],
+      projectKey: null,
+    },
+    {
+      // 018 T033 (R-5a/CONSOLE-51): the retention fixture — the fleet knows
+      // the run, the graph state answers unavailable.
+      id: 'feature-retired-demo',
+      title: 'Retention expired',
+      mode: 'greenfield',
+      repo: 'git@github.com:acme/graph-demo',
+      activeStages: [],
+      stageMarks: null,
+      status: 'running',
+      blocker: '',
+      cost: 0.9,
+      budget: null,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
+      age: '5d',
+      decisions: [],
+      projectKey: null,
+    },
+    {
       id: 'feature-add-sso',
       title: 'Add SSO to customer portal',
       mode: 'brownfield',
