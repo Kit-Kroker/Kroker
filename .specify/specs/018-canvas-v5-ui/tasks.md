@@ -185,7 +185,7 @@
 
   Commands whose target is not `available` in `navManifest` are omitted. "Switch to Design", "Design <graph>" and "Validate graph" are omitted while `designAvailable` is false (data-model §5); T063 sets it true. Fails.
 - [x] T019 [US8] Create `F/app/commands.ts`. Mount `CommandPalette` and `ToggleMenu` in `F/app/App.vue`, bound to `prefs.store` (theme, payloads, terminals, grid) and to global ⌘K or Ctrl+K and Escape. T018 goes green. Commit T018 + T019.
-- [ ] T020 [US8] App tier: add CONSOLE-47 to `U/app.md`, and a test in `U/app.shell.pw.ts`: Ctrl+K, type "inbox", Enter lands on `/#/inbox`; ⋯ → Light theme sets `data-theme="light"` on `html`. `check_clauses.py`. Commit.
+- [x] T020 [US8] App tier: add CONSOLE-47 to `U/app.md`, and a test in `U/app.shell.pw.ts`: Ctrl+K, type "inbox", Enter lands on `/#/inbox`; ⋯ → Light theme sets `data-theme="light"` on `html`. `check_clauses.py`. Commit.
 
 ---
 

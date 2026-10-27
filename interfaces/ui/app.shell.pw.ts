@@ -53,6 +53,27 @@ test('the footer shows context left and hints right on every screen', async ({ p
   }
 })
 
+// --- The v5 palette and session menu (018 T019): ⌘K opens the palette,
+// ⋯ opens the session toggles. The components' own contracts are pinned
+// at the library tier (COMMAND_PALETTE-*, TOGGLE_MENU-*); this tier pins
+// the shell wiring.
+test('Ctrl+K opens the palette, filtering runs the chosen command', async ({ page }) => {  // clause: CONSOLE-47
+  await page.keyboard.press('Control+k')
+  const input = page.locator('[data-testid="palette-input"]')
+  await expect(input).toBeVisible()
+  await input.fill('inbox')
+  await expect(page.locator('[data-testid="palette-command"]')).toHaveCount(1)
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/#\/inbox/)
+})
+
+test('the ⋯ menu light theme switches data-theme on the document', async ({ page }) => {  // clause: CONSOLE-47
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme', 'light')
+  await page.locator('[data-testid="header-menu"]').click()
+  await page.locator('[data-testid="toggle-item"]', { hasText: 'Light theme' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+})
+
 // --- The start form's budget (011 T016): the form lives in the shell
 // (the header's Start button) and starts a run on the fleet.
 test('the start form rejects a zero budget and starts a budgeted run', async ({ page }) => {  // clause: CONSOLE-28

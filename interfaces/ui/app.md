@@ -162,6 +162,11 @@ tier until a zero-fleet mock exists.)
 ### CONSOLE-50
 The footer shows context left and hints right on every screen.
 
+### CONSOLE-47
+The command palette opens on ⌘K or Ctrl+K, filters v5's commands, and
+runs the chosen one. The ⋯ menu's light theme switches `data-theme` on
+the document.
+
 ## Retired clauses
 
 (empty for now — slice tasks tombstone retired clauses here)
