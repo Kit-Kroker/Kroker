@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
 import { useFleetStore } from '../shared/fleet.store'
 import { useInboxStore } from './inbox.store'
 import { useCatalogStore } from '../shared/catalog.store'
+import { usePrefsStore } from './prefs.store'
 import AppHeader from './shell/AppHeader.vue'
 import Toasts from './shell/Toasts.vue'
 import StartRunModal from './shell/StartRunModal.vue'
@@ -10,7 +11,20 @@ import StartRunModal from './shell/StartRunModal.vue'
 const fleet = useFleetStore()
 const inbox = useInboxStore()
 const catalog = useCatalogStore()
+const prefs = usePrefsStore()
 let pollId: ReturnType<typeof setInterval> | null = null
+
+// 018 R-10/S4: the app owns the active theme (tokens.md); the library
+// never sets it. 'dark' is the unstyled default, so it REMOVES the
+// attribute — including a stale one left by an earlier page.
+watch(
+  () => prefs.theme,
+  (theme) => {
+    if (theme === 'light') document.documentElement.dataset.theme = 'light'
+    else delete document.documentElement.dataset.theme
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   // T5: a failed first read must not stop the poll. Every store owns its
