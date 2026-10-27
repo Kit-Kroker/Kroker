@@ -225,7 +225,7 @@ def build_case_dict(
         "research_enabled": False,
         "network_required": network_required,
         "harnesses": ["opencode"],
-        "models": ["zai-coding-plan/glm-5.2"],
+        "models": ["zai-coding-plan/glm-5.3"],
         "judge_model": judge_model,
         "rubrics": {},
     }

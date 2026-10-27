@@ -239,6 +239,20 @@ def test_build_case_dict_matches_the_CaseSpec_contract():
     assert "A tool." in case["description"]
 
 
+def test_build_case_dict_default_model_is_glm_5_3():
+    """FR-004 / R019: the importer's models default follows the Q0 strong model."""
+    case = build_case_dict(
+        case_id="x",
+        prd="# t\nline",
+        contract="c",
+        language="python",
+        judge_model="j",
+        network_required=False,
+        repo_url="/srv/x",
+    )
+    assert case["models"] == ["zai-coding-plan/glm-5.3"]
+
+
 def test_render_case_yaml_round_trips_through_load_case_spec(tmp_path):
     from sdlc.benchmarks.cli import load_case_spec
 
