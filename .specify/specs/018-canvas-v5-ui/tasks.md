@@ -210,7 +210,7 @@
 
   Create `U/src/components/step_list/step_list.spec.ts`: one row per step with name, ref, a status pip and meta; no interactive control. Fail.
 - [x] T024 [P] [US1] Create the five files of `rail` and of `step_list`, and register them. T023 goes green. Commit T023 + T024.
-- [ ] T025 [US1] RED: extend `F/shared/graphCanvas.adapter.test.ts`. `toCanvas` with a graph state appends four sink nodes (completed, rejected, failed, escalated) and never a `halted` one.
+- [x] T025 [US1] RED: extend `F/shared/graphCanvas.adapter.test.ts`. `toCanvas` with a graph state appends four sink nodes (completed, rejected, failed, escalated) and never a `halted` one.
   - Outcome `failed` with result `failed:quarantined-tasks` lights `failed` with that sub (V1).
   - Outcome `escalated` lights `escalated` (V2).
   - Outcome `completed` with two edgeless non-terminal ports lists both nodes in the completed sub (V3).
@@ -218,7 +218,7 @@
   - Wire `blocked` maps to the waiting status, never failed (R-10).
 
   Fails.
-- [ ] T026 [US1] Implement T025 in `F/shared/graphCanvas.adapter.ts`. T025 goes green. Commit T025 + T026.
+- [x] T026 [US1] Implement T025 in `F/shared/graphCanvas.adapter.ts`. T025 goes green. Commit T025 + T026.
 - [ ] T027 [P] [US1] RED: create `F/features/run/costRail.adapter.test.ts`, porting every case of `F/features/cost/CostTab.test.ts` that asserts a spec 011 fact onto `costRailOf` output (FR-015a):
   - role rows with calls, tokens and dollars;
   - "not priced";

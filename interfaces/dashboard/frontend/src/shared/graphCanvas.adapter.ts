@@ -161,9 +161,44 @@ export function toCanvas(graph: GraphWire, opts: CanvasOptions): CanvasModel {
     if (state && e.max_traversals !== undefined) {
       const used = state.edges.find((s) => sameEdge(s.edge, e))?.traversals ?? 0
       edge.counter = { used, max: e.max_traversals }
+      // 018 T025 (V2/S16): a revise loop at its last traversal warns that
+      // the next revise escalates the run.
+      if (used === e.max_traversals) edge.note = 'next revise escalates the run'
     }
     return edge
   })
+
+  // 018 T025 (V1-V3): a final state appends the four outcome sinks — never
+  // a 'halted' one; only the outcome's sink lights. A completion point is a
+  // catalog-typed node with an out port no edge routes onward.
+  if (state?.outcome && state.outcome.state !== 'running') {
+    const outcome = state.outcome
+    const completionPoints = graph.nodes
+      .filter((n) => {
+        const t = opts.typeOf(n.type)
+        if (!t) return false
+        const outs = t.ports.filter((p) => p.direction === 'out').map((p) => p.name)
+        return outs.some((name) => !graph.edges.some((e) => e.source === n.id && e.source_port === name))
+      })
+      .map((n) => n.label ?? n.id)
+    const subFor = (o: 'completed' | 'rejected' | 'failed' | 'escalated'): string => {
+      if (o === 'completed') return completionPoints.join(' · ')
+      const text = outcome.state === o ? (outcome.result ?? outcome.reason) : null
+      return text ?? ''
+    }
+    const sinkX = Math.max(...nodes.map((n) => n.position?.x ?? 0), 0) + 280
+    for (const [i, o] of (['completed', 'rejected', 'failed', 'escalated'] as const).entries()) {
+      nodes.push({
+        key: `sink-${o}`,
+        title: o,
+        ports: [],
+        issueCount: 0,
+        position: { x: sinkX, y: i * 140 },
+        kind: 'sink',
+        sink: { outcome: o, lit: outcome.state === o, sub: subFor(o) },
+      })
+    }
+  }
 
   const pendingByNode: Record<string, PendingRef[]> = {}
   // E-75 §7.4: an unattributed pending (node null, opened outside any

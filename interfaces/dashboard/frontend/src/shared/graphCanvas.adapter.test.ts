@@ -167,7 +167,9 @@ describe('toCanvas (run mode over the recorded FINAL contract)', () => {
 
   it('completed: every node decorated terminal, with the completed outcome present', () => {
     const m = toCanvas(GRAPH, { typeOf, state: STATES.completed })
-    expect(m.nodes.filter((n) => n.status !== 'done' && n.status !== 'skipped')).toEqual([])
+    // 018 T025: the four appended sinks carry no status by design; the rule
+    // is that every GRAPH node is decorated terminal.
+    expect(m.nodes.filter((n) => n.kind !== 'sink' && n.status !== 'done' && n.status !== 'skipped')).toEqual([])
     expect(statusOf(m, 'context')).toBe('skipped')
     expect(outcomeOf(m)).toEqual({ state: 'completed', reason: null, result: 'deployed:https://example.invalid/pr/1' }) // RED
   })
@@ -249,5 +251,160 @@ describe('helpers', () => {
     expect(formatElapsed(59_900)).toBe('0m 59s')
     expect(formatElapsed(60_000)).toBe('1m 00s')
     expect(formatElapsed(3_600_000)).toBe('1h 00m')
+  })
+})
+
+// --- toCanvas v5 sinks and edge notes (018 T025 RED) ------------------------
+// The adapter must append the four outcome sinks (V1-V3), annotate a back
+// edge at its traversal max (V2), and pass wire `blocked` through (R-10).
+// CanvasNode.kind/sink exist in the library; the adapter does not populate
+// them yet - that is the RED.
+
+describe('toCanvas v5 sinks and edge notes (018 T025 RED)', () => {
+  const stateOf = (outcome: { state: string; reason: string | null; result: string | null }, extra = {}) =>
+    ({
+      kind: 'state',
+      graph_sha: 's',
+      nodes: {},
+      edges: [],
+      current_nodes: [],
+      pending: [],
+      outcome,
+      ...extra,
+    }) as unknown as GraphStateResponse
+
+  // a's four out ports are all routed, so exactly b and c keep an edgeless
+  // out port - the two completion points V3's completed sink must name.
+  const COMPLETED_GRAPH: GraphWire = {
+    schema_version: 1,
+    nodes: [{ id: 'a', type: 'intake' }, { id: 'b', type: 'intake' }, { id: 'c', type: 'intake' }],
+    edges: [e('a', 'ok', 'b', 'trigger'), e('a', 'brownfield', 'b', 'trigger'), e('a', 'reject', 'b', 'trigger'), e('a', 'fail', 'b', 'trigger')],
+  }
+
+  const sinksOf = (m: ReturnType<typeof toCanvas>) =>
+    m.nodes.filter((n) => (n as { kind?: string }).kind === 'sink')
+
+  it('a final state appends the four outcome sinks, lighting only the outcome, and never a halted one', () => {  // V1
+    const m = toCanvas(PRE, { typeOf, state: stateOf({ state: 'failed', reason: null, result: 'failed:quarantined-tasks' }) })
+    const sinks = sinksOf(m)
+    expect(sinks.map((s) => (s.sink as { outcome: string }).outcome)).toEqual(['completed', 'rejected', 'failed', 'escalated'])
+    const lit = sinks.filter((s) => (s.sink as { lit: boolean }).lit)
+    expect(lit.map((s) => (s.sink as { outcome: string }).outcome)).toEqual(['failed'])
+    // The wrong outcome must not appear anywhere on the canvas (R-11).
+    expect(m.nodes.every((n) => !JSON.stringify(n).includes('halted'))).toBe(true)
+  })
+
+  it('the failed sink carries the outcome result as its sub (V1)', () => {
+    const m = toCanvas(PRE, { typeOf, state: stateOf({ state: 'failed', reason: null, result: 'failed:quarantined-tasks' }) })
+    const failed = sinksOf(m).find((s) => (s.sink as { outcome: string }).outcome === 'failed')!
+    expect((failed.sink as { sub: string }).sub).toBe('failed:quarantined-tasks')
+  })
+
+  it('an escalated outcome lights the escalated sink (V2)', () => {
+    const m = toCanvas(PRE, { typeOf, state: stateOf({ state: 'escalated', reason: 'owner notified', result: null }) })
+    const byOutcome = Object.fromEntries(
+      sinksOf(m).map((s) => [(s.sink as { outcome: string }).outcome, (s.sink as { lit: boolean }).lit]),
+    )
+    expect(byOutcome['escalated']).toBe(true)
+    expect(byOutcome['failed']).toBe(false)
+  })
+
+  it('a completed outcome lists every completion point node in the completed sub (V3)', () => {
+    const m = toCanvas(COMPLETED_GRAPH, { typeOf, state: stateOf({ state: 'completed', reason: null, result: null }) })
+    const completed = sinksOf(m).find((s) => (s.sink as { outcome: string }).outcome === 'completed')!
+    const sub = (completed.sink as { sub: string }).sub
+    expect(sub).toContain('b')
+    expect(sub).toContain('c')
+  })
+
+  it('a back edge at its traversal max carries the escalation note; one below max does not (V2)', () => {
+    const backEdges = (validationRecorded as unknown as ValidationWire).back_edges
+    const m = toCanvas(PRE, {
+      typeOf,
+      backEdges,
+      state: stateOf({ state: 'running', reason: null, result: null }, {
+        edges: [
+          { edge: e('architecture', 'revise', 'architect', 'guidance'), traversals: 2 },
+          { edge: e('plan', 'revise', 'planner', 'guidance'), traversals: 1 },
+        ],
+      }),
+    })
+    const atMax = m.edges.find((x) => x.key === 'architecture.revise>architect.guidance')!
+    expect(atMax.backward).toBe(true)
+    expect(atMax.counter).toEqual({ used: 2, max: 2 })
+    expect((atMax as { note?: string }).note).toBe('next revise escalates the run')
+    const belowMax = m.edges.find((x) => x.key === 'plan.revise>planner.guidance')!
+    expect(belowMax.backward).toBe(true)
+    expect((belowMax as { note?: string }).note).toBeUndefined()
+  })
+
+  it('a wire blocked status maps to the blocked canvas status, never failed (R-10)', () => {
+    const m = toCanvas(PRE, {
+      typeOf,
+      state: stateOf({ state: 'running', reason: null, result: null }, {
+        nodes: { intake: { status: 'blocked', round: 1, started_at: null, ended_at: null, cost_usd: null } },
+      }),
+    })
+    expect(m.nodes.find((n) => n.key === 'intake')!.status).toBe('blocked')
+    expect(m.nodes.find((n) => n.key === 'intake')!.status).not.toBe('failed')
+  })
+
+  // --- chaos (018 T025 RED) ------------------------------------------------
+
+  it('a running outcome appends no sink nodes at all (sinks exist only for final states)', () => {  // V1
+    const m = toCanvas(PRE, { typeOf, state: stateOf({ state: 'running', reason: null, result: null }) })
+    expect(sinksOf(m)).toHaveLength(0)
+  })
+
+  it('no state means no sinks and no edge notes even with max traversals recorded', () => {  // V1/V2
+    const m = toCanvas(PRE, { typeOf })
+    expect(sinksOf(m)).toHaveLength(0)
+    expect(m.edges.every((x) => (x as { note?: string }).note === undefined)).toBe(true)
+  })
+
+  it('a failed sink with null result falls back to the reason string, never a literal null/undefined', () => {  // V1
+    const m = toCanvas(PRE, { typeOf, state: stateOf({ state: 'failed', reason: 'quarantined', result: null }) })
+    const failed = sinksOf(m).find((s) => (s.sink as { outcome: string }).outcome === 'failed')!
+    expect((failed.sink as { sub: string }).sub).toBe('quarantined')
+  })
+
+  it('a completed sink on a graph with no edgeless out port leaks no undefined/null placeholder', () => {  // V3
+    // every out port of both intake nodes is routed, so there is no completion
+    // point to name - the sub must degrade to empty/dash, not a placeholder.
+    const FULLY_ROUTED: GraphWire = {
+      schema_version: 1,
+      nodes: [{ id: 'a', type: 'intake' }, { id: 'b', type: 'intake' }],
+      edges: [
+        e('a', 'ok', 'b', 'trigger'),
+        e('a', 'brownfield', 'b', 'trigger'),
+        e('a', 'reject', 'b', 'trigger'),
+        e('a', 'fail', 'b', 'trigger'),
+        e('b', 'ok', 'a', 'trigger'),
+        e('b', 'brownfield', 'a', 'trigger'),
+        e('b', 'reject', 'a', 'trigger'),
+        e('b', 'fail', 'a', 'trigger'),
+      ],
+    }
+    const m = toCanvas(FULLY_ROUTED, { typeOf, state: stateOf({ state: 'completed', reason: null, result: null }) })
+    const completed = sinksOf(m).find((s) => (s.sink as { outcome: string }).outcome === 'completed')!
+    const sub = (completed.sink as { sub: string }).sub
+    expect(sub).not.toContain('undefined')
+    expect(sub).not.toContain('null')
+  })
+
+  it('the four sink keys are distinct and collide with no graph node key', () => {  // V1
+    const m = toCanvas(PRE, { typeOf, state: stateOf({ state: 'failed', reason: null, result: 'failed:x' }) })
+    const keys = m.nodes.map((n) => n.key)
+    expect(new Set(keys).size).toBe(keys.length)
+    const graphKeys = new Set(nodeKeys(PRE))
+    for (const s of sinksOf(m)) expect(graphKeys.has(s.key)).toBe(false)
+  })
+
+  it('every sink node has empty ports and issueCount 0 (sinks inherit neither)', () => {  // V1
+    const m = toCanvas(PRE, { typeOf, state: stateOf({ state: 'failed', reason: null, result: 'failed:x' }) })
+    for (const s of sinksOf(m)) {
+      expect(s.ports).toEqual([])
+      expect(s.issueCount).toBe(0)
+    }
   })
 })
