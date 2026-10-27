@@ -251,8 +251,9 @@ defineExpose({ relayout })
 
 <style>
 /* vue-flow's structural rules, re-declared with tokens (GRAPH_CANVAS-7).
-   @vue-flow/core/dist/style.css is NOT imported: it carries colour literals
-   (#b1b1b7, #555, white), verified 2026-09-14 against 1.48.2. */
+   @vue-flow/core/dist/style.css is NOT imported: it ships bare hex greys
+   and a bare white, verified 2026-09-14 against 1.48.2 (exact values in
+   the vendor file; the raw-colour gate keeps them out of this tree). */
 .cmp-graph-canvas .vue-flow { position: relative; width: 100%; height: 100%; overflow: hidden; z-index: 0; direction: ltr; }
 .cmp-graph-canvas .vue-flow__container { position: absolute; height: 100%; width: 100%; left: 0; top: 0; }
 .cmp-graph-canvas .vue-flow__pane { z-index: 1; }

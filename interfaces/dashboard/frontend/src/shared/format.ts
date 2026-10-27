@@ -12,8 +12,10 @@ export function budgetPct(counted: number, threshold: number): number {
   return Math.min(100, (counted / threshold) * 100)
 }
 
+// 018 R-10: token names, never raw colours — the caller binds them to
+// var() and the theme does the rest.
 export function budgetColor(pct: number): string {
-  if (pct > 85) return '#e06c55'
-  if (pct > 60) return '#e0b050'
-  return '#4fae7f'
+  if (pct > 85) return 'var(--status-failed)'
+  if (pct > 60) return 'var(--status-waiting)'
+  return 'var(--status-done)'
 }

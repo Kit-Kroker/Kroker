@@ -20,9 +20,10 @@ describe('format', () => {
     expect(budgetPct(31, 40)).toBe(77.5)
     expect(budgetPct(0, 40)).toBe(0)
   })
+  // 018 R-10: budget colors are token names, not hex (raw-colour gate).
   it('colors budget by threshold', () => {
-    expect(budgetColor(50)).toBe('#4fae7f')
-    expect(budgetColor(70)).toBe('#e0b050')
-    expect(budgetColor(90)).toBe('#e06c55')
+    expect(budgetColor(50)).toBe('var(--status-done)')
+    expect(budgetColor(70)).toBe('var(--status-waiting)')
+    expect(budgetColor(90)).toBe('var(--status-failed)')
   })
 })

@@ -11,8 +11,9 @@ beforeEach(() => {
 describe('Toasts', () => {
   it('renders each toast from the ui store', () => {
     const ui = useUiStore()
-    ui.toasts.push({ id: 1, msg: 'saved', color: '#4fae7f' })
-    ui.toasts.push({ id: 2, msg: 'rejected', color: '#e06c55' })
+    // 018 R-10: kinds, not colours — the theme maps them (raw-colour gate).
+    ui.toasts.push({ id: 1, msg: 'saved', kind: 'done' })
+    ui.toasts.push({ id: 2, msg: 'rejected', kind: 'failed' })
     const w = mount(Toasts)
     const items = w.findAll('[data-testid="toast"]')
     expect(items).toHaveLength(2)

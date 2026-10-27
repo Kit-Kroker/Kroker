@@ -89,10 +89,10 @@ export const useRunGraphStore = defineStore('runGraph', () => {
     } catch (e) {
       if (isNotFound(e)) {
         // FR-302: another surface decided first. Busy until the next state.
-        ui.toast('this gate was already decided elsewhere', 'var(--status-blocked)')
+        ui.toast('this gate was already decided elsewhere', 'waiting')
         lostRace.add(key)
       } else {
-        ui.toast(`decision failed: ${String(e)}`, 'var(--status-failed)')
+        ui.toast(`decision failed: ${String(e)}`, 'failed')
         const next = new Set(inFlight.value)
         next.delete(key)
         inFlight.value = next

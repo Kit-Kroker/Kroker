@@ -1,7 +1,11 @@
 <script setup lang="ts">
+export type ToastKind = 'done' | 'running' | 'waiting' | 'failed' | 'idle'
 export interface ToastItem {
   id: string | number
   msg: string
+  /** 018 R-10: status kind, mapped to a --status-* token. */
+  kind?: ToastKind
+  /** Deprecated pass-through colour; removed with the v5 toasts (T014). */
   color?: string
 }
 
@@ -17,7 +21,8 @@ defineProps<{
       :key="t.id"
       data-testid="toast"
       class="toast"
-      :style="{ borderLeftColor: t.color }"
+      :class="t.kind ? `cmp-toast-${t.kind}` : undefined"
+      :style="t.color ? { borderLeftColor: t.color } : undefined"
     >
       {{ t.msg }}
     </div>
@@ -44,9 +49,14 @@ defineProps<{
   font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--ink-tertiary);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-overlay);
   animation: fc-toast 0.18s ease-out;
 }
+/* 018 R-10: kinds map to status tokens; done is the .toast default. */
+.cmp-toast-running { border-left-color: var(--status-running); }
+.cmp-toast-waiting { border-left-color: var(--status-waiting); }
+.cmp-toast-failed { border-left-color: var(--status-failed); }
+.cmp-toast-idle { border-left-color: var(--status-idle); }
 @keyframes fc-toast {
   from {
     transform: translateY(8px);

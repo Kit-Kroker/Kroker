@@ -1,11 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { ProjectMode } from '../api/types'
+import type { ToastItem, ToastKind } from '@kroker/ui/components/toasts/Toasts.vue'
 
-export interface Toast {
+export interface Toast extends ToastItem {
   id: number
-  msg: string
-  color: string
 }
 
 export const useUiStore = defineStore('ui', () => {
@@ -19,9 +18,11 @@ export const useUiStore = defineStore('ui', () => {
   const startBudget = ref('')
   let next = 1
 
-  function toast(msg: string, color = '#4fae7f') {
+  // 018 R-10: a status kind, not a colour — Toasts.vue maps it to the
+  // theme token.
+  function toast(msg: string, kind: ToastKind = 'done') {
     const id = next++
-    toasts.value.push({ id, msg, color })
+    toasts.value.push({ id, msg, kind })
     setTimeout(() => {
       toasts.value = toasts.value.filter((t) => t.id !== id)
     }, 3800)

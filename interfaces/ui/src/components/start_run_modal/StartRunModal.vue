@@ -156,7 +156,7 @@ function handleSubmit() {
 .backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(5, 7, 10, 0.7);
+  background: var(--backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -168,7 +168,7 @@ function handleSubmit() {
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   padding: 22px 24px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-overlay);
 }
 .title {
   font-family: var(--font-mono);

@@ -18,15 +18,15 @@ async function onSubmit(payload: StartRunPayload) {
     mode: payload.mode,
     budget,
   })
-  ui.toast(`Run started — ${r.id}`, '#5b9dd9')
+  ui.toast(`Run started — ${r.id}`, 'running')
   // FR-009: when a budget was given the server says what it counts.
-  if (r.budgetNotice) ui.toast(r.budgetNotice, '#e0b050')
+  if (r.budgetNotice) ui.toast(r.budgetNotice, 'waiting')
   ui.resetStartForm()
   ui.closeStart()
 }
 
 function onInvalid() {
-  ui.toast('Title required', '#e0b050')
+  ui.toast('Title required', 'waiting')
 }
 </script>
 
