@@ -112,11 +112,13 @@ const settle = async () => {
   for (let i = 0; i < 5; i++) await vi.advanceTimersByTimeAsync(0)
 }
 
-const mountPage = async (initial: string, projectKey: string | null) => {
+const mountPage = async (initial: string, projectKey: string | null, runViewStub?: object) => {
   useFleetStore().runs = [{ ...RUN_BASE, projectKey }]
   const router = await makeRouter(initial)
   const Host = { components: { RouterView }, template: '<RouterView />' }
-  const w = mount(Host, { global: { plugins: [router], stubs: { RouterLink: RouterLinkStub } } })
+  const w = mount(Host, {
+    global: { plugins: [router], stubs: { RouterLink: RouterLinkStub, ...(runViewStub ? { RunView: runViewStub } : {}) } },
+  })
   await flushPromises()
   await settle()
   return { w, router }
@@ -169,13 +171,19 @@ describe('RunPage composes the board (R-13)', () => {
     expect(boardTab.attributes('aria-selected')).toBe('true')
   })
 
-  it('fills the cost slot with a live CostTab', async () => {
-    // 011 T009 (RED): the #cost slot is filled by RunPage, not by a probe;
-    // the panel carries CostTab's own root testid cost-tab.
+  it('passes no cost slot; the board slot is still forwarded', async () => {
+    // 018 T031/T032: v5 retires the cost tab — RunPage must stop filling a
+    // #cost slot (cost is the rail's section, S3); the #board slot stays
+    // (R-13). Asserted through the real view: no cost tab exists, ?tab=cost
+    // lands on the rail's Cost section, and ?tab=board still renders the
+    // live BoardTab the slot forwards.
     const { w } = await mountPage('/runs/r1?tab=cost', 'kroker')
-    const panel = w.find('[data-testid="run-tab-cost"]')
-    expect(panel.exists()).toBe(true)
-    expect(panel.find('[data-testid="cost-tab"]').exists()).toBe(true)
+    expect(w.find('[data-testid="tab-cost"]').exists()).toBe(false)
+    expect(w.find('[data-testid="cost-tab"]').exists()).toBe(false)
+    expect(w.find('[data-testid="rail-cost"]').exists()).toBe(true)
+
+    const { w: w2 } = await mountPage('/runs/r1?tab=board', 'kroker')
+    expect(w2.find('[data-testid="board-tab"]').exists()).toBe(true)
   })
 })
 

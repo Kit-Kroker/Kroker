@@ -1,10 +1,9 @@
-// T036 (RED): RunView as the run tab host (FR-017/FR-018, R-4, R-13,
-// data-model §5). RunView has no `tab` prop and no TabBar yet -- every
-// assertion on the tab bar, the board panel and the probe fails until T037.
-// The board slot is a string-template probe forwarded through the RouterView
-// slot (the composition app/RunPage.vue will use); the router is a REAL
-// memory router so tab select's router.replace is observable in
-// router.currentRoute.
+// v5 Observe tabs (018 T031 RED): the tab bar carries EXACTLY Graph and
+// Board; Cost lives on as a rail section addressed by ?rail=cost (legacy
+// ?tab=cost keeps working). The board-slot semantics are ported unchanged
+// from the pre-v5 tab host. Harness bones (api mock, catalogWithRunGraph,
+// makeRouter, mountRun, seedRun) are the T036 originals; the router now
+// forwards the new rail prop the way the v5 view declares it.
 import { describe, it, expect, beforeEach, afterEach, vi, beforeAll } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -67,8 +66,8 @@ const catalogWithRunGraph = () => {
   api.getCatalog.mockResolvedValue(catalog)
 }
 
-// The run route with R-4's props function (tab only when the query carries a
-// string) -- the same shape T037 declares on the app router.
+// The run route with R-4's props function (tab and the new rail param only
+// when the query carries a string) -- the shape the v5 app router declares.
 const makeRouter = async (initial: string): Promise<Router> => {
   const router = createRouter({
     history: createMemoryHistory(),
@@ -80,6 +79,7 @@ const makeRouter = async (initial: string): Promise<Router> => {
         props: (r) => ({
           id: r.params.id as string,
           ...(typeof r.query.tab === 'string' ? { tab: r.query.tab } : {}),
+          ...(typeof r.query.rail === 'string' ? { rail: r.query.rail } : {}),
         }),
       },
     ],
@@ -90,21 +90,15 @@ const makeRouter = async (initial: string): Promise<Router> => {
 }
 
 // The host forwards the board slot into the route component through the
-// RouterView slot -- exactly app/RunPage.vue's composition (R-13). The
-// optional cost slot (011 T009) carries the scoped runId the way RunPage
-// will forward it, rendering a probe that echoes it.
-const mountRun = async (initial: string, withBoardSlot = true, withCostSlot = false) => {
+// RouterView slot -- exactly app/RunPage.vue's composition (R-13). The cost
+// slot is gone in v5 (the rail owns Cost).
+const mountRun = async (initial: string, withBoardSlot = true) => {
   const router = await makeRouter(initial)
-  const slots =
-    (withBoardSlot ? '<template #board><div data-testid="board-probe">PROBE</div></template>' : '') +
-    (withCostSlot
-      ? '<template #cost="{ runId }"><div data-testid="cost-probe">COST {{ runId }}</div></template>'
-      : '')
   const Host = {
     components: { RouterView: (await import('vue-router')).RouterView },
-    template: slots
+    template: withBoardSlot
       ? `<RouterView v-slot="{ Component }">
-           <component :is="Component">${slots}</component>
+           <component :is="Component"><template #board><div data-testid="board-probe">PROBE</div></template></component>
          </RouterView>`
       : `<RouterView v-slot="{ Component }"><component :is="Component" /></RouterView>`,
   }
@@ -132,7 +126,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('RunView as a tab host', () => {
+describe('RunView as a two-tab host (v5)', () => {
   it('Graph is the default: no tab prop renders the canvas and never the probe', async () => {
     seedRun()
     catalogWithRunGraph()
@@ -142,18 +136,19 @@ describe('RunView as a tab host', () => {
     expect(w.find('[data-testid="board-probe"]').exists()).toBe(false)
   })
 
-  it('tab=board with the slot renders the probe and the four tab labels', async () => {
+  it('the tab bar renders EXACTLY Graph and Board', async () => {
     seedRun()
     catalogWithRunGraph()
-    const { w, router } = await mountRun('/runs/r1?tab=board')
-    expect(router.currentRoute.value.query.tab).toBe('board')
-    expect(w.find('[data-testid="board-probe"]').exists()).toBe(true)
-    expect(w.find('[data-testid="board-probe"]').text()).toBe('PROBE')
+    const { w } = await mountRun('/runs/r1?tab=board')
+    expect(w.find('[data-testid="tab-graph"]').exists()).toBe(true)
+    expect(w.find('[data-testid="tab-board"]').exists()).toBe(true)
+    expect(w.find('[data-testid="tab-cost"]').exists()).toBe(false)
+    expect(w.find('[data-testid="tab-gates"]').exists()).toBe(false)
     const bar = w.find('nav.cmp-tab-bar')
     expect(bar.exists()).toBe(true)
-    for (const label of ['Graph', 'Board', 'Gates', 'Cost']) {
-      expect(bar.text(), label).toContain(label)
-    }
+    expect(bar.text()).not.toContain('Cost')
+    expect(bar.text()).not.toContain('Gates')
+    expect(w.find('[data-testid="board-probe"]').exists()).toBe(true)
     expect(w.find('[data-testid="tab-board"]').attributes('aria-selected')).toBe('true')
   })
 
@@ -170,62 +165,6 @@ describe('RunView as a tab host', () => {
     expect(w.find('[data-testid="board-probe"]').exists()).toBe(false)
     expect(boardTab.attributes('aria-selected')).not.toBe('true')
     expect(router.currentRoute.value.query.tab).toBe('board') // disabled: URL untouched (R-4)
-  })
-
-  it('Gates is disabled; Cost is disabled without a cost slot', async () => {
-    seedRun()
-    catalogWithRunGraph()
-    const { w, router } = await mountRun('/runs/r1')
-    for (const id of ['gates']) {
-      const tab = w.find(`[data-testid="tab-${id}"]`)
-      expect(tab.exists()).toBe(true)
-      expect(tab.attributes('disabled')).toBeDefined()
-      await tab.trigger('click')
-      await flushPromises()
-      expect(router.currentRoute.value.query.tab).toBeUndefined()
-      expect(tab.attributes('aria-selected')).not.toBe('true')
-    }
-    expect(w.find('.canvas-wrap').exists()).toBe(true) // still Graph
-  })
-
-  it('without a cost slot Cost is disabled and clicking it does not switch', async () => {
-    seedRun()
-    catalogWithRunGraph()
-    const { w, router } = await mountRun('/runs/r1')
-    const costTab = w.find('[data-testid="tab-cost"]')
-    expect(costTab.exists()).toBe(true)
-    expect(costTab.attributes('disabled')).toBeDefined()
-    expect(w.find('[data-testid="cost-probe"]').exists()).toBe(false)
-    await costTab.trigger('click')
-    await flushPromises()
-    expect(w.find('[data-testid="cost-probe"]').exists()).toBe(false)
-    expect(costTab.attributes('aria-selected')).not.toBe('true')
-    expect(router.currentRoute.value.query.tab).toBeUndefined() // disabled: URL untouched (R-4)
-  })
-
-  it('with a cost slot, ?tab=cost shows the slot content, selecting Cost sets ?tab=cost, selecting Graph clears it', async () => {
-    seedRun()
-    catalogWithRunGraph()
-    const { w, router } = await mountRun('/runs/r1', false, true)
-    const costTab = w.find('[data-testid="tab-cost"]')
-    expect(costTab.attributes('disabled')).toBeUndefined() // the slot enables the tab
-    await costTab.trigger('click')
-    await flushPromises()
-    expect(router.currentRoute.value.query.tab).toBe('cost')
-    const probe = w.find('[data-testid="cost-probe"]')
-    expect(probe.exists()).toBe(true)
-    expect(probe.text()).toContain('COST r1') // the scoped runId reached the slot
-
-    await w.find('[data-testid="tab-graph"]').trigger('click')
-    await flushPromises()
-    expect(router.currentRoute.value.query.tab).toBeUndefined()
-    expect(w.find('[data-testid="cost-probe"]').exists()).toBe(false)
-    expect(w.find('.canvas-wrap').exists()).toBe(true)
-
-    // A deep link straight to the cost tab shows the slot content too.
-    const { w: w2 } = await mountRun('/runs/r1?tab=cost', false, true)
-    expect(w2.find('[data-testid="cost-probe"]').exists()).toBe(true)
-    expect(w2.find('[data-testid="cost-probe"]').text()).toContain('COST r1')
   })
 
   it('selecting Graph from Board unmounts the probe and clears ?tab (replace semantics)', async () => {
@@ -247,6 +186,42 @@ describe('RunView as a tab host', () => {
     expect(w.find('.canvas-wrap').exists()).toBe(true)
     expect(w.find('[data-testid="board-probe"]').exists()).toBe(false)
     expect(router.currentRoute.value.query.tab).toBe('nonsense') // URL untouched (R-4)
+  })
+})
+
+describe('Cost is a rail section (v5, 018 T031 RED)', () => {
+  it('?rail=cost shows the rail cost section, and no cost tab exists', async () => {
+    seedRun()
+    catalogWithRunGraph()
+    const { w, router } = await mountRun('/runs/r1?rail=cost')
+    expect(router.currentRoute.value.query.rail).toBe('cost')
+    expect(w.find('[data-testid="rail-cost"]').exists()).toBe(true)
+    expect(w.find('[data-testid="tab-cost"]').exists()).toBe(false)
+  })
+
+  it('the legacy ?tab=cost deep link also lands on the rail cost section', async () => {
+    seedRun()
+    catalogWithRunGraph()
+    const { w } = await mountRun('/runs/r1?tab=cost')
+    expect(w.find('[data-testid="rail-cost"]').exists()).toBe(true)
+    expect(w.find('.canvas-wrap').exists()).toBe(true)
+  })
+
+  it('clicking the rail Cost tab sets ?rail=cost; clicking Path clears it', async () => {
+    seedRun()
+    catalogWithRunGraph()
+    const { w, router } = await mountRun('/runs/r1')
+    const costTab = w.findAll('[data-testid="rail-tab"]').find((t) => t.text() === 'Cost')
+    expect(costTab).toBeDefined()
+    await costTab!.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.rail).toBe('cost')
+
+    const pathTab = w.findAll('[data-testid="rail-tab"]').find((t) => t.text() === 'Path')
+    expect(pathTab).toBeDefined()
+    await pathTab!.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.rail).toBeUndefined()
   })
 })
 

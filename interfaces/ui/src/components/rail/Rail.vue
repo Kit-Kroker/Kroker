@@ -65,6 +65,9 @@ const emit = defineEmits<{
         <span class="note">{{ head.budget.note }}</span>
       </div>
     </div>
+    <!-- 018 T032 (R-5a): notes that belong to the run block — E-77 reasons,
+         the interim open-copy link — render here, between head and calls. -->
+    <div v-if="$slots.headNote" class="head-note"><slot name="headNote" /></div>
     <div v-if="calls.length" class="calls">
       <button
         v-for="(c, i) in calls"
@@ -123,6 +126,7 @@ const emit = defineEmits<{
 .budget .bar .fill { height: 100%; background: var(--accent); }
 .budget .spent { font-family: var(--font-mono); font-size: 11px; color: var(--ink-primary); }
 .budget .note { font-size: 10.5px; color: var(--ink-subtle); }
+.head-note { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; font-size: 11px; color: var(--ink-subtle); }
 .calls { display: flex; flex-direction: column; gap: 6px; }
 .call { cursor: pointer; text-align: left; padding: 7px 10px; border-radius: 4px; border: 1px solid var(--line-strong); background: var(--ground-3); color: var(--ink-primary); font-family: var(--font-sans); font-size: 12px; }
 .call.is-primary { border-color: var(--accent); }

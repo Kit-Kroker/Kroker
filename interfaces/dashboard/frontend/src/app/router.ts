@@ -15,11 +15,13 @@ export const router = createRouter({
       // R-13: the route component is the composition-only RunPage, which
       // fills RunView's #board slot with the board tab.
       component: RunPage,
-      // R-4: the active tab travels as ?tab=; delivered as a prop only when
-      // the query carries a string. Replace, never push, on switches.
+      // R-4: the active tab travels as ?tab= and the rail section as ?rail=;
+      // delivered as props only when the query carries a string. Replace,
+      // never push, on switches.
       props: (r) => ({
         id: r.params.id as string,
         ...(typeof r.query.tab === 'string' ? { tab: r.query.tab } : {}),
+        ...(typeof r.query.rail === 'string' ? { rail: r.query.rail } : {}),
       }),
     },
     { path: '/graphs', name: 'graphs', component: GraphEditorView },

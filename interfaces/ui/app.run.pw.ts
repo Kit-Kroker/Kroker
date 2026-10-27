@@ -47,10 +47,12 @@ test('deciding the pending gate from the canvas clears it', async ({ page }) => 
   await expect(page.locator('[data-testid="run-view"] .cmp-graph-node-skipped')).toHaveCount(1)
 })
 
-test('a legacy run shows the no-graph empty state and the strip', async ({ page }) => {  // clause: CONSOLE-6
+test('a legacy run shows the no-graph empty state and no canvas', async ({ page }) => {  // clause: CONSOLE-6
   await page.goto('/#/runs/feature-add-sso')
   await expect(page.locator('[data-testid="run-graph-empty"]')).toBeVisible()
-  await expect(page.locator('[data-testid="run-view"] [data-testid="stage-dot"]')).toHaveCount(18)
+  // 018 T032: the run header's stage strip is gone (v5 draws none on the
+  // run); the clause keeps its no-graph-empty rule.
+  await expect(page.locator('[data-testid="run-view"] [data-testid="stage-dot"]')).toHaveCount(0)
   await expect(page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')).toHaveCount(0)
 })
 
@@ -94,55 +96,8 @@ test('a gate decision shows its busy window before the state clears it', async (
   await expect(gate).toHaveCount(0)  // then the next state clears the whole control
 })
 
-// --- The Cost tab (011 T010): the budget run is the seeded
-// feature-graph-demo (blocked, three roles, one not-priced); the no-budget
-// run is the closed feature-dark-mode. Both are non-running, so the mock
-// ticker never moves their figures.
-
-test('the Cost tab lists the roles, the total, and reopens from a copied URL', async ({ page }) => {  // clause: CONSOLE-24
-  await page.goto('/#/runs/feature-graph-demo?tab=cost')
-  const tab = page.locator('[data-testid="cost-tab"]')
-  await expect(tab).toBeVisible()
-  await expect(tab.locator('[data-testid="cost-row"]')).toHaveCount(3)
-  const total = tab.locator('[data-testid="cost-total-price"]')
-  await expect(total).toBeVisible()
-  await expect(total).toContainText('2.60')
-  // A copied URL reopens the tab (SC-005 for cost).
-  await page.reload()
-  await expect(page.locator('[data-testid="cost-tab"]')).toBeVisible()
-})
-
-test('the budget block counts the dollars, the share, the crossings and the scope', async ({ page }) => {  // clause: CONSOLE-26
-  await page.goto('/#/runs/feature-graph-demo?tab=cost')
-  const budget = page.locator('[data-testid="cost-tab"] [data-testid="cost-budget"]')
-  await expect(budget).toContainText('20.00')
-  await expect(budget).toContainText('40.00')
-  const counted = page.locator('[data-testid="cost-budget-counted"]')
-  await expect(counted).toContainText('counted toward budget')
-  await expect(counted).toContainText('2.60')
-  // Whole percent of the CURRENT limit (2.6 of 40 -> 6%), never cost/budget.
-  await expect(page.locator('[data-testid="cost-budget-pct"]')).toHaveText(/^\d+%$/)
-  await expect(page.locator('[data-testid="cost-budget-crossings"]')).toContainText('1')
-  await expect(page.locator('[data-testid="cost-budget-note"]')).not.toBeEmpty()
-  // A closed run without a budget says so and how one is set.
-  await page.goto('/#/runs/feature-dark-mode?tab=cost')
-  const none = page.locator('[data-testid="cost-tab"] [data-testid="cost-budget"]')
-  await expect(none).toContainText('No budget')
-  await expect(none).toContainText('start form')
-})
-
-test('a missing price reads "not priced" and no figure on the tab is $0.00', async ({ page }) => {  // clause: CONSOLE-25
-  await page.goto('/#/runs/feature-graph-demo?tab=cost')
-  // The unpriced dev role states the absence in words, never as dollars.
-  const rowPrices = page.locator('[data-testid="cost-row-price"]')
-  await expect(rowPrices.filter({ hasText: 'not priced' }).first()).toBeVisible()
-  // The total says what it left out: partial.
-  await expect(page.locator('[data-testid="cost-total-price"]')).toContainText('partial')
-  // And nowhere on the tab does a figure read exactly $0.00 (FR-003).
-  const priceEls = page.locator('[data-testid="cost-row-price"], [data-testid="cost-total-price"]')
-  const count = await priceEls.count()
-  expect(count).toBeGreaterThan(0)
-  for (let i = 0; i < count; i++) {
-    expect(await priceEls.nth(i).textContent()).not.toContain('$0.00')
-  }
-})
+// --- The Cost tab is retired (018 T032, S3): the CONSOLE-24/25/26 tests
+// were deleted with the CostTab they drove (their cases were ported to
+// costRail.adapter.test.ts in T027); T033 restores the clauses on the
+// rail's Cost section. The budget run remains the seeded
+// feature-graph-demo; the no-budget run feature-dark-mode.

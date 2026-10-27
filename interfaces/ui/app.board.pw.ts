@@ -88,6 +88,7 @@ test('Graph is unchanged after a Board round trip', async ({ page }) => {  // cl
   await expect(page.locator('[data-testid="board-tab"]')).toBeVisible()
   await page.locator('[data-testid="tab-graph"]').click()
   await expect(canvas.locator('[data-testid="graph-node"]')).toHaveCount(12)
-  // The header title and strip persist above the tab bar on every tab (FR-018).
-  await expect(page.locator('[data-testid="run-view"] [data-testid="stage-dot"]')).toHaveCount(18)
+  // 018 T032: the run header's stage strip is gone (v5 draws none on the
+  // run); the clause keeps its Graph-unchanged rule.
+  await expect(page.locator('[data-testid="run-view"] [data-testid="stage-dot"]')).toHaveCount(0)
 })

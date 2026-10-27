@@ -230,7 +230,7 @@
 - [x] T028 [P] [US1] Create `F/features/run/costRail.adapter.ts`, reusing `F/shared/cost.ts`. T027 goes green. Commit T027 + T028.
 - [x] T029 [P] [US1] RED: create `F/features/run/railEvents.adapter.test.ts` (R-5). From live decisions, pending items, two successive graph states and board events, the result is newest first. Node transitions are labelled `observed`. Closed `RunSummary`-derived decisions come after the timed events, labelled `untimed` and "not approved" where not approved. With no source, the result is the single "Decision history is not available for this run" row. An open run carries the "automatic and timed-out decisions appear when the run ends" note (FR-022). Fails.
 - [x] T030 [P] [US1] Create `F/features/run/railEvents.adapter.ts`. T029 goes green. Commit T029 + T030.
-- [ ] T031 [US1] RED: rewrite `F/features/run/RunView.test.ts` and `F/features/run/RunView.tabs.test.ts` for v5 Observe (Clauses CONSOLE-4, 6, 24–26, 49, 51, 52; the tab-host unit tests touch CONSOLE-10 and CONSOLE-16 behaviour now, but those clauses' app-tier rewrite lands in T055). In `F/app/RunPage.test.ts`, replace the "fills the cost slot with a live CostTab" case with a test that `RunPage` passes no cost slot:
+- [x] T031 [US1] RED: rewrite `F/features/run/RunView.test.ts` and `F/features/run/RunView.tabs.test.ts` for v5 Observe (Clauses CONSOLE-4, 6, 24–26, 49, 51, 52; the tab-host unit tests touch CONSOLE-10 and CONSOLE-16 behaviour now, but those clauses' app-tier rewrite lands in T055). In `F/app/RunPage.test.ts`, replace the "fills the cost slot with a live CostTab" case with a test that `RunPage` passes no cost slot:
   - the rail renders the run block, and its Path, Events and Cost sections from the adapters;
   - `?rail=cost` and `?tab=cost` select Cost;
   - the tabs are Graph and Board only;
@@ -239,7 +239,7 @@
   - retention-expired and registry-drift reasons render under the run block, and a provider failure reads "could not load" (CONSOLE-51).
 
   Fails.
-- [ ] T032 [US1] Rebuild `F/features/run/RunView.vue` to v5 Observe, with the inspector as `F/features/run/RunInspector.vue` (new, screen-local). Update `F/app/RunPage.vue`: drop the Cost slot and keep the Board slot. **Delete `F/features/cost/`** (CostTab and its test, whose cases were ported in T027). The run header's stage strip goes (v5 draws none on the run). If `toStageDots` then has no importer outside tests, leave the shared module for T049 to decide.
+- [x] T032 [US1] Rebuild `F/features/run/RunView.vue` to v5 Observe, with the inspector as `F/features/run/RunInspector.vue` (new, screen-local). Update `F/app/RunPage.vue`: drop the Cost slot and keep the Board slot. **Delete `F/features/cost/`** (CostTab and its test, whose cases were ported in T027). The run header's stage strip goes (v5 draws none on the run). If `toStageDots` then has no importer outside tests, leave the shared module for T049 to decide.
 
 **Interims until later slices** (the "App-tier tests move with the surface" rule):
 - the existing canvas gate control (`GateDecision` on a pending node) stays in Observe until T043 replaces it with the card, so CONSOLE-5 and CONSOLE-23 stay green;

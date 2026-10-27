@@ -91,10 +91,13 @@ test('the start form rejects a zero budget and starts a budgeted run', async ({ 
   )
   await expect(page.locator('[data-testid="submit"]')).toBeDisabled()
   expect(await page.locator('[data-testid="fleet-row"]').count()).toBe(before)
-  // A valid budget starts the run, and the new run's Cost tab shows it.
+  // A valid budget starts the run, and the new run's Cost section (the
+  // rail, 018 T032 — the Cost tab is retired) shows it. ?rail=cost opens
+  // the section (SC-005 for cost).
   await page.locator('[data-testid="start-title-input"]').fill('Budgeted demo')
   await page.locator('[data-testid="start-budget-input"]').fill('5')
   await page.locator('[data-testid="submit"]').click()
-  await page.goto('/#/runs/feature-budgeted-demo?tab=cost')
-  await expect(page.locator('[data-testid="cost-budget"]')).toContainText('5.00')
+  await page.goto('/#/runs/feature-budgeted-demo?rail=cost')
+  await expect(page.locator('[data-testid="rail-cost"]')).toBeVisible()
+  await expect(page.locator('[data-testid="rail-cost"] [data-testid="rail-budget"]')).toContainText('5.00')
 })
