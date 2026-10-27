@@ -28,6 +28,8 @@ import issueList from '../src/components/issue_list/issue_list.profiles'
 import yamlPane from '../src/components/yaml_pane/yaml_pane.profiles'
 import schemaForm from '../src/components/schema_form/schema_form.profiles'
 import graphCanvas from '../src/components/graph_canvas/graph_canvas.profiles'
+import rail from '../src/components/rail/rail.profiles'
+import stepList from '../src/components/step_list/step_list.profiles'
 
 export const REGISTRY: ProfileSet[] = [
   // primitives first: the showcase reads top-down from foundations to screens
@@ -60,4 +62,6 @@ export const REGISTRY: ProfileSet[] = [
   yamlPane,
   schemaForm,
   graphCanvas,
+  rail,
+  stepList,
 ]

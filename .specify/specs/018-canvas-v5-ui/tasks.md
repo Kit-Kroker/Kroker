@@ -203,13 +203,13 @@
 
   Existing GRAPH_CANVAS clauses are PINs. Fails.
 - [x] T022 [P] [US1] Extend `U/src/components/graph_canvas/` (`types.ts`, `GraphCanvas.vue`, `.md` new clauses, `.profiles.ts` one profile per sink outcome, `.pw.ts`) per data-model §4.1. Grid dots use `--grid-dot`, wires `--edge`, and nodes `--ground-node`. T021 goes green. Commit T021 + T022.
-- [ ] T023 [P] [US1] RED: create `U/src/components/rail/rail.spec.ts`:
+- [x] T023 [P] [US1] RED: create `U/src/components/rail/rail.spec.ts`:
   - the head renders title, state, rows and the budget (with `limit: null` it renders "off" and no bar);
   - the tabs switch the visible section slot;
   - each `calls` entry renders as a call-to-action button emitting `call(index)`.
 
   Create `U/src/components/step_list/step_list.spec.ts`: one row per step with name, ref, a status pip and meta; no interactive control. Fail.
-- [ ] T024 [P] [US1] Create the five files of `rail` and of `step_list`, and register them. T023 goes green. Commit T023 + T024.
+- [x] T024 [P] [US1] Create the five files of `rail` and of `step_list`, and register them. T023 goes green. Commit T023 + T024.
 - [ ] T025 [US1] RED: extend `F/shared/graphCanvas.adapter.test.ts`. `toCanvas` with a graph state appends four sink nodes (completed, rejected, failed, escalated) and never a `halted` one.
   - Outcome `failed` with result `failed:quarantined-tasks` lights `failed` with that sub (V1).
   - Outcome `escalated` lights `escalated` (V2).

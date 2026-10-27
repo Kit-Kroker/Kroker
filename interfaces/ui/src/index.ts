@@ -28,3 +28,7 @@ export { default as CommandPalette } from './components/command_palette/CommandP
 export type { PaletteCommand } from './components/command_palette/CommandPalette.vue'
 export { default as ToggleMenu } from './components/toggle_menu/ToggleMenu.vue'
 export type { ToggleItem } from './components/toggle_menu/ToggleMenu.vue'
+export { default as Rail } from './components/rail/Rail.vue'
+export type { RailHead, RailTabItem, RailCall, RailBudget } from './components/rail/Rail.vue'
+export { default as StepList } from './components/step_list/StepList.vue'
+export type { StepItem } from './components/step_list/StepList.vue'
