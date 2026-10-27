@@ -307,7 +307,7 @@ not be evaluated is `errored` and never counts as a pass.
   harness/model family than `roles["dev"]`.
 - Per-run model overrides: `--role-model role=model` (repeatable). Harness
   roles (`dev`, `test`, `devops`) take their own grammar verbatim
-  (e.g. `--role-model dev=zai-coding-plan/glm-5.2`); a **proposer** role's
+  (e.g. `--role-model dev=zai-coding-plan/glm-5.3`); a **proposer** role's
   override must be a `provider:model` id the installed framework can
   construct (e.g. `--role-model architect=openai:gpt-5.2`) and is validated
   offline at submission — an invalid string exits non-zero before any

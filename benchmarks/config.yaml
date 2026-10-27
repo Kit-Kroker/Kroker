@@ -7,8 +7,9 @@ weights:
 # by BOTH family and identity (ADR-6). The matrix expander rejects same-family
 # configs; the prompt gate additionally rejects same-identity ones.
 #
-# Gemini, not GPT: the shipped proposer roles run `anthropic:glm-5.2` against
-# ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic — the prefix is a protocol
-# label, the weights are GLM. google:gemini-3.5-flash is decorrelated on both
-# axes and authenticates from GEMINI_API_KEY, which this deployment sets.
+# anthropic:claude-sonnet-5, not a glm or gemini judge: every author family in
+# the corpus is zai (glm-5.3 / glm-5.3-flash since R019) or anthropic-route
+# glm — claude-sonnet-5 is decorrelated on both axes. The earlier Gemini
+# candidate lost case runs to free-tier 503 waves and daily 429 quota (see the
+# judge comments on the R0-era case records); gemini is not re-candidated.
 default_judge_model: anthropic:claude-sonnet-5

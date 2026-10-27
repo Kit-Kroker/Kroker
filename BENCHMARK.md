@@ -31,6 +31,41 @@
 > benchmark was re-run** for this change; the harness and case suites are
 > untouched.
 
+> **ARM-RETIREMENT BREAK MARKER — 2026-10-27 (R019 glm-5.2 retirement).**
+> z.ai deprecated `glm-5.2` in the `zai-coding-plan` catalog (along with
+> glm-4.7, glm-5-turbo and glm-5.2-highspeed); opencode filters deprecated
+> models at resolution, so every glm-5.2 arm dies within seconds with
+> `ProviderModelNotFoundError`. The corpus pair changed: strong
+> `glm-5.3-flash` / weak `glm-5.2` → strong `zai-coding-plan/glm-5.3` /
+> weak `zai-coding-plan/glm-5.3-flash` (GATE 1 Q0=A); the glm-5.2
+> `--variant max` entries are dropped (the glm-5.3 family declares no
+> opencode variants). Every touched case was re-labelled online with no
+> spend; the shipped test role moved to glm-5.3 as well (dev == test
+> model, a knowing Q3=A choice). Per-case verdicts, old → new:
+>
+> | Case | Before | After |
+> |---|---|---|
+> | cat-cafe-monitoring | provisional (flash 0.833 vs 5.2 0.472, n=1) | not_assessed (no strong arm runs) |
+> | deveval-geotext | rejected (no_separation; inverted 0.222 vs 0.778) | not_assessed (no strong arm runs) |
+> | deveval-readtime | rejected (no_separation; near-tie 0.250 vs 0.167) | not_assessed (no strong arm runs) |
+> | deveval-lice | rejected (reference, 30/31) | rejected (reference) — unchanged |
+> | deveval-hone | not_assessed (parked) | not_assessed (parked) |
+> | deveval-particle-swarm-optimization | not_assessed (parked) | not_assessed (parked) |
+> | deveval-stocktrends | not_assessed (parked) | not_assessed (parked) |
+> | theatre-box-office (private) | rejected (no_separation; 0.0179 vs 0.0179) | not_assessed (no strong arm runs) |
+>
+> Corpus tally **1 → 0 of 8 accepted or provisional** — the drop is the
+> expected result, not a regression. Stored flash runs carry into the weak
+> slot as weak evidence (same arm name and oracle); where a case's oracle
+> had drifted, even the flash run is not comparable and moved to
+> `not_comparable`. Carried flash evidence is cross-commit confounded
+> (research D-3): it was graded on older commits, so re-proving separation
+> needs both arms rerun on one commit, n ≥ 3 each (follow-up card
+> `2026-10-27-r019-reprove-separation-reruns`). glm-5.2 run records are
+> kept as history and are now `not_comparable` — old run ids still naming
+> the glm-5.2 arm read as history, never as live evidence. **No benchmark
+> was re-run** for this change.
+
 > **RESEARCH-SPEND BREAK MARKER — 2026-10-04 (008 research cap handling).** A
 > research sub-question that hits a bound — its request limit or a tool
 > budget cap — now reports and prices the model spend it incurred before
