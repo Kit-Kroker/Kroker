@@ -1,18 +1,30 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useFleetStore } from '../shared/fleet.store'
 import { useInboxStore } from './inbox.store'
 import { useCatalogStore } from '../shared/catalog.store'
 import { usePrefsStore } from './prefs.store'
+import { money } from '../shared/format'
 import AppHeader from './shell/AppHeader.vue'
 import Toasts from './shell/Toasts.vue'
 import StartRunModal from './shell/StartRunModal.vue'
+import FooterBar from '@kroker/ui/components/footer_bar/FooterBar.vue'
 
 const fleet = useFleetStore()
 const inbox = useInboxStore()
 const catalog = useCatalogStore()
 const prefs = usePrefsStore()
 let pollId: ReturnType<typeof setInterval> | null = null
+
+// 018 T012 (CONSOLE-27's new home): the footer's fleet total — priced runs
+// only, the excluded counted aloud, "not priced" when nothing is priced,
+// the em dash when there is nothing to sum (011's honest-spend contract).
+const footerTotal = computed(() => {
+  if (fleet.runs.length === 0) return '—'
+  const { usd, excluded } = fleet.totalCost
+  if (usd === null) return 'not priced'
+  return excluded > 0 ? `${money(usd)} · ${excluded} not priced` : money(usd)
+})
 
 // 018 R-10/S4: the app owns the active theme (tokens.md); the library
 // never sets it. 'dark' is the unstyled default, so it REMOVES the
@@ -53,6 +65,7 @@ onUnmounted(() => {
     <RouterView />
     <Toasts />
     <StartRunModal />
+    <FooterBar :left="footerTotal" right="⌘K commands" />
   </div>
 </template>
 

@@ -1,23 +1,33 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { navManifest } from '../nav'
+import { useFleetStore } from '../../shared/fleet.store'
 import { useInboxStore } from '../inbox.store'
+import { usePrefsStore } from '../prefs.store'
 import { useUiStore } from '../ui.store'
 import AppHeader from '@kroker/ui/components/app_header/AppHeader.vue'
 import type { NavItem } from '@kroker/ui/components/app_header/AppHeader.vue'
 
+const fleet = useFleetStore()
 const inbox = useInboxStore()
+const prefs = usePrefsStore()
 const ui = useUiStore()
 
-// 018 T010: interim inline manifest; nav.ts replaces it in T012.
-const primary = computed<NavItem[]>(() => [
-  { id: 'fleet', label: 'Fleet', to: '/', available: true },
-  { id: 'inbox', label: 'Inbox', to: '/inbox', available: true },
-])
-const secondary: NavItem[] = [
-  { id: 'graphs', label: 'Graphs', to: '/graphs', available: true },
-  { id: 'compare', label: 'Compare', to: '/compare', available: false },
-  { id: 'interfaces', label: 'Interfaces', to: '/interfaces', available: false },
-]
+// 018 T012: the manifest's static primary entries with the run entry
+// rebuilt from live state. A fresh array every render — the exported
+// manifest is never mutated (fleet state must not leak across mounts).
+const runEntry = computed<NavItem>(() => {
+  const pinned = prefs.runInContext
+  if (pinned) return { id: 'run', label: pinned, to: `/runs/${pinned}`, available: true }
+  const newest = fleet.runs[0]
+  if (newest) return { id: 'run', label: newest.id, to: `/runs/${newest.id}`, available: true }
+  return { id: 'run', label: 'No runs', to: '/runs', available: false }
+})
+
+const primary = computed<NavItem[]>(() =>
+  navManifest.slice(0, 3).map((item) => (item.id === 'run' ? runEntry.value : item)),
+)
+const secondary = navManifest.slice(3)
 </script>
 
 <template>

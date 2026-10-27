@@ -1,0 +1,35 @@
+import { describe, it, expect } from 'vitest'
+import { navManifest, designAvailable } from './nav'
+
+// 018 T011 (RED): the v5 route manifest (data-model §5). Static parts only:
+// the six ids in v5 order and this slice's availability flags. The run
+// entry's dynamic label/target are pinned in shell/AppHeader.test.ts.
+describe('navManifest', () => {
+  it('lists the six entries primary-first in v5 order', () => {
+    expect(navManifest.map((n) => n.id)).toEqual([
+      'fleet',
+      'inbox',
+      'run',
+      'graphs',
+      'compare',
+      'interfaces',
+    ])
+  })
+
+  it('Compare and Interfaces are unavailable in this slice', () => {
+    const byId = new Map(navManifest.map((n) => [n.id, n]))
+    expect(byId.get('compare')?.available).toBe(false)
+    expect(byId.get('interfaces')?.available).toBe(false)
+  })
+
+  it('Fleet, Inbox, run and Graphs are available', () => {
+    const byId = new Map(navManifest.map((n) => [n.id, n]))
+    for (const id of ['fleet', 'inbox', 'run', 'graphs']) {
+      expect(byId.get(id)?.available, id).toBe(true)
+    }
+  })
+
+  it('Design is gated off until the Design route lands (T063)', () => {
+    expect(designAvailable).toBe(false)
+  })
+})
