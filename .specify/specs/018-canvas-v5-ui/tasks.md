@@ -78,8 +78,8 @@
 
 ## Phase 1: Setup and baseline (slice 0)
 
-- [ ] T001 Run `git log --oneline -3 main`. Cut branch `018-canvas-v5-ui` from the current main head (`07232332` or newer) in the worktree the orchestrator names. Stage exactly two files, `docs/reports/Pipeline Canvas v4 (standalone).html` and `docs/reports/Pipeline Canvas v5 (standalone).html`, each with its own `git add` (FR-070), and commit them alone ("docs(018): add Pipeline Canvas v4/v5 prototypes as spec inputs"). Confirm with `git show --stat HEAD` that nothing else was committed (FR-075).
-- [ ] T002 Commit the spec set `.specify/specs/018-canvas-v5-ui/` (spec, plan, research, data-model, contracts, quickstart, checklists, tasks) as its own commit. Then run quickstart §1 steps 1, 2, 5 and 6 once each, one per shell call, and write `.specify/specs/018-canvas-v5-ui/baseline.md` with:
+- [x] T001 Run `git log --oneline -3 main`. Cut branch `018-canvas-v5-ui` from the current main head (`07232332` or newer) in the worktree the orchestrator names. Stage exactly two files, `docs/reports/Pipeline Canvas v4 (standalone).html` and `docs/reports/Pipeline Canvas v5 (standalone).html`, each with its own `git add` (FR-070), and commit them alone ("docs(018): add Pipeline Canvas v4/v5 prototypes as spec inputs"). Confirm with `git show --stat HEAD` that nothing else was committed (FR-075).
+- [x] T002 Commit the spec set `.specify/specs/018-canvas-v5-ui/` (spec, plan, research, data-model, contracts, quickstart, checklists, tasks) as its own commit. Then run quickstart §1 steps 1, 2, 5 and 6 once each, one per shell call, and write `.specify/specs/018-canvas-v5-ui/baseline.md` with:
   - the base sha;
   - each `check_ui.py` step's result;
   - the Vitest pass counts for both workspaces and the Playwright pass count;
@@ -99,13 +99,13 @@
 
 ### Tokens and theme (R-10)
 
-- [ ] T003 RED: in `interfaces/ui/src/tokens/tokens.pw.ts` add tests that `--ground-node`, `--grid-dot`, `--edge` and `--ink-dim` resolve under `:root` and under `[data-theme='light']` (TOKENS-1/TOKENS-3 pattern). Create `tests/test_check_raw_colours.py`, which runs `scripts/check_raw_colours.py` over a temp tree:
+- [x] T003 RED: in `interfaces/ui/src/tokens/tokens.pw.ts` add tests that `--ground-node`, `--grid-dot`, `--edge` and `--ink-dim` resolve under `:root` and under `[data-theme='light']` (TOKENS-1/TOKENS-3 pattern). Create `tests/test_check_raw_colours.py`, which runs `scripts/check_raw_colours.py` over a temp tree:
   - a `.vue` file with `#fff`, a `.ts` file with `rgba(`, and a `.vue` file naming `'IBM Plex Sans'` each fail with path:line;
   - files under `tokens/`, `api/mock/` and `__fixtures__/` pass.
 
   Both fail (names missing; script missing).
-- [ ] T004 Add the four names, with both themes' values from R-10, to `interfaces/ui/src/tokens/tokens.css`, and describe them in `interfaces/ui/src/tokens/tokens.md` (no TOKENS-4 change). Create `scripts/check_raw_colours.py` (exit 1 on any hit; scans `.vue` and `.ts` under `interfaces/ui/src` and `interfaces/dashboard/frontend/src`; exemptions as in T003). Add it as a step in `scripts/check_ui.py`, after the typecheck. T003 goes green. Commit T003 + T004.
-- [ ] T005 Raw-colour sweep, so the new check passes on the tree:
+- [x] T004 Add the four names, with both themes' values from R-10, to `interfaces/ui/src/tokens/tokens.css`, and describe them in `interfaces/ui/src/tokens/tokens.md` (no TOKENS-4 change). Create `scripts/check_raw_colours.py` (exit 1 on any hit; scans `.vue` and `.ts` under `interfaces/ui/src` and `interfaces/dashboard/frontend/src`; exemptions as in T003). Add it as a step in `scripts/check_ui.py`, after the typecheck. T003 goes green. Commit T003 + T004.
+- [x] T005 Raw-colour sweep, so the new check passes on the tree:
   - `F/shared/format.ts` (`budgetColor` returns token names);
   - `F/app/ui.store.ts` (toast takes a status kind, not a colour);
   - `F/app/shell/StartRunModal.vue`;
@@ -116,21 +116,21 @@
 
 ### Session prefs and theme wiring (data-model §5)
 
-- [ ] T006 RED: create `F/app/prefs.store.test.ts`:
+- [x] T006 RED: create `F/app/prefs.store.test.ts`:
   - the defaults are `theme: 'dark'`, all three toggles off and `runInContext: null`;
   - setting `theme` to `'light'` and mounting `F/app/App.vue` (pattern: `F/app/App.test.ts`) sets `document.documentElement.dataset.theme` to `light`, and setting it back to `'dark'` removes it;
   - nothing is read from or written to `localStorage` (spy).
 
   Fails (store missing).
-- [ ] T007 Create `F/app/prefs.store.ts` (data-model §5) and wire `data-theme` in `F/app/App.vue`. T006 goes green. Commit T006 + T007.
+- [x] T007 Create `F/app/prefs.store.ts` (data-model §5) and wire `data-theme` in `F/app/App.vue`. T006 goes green. Commit T006 + T007.
 
 ### Split the app tier (R-11)
 
-- [ ] T008 Split `interfaces/ui/app.pw.ts` by screen into `interfaces/ui/app.{shell,run,inbox,fleet,board,graphs}.pw.ts`. Move each test with its `// clause:` citation unchanged. Put shared setup in `interfaces/ui/app.helpers.ts` (not a `.pw.ts`). Delete `app.pw.ts`. The Playwright pass count and the `check_clauses.py` output equal baseline.md. Commit.
+- [x] T008 Split `interfaces/ui/app.pw.ts` by screen into `interfaces/ui/app.{shell,run,inbox,fleet,board,graphs}.pw.ts`. Move each test with its `// clause:` citation unchanged. Put shared setup in `interfaces/ui/app.helpers.ts` (not a `.pw.ts`). Delete `app.pw.ts`. The Playwright pass count and the `check_clauses.py` output equal baseline.md. Commit.
 
 ### Header, footer, toasts (S4, S5, S12; Clauses CONSOLE-2, 27, 48, 50)
 
-- [ ] T009 RED: rewrite `interfaces/ui/src/components/app_header/app_header.spec.ts` for the rebuilt API (data-model §4.2):
+- [x] T009 RED: rewrite `interfaces/ui/src/components/app_header/app_header.spec.ts` for the rebuilt API (data-model §4.2):
   - primary and secondary items render in order with their labels;
   - `available: false` items are not rendered;
   - the badge renders only when `badge > 0`;
@@ -139,8 +139,8 @@
   - no stats element and no Start button exist.
 
   Rewrite `app_header.md` clauses accordingly: the clauses asserting `SDLC·FACTORY`, uppercase labels or stats become tombstones (Clauses §3). Create `interfaces/ui/src/components/footer_bar/` RED spec `footer_bar.spec.ts`: left and right text render. Both fail.
-- [ ] T010 Rebuild `U/src/components/app_header/AppHeader.vue`, its `.profiles.ts` and its `.pw.ts` to v5 (wordmark mark "K" + "Kroker", primary and secondary nav, run switch, Search ⌘K, ⋯; tokens only). Create the five files of `footer_bar` and register both in `U/showcase/registry.ts` and `U/src/index.ts`. T009 goes green. Commit T009 + T010.
-- [ ] T011 RED: update `F/app/shell/AppHeader.test.ts` and create `F/app/nav.test.ts`:
+- [x] T010 Rebuild `U/src/components/app_header/AppHeader.vue`, its `.profiles.ts` and its `.pw.ts` to v5 (wordmark mark "K" + "Kroker", primary and secondary nav, run switch, Search ⌘K, ⋯; tokens only). Create the five files of `footer_bar` and register both in `U/showcase/registry.ts` and `U/src/index.ts`. T009 goes green. Commit T009 + T010.
+- [x] T011 RED: update `F/app/shell/AppHeader.test.ts` and create `F/app/nav.test.ts`:
   - `navManifest` lists Fleet, Inbox and run-in-context (primary) and Graphs, Compare and Interfaces (secondary);
   - Compare and Interfaces have `available: false` in this slice;
   - the shell wrapper passes `inbox.items.length` as the badge;
@@ -148,10 +148,10 @@
   - the run entry targets `prefs.runInContext`, else the newest fleet run.
 
   **The existing Start-run button stays in the shell until T066** (R-1). Assert it is still present. Fails.
-- [ ] T012 Create `F/app/nav.ts` (with `designAvailable: false`, data-model §5) and update `F/app/shell/AppHeader.vue` and `F/app/App.vue` to render the v5 header from the manifest, plus `FooterBar`. On non-canvas screens the footer's left side is the fleet total (priced runs only, and how many were left out, from `F/shared/fleet.store.ts`) and its right side reads `⌘K commands`. In the same commit (standing rule "App-tier tests move with the surface"), delete the app-shell CONSOLE-2 and CONSOLE-27 tests, which assert `.cmp-app-header .stats`. T015 restores them on the badge and the footer in this phase. Name both in the commit body. T011 goes green. Commit T011 + T012.
-- [ ] T013 RED: in `interfaces/ui/src/components/toasts/toasts.spec.ts` add tests that a toast renders bottom-centre (a class assertion) and takes its colour from `kind` (`done` or `failed`), not a colour prop. Fails.
-- [ ] T014 Reconcile `U/src/components/toasts/Toasts.vue`, `.md` and `.profiles.ts` (TOASTS clauses rewritten, Clauses §3), and update `F/app/shell/Toasts.vue` to pass `kind`. T013 goes green. Commit T013 + T014.
-- [ ] T015 App tier: in `U/app.md` rewrite CONSOLE-2 (badge only) and CONSOLE-27 (footer total), and add CONSOLE-48 and CONSOLE-50 (Clauses). In `U/app.shell.pw.ts` restore the CONSOLE-2 and CONSOLE-27 tests (deleted in T012), rewritten and add tests for 48 and 50, citing on the test line. Add `## Retired clauses` to `U/app.md` (empty for now). Run `check_ui.py`, then `check_clauses.py` (SG-5). Commit.
+- [x] T012 Create `F/app/nav.ts` (with `designAvailable: false`, data-model §5) and update `F/app/shell/AppHeader.vue` and `F/app/App.vue` to render the v5 header from the manifest, plus `FooterBar`. On non-canvas screens the footer's left side is the fleet total (priced runs only, and how many were left out, from `F/shared/fleet.store.ts`) and its right side reads `⌘K commands`. In the same commit (standing rule "App-tier tests move with the surface"), delete the app-shell CONSOLE-2 and CONSOLE-27 tests, which assert `.cmp-app-header .stats`. T015 restores them on the badge and the footer in this phase. Name both in the commit body. T011 goes green. Commit T011 + T012.
+- [x] T013 RED: in `interfaces/ui/src/components/toasts/toasts.spec.ts` add tests that a toast renders bottom-centre (a class assertion) and takes its colour from `kind` (`done` or `failed`), not a colour prop. Fails.
+- [x] T014 Reconcile `U/src/components/toasts/Toasts.vue`, `.md` and `.profiles.ts` (TOASTS clauses rewritten, Clauses §3), and update `F/app/shell/Toasts.vue` to pass `kind`. T013 goes green. Commit T013 + T014.
+- [x] T015 App tier: in `U/app.md` rewrite CONSOLE-2 (badge only) and CONSOLE-27 (footer total), and add CONSOLE-48 and CONSOLE-50 (Clauses). In `U/app.shell.pw.ts` restore the CONSOLE-2 and CONSOLE-27 tests (deleted in T012), rewritten and add tests for 48 and 50, citing on the test line. Add `## Retired clauses` to `U/app.md` (empty for now). Run `check_ui.py`, then `check_clauses.py` (SG-5). Commit.
 
 **Checkpoint**: v5 header and footer on every route; old screens still in place; Start button still present; quickstart §1 green.
 
@@ -163,14 +163,14 @@
 
 **Independent test**: `command_palette.spec.ts`, `toggle_menu.spec.ts`, `F/app/commands.test.ts`; app tier CONSOLE-47.
 
-- [ ] T016 [P] [US8] RED: create `U/src/components/command_palette/command_palette.spec.ts`:
+- [x] T016 [P] [US8] RED: create `U/src/components/command_palette/command_palette.spec.ts`:
   - `open: false` renders nothing;
   - typing filters by label (case-insensitive);
   - ArrowDown, ArrowUp and Enter run the highlighted command (emit `run(id)`);
   - Escape and a backdrop click emit `close`.
 
   Create `U/src/components/toggle_menu/toggle_menu.spec.ts`: each item renders its label, description and a check when `on`; a click emits `toggle(id)`. Both fail.
-- [ ] T017 [P] [US8] Create the five files of `command_palette` and of `toggle_menu` (data-model §4.2; tokens only). Register them in the showcase and the index. T016 goes green. Commit T016 + T017.
+- [x] T017 [P] [US8] Create the five files of `command_palette` and of `toggle_menu` (data-model §4.2; tokens only). Register them in the showcase and the index. T016 goes green. Commit T016 + T017.
 - [ ] T018 [US8] RED: create `F/app/commands.test.ts`. `commandsOf(state)` returns v5's commands in v5's order (S11):
   - "Review …" one per pending item of the run in context, with hint `waiting`;
   - "Open Inbox" with hint `<n> pending`;

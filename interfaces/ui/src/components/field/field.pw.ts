@@ -4,12 +4,13 @@ const at = (profile: string) => `#showcase-field-${profile}`
 
 test('label click focuses the control', async ({ page }) => {  // clause: FIELD-1
   await page.goto('/')
-  // The showcase also renders start_run_modal's open profiles, whose fixed
-  // backdrop intercepts pointer events across the page. Remove those
-  // articles so the label click is a real, unobstructed user click.
+  // The showcase also renders start_run_modal's and command_palette's open
+  // profiles, whose fixed backdrop intercepts pointer events across the
+  // page. Remove those articles so the label click is a real, unobstructed
+  // user click.
   await page
     .locator(
-      '#showcase-start_run_modal-open-filled, #showcase-start_run_modal-open-empty, #showcase-start_run_modal-with-budget-error',
+      '#showcase-start_run_modal-open-filled, #showcase-start_run_modal-open-empty, #showcase-start_run_modal-with-budget-error, #showcase-command_palette-open',
     )
     .evaluateAll((els) => els.forEach((e) => e.remove()))
   await page.locator(`${at('with-hint')} label`).click()
