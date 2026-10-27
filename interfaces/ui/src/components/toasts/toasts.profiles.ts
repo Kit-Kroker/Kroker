@@ -8,12 +8,12 @@ export default defineProfiles({
   profiles: [
     {
       name: 'multiple',
-      summary: 'Multiple active notification toasts with distinct colors.',
+      summary: 'Multiple active notification toasts with distinct kinds.',
       props: {
         toasts: [
-          { id: 't1', msg: 'Run started — feature-123', color: 'var(--status-running)' },
-          { id: 't2', msg: 'Clarification resolved', color: 'var(--status-done)' },
-          { id: 't3', msg: 'Title required', color: 'var(--status-blocked)' },
+          { id: 't1', msg: 'Run started — feature-123', kind: 'running' },
+          { id: 't2', msg: 'Clarification resolved', kind: 'done' },
+          { id: 't3', msg: 'Title required', kind: 'failed' },
         ],
       },
     },

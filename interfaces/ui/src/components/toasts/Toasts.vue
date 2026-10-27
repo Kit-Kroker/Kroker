@@ -5,8 +5,6 @@ export interface ToastItem {
   msg: string
   /** 018 R-10: status kind, mapped to a --status-* token. */
   kind?: ToastKind
-  /** Deprecated pass-through colour; removed with the v5 toasts (T014). */
-  color?: string
 }
 
 defineProps<{
@@ -15,14 +13,13 @@ defineProps<{
 </script>
 
 <template>
-  <div v-if="toasts.length > 0" class="cmp-toasts stack">
+  <div v-if="toasts.length > 0" class="cmp-toasts stack cmp-toasts--bottom-centre">
     <div
       v-for="t in toasts"
       :key="t.id"
       data-testid="toast"
       class="toast"
       :class="t.kind ? `cmp-toast-${t.kind}` : undefined"
-      :style="t.color ? { borderLeftColor: t.color } : undefined"
     >
       {{ t.msg }}
     </div>
@@ -32,8 +29,10 @@ defineProps<{
 <style scoped>
 .stack {
   position: fixed;
-  right: 18px;
+  /* 018 v5 (TOASTS-2): the stack sits bottom-centre, not bottom-right. */
+  left: 50%;
   bottom: 18px;
+  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   gap: 8px;
