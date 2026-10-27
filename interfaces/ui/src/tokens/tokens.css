@@ -12,6 +12,9 @@
   --line: #1d232d;          --line-strong: #2b3341;
   --ink-primary: #e8edf5;   --ink-secondary: #9aa3b2;  --ink-muted: #8b93a1;  --ink-inverse: #0d1015;
 
+  /* v5 canvas (018 R-10): ground nodes, the dot grid, wires, dim ink. */
+  --ground-node: #141920;   --grid-dot: #1f2630;   --edge: #465163;   --ink-dim: #636c7c;
+
   --status-done: #76a784;   --status-running: #8fb0e0; --status-waiting: #b79de0;
   --status-failed: #d6725f; --status-idle: #4b5464;
   --status-done-tint: rgba(118, 167, 132, 0.1);   --status-running-tint: rgba(143, 176, 224, 0.1);
@@ -45,6 +48,9 @@
   --ground-shell: #f7f6f2;  --ground-canvas: #eeece6;  --ground-raised: #fbfaf7;
   --line: #dcd8ce;          --line-strong: #bdb8ad;
   --ink-primary: #1b1e22;   --ink-secondary: #555a63;  --ink-muted: #686c73;  --ink-inverse: #f7f6f2;
+
+  /* v5 canvas (018 R-10). */
+  --ground-node: #fbfaf7;   --grid-dot: #d3cfc4;   --edge: #8d9198;   --ink-dim: #868a91;
 
   --status-done: #3f7a55;   --status-running: #2f5d96; --status-waiting: #6b4fa3;
   --status-failed: #a4402f; --status-idle: #b3afa4;

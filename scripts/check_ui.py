@@ -41,30 +41,51 @@ UI = "@kroker/ui"
 # instead of consuming it; a value <= 5000 would be a no-op dressed as a fix.
 VITEST_TEST_TIMEOUT_MS = 60_000
 
-# (label, npm argv). Cheapest first, same principle as verify.py GATES.
+# (label, argv). Cheapest first, same principle as verify.py GATES. Every
+# entry is a full command; "npm" entries get the resolved npm.cmd swapped
+# in at run time, python entries carry the running interpreter already.
 STEPS: tuple[tuple[str, list[str]], ...] = (
-    ("install", ["ci"]),
-    ("typecheck", ["run", "typecheck", "--workspace", DASH]),
-    ("typecheck-ui", ["run", "typecheck", "--workspace", UI]),
-    ("build-dashboard", ["run", "build", "--workspace", DASH]),
+    ("install", ["npm", "ci"]),
+    ("typecheck", ["npm", "run", "typecheck", "--workspace", DASH]),
+    # 018 R-10: tokens-only colours/fonts, before any build output exists.
+    (
+        "raw-colours",
+        [
+            sys.executable,
+            str(Path(__file__).resolve().parents[1] / "scripts" / "check_raw_colours.py"),
+        ],
+    ),
+    ("typecheck-ui", ["npm", "run", "typecheck", "--workspace", UI]),
+    ("build-dashboard", ["npm", "run", "build", "--workspace", DASH]),
     # @kroker/ui's vite root is showcase/ (vite.config.ts): this build is what
     # ds-bundle's vite.preview() serves next -- without it, build-ds-bundle.ts
     # silently falls back to a URL with nothing listening on it.
-    ("build-ui", ["run", "build", "--workspace", UI]),
+    ("build-ui", ["npm", "run", "build", "--workspace", UI]),
     (
         "vitest-dashboard",
-        ["run", "test", "--workspace", DASH, "--", f"--testTimeout={VITEST_TEST_TIMEOUT_MS}"],
+        [
+            "npm",
+            "run",
+            "test",
+            "--workspace",
+            DASH,
+            "--",
+            f"--testTimeout={VITEST_TEST_TIMEOUT_MS}",
+        ],
     ),
-    ("playwright-browser", ["exec", "--", "playwright", "install", "--with-deps", "chromium"]),
+    (
+        "playwright-browser",
+        ["npm", "exec", "--", "playwright", "install", "--with-deps", "chromium"],
+    ),
     # Populates dist-ds/ (gitignored, spec C Task 12/13's DesignSync payload)
     # before vitest-ui runs: build-ds-bundle.spec.ts asserts against those
     # files and has no fixture of its own.
-    ("ds-bundle", ["run", "ds:bundle", "--workspace", UI]),
+    ("ds-bundle", ["npm", "run", "ds:bundle", "--workspace", UI]),
     (
         "vitest-ui",
-        ["run", "test", "--workspace", UI, "--", f"--testTimeout={VITEST_TEST_TIMEOUT_MS}"],
+        ["npm", "run", "test", "--workspace", UI, "--", f"--testTimeout={VITEST_TEST_TIMEOUT_MS}"],
     ),
-    ("playwright", ["run", "test:pw", "--workspace", UI]),
+    ("playwright", ["npm", "run", "test:pw", "--workspace", UI]),
 )
 
 
@@ -91,7 +112,8 @@ def main(argv: list[str] | None = None) -> int:
     failed: list[str] = []
     for label, args in STEPS:
         print(f"=== ui: {label} ===", flush=True)
-        if subprocess.run([npm, *args]).returncode != 0:
+        cmd = [npm, *args[1:]] if args[0] == "npm" else args
+        if subprocess.run(cmd).returncode != 0:
             failed.append(label)
 
     if failed:

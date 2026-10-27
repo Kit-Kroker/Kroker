@@ -56,3 +56,36 @@ test('deprecated names are aliases only', async ({ page }) => {  // clause: TOKE
   })
   expect(raw).toEqual([])
 })
+
+// v5 (018, R-10): the canvas token names. PIN: they must exist by name and
+// resolve in both theme scopes before any component consumes them.
+const V5_TOKENS = ['--ground-node', '--grid-dot', '--edge', '--ink-dim']
+
+test('v5 canvas tokens resolve on :root', async ({ page }) => {  // clause: TOKENS-1
+  await page.goto('/')
+  const unresolved = await page.evaluate((names) => {
+    const s = getComputedStyle(document.documentElement)
+    const declared = Array.from(document.styleSheets)
+      .flatMap((sh) => Array.from((sh as CSSStyleSheet).cssRules ?? []))
+      .filter((r): r is CSSStyleRule => r instanceof CSSStyleRule && r.selectorText === ':root')
+      .flatMap((r) => Array.from(r.style))
+    return names.filter((n) => !declared.includes(n) || s.getPropertyValue(n).trim() === '')
+  }, V5_TOKENS)
+  expect(unresolved).toEqual([])
+})
+
+test('v5 canvas tokens are redeclared and resolve under the light theme', async ({ page }) => {  // clause: TOKENS-3
+  await page.goto('/')
+  const missing = await page.evaluate(({ names, light }) => {
+    document.documentElement.dataset.theme = 'light'
+    const s = getComputedStyle(document.documentElement)
+    const rules = Array.from(document.styleSheets)
+      .flatMap((sh) => Array.from((sh as CSSStyleSheet).cssRules ?? []))
+      .filter((r): r is CSSStyleRule => r instanceof CSSStyleRule)
+    const lightNames = rules
+      .filter((r) => r.selectorText === light)
+      .flatMap((r) => Array.from(r.style))
+    return names.filter((n) => !lightNames.includes(n) || s.getPropertyValue(n).trim() === '')
+  }, { names: V5_TOKENS, light: THEME_SCOPES[1] })
+  expect(missing).toEqual([])
+})

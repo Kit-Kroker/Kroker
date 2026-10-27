@@ -9,7 +9,11 @@ three grounds (`--ground-shell`, `--ground-canvas`, `--ground-raised`),
 two lines, four inks (`--ink-primary`, `--ink-secondary`, `--ink-muted`,
 `--ink-inverse`), five statuses with a tint each (`--status-done`,
 `running`, `waiting`, `failed`, `idle`), one overlay shadow and one
-backdrop. Theme-invariant scales: `--text-xs..xl` (11/12/13/15/17),
+backdrop. The v5 canvas pass (018) adds four names in both themes:
+`--ground-node` (canvas node fill), `--grid-dot` (the dot grid),
+`--edge` (wires and connectors) and `--ink-dim` (a fifth ink, dimmer
+than `--ink-muted`, for de-emphasised canvas labels). Theme-invariant
+scales: `--text-xs..xl` (11/12/13/15/17),
 `--space-1..5` (4/8/12/16/24), `--radius-sm/md/lg` (4/8/12), and the two
 Plex families. There is no brand accent: the primary action is inverse ink.
 
