@@ -358,8 +358,8 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 
 **Independent test**: `kanban.spec.ts`, `kanban.adapter.test.ts`, `BoardTab.test.ts`; app tier CONSOLE-10–16, 36.
 
-- [ ] T051 [P] [US4] RED: create `U/src/components/kanban/kanban.spec.ts`: columns render with title, count and cards; a card shows id, optional title, tag and meta; the `link` renders when given. Fails.
-- [ ] T052 [P] [US4] Create the five files of `kanban` and register them. T051 goes green. Commit T051 + T052.
+- [x] T051 [P] [US4] RED: create `U/src/components/kanban/kanban.spec.ts`: columns render with title, count and cards; a card shows id, optional title, tag and meta; the `link` renders when given. Fails.
+- [x] T052 [P] [US4] Create the five files of `kanban` and register them. T051 goes green. Commit T051 + T052.
 - [ ] T053 [US4] RED: create `F/features/board/kanban.adapter.test.ts`:
   - columns come only from the wire statuses present (`pending · in_progress · done · failed · blocked · quarantined`), never `claimed` or `queued` (V7);
   - a task whose `status` differs from `authoritative_status` shows both in its tag;
