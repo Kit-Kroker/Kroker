@@ -98,3 +98,19 @@ test('Graph is unchanged after a Board round trip', async ({ page }) => {  // cl
   // run); the clause keeps its Graph-unchanged rule.
   await expect(page.locator('[data-testid="run-view"] [data-testid="stage-dot"]')).toHaveCount(0)
 })
+
+test('V7: the kanban has columns by wire status only; divergent tasks show both', async ({ page }) => {  // clause: CONSOLE-36
+  await page.goto('/#/runs/feature-graph-demo?tab=board')
+  const kanban = page.locator('[data-testid="board-kanban"]')
+  // The mock's seven tasks cover all six wire statuses — and nothing else
+  // ever forms a column.
+  const columns = kanban.locator('[data-testid="kanban-column"]')
+  await expect(columns).toHaveCount(6)
+  await expect(columns.filter({ hasText: 'In progress' }).locator('[data-testid="kanban-card"]')).toHaveCount(2)
+  // The divergent task (T05: blocked row, done authoritative) shows both
+  // statuses in its tag; the agreeing one (T06) shows its status alone.
+  const t05 = kanban.locator('[data-testid="kanban-card"]', { hasText: 'T05' })
+  await expect(t05.locator('[data-testid="kanban-tag"]')).toHaveText(/blocked.*done/)
+  const t06 = kanban.locator('[data-testid="kanban-card"]', { hasText: 'T06' })
+  await expect(t06.locator('[data-testid="kanban-tag"]')).toHaveText('quarantined')
+})

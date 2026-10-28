@@ -367,7 +367,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 
   Fails.
 - [x] T054 [US4] Create `F/features/board/kanban.adapter.ts` and `F/features/board/BoardKanban.vue`. The latter reuses `board.store.ts`, its banners and its empty state, and links "Open full Agent Board →" to `/runs/:id/board`. Add the route in `F/app/router.ts`: `/runs/:id/board` renders `BoardTab.vue`, unchanged except for a back link to the run. `F/app/RunPage.vue` fills the Board slot with `BoardKanban`. In the same commit, update the app-tier tests of CONSOLE-10 to CONSOLE-16 so that each drives the surface its rule now lives on (the kanban, or `/runs/:id/board`), per the standing rule. T055 finalises the wording. T053 goes green; every `BoardTab.test.ts` and `board.store.test.ts` test is a PIN. Commit T053 + T054.
-- [ ] T055 [US4] App tier: rewrite CONSOLE-10 to 16 onto the kanban and the full board, and add CONSOLE-36, with tests in `U/app.board.pw.ts`. `check_ui.py`, then `check_clauses.py`. Commit.
+- [x] T055 [US4] App tier: rewrite CONSOLE-10 to 16 onto the kanban and the full board, and add CONSOLE-36, with tests in `U/app.board.pw.ts`. `check_ui.py`, then `check_clauses.py`. Commit.
 
 ---
 

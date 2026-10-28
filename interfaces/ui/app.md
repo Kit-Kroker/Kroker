@@ -54,18 +54,19 @@ on the graph editor holding the run's graph. [FR-1205]
 
 ### CONSOLE-10
 The run page's tab state round-trips through the URL: `?tab=board` opens the
-Board tab, a copied board URL reopens it, selecting Graph clears `?tab`, and
-unknown (`?tab=nonsense`) or disabled (`?tab=gates`) values render Graph with
-the URL left untouched. [FR-017, SC-005]
+Board tab (the v5 kanban), a copied board URL reopens it, selecting Graph
+clears `?tab`, and unknown (`?tab=nonsense`) or disabled (`?tab=gates`)
+values render Graph with the URL left untouched. [FR-017, SC-005]
 
 ### CONSOLE-11
-The Board tab renders one row per task of the run's pinned plan (the plan
-version this run published, else the project's current plan), and selecting
-a row shows the detail pane's fields, the task's evidence section, and its
+The full Agent Board at `/runs/:id/board` — its back link returns to the
+run — renders one row per task of the run's pinned plan (the plan version
+this run published, else the project's current plan), and selecting a row
+shows the detail pane's fields, the task's evidence section, and its
 timeline entries. [FR-019, FR-021, FR-021a]
 
 ### CONSOLE-12
-The Board tab's counter strip reads "this run": per-status counts, fix
+The full board's counter strip reads "this run": per-status counts, fix
 attempts, errored and diverged counts are derived from this run's task rows,
 never from the project's stored stats. [FR-019]
 
@@ -87,9 +88,10 @@ the healthy absence so the line cannot rot into a permanent fixture.
 [FR-023a]
 
 ### CONSOLE-16
-Switching Board → Graph → Board leaves the Graph tab unchanged (same canvas
-node count), and the run header — title and stage strip — persists above the
-tab bar on every tab. [FR-017, FR-018]
+Switching Board (the kanban) → Graph → Board leaves the Graph tab unchanged
+(same canvas node count), and the run header — title — persists above the
+tab bar on every tab. The run header draws no stage strip (v5). [FR-017,
+FR-018]
 
 ### CONSOLE-17
 v5 list: one row per item (kind label, age, title, where). The count
@@ -194,6 +196,10 @@ fixture, and an unpriced run's cost never reads `$0.00`.
 A Fleet row waiting on a person (gate, clarify or escalation) offers
 "Decide", the run in context offers "Open run", and every other row
 offers "Open" (S16).
+
+### CONSOLE-36
+V7 — The kanban has columns by wire task status only (no `claimed` or
+`queued`). A task whose live and authoritative statuses differ shows both.
 
 ### CONSOLE-49
 The Observe inspector of a node whose configured model differs from the
