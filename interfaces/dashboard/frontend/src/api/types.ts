@@ -161,6 +161,10 @@ export interface DashboardApi {
   getFleetSummary(): Promise<FleetSummary>
   /** 018 R-7: the Graphs catalog and its PipelineConfig panel. */
   getShippedGraphs(): Promise<ShippedGraphs>
+  /** 018 V9 (A8, presentation-only): the planned node types, dashed and
+   * unplaceable in Design. No read route exists yet; the http provider
+   * serves none until one does. */
+  getPlannedTypes(): Promise<string[]>
   answerClarify(runId: string, key: string, answer: string): Promise<void>
   decideGate(runId: string, key: string, outcome: GateOutcome, comment: string): Promise<void>
   overrideMerge(runId: string, key: string, approve: boolean, justification: string): Promise<void>

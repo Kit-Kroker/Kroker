@@ -287,13 +287,6 @@ function onRailSelect(id: string) {
               This run predates graph execution.
             </p>
             <p v-if="runGraph.connectionLost" class="banner" data-testid="connection-lost">connection lost — retrying</p>
-            <!-- T063 interim: the open-copy link is an item of the run block. -->
-            <RouterLink
-              v-if="graph"
-              :to="{ path: '/graphs', query: { from: `run:${id}` } }"
-              class="copy"
-              data-testid="open-copy"
-            >open copy in editor</RouterLink>
           </template>
         </Rail>
 

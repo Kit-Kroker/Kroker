@@ -179,8 +179,8 @@ describe('the v5 rail renders the run block (018 T031 RED)', () => {
     const cost = w.find('[data-testid="rail-cost"]')
     expect(cost.exists()).toBe(true)
     expect(cost.find('[data-testid="rail-budget"]').text()).toContain('20.00')
-    // The interim open-copy link survives inside the rail until T063.
-    expect(w.find('[data-testid="rail"] [data-testid="open-copy"]').exists()).toBe(true)
+    // 018 T063: the interim open-copy link is removed with the header's
+    // Observe/Design switch replacing it (app shell).
   })
 
   it('with nothing waiting, the events section carries the unavailable-history row', async () => {

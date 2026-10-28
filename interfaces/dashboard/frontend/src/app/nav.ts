@@ -14,6 +14,6 @@ export const navManifest: NavItem[] = [
   { id: 'interfaces', label: 'Interfaces', to: '/interfaces', available: false },
 ]
 
-// False until the Design route lands (T063). Gates the header's
-// Observe/Design switch and the design commands — never a nav item.
-export const designAvailable = false
+// 018 T063: the Design route landed. Gates the header's Observe/Design
+// switch and the design commands — never a nav item.
+export const designAvailable = true

@@ -518,11 +518,14 @@ describe('screen folders layout (T005)', () => {
       'features/run/RunView.test.ts',
       'features/run/runGraph.store.ts',
       'features/run/runGraph.store.test.ts',
-      // graphs
-      'features/graphs/GraphEditorView.vue',
+      // graphs (018 T063: DesignView replaces GraphEditorView; the
+      // schema-form coverage test is deleted with S15)
+      'features/graphs/DesignView.vue',
+      'features/graphs/DesignView.test.ts',
+      'features/graphs/GraphsView.vue',
+      'features/graphs/GraphsView.test.ts',
       'features/graphs/GraphInspector.vue',
       'features/graphs/GraphInspector.test.ts',
-      'features/graphs/schemaCoverage.test.ts',
       'features/graphs/graphEditor.store.ts',
       'features/graphs/graphEditor.store.test.ts',
       'features/graphs/graphEdits.ts',
@@ -651,7 +654,8 @@ describe('screen module shape (T005)', () => {
       // R-13 since T039: the run route composes through app/RunPage.vue,
       // which fills RunView's #board slot -- the pin follows the route.
       './RunPage.vue',
-      '../features/graphs/GraphEditorView.vue',
+      '../features/graphs/GraphsView.vue',
+      '../features/graphs/DesignView.vue',
     ]) {
       expect(router).toContain(spec)
     }

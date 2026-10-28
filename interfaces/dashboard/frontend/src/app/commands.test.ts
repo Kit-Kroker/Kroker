@@ -6,6 +6,8 @@ import type { PaletteCommand } from '@kroker/ui'
 // by navManifest availability and designAvailable (data-model §5). Tier A, C and
 // D use the real './nav'. Tier B swaps it for an all-available manifest through
 // vi.doMock and a fresh module graph, because the top-level import pins the real one.
+// 018 T063: designAvailable is true (the Design route landed) — the Design
+// trio (switch-mode, design-*, validate-graph) is served.
 
 const STATE = {
   run: {
@@ -20,7 +22,7 @@ const STATE = {
   graphs: ['ingest', 'enrich'],
 }
 
-describe('commandsOf with the real nav (designAvailable false, compare and interfaces unavailable)', () => {
+describe('commandsOf with the real nav (designAvailable true since T063, compare and interfaces unavailable)', () => {
   it('returns exactly the available commands in S11 order', () => {
     const expected: PaletteCommand[] = [
       { id: 'review-gate-1', label: 'Review Merge gate', hint: 'waiting' },
@@ -28,6 +30,10 @@ describe('commandsOf with the real nav (designAvailable false, compare and inter
       { id: 'open-inbox', label: 'Open Inbox', hint: '3 pending' },
       { id: 'open-fleet', label: 'Open Fleet' },
       { id: 'open-run-board', label: 'Open run board', hint: 'run-7' },
+      { id: 'switch-mode', label: 'Switch to Design' },
+      { id: 'design-ingest', label: 'Design ingest' },
+      { id: 'design-enrich', label: 'Design enrich' },
+      { id: 'validate-graph', label: 'Validate graph' },
       { id: 'fit-graph', label: 'Fit graph to view' },
     ]
     expect(commandsOf(STATE)).toEqual(expected)

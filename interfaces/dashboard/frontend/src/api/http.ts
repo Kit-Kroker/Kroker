@@ -239,6 +239,7 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
     async getInboxState() { return mapInboxState(await json('/inbox')) },
     async getFleetSummary() { return mapFleetSummary(await json('/fleet/summary')) },
     async getShippedGraphs() { return mapShippedGraphs(await json('/graphs/shipped')) },
+    async getPlannedTypes() { return [] as string[] },
 
     async answerClarify(runId, key, answer) {
       await json(`/runs/${encodeURIComponent(runId)}/answer`, {

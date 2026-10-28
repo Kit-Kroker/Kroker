@@ -21,16 +21,12 @@ The header's inbox badge appears when the provider reports inbox items and
 carries the pending count. The v5 header shows no run counter and no spend
 stats — totals live in the footer (CONSOLE-27, CONSOLE-50). [FR-601]
 
-### CONSOLE-7
-The graph editor renders the canvas after applying well-shaped recorded text,
-and keeps the canvas disabled while showing shape errors after applying text
-that does not parse. [FR-1205, E-76 U5]
-
 ### CONSOLE-9
-In the graph editor, editing one inspector field of a recorded graph and
-applying it round-trips through the provider's parse and commits: the
-working copy gains the parse's sha and the inspector shows no error. [FR-1205,
-E-76 U8]
+In Design, editing an edge's `max_traversals` and applying it round-trips
+through the provider's parse and commits: the working copy gains the parse's
+sha and the inspector shows no error. (T063 deleted the YAML-flow test per
+the orchestrator ruling; T066 restores it on Design — the clause reads
+untested mid-phase, and SG-5 checks at phase end.) [FR-1205, E-76 U8]
 
 ### CONSOLE-4
 The run view of a graph-executed run renders one canvas node per graph node,
@@ -238,6 +234,18 @@ neither source exists.
 
 ## Retired clauses
 
+- CONSOLE-7 — retired 018 T063 (S15): the YAML paste flow is deleted with
+  the YAML pane; Design loads through the run graph or the catalog, never
+  pasted text. The parse route stays served (loadText remains the
+  store's loading helper) and its shape-error discipline is pinned at
+  the unit tier (graphEditor.store.test.ts).
+- YAML_PANE-*, SCHEMA_FORM-* — retired 018 T063 (S15): both components
+  are deleted with their only product importers (the YAML pane's editor
+  view and the inspector's schema-form node fields). A grep shows no
+  importer beyond the removed showcase entries; their coverage test
+  (features/graphs/schemaCoverage.test.ts) is deleted with them, named
+  in the T063 commit body. The S15 inspector is edge-edit plus read-only
+  knobs.
 - GATE_DECISION-1..3 — retired 018 T044: the gate_decision component is
   deleted (the decision card replaces it; a grep shows no importer, and
   the ds-bundle spec never referenced it). Their rules live on in

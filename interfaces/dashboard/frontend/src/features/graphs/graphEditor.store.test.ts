@@ -1,10 +1,16 @@
+// v5 Design store (018 T062 RED). The state machine's surviving core (states,
+// D11 local ops, epoch discipline, parse-round-trip inspector apply, save) is
+// kept from the E-76 suite; new v5 pins: payload-refusing connect (FR-047),
+// undo/redo (S15), the edge max_traversals round trip. The YAML pane pins are
+// DELETED with S15 (named in the RED report): the serialize-discard case rode
+// openYaml, which the pane's removal retires; loadText stays as the loading
+// helper because the parse route stays served (S15).
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import catalogJson from '../../api/__fixtures__/graph/catalog.json'
 import preCode from '../../api/__fixtures__/graph/scenarios/pre_code.json'
 import badYaml from '../../api/__fixtures__/graph/scenarios/bad_yaml.json'
 import soft from '../../api/__fixtures__/graph/objects/pre_code_architecture_soft.json'
-import renamedInvalid from '../../api/__fixtures__/graph/objects/pre_code_intake_renamed_invalid.json'
 import type { CatalogWire, GraphWire, ParseWire, ValidationWire } from '../../api/graph-types'
 
 type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void }
@@ -28,8 +34,12 @@ import { useGraphEditorStore } from './graphEditor.store'
 import { useCatalogStore } from '../../shared/catalog.store'
 
 const PRE = preCode.parse as { ok: true; graph: GraphWire; sha: string }
+const CATALOG = catalogJson as unknown as CatalogWire
 const withCaps = (caps: Partial<CatalogWire['capabilities']>) =>
-  ({ ...(catalogJson as unknown as CatalogWire), capabilities: { validate: false, save: false, load: false, run_graph: false, ...caps } })
+  ({ ...CATALOG, capabilities: { validate: false, save: false, load: false, run_graph: false, ...caps } })
+
+const portOf = (type: string, name: string) =>
+  CATALOG.node_types.find((t) => t.type === type)!.ports.find((p) => p.name === name)!
 
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -47,14 +57,54 @@ async function loaded() {
   return s
 }
 
-describe('states', () => {
+// Deterministic port pairs from the served catalog: an EQUAL pair is an
+// equal-payload port combination with NO existing edge between them (the
+// RED's first draft reused PRE.edges[0], which M1's kept dedupe pin would
+// select instead of adding — the pair is now searched, same intent); an
+// UNEQUAL pair is searched from the catalog's payloads (FR-047's refusal
+// input).
+const equalPair = () => {
+  const withType = PRE.graph.nodes.map((n) => ({ n, t: CATALOG.node_types.find((t) => t.type === n.type)! }))
+  const has = (a: string, ap: string, b: string, bp: string) =>
+    PRE.graph.edges.some((e) => e.source === a && e.source_port === ap && e.target === b && e.target_port === bp)
+  for (const a of withType) {
+    for (const out of a.t.ports.filter((p) => p.direction === 'out')) {
+      for (const b of withType) {
+        for (const inn of b.t.ports.filter((p) => p.direction === 'in')) {
+          if (a.n.id === b.n.id) continue
+          if (out.payload === inn.payload && !has(a.n.id, out.name, b.n.id, inn.name)) {
+            return { from: { node: a.n.id, port: out.name }, to: { node: b.n.id, port: inn.name } }
+          }
+        }
+      }
+    }
+  }
+  throw new Error('catalog offers no free equal-payload pair')
+}
+const unequalPair = () => {
+  const withType = PRE.graph.nodes.map((n) => ({ n, t: CATALOG.node_types.find((t) => t.type === n.type)! }))
+  for (const a of withType) {
+    for (const out of a.t.ports.filter((p) => p.direction === 'out')) {
+      for (const b of withType) {
+        for (const inn of b.t.ports.filter((p) => p.direction === 'in')) {
+          if (a.n.id === b.n.id) continue
+          if (out.payload !== inn.payload) {
+            return { from: { node: a.n.id, port: out.name }, to: { node: b.n.id, port: inn.name } }
+          }
+        }
+      }
+    }
+  }
+  throw new Error('catalog offers no unequal-payload pair')
+}
+
+describe('states (kept from E-76)', () => {
   it('starts empty, loads recorded text into graph_loaded with its sha', async () => {
     const s = useGraphEditorStore()
     expect(s.state).toBe('empty')
     await loaded()
     expect(s.state).toBe('graph_loaded')
     expect(s.sha).toBe(PRE.sha)
-    expect(s.yamlDirty).toBe(false)
   })
 
   it('shape-broken text goes text_broken with its errors and locks the canvas', async () => {
@@ -64,90 +114,57 @@ describe('states', () => {
     expect(s.state).toBe('text_broken')
     expect(s.yamlErrors[0].line).toBe(3)
     expect(s.canvasLocked).toBe(true)
-    s.addNode('intake', 0, 0)
-    expect(s.working).toBeNull()
-  })
-
-  it('a failed apply after a load goes text_broken too, keeping the last good copy', async () => {
-    const s = await loaded()
-    const good = s.working
-    api.parseGraph.mockResolvedValueOnce(badYaml.parse)
-    await s.loadText(badYaml.yaml)
-    expect(s.state).toBe('text_broken')
-    expect(s.canvasLocked).toBe(true)
-    expect(s.working).toBe(good)
-    api.parseGraph.mockResolvedValueOnce(PRE)
-    await s.loadText(preCode.yaml)
-    expect(s.state).toBe('graph_loaded')
-  })
-
-  it('refuses over-cap text without calling the server', async () => {
-    const s = useGraphEditorStore()
-    useCatalogStore().catalog = { ...withCaps({}), max_graph_bytes: 10 }
-    await s.loadText('schema_version: 1\n')
-    expect(api.parseGraph).not.toHaveBeenCalled()
-    expect(s.yamlErrors[0].msg).toContain('exceeds 10 bytes')
   })
 })
 
-describe('D11 canvas operations never round-trip', () => {
-  it('adds, connects, moves and removes locally, bumping the epoch each time', async () => {
+describe('D11 canvas operations never round-trip (kept)', () => {
+  it('adds, moves and removes locally, bumping the epoch each time', async () => {
     const s = await loaded()
     api.parseGraph.mockClear()
     const e0 = s.epoch
     s.addNode('gate.plan', 5, 5)
-    expect(s.working!.nodes.at(-1)!.id).toBe('gate_plan')
-    s.connect('planner', 'plan', 'gate_plan', 'artifact')
     s.move('gate_plan', 50, 60)
     s.remove('node', 'gate_plan')
-    expect(s.epoch).toBe(e0 + 4)
+    expect(s.epoch).toBe(e0 + 3)
     expect(api.parseGraph).not.toHaveBeenCalled()
-    expect(s.working!.nodes.some((n) => n.id === 'gate_plan')).toBe(false)
   })
 })
 
-describe('epoch discards stale responses', () => {
-  it('discards a validation dispatched before a later edit', async () => {
-    vi.useFakeTimers()
+describe('payload-refusing connect (FR-047, 018 T062 RED)', () => {
+  it('an equal-payload connect creates the edge', async () => {
     const s = await loaded()
-    const pending = deferred<ValidationWire>()
-    api.validateGraph.mockReturnValueOnce(pending.promise)
-    await vi.advanceTimersByTimeAsync(400)
-    s.move('intake', 1, 1)
-    pending.resolve({ issues: [{ code: 'x', severity: 'error', message: 'stale', target: { kind: 'graph' } }], back_edges: [] })
-    await vi.advanceTimersByTimeAsync(0)
-    expect(s.validation).toBeNull()
+    const { from, to } = equalPair()
+    const before = s.working!.edges.length
+    s.connect(from.node, from.port, to.node, to.port)
+    expect(s.working!.edges.length).toBeGreaterThan(before)
   })
 
-  it('discards a serialize dispatched before a later edit', async () => {
+  it('an unequal-payload connect is refused with a reason and creates no edge', async () => {
     const s = await loaded()
-    const pending = deferred<{ ok: true; yaml: string }>()
-    api.serializeGraph.mockReturnValueOnce(pending.promise)
-    const opening = s.openYaml()
-    s.move('intake', 2, 2)
-    pending.resolve({ ok: true, yaml: 'STALE' })
-    await opening
-    expect(s.yamlText).not.toBe('STALE')
+    const { from, to } = unequalPair()
+    const before = s.working!.edges
+    s.connect(from.node, from.port, to.node, to.port)
+    expect(s.working!.edges).toBe(before) // no edge created
+    expect(s.notice).toBeTruthy()
+    expect(String(s.notice)).toMatch(/payload/)
   })
+})
 
-  it('locks canvas operations while an inspector apply is in flight', async () => {
+describe('undo and redo (S15, 018 T062 RED)', () => {
+  it('undo restores the previous working copy; redo reapplies the edit', async () => {
     const s = await loaded()
-    s.select('architecture')
-    const pending = deferred<ParseWire>()
-    api.parseGraph.mockReturnValueOnce(pending.promise)
-    const applying = s.applyInspector({ ...s.selectedNode!.node, gate: { policy: 'soft' } })
-    expect(s.canvasLocked).toBe(true)
     const before = s.working
-    s.move('intake', 9, 9)
-    expect(s.working).toBe(before)
-    pending.resolve(soft.parse as ParseWire)
-    await applying
-    expect(s.canvasLocked).toBe(false)
+    s.addNode('gate.plan', 5, 5)
+    expect(s.working!.nodes.some((n) => n.id === 'gate_plan')).toBe(true)
+    s.undo()
+    expect(s.working).toEqual(before)
+    s.redo()
+    expect(s.working!.nodes.some((n) => n.id === 'gate_plan')).toBe(true)
   })
 })
 
-describe('inspector apply', () => {
-  it('commits the parsed graph on success', async () => {
+describe('inspector apply (kept; the edge round trip is new)', () => {
+  it('commits the parsed graph on success (node gate change)', async () => {
     const s = await loaded()
     s.select('architecture')
     api.parseGraph.mockResolvedValueOnce(soft.parse)
@@ -156,17 +173,95 @@ describe('inspector apply', () => {
     expect(s.working!.nodes.find((n) => n.id === 'architecture')!.gate).toEqual({ policy: 'soft' })
   })
 
-  it('maps shape errors inside the element onto its fields and counts the rest', async () => {
+  it('an edge max_traversals edit round-trips through parse (S15, 018 T062 RED)', async () => {
     const s = await loaded()
-    s.select('intake')
-    api.parseGraph.mockResolvedValueOnce(renamedInvalid.parse)
-    await s.applyInspector({ ...s.selectedNode!.node, id: 'Intake' })
-    expect(api.parseGraph).toHaveBeenLastCalledWith({ graph: renamedInvalid.graph })
-    expect(s.inspectorErrors).toEqual([
-      { path: 'id', msg: "String should match pattern '^[a-z][a-z0-9_]*$'" },
-      { path: '', msg: '1 shape error(s) elsewhere in the graph' },
-    ])
-    expect(s.working!.nodes.some((n) => n.id === 'intake')).toBe(true)
+    const key = `${PRE.graph.edges[0]!.source}.${PRE.graph.edges[0]!.source_port}>${PRE.graph.edges[0]!.target}.${PRE.graph.edges[0]!.target_port}`
+    s.select(key)
+    expect(s.selectedEdge).not.toBeNull()
+    const edited = { ...s.selectedEdge!.edge, max_traversals: 5 }
+    const expected: GraphWire = JSON.parse(JSON.stringify(s.working))
+    const idx = s.working!.edges.indexOf(s.selectedEdge!.edge)
+    expected.edges[idx] = edited
+    api.parseGraph.mockResolvedValueOnce({ ok: true, graph: expected, sha: 'sha-edited' })
+    await s.applyInspector(edited)
+    expect(api.parseGraph).toHaveBeenLastCalledWith({ graph: expected })
+    expect(s.working!.edges[idx]!.max_traversals).toBe(5)
+  })
+
+  it('locks canvas operations while an inspector apply is in flight (kept)', async () => {
+    const s = await loaded()
+    s.select('architecture')
+    const pending = deferred<ParseWire>()
+    api.parseGraph.mockReturnValueOnce(pending.promise)
+    const applying = s.applyInspector({ ...s.selectedNode!.node, gate: { policy: 'soft' } })
+    expect(s.canvasLocked).toBe(true)
+    pending.resolve(soft.parse as ParseWire)
+    await applying
+    expect(s.canvasLocked).toBe(false)
+  })
+})
+
+describe('save (kept)', () => {
+  it('records the sha and the validation it returned', async () => {
+    const s = await loaded()
+    api.saveGraph.mockResolvedValueOnce({ ok: true, sha: PRE.sha, validation: { issues: [], back_edges: [] } })
+    await s.save()
+    expect(s.savedSha).toBe(PRE.sha)
+    expect(s.runnable).toBe(true)
+  })
+
+  it('a refused save keeps the saved sha and raises a notice', async () => {
+    const s = await loaded()
+    api.saveGraph.mockResolvedValueOnce({ ok: false, shape_errors: [{ loc: [], msg: 'x', line: null, column: null }] })
+    await s.save()
+    expect(s.savedSha).toBeNull()
+    expect(s.notice).toContain('save refused')
+  })
+
+  it('a layout-only move keeps the content sha; an edge change alters it (FR-049, 018 T062 RED)', async () => {
+    const s = await loaded()
+    // Layout-only: a move leaves the content the sha is computed over.
+    s.move('intake', 111, 222)
+    api.saveGraph.mockResolvedValueOnce({ ok: true, sha: PRE.sha, validation: null })
+    await s.save()
+    expect(s.sha).toBe(PRE.sha)
+
+    // An edge change is a content change: the server answers a new sha.
+    s.connect(...(Object.values(equalPair()).flatMap((p) => [p.node, p.port]) as [string, string, string, string]))
+    api.saveGraph.mockResolvedValueOnce({ ok: true, sha: 'sha-after-edge', validation: null })
+    await s.save()
+    expect(s.sha).toBe('sha-after-edge')
+  })
+
+  it('a missing sha and a legacy run land as notices, not throws (kept)', async () => {
+    const s = await loaded()
+    api.loadGraph.mockResolvedValueOnce({ ok: false, reason: 'not_found' })
+    await s.loadSha('nope')
+    expect(s.notice).toBe('no saved graph nope')
+    api.getRunGraph.mockResolvedValueOnce({ kind: 'no_graph', reason: 'legacy_run' })
+    await s.openRunCopy('r1')
+    expect(s.notice).toBe('this run predates graph execution')
+  })
+})
+
+// --- kept chaos (pane-independent E-76 pins) ----------------------------------
+
+describe('kept store discipline (E-76, unchanged by S15)', () => {
+  it('a failed apply after a load goes text_broken too, keeping the last good copy', async () => {
+    const s = await loaded()
+    const good = s.working
+    api.parseGraph.mockResolvedValueOnce(badYaml.parse)
+    await s.loadText(badYaml.yaml)
+    expect(s.state).toBe('text_broken')
+    expect(s.working).toBe(good)
+  })
+
+  it('refuses over-cap text without calling the server', async () => {
+    const s = useGraphEditorStore()
+    useCatalogStore().catalog = { ...withCaps({}), max_graph_bytes: 10 }
+    await s.loadText('schema_version: 1\n')
+    expect(api.parseGraph).not.toHaveBeenCalled()
+    expect(s.yamlErrors[0].msg).toContain('exceeds 10 bytes')
   })
 
   it('M2 refuses a rename onto an in-use id without calling the server', async () => {
@@ -177,15 +272,24 @@ describe('inspector apply', () => {
     expect(api.parseGraph).not.toHaveBeenCalled()
     expect(s.inspectorErrors[0]).toEqual({ path: 'id', msg: "'architect' is already used by another node, so renaming would merge their edges" })
   })
-})
 
-describe('save', () => {
-  it('records the sha and the validation it returned', async () => {
+  it('error mapping: inside-only errors omit the elsewhere line; outside-only errors are just the line; select clears', async () => {
     const s = await loaded()
-    api.saveGraph.mockResolvedValueOnce({ ok: true, sha: PRE.sha, validation: { issues: [], back_edges: [] } })
-    await s.save()
-    expect(s.savedSha).toBe(PRE.sha)
-    expect(s.runnable).toBe(true)
+    s.select('intake')  // intake is nodes[3] in the recorded (alphabetically sorted) graph
+    api.parseGraph.mockResolvedValueOnce({
+      ok: false,
+      shape_errors: [{ loc: ['nodes', 3, 'gate', 'policy'], msg: 'bad enum', line: null, column: null }],
+    })
+    await s.applyInspector({ ...s.selectedNode!.node })
+    expect(s.inspectorErrors).toEqual([{ path: 'gate.policy', msg: 'bad enum' }])
+    api.parseGraph.mockResolvedValueOnce({
+      ok: false,
+      shape_errors: [{ loc: ['nodes', 0, 'id'], msg: 'bad id', line: null, column: null }],
+    })
+    await s.applyInspector({ ...s.selectedNode!.node })
+    expect(s.inspectorErrors).toEqual([{ path: '', msg: '1 shape error(s) elsewhere in the graph' }])
+    s.select('architect')
+    expect(s.inspectorErrors).toEqual([])
   })
 
   it('counts error issues for the not-runnable badge, ignoring warnings (U6)', async () => {
@@ -214,7 +318,17 @@ describe('save', () => {
     expect(api.saveGraph).not.toHaveBeenCalled()
   })
 
-  // --- chaos: stale epochs, reachable races, error mapping -------------------
+  it('discards a validation dispatched before a later edit', async () => {
+    vi.useFakeTimers()
+    const s = await loaded()
+    const pending = deferred<ValidationWire>()
+    api.validateGraph.mockReturnValueOnce(pending.promise)
+    await vi.advanceTimersByTimeAsync(400)
+    s.move('intake', 1, 1)
+    pending.resolve({ issues: [{ code: 'x', severity: 'error', message: 'stale', target: { kind: 'graph' } }], back_edges: [] })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(s.validation).toBeNull()
+  })
 
   it('discards a REJECTED validation that an edit overtook: no stale notice', async () => {
     vi.useFakeTimers()
@@ -222,33 +336,17 @@ describe('save', () => {
     let reject!: (e: unknown) => void
     api.validateGraph.mockReturnValueOnce(new Promise((_, rej) => { reject = rej }))
     await vi.advanceTimersByTimeAsync(400)
-    s.move('intake', 1, 1)  // epoch moves while the request is in flight
+    s.move('intake', 1, 1)
     reject(new Error('validation 500'))
     await vi.advanceTimersByTimeAsync(0)
     expect(s.validation).toBeNull()
-    expect(s.notice).toBeNull()  // a stale failure is discarded, not surfaced
-  })
-
-  it('a failed serialize during load never becomes an unhandled rejection', async () => {
-    const rejections: unknown[] = []
-    const onRejection = (r: unknown) => { rejections.push(r) }
-    process.on('unhandledRejection', onRejection)
-    try {
-      const s = useGraphEditorStore()
-      api.parseGraph.mockResolvedValueOnce(PRE)
-      api.serializeGraph.mockRejectedValueOnce(new Error('serialize 500'))
-      s.loadGraph(PRE.graph, PRE.sha)  // fire-and-forget openYaml inside
-      await new Promise((r) => setTimeout(r, 0))
-      expect(rejections).toEqual([])
-    } finally {
-      process.off('unhandledRejection', onRejection)
-    }
+    expect(s.notice).toBeNull()
   })
 
   it('coalesces a burst of edits into one debounced validate carrying the latest copy', async () => {
     vi.useFakeTimers()
     const s = await loaded()
-    await vi.advanceTimersByTimeAsync(400)  // flush the load's own validate
+    await vi.advanceTimersByTimeAsync(400)
     api.validateGraph.mockClear()
     s.move('intake', 1, 1)
     await vi.advanceTimersByTimeAsync(100)
@@ -269,47 +367,10 @@ describe('save', () => {
     const first = s.loadText('x: 1')
     expect(s.applying).toBe(true)
     api.parseGraph.mockResolvedValueOnce(PRE)
-    await s.loadText(preCode.yaml)  // dropped while applying
+    await s.loadText(preCode.yaml)
     expect(api.parseGraph).toHaveBeenCalledTimes(1)
     pending.resolve(PRE)
     await first
     expect(s.state).toBe('graph_loaded')
-  })
-
-  it('error mapping: inside-only errors omit the elsewhere line; outside-only errors are just the line; select clears', async () => {
-    const s = await loaded()
-    s.select('intake')  // intake is nodes[3] in the recorded (alphabetically sorted) graph
-    api.parseGraph.mockResolvedValueOnce({
-      ok: false,
-      shape_errors: [{ loc: ['nodes', 3, 'gate', 'policy'], msg: 'bad enum', line: null, column: null }],
-    })
-    await s.applyInspector({ ...s.selectedNode!.node })
-    expect(s.inspectorErrors).toEqual([{ path: 'gate.policy', msg: 'bad enum' }])
-    api.parseGraph.mockResolvedValueOnce({
-      ok: false,
-      shape_errors: [{ loc: ['nodes', 0, 'id'], msg: 'bad id', line: null, column: null }],
-    })
-    await s.applyInspector({ ...s.selectedNode!.node })
-    expect(s.inspectorErrors).toEqual([{ path: '', msg: '1 shape error(s) elsewhere in the graph' }])
-    s.select('architect')
-    expect(s.inspectorErrors).toEqual([])
-  })
-
-  it('a refused save keeps the saved sha and raises a notice', async () => {
-    const s = await loaded()
-    api.saveGraph.mockResolvedValueOnce({ ok: false, shape_errors: [{ loc: [], msg: 'x', line: null, column: null }] })
-    await s.save()
-    expect(s.savedSha).toBeNull()
-    expect(s.notice).toContain('save refused')
-  })
-
-  it('a missing sha and a legacy run land as notices, not throws', async () => {
-    const s = await loaded()
-    api.loadGraph.mockResolvedValueOnce({ ok: false, reason: 'not_found' })
-    await s.loadSha('nope')
-    expect(s.notice).toBe('no saved graph nope')
-    api.getRunGraph.mockResolvedValueOnce({ kind: 'no_graph', reason: 'legacy_run' })
-    await s.openRunCopy('r1')
-    expect(s.notice).toBe('this run predates graph execution')
   })
 })

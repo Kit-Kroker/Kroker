@@ -43,11 +43,46 @@ export const useGraphEditorStore = defineStore('graphEditor', () => {
   const errorCount = computed(() => validation.value?.issues.filter((i) => i.severity === 'error').length ?? 0)
   const runnable = computed(() => validation.value !== null && errorCount.value === 0)
 
+  // 018 T063 (S15): undo/redo over the working copy. Every commit pushes the
+  // copy it replaces; an edit clears the redo stack.
+  const undoStack: GraphWire[] = []
+  const redoStack: GraphWire[] = []
+  const canUndo = ref(false)
+  const canRedo = ref(false)
+
   function commit(graph: GraphWire, opts: { sha?: string | null } = {}) {
+    if (working.value && working.value !== graph) {
+      undoStack.push(working.value)
+      redoStack.length = 0
+      canUndo.value = true
+      canRedo.value = false
+    }
     working.value = graph
     sha.value = opts.sha ?? null
     epoch.value += 1
     state.value = 'graph_loaded'
+    scheduleValidate()
+  }
+
+  function undo() {
+    const prev = undoStack.pop()
+    if (!prev || !working.value) return
+    redoStack.push(working.value)
+    working.value = prev
+    epoch.value += 1
+    canUndo.value = undoStack.length > 0
+    canRedo.value = true
+    scheduleValidate()
+  }
+
+  function redo() {
+    const next = redoStack.pop()
+    if (!next || !working.value) return
+    undoStack.push(working.value)
+    working.value = next
+    epoch.value += 1
+    canUndo.value = true
+    canRedo.value = redoStack.length > 0
     scheduleValidate()
   }
 
@@ -164,19 +199,36 @@ export const useGraphEditorStore = defineStore('graphEditor', () => {
 
   function addNode(type: string, x: number, y: number) {
     const spec = catalog.typeOf(type)
-    if (canvasLocked.value || !working.value || !spec) return
+    if (applying.value || !working.value || !spec) return
     applyEdit(addNodeOp(working.value, type, spec.default_id, x, y))
   }
   function connect(fromKey: string, fromPort: string, toKey: string, toPort: string) {
-    if (canvasLocked.value || !working.value) return
-    applyEdit(connectOp(working.value, fromKey, fromPort, toKey, toPort))
+    if (applying.value || !working.value) return
+    // FR-047 (018 T063): a connection whose payloads are not exactly equal
+    // is refused at drop time, with the reason; no edge is created.
+    const graph = working.value
+    const fromNode = graph.nodes[nodeKeys(graph).indexOf(fromKey)]
+    const toNode = graph.nodes[nodeKeys(graph).indexOf(toKey)]
+    if (fromNode && toNode) {
+      const fromType = catalog.typeOf(fromNode.type)
+      const toType = catalog.typeOf(toNode.type)
+      const out = fromType?.ports.find((p) => p.name === fromPort && p.direction === 'out')
+      const inn = toType?.ports.find((p) => p.name === toPort && p.direction === 'in')
+      if (out && inn && out.payload !== inn.payload) {
+        notice.value =
+          `connection refused: ${fromNode.id}.${fromPort} carries ${out.payload}, ` +
+          `${toNode.id}.${toPort} expects ${inn.payload} — payloads must be exactly equal`
+        return
+      }
+    }
+    applyEdit(connectOp(graph, fromKey, fromPort, toKey, toPort))
   }
   function move(key: string, x: number, y: number) {
-    if (canvasLocked.value || !working.value) return
+    if (applying.value || !working.value) return
     applyEdit(moveNode(working.value, key, x, y))
   }
   function remove(kind: 'node' | 'edge', key: string) {
-    if (canvasLocked.value || !working.value) return
+    if (applying.value || !working.value) return
     applyEdit(removeElement(working.value, kind, key))
   }
   function select(key: string | null) {
@@ -257,7 +309,8 @@ export const useGraphEditorStore = defineStore('graphEditor', () => {
   return {
     state, working, sha, savedSha, epoch, applying, selection, notice, yamlText, yamlDirty, yamlErrors,
     validation, inspectorErrors, tidyRequest, canvasLocked, errorCount, runnable, selectedNode, selectedEdge,
+    canUndo, canRedo,
     loadText, applyText, setYamlText, openYaml, loadGraph, newGraph, loadSha, openRunCopy,
-    addNode, connect, move, remove, select, tidy, applyInspector, save,
+    addNode, connect, move, remove, select, tidy, applyInspector, save, undo, redo,
   }
 })

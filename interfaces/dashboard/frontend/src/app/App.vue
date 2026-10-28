@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useFleetStore } from '../shared/fleet.store'
 import { useFleetSummaryStore } from '../shared/fleetSummary.store'
 import { useInboxStore } from './inbox.store'
@@ -8,6 +8,7 @@ import { useCatalogStore } from '../shared/catalog.store'
 import { usePrefsStore } from './prefs.store'
 import { money } from '../shared/format'
 import { commandsOf } from './commands'
+import { api } from '../api/client'
 import AppHeader from './shell/AppHeader.vue'
 import Toasts from './shell/Toasts.vue'
 import StartRunModal from './shell/StartRunModal.vue'
@@ -21,7 +22,11 @@ const inbox = useInboxStore()
 const catalog = useCatalogStore()
 const prefs = usePrefsStore()
 const router = useRouter()
+const route = useRoute()
 let pollId: ReturnType<typeof setInterval> | null = null
+
+// 018 T063: the shipped graphs the palette's Design commands target.
+const shippedGraphs = ref<{ name: string; sha: string }[]>([])
 
 // 018 T019 (S11): the ⌘K palette and the ⋯ session menu. Both are shell
 // state, closed by Escape and by their own backdrops.
@@ -37,6 +42,11 @@ function openPalette(): void {
 // (T012): pinned first, else the newest fleet run.
 const runInContext = computed(() => prefs.runInContext ?? fleet.runs[0]?.id ?? null)
 
+// 018 T063: live palette state — the mode from the route, the shipped
+// graph names from the read.
+const designMode = computed(() => route.path.startsWith('/graphs'))
+const graphNames = ref<string[]>([])
+
 const commands = computed(() =>
   commandsOf({
     run: runInContext.value
@@ -48,8 +58,8 @@ const commands = computed(() =>
         }
       : null,
     inboxCount: inbox.items.length,
-    mode: 'observe', // the Observe/Design switch lands with the Design route (T063)
-    graphs: [], // shipped graph names land with the Design slice (T063)
+    mode: designMode.value ? 'design' : 'observe',
+    graphs: graphNames.value,
   }),
 )
 
@@ -59,11 +69,26 @@ function runCommand(id: string): void {
   else if (id === 'open-fleet') void router.push('/')
   else if (id === 'open-run-board' && runInContext.value) {
     void router.push(`/runs/${runInContext.value}`)
+  } else if (id === 'switch-mode') {
+    // The Observe/Design switch: to the run, or to its pinned graph.
+    if (designMode.value && runInContext.value) void router.push(`/runs/${runInContext.value}`)
+    else if (runInContext.value) {
+      const sha = fleetSummary.byRun[runInContext.value]?.graphSha
+      if (sha) void router.push(`/graphs/${sha}?from=run:${runInContext.value}`)
+    }
+  } else if (id.startsWith('design-')) {
+    const name = id.slice('design-'.length)
+    const sha = shippedGraphs.value.find((g) => g.name === name)?.sha
+    if (sha) void router.push(`/graphs/${sha}`)
+  } else if (id === 'validate-graph' || id === 'fit-graph') {
+    // The validation panel lives on Design; fit is a canvas control there.
+    if (runInContext.value) {
+      const sha = fleetSummary.byRun[runInContext.value]?.graphSha
+      if (sha) void router.push(`/graphs/${sha}?from=run:${runInContext.value}`)
+    }
   }
-  // fit-graph, switch-mode, design-*, validate-graph, compare and
-  // interfaces have no target surface yet (canvas slice 2, Design T063,
-  // Compare/Interfaces slices 6-7); the palette closing is their whole
-  // effect until then.
+  // compare and interfaces have no target surface yet (slices 6-7); the
+  // palette closing is their whole effect until then.
 }
 
 // The four session toggles (data-model §5), labels shared with the
@@ -126,6 +151,11 @@ onMounted(() => {
   void fleet.refresh()
   void fleetSummary.refresh()
   void inbox.refresh()
+  // 018 T063: the shipped graph names for the palette's Design commands.
+  void api.getShippedGraphs().then((s) => {
+    shippedGraphs.value = s.graphs.map((g) => ({ name: g.name, sha: g.sha }))
+    graphNames.value = s.graphs.map((g) => g.name)
+  }).catch(() => {})
   pollId = setInterval(() => {
     if (document.visibilityState === 'visible') {
       void fleet.refresh()

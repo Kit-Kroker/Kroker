@@ -396,7 +396,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 
   Add `F/api/http-read.test.ts` and mock cases for `getShippedGraphs`. Fails.
 - [x] T061 [US5] Create `F/features/graphs/GraphsView.vue` and add the read types, mappers and `F/api/mock/shippedGraphs.ts`. Route `/graphs` renders `GraphsView`. Set `navManifest` Graphs to `available` (if not already). T060 goes green. Commit T060 + T061.
-- [ ] T062 [US5] RED: create `F/features/graphs/DesignView.test.ts` and rewrite `F/features/graphs/graphEditor.store.test.ts` for v5 Design (Clauses CONSOLE-8, 9, 37, 38, 42, 43):
+- [x] T062 [US5] RED: create `F/features/graphs/DesignView.test.ts` and rewrite `F/features/graphs/graphEditor.store.test.ts` for v5 Design (Clauses CONSOLE-8, 9, 37, 38, 42, 43):
   - the palette is built from the catalog, grouped by `canonical_stage` in `CANONICAL_STAGES` order;
   - planned types (feedback §4) are shown dashed, refuse placement, and those with no stage read `unmapped` (V9);
   - a drop with unequal payloads is refused with a reason and creates no edge;
@@ -411,7 +411,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 
   Rewrite `F/features/graphs/GraphInspector.test.ts` for the S15 inspector: edge `max_traversals` edit, node delete and read-only knobs. Its schema-form node-field cases (the E-76 corners) are deleted with S15 and named in the commit body. Fails.
 
-- [ ] T063 [US5] Create `F/features/graphs/DesignView.vue` on the shared `GraphCanvas`. Adapt `F/features/graphs/graphEditor.store.ts` and `GraphInspector.vue` to S15 (no YAML pane, no schema-form node fields). Delete `GraphEditorView.vue`. In this commit, all named in the commit body:
+- [x] T063 [US5] Create `F/features/graphs/DesignView.vue` on the shared `GraphCanvas`. Adapt `F/features/graphs/graphEditor.store.ts` and `GraphInspector.vue` to S15 (no YAML pane, no schema-form node fields). Delete `GraphEditorView.vue`. In this commit, all named in the commit body:
 - **CONSOLE-7:** delete the app-graphs CONSOLE-7 test and the YAML paste helper in `U/app.helpers.ts`, and tombstone CONSOLE-7 in `U/app.md` (not T066);
 - **CONSOLE-9 (orchestrator ruling):** delete its app-graphs test, which loads through the YAML flow. T066 restores it on Design. The clause is untested mid-phase, which is acceptable because SG-5 checks at phase end;
 - **CONSOLE-8:** delete its app-graphs test, which clicks the `open-copy` link removed here, on the same terms. T066 restores it on the Design switch;

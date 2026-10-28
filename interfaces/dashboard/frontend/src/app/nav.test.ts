@@ -29,7 +29,7 @@ describe('navManifest', () => {
     }
   })
 
-  it('Design is gated off until the Design route lands (T063)', () => {
-    expect(designAvailable).toBe(false)
+  it('Design is available since the Design route landed (T063)', () => {
+    expect(designAvailable).toBe(true)
   })
 })

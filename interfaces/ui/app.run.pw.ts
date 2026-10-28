@@ -97,18 +97,11 @@ test('a legacy run shows the no-graph empty state and no canvas', async ({ page 
   await expect(page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')).toHaveCount(0)
 })
 
-test('the run view offers no edit affordance and opens a copy in the editor', async ({ page }) => {  // clause: CONSOLE-8
-  await page.goto('/#/runs/feature-graph-demo')
-  const view = page.locator('[data-testid="run-view"]')
-  await expect(view.locator('.vue-flow__node.draggable')).toHaveCount(0)
-  await expect(view.locator('.vue-flow__handle.connectable')).toHaveCount(0)
-  await expect(view.locator('[data-testid="node-palette"]')).toHaveCount(0)
-  await view.locator('[data-testid="open-copy"]').click()
-  await expect(page.locator('[data-testid="graph-editor-view"]')).toBeVisible()
-  await expect(page.locator('[data-testid="editor-state"]')).toHaveAttribute('data-state', 'graph_loaded')
-  await expect(page.locator('[data-testid="graph-editor-view"] [data-testid="graph-node"]')).toHaveCount(12)
-  await expect(page.locator('[data-testid="editor-sha"]')).toHaveCount(0)
-})
+// 018 T063 (S15): the CONSOLE-8 test ('the run view offers no edit
+// affordance and opens a copy in the editor') is deleted — it clicked the
+// open-copy interim link removed here. T066 restores the clause on the
+// header's Observe/Design switch; it reads untested mid-phase, and SG-5
+// checks at phase end.
 
 test('the elapsed clock flows while the canvas structure survives a minute of ticks', async ({ page }) => {  // clause: GRAPH_CANVAS-9
   // Positive control for the regression above: a fix that silenced the clock

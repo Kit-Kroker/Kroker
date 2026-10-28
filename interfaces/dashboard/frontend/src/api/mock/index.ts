@@ -417,6 +417,10 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       await delay()
       return mockShippedGraphs()
     },
+    async getPlannedTypes() {
+      await delay()
+      return [] as string[] // the plannedTypes fixture lands with T066
+    },
 
     async answerClarify(runId: string, key: string, answer: string) {
       await delay()
