@@ -262,7 +262,7 @@ T031 goes green. Commit T031 + T032 (+ those app-tier test edits).
 
 **Independent test**: `decision_card.spec.ts`, `decisionCard.adapter.test.ts`, `http.test.ts`, `mock/index.test.ts`, `InboxView.test.ts`, `RunView.test.ts`; app tier CONSOLE-5, 17–23, 29, 33, 34, 40, 41.
 
-- [ ] T034 [P] [US2] RED: create `U/src/components/decision_card/decision_card.spec.ts`:
+- [x] T034 [P] [US2] RED: create `U/src/components/decision_card/decision_card.spec.ts`:
   - kicker, schema chip, title, where and the fields render;
   - the text area renders only with `text`;
   - an action with `needsText` is disabled while the text is blank;
@@ -271,7 +271,7 @@ T031 goes green. Commit T031 + T032 (+ those app-tier test edits).
   - a click emits `act(id, text)`.
 
   Fails.
-- [ ] T035 [P] [US2] Create the five files of `decision_card` and register them. T034 goes green. Commit T034 + T035.
+- [x] T035 [P] [US2] Create the five files of `decision_card` and register them. T034 goes green. Commit T034 + T035.
 - [ ] T036 [US2] RED: in `F/api/http.test.ts`:
   - `decideTaskGate(run, key, 'revise', 'g', true)` posts `{key, outcome:'revise', text:'g', thaw_tests:true}`;
   - `approve` and `reject` post no `thaw_tests`;

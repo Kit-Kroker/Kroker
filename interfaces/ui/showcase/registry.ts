@@ -13,6 +13,7 @@ import surface from '../src/components/surface/surface.profiles'
 import tag from '../src/components/tag/tag.profiles'
 import filterChip from '../src/components/filter_chip/filter_chip.profiles'
 import field from '../src/components/field/field.profiles'
+import decisionCard from '../src/components/decision_card/decision_card.profiles'
 import checkRow from '../src/components/check_row/check_row.profiles'
 import fleetRow from '../src/components/fleet_row/fleet_row.profiles'
 import fleetTable from '../src/components/fleet_table/fleet_table.profiles'
@@ -39,6 +40,7 @@ export const REGISTRY: ProfileSet[] = [
   tag,
   filterChip,
   field,
+  decisionCard,
   statusPip,
   statusTag,
   stageDots,
