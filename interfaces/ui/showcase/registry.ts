@@ -25,6 +25,7 @@ import issueList from '../src/components/issue_list/issue_list.profiles'
 import yamlPane from '../src/components/yaml_pane/yaml_pane.profiles'
 import schemaForm from '../src/components/schema_form/schema_form.profiles'
 import graphCanvas from '../src/components/graph_canvas/graph_canvas.profiles'
+import catalogCard from '../src/components/catalog_card/catalog_card.profiles'
 import rail from '../src/components/rail/rail.profiles'
 import stepList from '../src/components/step_list/step_list.profiles'
 import kanban from '../src/components/kanban/kanban.profiles'
@@ -57,6 +58,7 @@ export const REGISTRY: ProfileSet[] = [
   yamlPane,
   schemaForm,
   graphCanvas,
+  catalogCard,
   rail,
   stepList,
   kanban,
