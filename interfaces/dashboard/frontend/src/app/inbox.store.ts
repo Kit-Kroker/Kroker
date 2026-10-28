@@ -122,13 +122,13 @@ export const useInboxStore = defineStore('inbox', () => {
       api.overrideMerge(runId, key, approve, justification))
   }
 
-  async function resolveEscalation(
-    runId: string, key: string, retry: boolean, guidance: string,
+  // 018 T041 (data-model §3.1): the task gate replaces the dedicated
+  // escalation resolution — one action, the thaw flag rides only when true.
+  async function decideTaskGate(
+    runId: string, key: string, outcome: GateOutcome, guidance: string, thawTests: boolean,
   ): Promise<void> {
-    // 018 T037 stopgap: the wire action is decideTaskGate now (T041 renames
-    // this store action); retry maps to approve, quarantine to reject.
     await send(entryKey({ runId, id: key }), () =>
-      api.decideTaskGate(runId, key, retry ? 'approve' : 'reject', guidance, false))
+      api.decideTaskGate(runId, key, outcome, guidance, thawTests))
   }
 
   function setDraft(id: string, v: string) {
@@ -141,6 +141,6 @@ export const useInboxStore = defineStore('inbox', () => {
   return {
     items, drafts, editing, loading, refresh, setDraft, toggleEdit,
     loaded, loadError, unreadable, inFlight, notice,
-    answerClarify, decideGate, overrideMerge, resolveEscalation,
+    answerClarify, decideGate, overrideMerge, decideTaskGate,
   }
 })

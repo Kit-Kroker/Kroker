@@ -67,6 +67,7 @@ export function decisionCardOf(item: InboxItem, timeouts?: Record<string, string
     for (const check of o.checks) {
       base.fields.push({ k: check.name, v: check.ok ? 'pass' : check.detail || 'fail', mono: true })
     }
+    text = { label: 'Justification', hint: 'why this override is safe', value: '', required: true }
     entries.push(action('override', 'Override', 'merge under an audited human override', 'primary', true,
       (api, t) => api.overrideMerge(o.runId, o.id, true, t)))
     entries.push(action('send-back', 'Send back', 'return the work without merging', 'default', false,
