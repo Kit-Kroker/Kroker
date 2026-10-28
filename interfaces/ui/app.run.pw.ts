@@ -35,17 +35,11 @@ test('run-state re-renders never drop the canvas edges', async ({ page }) => {  
   await expect(canvas.locator('.cmp-graph-node-blocked')).toHaveCount(1)
 })
 
-test('deciding the pending gate from the canvas clears it', async ({ page }) => {  // clause: CONSOLE-5
-  await page.goto('/#/runs/feature-graph-demo')
-  const gate = page.locator('[data-testid="run-view"] [data-testid="gate-decision"]')
-  await expect(gate).toHaveCount(1)
-  await gate.locator('[data-testid="gate-approve"]').click()
-  await expect(gate).toHaveCount(0)
-  // The recorded completed projection: the gate resolves, every node of the
-  // run's graph is done except the skipped context leg.
-  await expect(page.locator('[data-testid="run-view"] .cmp-graph-node-done')).toHaveCount(11)
-  await expect(page.locator('[data-testid="run-view"] .cmp-graph-node-skipped')).toHaveCount(1)
-})
+// --- 018 T043: the CONSOLE-5 tests ('deciding the pending gate from the
+// canvas clears it', 'a gate decision shows its busy window before the
+// state clears it') were deleted with the interim GateDecision they drove
+// (gate-decision / gate-approve test ids); T044 restores the clause on the
+// v5 card. CONSOLE-23's inbox half went with T041's inbox tests.
 
 test('a legacy run shows the no-graph empty state and no canvas', async ({ page }) => {  // clause: CONSOLE-6
   await page.goto('/#/runs/feature-add-sso')
@@ -84,16 +78,6 @@ test('the elapsed clock flows while the canvas structure survives a minute of ti
   expect(after).not.toBe(before)  // the clock really ticks
   await expect(canvas.locator('[data-testid="graph-edge"]')).toHaveCount(20)
   await expect(canvas.locator('.cmp-graph-node-blocked')).toHaveCount(1)
-})
-
-test('a gate decision shows its busy window before the state clears it', async ({ page }) => {  // clause: CONSOLE-5
-  await page.goto('/#/runs/feature-graph-demo')
-  const gate = page.locator('[data-testid="run-view"] [data-testid="gate-decision"]')
-  await expect(gate).toHaveCount(1)
-  await gate.locator('[data-testid="gate-approve"]').click()
-  // In flight: the controls lock at once, so a rapid second submit cannot fire.
-  await expect(gate.locator('[data-testid="gate-approve"]')).toBeDisabled()
-  await expect(gate).toHaveCount(0)  // then the next state clears the whole control
 })
 
 // --- The rail's Cost section (018 T033, S3): the CONSOLE-24/25/26 rules

@@ -60,15 +60,17 @@ export function costRailOf(
 ): CostRail {
   const state = opts.state && opts.state.kind === 'state' ? opts.state : null
   const closed = run.status !== 'running'
+  // Defensive: an older wire shape may omit roles; it means none.
+  const roles = run.roles ?? []
 
-  const roleRows: CostRoleRow[] = run.roles.map((r) => ({
+  const roleRows: CostRoleRow[] = roles.map((r) => ({
     role: r.role,
     model: r.model,
     calls: r.calls,
     tokens: `${tokens(r.inputTokens)} ${tokens(r.outputTokens)} ${tokens(r.cacheReadTokens)} ${tokens(r.cacheWriteTokens)}`,
     price: priceLabel(rowPrice(r)),
   }))
-  const total = totalPrice(run.roles, run.cost)
+  const total = totalPrice(roles, run.cost)
 
   // R-5a: open runs group per-node cost by canonical stage; a closed run's
   // record-vocabulary stages have no canonical mapping, so nothing is
@@ -117,7 +119,7 @@ export function costRailOf(
     roleRows,
     totalTokens: tokens(total.tokens),
     totalPrice: priceLabel(total),
-    noBreakdown: run.roles.length === 0 && run.cost !== null && run.cost > 0,
+    noBreakdown: roles.length === 0 && run.cost !== null && run.cost > 0,
     stageMeasured: !closed,
     stageRows,
     reviseRows,

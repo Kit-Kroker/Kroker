@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi, beforeAll } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 import RunView from './RunView.vue'
 import GraphCanvas from '@kroker/ui/components/graph_canvas/GraphCanvas.vue'
 import catalogJson from '../../api/__fixtures__/graph/catalog.json'
@@ -12,6 +13,7 @@ import type { CatalogWire, GraphStateResponse } from '../../api/graph-types'
 import type { Run } from '../../api/types'
 import { useCatalogStore } from '../../shared/catalog.store'
 import { useFleetStore } from '../../shared/fleet.store'
+import { useInboxStore } from '../../app/inbox.store'
 import { useUiStore } from '../../app/ui.store'
 
 const api = vi.hoisted(() => ({
@@ -283,5 +285,203 @@ describe('RunView v5 chaos (018 T031 RED)', () => {
     await select(w, 'cd')
     expect(w.find('[data-testid="inspector-configured"]').text()).toBe('code')
     expect(w.find('[data-testid="inspector-answering"]').text()).toBe('not measured')
+  })
+})
+
+describe('the rail call to actions and the canvas card (018 T042 RED)', () => {
+  const select = async (w: ReturnType<typeof mount>, key: string | null) => {
+    w.findComponent(GraphCanvas).vm.$emit('select', key)
+    await flushPromises()
+  }
+
+  const GRAPH_WITH_ARCH = {
+    kind: 'graph' as const,
+    sha: 'sha-1',
+    graph: {
+      schema_version: 1 as const,
+      nodes: [
+        { id: 'architecture', type: 'architect' },
+        { id: 'arch', type: 'architect' },
+      ],
+      edges: [],
+    },
+    back_edges: [],
+  }
+
+  const pendingRef = (key: string) => ({ node: 'architecture', key, kind: 'gate' as const })
+
+  const stateWith = (pending: ReturnType<typeof pendingRef>[]) =>
+    ({
+      kind: 'state',
+      graph_sha: 'sha-1',
+      nodes: {},
+      edges: [],
+      current_nodes: [],
+      outcome: { state: 'running', reason: null, result: null },
+      pending,
+    }) as unknown as GraphStateResponse
+
+  // T043 reads the run's items from the inbox store filtered by run; seed it
+  // directly so the card mapping has its item whichever source wins.
+  const seedInboxGate = () => {
+    const inbox = useInboxStore()
+    inbox.items = [
+      {
+        id: 'architecture#1', runId: 'r1', round: 1, age: '1m', type: 'gate',
+        gate: 'architecture', title: 'architecture (round 1)', body: '',
+      },
+    ]
+    inbox.loaded = true
+    inbox.loadError = null
+    inbox.unreadable = []
+    return inbox
+  }
+
+  const subscribeDelivering = (first: GraphStateResponse) => {
+    let deliver: (s: GraphStateResponse) => void = () => {}
+    api.subscribeGraphState.mockImplementation((_id: string, cb: (s: GraphStateResponse) => void) => {
+      deliver = cb
+      cb(first)
+      return () => {}
+    })
+    return () => deliver
+  }
+
+  const makeRouter = async (initial: string) => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', component: { template: '<div />' } },
+        {
+          path: '/runs/:id',
+          component: RunView,
+          props: (r) => ({
+            id: r.params.id as string,
+            ...(typeof r.query.rail === 'string' ? { rail: r.query.rail } : {}),
+            ...(typeof r.query.decision === 'string' ? { decision: r.query.decision } : {}),
+          }),
+        },
+      ],
+    })
+    await router.push(initial)
+    await router.isReady()
+    return router
+  }
+
+  const mountRouted = async (initial: string) => {
+    seedCatalog()
+    useFleetStore().runs = [RUN]
+    const router = await makeRouter(initial)
+    const Host = { components: { RouterView }, template: '<RouterView />' }
+    const w = mount(Host, { global: { plugins: [router], stubs: { RouterLink: RouterLinkStub } } })
+    await flushPromises()
+    return { w, router }
+  }
+
+  it('each pending item renders one rail call, two render two in order, none renders zero', async () => {
+    seedCatalog()
+    seedInboxGate()
+    const getDeliver = subscribeDelivering(stateWith([pendingRef('architecture#1')]))
+    const w = await mountView()
+    let calls = w.findAll('[data-testid="rail-call"]')
+    expect(calls).toHaveLength(1)
+    expect(calls[0].text()).toContain('Review')
+    expect(calls[0].text()).toContain('architecture#1')
+
+    getDeliver()(stateWith([pendingRef('architecture#1'), pendingRef('merge#1')]))
+    await flushPromises()
+    calls = w.findAll('[data-testid="rail-call"]')
+    expect(calls).toHaveLength(2)
+    expect(calls[0].text()).toContain('architecture#1')
+    expect(calls[1].text()).toContain('merge#1')
+
+    getDeliver()(stateWith([]))
+    await flushPromises()
+    expect(w.findAll('[data-testid="rail-call"]')).toHaveLength(0)
+  })
+
+  it('clicking a call opens its card over the canvas; the close button closes it', async () => {
+    seedCatalog()
+    seedInboxGate()
+    subscribeDelivering(stateWith([pendingRef('architecture#1')]))
+    const w = await mountView()
+    expect(w.find('[data-testid="run-card"]').exists()).toBe(false)
+
+    await w.find('[data-testid="rail-call"]').trigger('click')
+    await flushPromises()
+    const pane = w.find('[data-testid="run-card"]')
+    expect(pane.exists()).toBe(true)
+    expect(pane.find('[data-testid="decision-card"]').exists()).toBe(true)
+    expect(pane.text()).toContain('architecture#1')
+
+    await w.find('[data-testid="run-card-close"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="run-card"]').exists()).toBe(false)
+  })
+
+  it('?decision= opens the card; closing clears the query', async () => {
+    seedInboxGate()
+    subscribeDelivering(stateWith([pendingRef('architecture#1')]))
+    const { w, router } = await mountRouted('/runs/r1?decision=architecture%231')
+    expect(w.find('[data-testid="run-card"]').exists()).toBe(true)
+    expect(w.find('[data-testid="run-card"]').text()).toContain('architecture#1')
+
+    await w.find('[data-testid="run-card-close"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.decision).toBeUndefined()
+    expect(w.find('[data-testid="run-card"]').exists()).toBe(false)
+  })
+
+  it('selecting a canvas node with a pending opens the same card; a node without one does not', async () => {
+    seedCatalog()
+    seedInboxGate()
+    subscribeDelivering(stateWith([pendingRef('architecture#1')]))
+    const w = await mountView()
+    await select(w, 'architecture')
+    expect(w.find('[data-testid="run-card"]').exists()).toBe(true)
+    expect(w.find('[data-testid="run-card"]').text()).toContain('architecture#1')
+
+    await select(w, 'arch')
+    await flushPromises()
+    expect(w.find('[data-testid="run-card"]').exists()).toBe(false)
+  })
+
+  it('after a decision and a pending-free refresh, the call and the canvas mark are gone', async () => {
+    seedCatalog()
+    seedInboxGate()
+    const getDeliver = subscribeDelivering(stateWith([pendingRef('architecture#1')]))
+    api.decideGate.mockResolvedValue(undefined)
+    const w = await mountView()
+    await w.find('[data-testid="rail-call"]').trigger('click')
+    await flushPromises()
+
+    const approve = w
+      .findAll('[data-testid="card-action"]')
+      .find((b) => b.text() === 'Approve')!
+    await approve.trigger('click')
+    await flushPromises()
+    expect(api.decideGate).toHaveBeenCalledWith('r1', 'architecture#1', 'approve', '')
+
+    getDeliver()(stateWith([]))
+    await flushPromises()
+    expect(w.findAll('[data-testid="rail-call"]')).toHaveLength(0)
+    // Previews the T043 removal: the interim GateDecision mark must not survive.
+    expect(w.find('[data-testid="gate-decision"]').exists()).toBe(false)
+  })
+
+  it('events show both live notes on an open run, and only the untimed rows on a closed one (FR-022)', async () => {
+    seedCatalog()
+    const decided = [{ ts: '10:00', gate: 'architecture r2', outcome: 'approve' as const, comment: '', decider: 'owner' }]
+
+    const open = await mountView({ ...RUN, decisions: decided })
+    const openEvents = open.find('[data-testid="rail-events"]').text()
+    expect(openEvents).toContain('approve architecture r2')
+    expect(openEvents).toContain('Human decisions only while the run is open.')
+    expect(openEvents).toContain('automatic and timed-out decisions appear when the run ends')
+
+    const closed = await mountView({ ...RUN, status: 'done', decisions: decided })
+    const closedEvents = closed.find('[data-testid="rail-events"]').text()
+    expect(closedEvents).toContain('approve architecture r2')
+    expect(closedEvents).not.toContain('Human decisions only while the run is open.')
   })
 })

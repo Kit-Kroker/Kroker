@@ -1,27 +1,31 @@
 <script setup lang="ts">
-// 018 T032 (S3/S13): the v5 Observe run view. The old run header (title +
-// stage strip) and the Cost tab are gone; the rail carries the run block
+// 018 T032/T043 (S3/S13): the v5 Observe run view. The old run header (title
+// + stage strip) and the Cost tab are gone; the rail carries the run block
 // (title, state, budget, the interim open-copy link until T063, and the
 // E-77 unavailable reasons as notes, R-5a) with Path, Events and Cost
-// sections from the adapters. Tabs are Graph and Board only; Cost is a
-// rail section (?rail=cost, and ?tab=cost still selects it until the
-// CONSOLE-10 rewrite lands). Read-only: the canvas keeps the interim
-// GateDecision until T043's card (CONSOLE-5/23 stay green). The inspector
+// sections from the adapters, plus one call to action per pending item
+// opening the DecisionCard over the canvas (?decision=). Tabs are Graph and
+// Board only; Cost is a rail section (?rail=cost, and ?tab=cost still
+// selects it until the CONSOLE-10 rewrite lands). The inspector
 // (RunInspector, screen-local) shows configured vs answering model ids.
 import { computed, onBeforeUnmount, onMounted, ref, useSlots, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import GraphCanvas from '@kroker/ui/components/graph_canvas/GraphCanvas.vue'
-import GateDecision from '@kroker/ui/components/gate_decision/GateDecision.vue'
 import Rail from '@kroker/ui/components/rail/Rail.vue'
 import type { RailHead } from '@kroker/ui/components/rail/Rail.vue'
+import DecisionCard from '@kroker/ui/components/decision_card/DecisionCard.vue'
 import { TabBar, type TabItem } from '@kroker/ui'
 import { useCatalogStore } from '../../shared/catalog.store'
 import { useFleetStore } from '../../shared/fleet.store'
+import { useInboxStore } from '../../app/inbox.store'
 import { useRunGraphStore } from './runGraph.store'
 import { toCanvas } from '../../shared/graphCanvas.adapter'
 import type { GraphStateResponse } from '../../api/graph-types'
+import type { DashboardApi, InboxItem } from '../../api/types'
 import { costRailOf } from './costRail.adapter'
 import { railEventsOf } from './railEvents.adapter'
+import { decisionCardOf } from '../../shared/decisionCard.adapter'
+import { entryKey } from '../../shared/entryKey'
 import { BUDGET_SCOPE_NOTE } from '../../shared/cost'
 import { money } from '../../shared/format'
 import RunInspector from './RunInspector.vue'
@@ -30,7 +34,7 @@ defineSlots<{
   board?: (props: { runId: string; projectKey: string | null }) => unknown
 }>()
 
-const props = defineProps<{ id: string; tab?: string; rail?: string }>()
+const props = defineProps<{ id: string; tab?: string; rail?: string; decision?: string }>()
 const slots = useSlots()
 const router = useRouter()
 const catalog = useCatalogStore()
@@ -65,8 +69,73 @@ const model = computed(() =>
     ? toCanvas(graph.value.graph, { typeOf: catalog.typeOf, backEdges: graph.value.back_edges, state: runGraph.state, now: now.value })
     : null,
 )
-const gateOf = (nodeKey: string) => model.value?.pendingByNode[nodeKey]?.find((p) => p.kind === 'gate')
-const otherPending = (nodeKey: string) => model.value?.pendingByNode[nodeKey]?.filter((p) => p.kind !== 'gate') ?? []
+const otherPending = (nodeKey: string) => model.value?.pendingByNode[nodeKey] ?? []
+
+// --- 018 T043: the pending items become rail calls and one card. ---
+const inbox = useInboxStore()
+const pending = computed(() => state.value?.pending ?? [])
+const railCalls = computed(() =>
+  pending.value.map((p) => ({ id: p.key, label: `Review ${p.kind} ${p.key}`, kind: 'primary' })),
+)
+
+const decisionKey = ref<string | null>(props.decision ?? null)
+watch(
+  () => props.decision,
+  (d) => { decisionKey.value = typeof d === 'string' ? d : null },
+)
+watch(() => props.id, () => { decisionKey.value = null })
+
+function openDecision(key: string): void {
+  decisionKey.value = key
+  const current = router?.currentRoute.value
+  if (!current) return
+  void router.replace({ query: { ...current.query, decision: key } })
+}
+function closeDecision(): void {
+  decisionKey.value = null
+  const current = router?.currentRoute.value
+  if (!current) return
+  void router.replace({ query: { ...current.query, decision: undefined } })
+}
+
+// The card's item: the inbox entry for this run when one exists (the card
+// then carries the wire's title/body), else a synthetic gate item from the
+// pending ref itself.
+const cardItem = computed<InboxItem | null>(() => {
+  if (decisionKey.value === null) return null
+  const listed = inbox.items.find((i) => i.runId === props.id && i.id === decisionKey.value)
+  if (listed) return listed
+  const p = pending.value.find((x) => x.key === decisionKey.value)
+  if (!p) return null
+  return {
+    id: p.key, runId: props.id, round: 1, age: '—', type: 'gate',
+    gate: p.key.split('#')[0], title: p.key, body: '',
+  }
+})
+const cardModel = computed(() => (cardItem.value ? decisionCardOf(cardItem.value) : null))
+const cardBusy = computed(() =>
+  cardItem.value !== null && inbox.inFlight.has(entryKey(cardItem.value)),
+)
+
+// The card's actions route through the inbox store (the store owns in-flight,
+// notices and the refresh-after-write), exactly as the inbox view does.
+const storeAsApi = {
+  answerClarify: (r: string, k: string, a: string) => inbox.answerClarify(r, k, a),
+  decideGate: (r: string, k: string, o: 'approve' | 'reject' | 'revise', c: string) => inbox.decideGate(r, k, o, c),
+  overrideMerge: (r: string, k: string, a: boolean, j: string) => inbox.overrideMerge(r, k, a, j),
+  decideTaskGate: (r: string, k: string, o: 'approve' | 'reject' | 'revise', g: string, t: boolean) =>
+    inbox.decideTaskGate(r, k, o, g, t),
+} as unknown as DashboardApi
+
+async function onCardAct(actId: string, text: string): Promise<void> {
+  if (!cardItem.value || !cardModel.value) return
+  try {
+    await cardModel.value.call(storeAsApi, actId, text, false)
+  } catch {
+    // The store's send() owns failure notices; a throwing action surfaces
+    // nothing more here (the pane closes on the next state).
+  }
+}
 
 // --- The rail (S3): run block, Path, Events, Cost. ---
 const railHead = computed<RailHead>(() => ({
@@ -125,6 +194,20 @@ const active = computed(() => (props.tab === 'board' && hasBoardSlot.value ? 'bo
 
 // --- The inspector (S13): configured vs answering model. ---
 const selectedKey = ref<string | null>(null)
+
+// Selecting a canvas node: a pending item opens its card (FR-1205);
+// otherwise the selection feeds the inspector.
+function onCanvasSelect(key: string | null): void {
+  selectedKey.value = key
+  if (key !== null) {
+    const first = model.value?.pendingByNode[key]?.[0]
+    if (first) {
+      openDecision(first.key)
+      return
+    }
+  }
+  if (decisionKey.value !== null) closeDecision()
+}
 const selectedWire = computed(() =>
   selectedKey.value !== null ? graph.value?.graph.nodes.find((n) => n.id === selectedKey.value) : undefined,
 )
@@ -174,7 +257,14 @@ function onRailSelect(id: string) {
 
     <section v-else class="observe">
       <div class="rail-col">
-        <Rail :head="railHead" :tabs="railTabs" :active="railActive" @select="onRailSelect">
+        <Rail
+          :head="railHead"
+          :tabs="railTabs"
+          :active="railActive"
+          :calls="railCalls"
+          @select="onRailSelect"
+          @call="(i) => openDecision(railCalls[i]?.id ?? '')"
+        >
           <template #headNote>
             <!-- R-5a: the E-77 reasons are notes under the run block. -->
             <p v-if="runGraph.state?.kind === 'unavailable'" class="banner" data-testid="run-graph-state-unavailable">
@@ -208,6 +298,7 @@ function onRailSelect(id: string) {
               <span class="label">{{ row.label }}</span>
             </div>
             <p v-if="events.note" class="note">{{ events.note }}</p>
+            <p v-if="events.note" class="note">Human decisions only while the run is open.</p>
           </div>
 
           <div class="rail-section" data-testid="rail-cost">
@@ -270,32 +361,37 @@ function onRailSelect(id: string) {
               :edges="model.edges"
               :editable="false"
               :selected-key="selectedKey"
-              @select="(k) => (selectedKey = k)"
+              @select="onCanvasSelect"
             >
               <template #node-extra="{ nodeKey }">
-                <GateDecision
-                  v-if="gateOf(nodeKey)"
-                  :title="`${nodeKey} · pending`"
-                  :busy="runGraph.inFlight.has(gateOf(nodeKey)!.key)"
-                  @decide="(d) => runGraph.decide(gateOf(nodeKey)!.key, d.outcome, d.comment)"
-                />
-                <RouterLink
+                <span
                   v-for="p in otherPending(nodeKey)"
                   :key="p.key"
-                  to="/inbox"
-                  class="pending-link"
-                  data-testid="pending-inbox-link"
-                >{{ p.kind }} pending — inbox</RouterLink>
+                  class="pending-mark"
+                  data-testid="pending-mark"
+                >{{ p.kind }} pending</span>
               </template>
             </GraphCanvas>
           </div>
-          <RunInspector
-            v-if="inspector"
-            :title="inspector.title"
-            :configured="inspector.configured"
-            :answering="inspector.answering"
-            :is-code="inspector.isCode"
-          />
+          <div class="side-col">
+            <RunInspector
+              v-if="inspector"
+              :title="inspector.title"
+              :configured="inspector.configured"
+              :answering="inspector.answering"
+              :is-code="inspector.isCode"
+            />
+            <!-- 018 T043: the decision card over the canvas (FR-1205). -->
+            <div v-if="cardModel && cardItem" class="run-card" data-testid="run-card">
+              <button class="card-close" data-testid="run-card-close" @click="closeDecision">close</button>
+              <p v-if="inbox.notice[entryKey(cardItem)]" class="notice">{{ inbox.notice[entryKey(cardItem)] }}</p>
+              <DecisionCard
+                v-bind="cardModel.card"
+                :busy="cardBusy"
+                @act="(id, text) => onCardAct(id, text)"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -329,5 +425,13 @@ function onRailSelect(id: string) {
 .cost-line { color: var(--ink-subtle); font-size: 11px; }
 .mono { font-family: var(--font-mono); font-size: 11px; }
 .dim { color: var(--ink-subtle); }
+.pending-mark { display: block; padding: 2px 8px; color: var(--status-waiting); font-family: var(--font-mono); font-size: 10.5px; }
+.side-col { display: flex; flex-direction: column; gap: 8px; }
+.run-card { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.card-close {
+  cursor: pointer; background: none; border: none; padding: 0;
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--link);
+}
+.notice { margin: 0; align-self: flex-start; font-family: var(--font-mono); font-size: 11px; color: var(--status-waiting); }
 .copy { color: var(--link); font-family: var(--font-mono); font-size: 11px; padding-top: 4px; }
 </style>

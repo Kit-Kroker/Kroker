@@ -38,7 +38,7 @@ export function decisionCardOf(item: InboxItem, timeouts?: Record<string, string
   const base = {
     kicker: `${'gate' in item && item.gate ? item.gate : item.type} r${item.round}`,
     title: item.title,
-    where: `${item.runId} · round ${item.round}`,
+    where: `${item.runId} · ${item.id}`,
     fields: [] as CardField[],
   }
   const entries: { a: CardAction; act: Act }[] = []
