@@ -26,8 +26,14 @@ with workflow.unsafe.imports_passed_through():
         RetainItem,
     )
 
+# 120s, not 30s: a live recall measured 42.3s end-to-end (2026-10-28, bank
+# project-default; the Hindsight LLM leg averages ~30s/call), and StartToClose
+# killed the activity mid-recall four runs in a row. Stays above the activity
+# client timeout (memory.activities.HINDSIGHT_TIMEOUT_S = 100s) so the client
+# raises first and recall degrades to an empty snapshot rather than Temporal
+# killing the activity on a timeout that says nothing about the backend.
 MEM_ACT = workflow.ActivityConfig(
-    start_to_close_timeout=timedelta(seconds=30), retry_policy=RetryPolicy(maximum_attempts=5)
+    start_to_close_timeout=timedelta(seconds=120), retry_policy=RetryPolicy(maximum_attempts=5)
 )
 
 

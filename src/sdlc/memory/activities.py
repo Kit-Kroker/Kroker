@@ -21,6 +21,14 @@ from .scrub import scrub
 
 logger = logging.getLogger(__name__)
 
+# Measured 2026-10-28 against the live bank: a real recall runs ~42s (the
+# Hindsight LLM leg alone averages ~30s/call), so the client default of 30s
+# aborted every recall mid-flight. Kept inside MemoryHost.MEM_ACT's
+# start_to_close (120s) so the client raises a diagnosable ReadTimeout and
+# recall degrades to an empty snapshot instead of Temporal killing the
+# activity on a timeout that says nothing about the backend.
+HINDSIGHT_TIMEOUT_S = 100.0
+
 _fake_singleton = FakeMemory()
 
 
@@ -34,6 +42,7 @@ def _backend(base_url: str, backend: str) -> Memory:
             base_url=base_url,
             tenant=os.environ.get("SDLC_MEMORY_TENANT", "default"),
             api_key=os.environ.get("SDLC_MEMORY_API_KEY") or None,
+            timeout_s=HINDSIGHT_TIMEOUT_S,
         )
     return _fake_singleton
 
