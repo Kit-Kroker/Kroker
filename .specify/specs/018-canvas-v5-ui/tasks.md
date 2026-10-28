@@ -280,7 +280,7 @@ T031 goes green. Commit T031 + T032 (+ those app-tier test edits).
 
   In `F/api/mock/index.test.ts`, rewrite "escalation retry resumes the task" to the corrected mapping (R-3) and add `decideTaskGate` cases. Fails.
 - [x] T037 [US2] In `F/api/types.ts` add `decideTaskGate` to `DashboardApi` and **remove `resolveEscalation`** (data-model §3.1). In `F/api/http.ts`, `decide()` gains an optional `thawTests`, sent only when true; add `decideTaskGate`; delete `resolveEscalation`; fix `mapClosed`. In `F/api/mock/index.ts` make the same change, keeping the mock seed. T036 goes green, and `vue-tsc` proves both providers. Commit T036 + T037.
-- [ ] T038 [US2] RED: create `F/shared/decisionCard.adapter.test.ts`. `decisionCardOf(item, timeouts)` gives, per R-3's table:
+- [x] T038 [US2] RED: create `F/shared/decisionCard.adapter.test.ts`. `decisionCardOf(item, timeouts)` gives, per R-3's table:
   - clarify: accept suggestion only when there is a suggestion, and answer needs text;
   - generic gate: approve, revise (needs text), reject;
   - `tool_approval`: Approve and Deny only, no Halt (V4), with the foot "a timeout counts as not approved";
@@ -292,7 +292,7 @@ T031 goes green. Commit T031 + T032 (+ those app-tier test edits).
   - timeout copy only when `timeouts` has the gate, else none (FR-035).
 
   Fails.
-- [ ] T039 [US2] Create `F/shared/decisionCard.adapter.ts` (data-model §5). T038 goes green. Commit T038 + T039.
+- [x] T039 [US2] Create `F/shared/decisionCard.adapter.ts` (data-model §5). T038 goes green. Commit T038 + T039.
 - [ ] T040 [US2] RED: rewrite `F/features/inbox/InboxView.test.ts`, and replace `F/features/inbox/entries.test.ts` with `F/features/inbox/InboxCard.test.ts`. The v5 list shows one row per item (kind label, age, title, where), keyed by `entryKey`. Selecting a row shows its `DecisionCard`, and `?item=` reflects the selection. Every spec 010 store rule still holds: run-and-key scoping, already-decided notice, failure keeps the text, in-flight blocks a second send, the three load states, and the incomplete banner (FR-030). The empty state reads "Nothing waiting on you". Fails.
 - [ ] T041 [US2] Rebuild `F/features/inbox/InboxView.vue` to v5. Delete `ClarifyEntry.vue`, `GateEntry.vue`, `OverrideEntry.vue`, `EscalationEntry.vue` and `InboxEntry.vue`. Adapt `F/app/inbox.store.ts`: its action set gains `decideTaskGate` and drops `resolveEscalation`, with every other rule unchanged. Rewrite the `resolveEscalation` cases of `F/app/inbox.store.test.ts` (the api fake and the action tests) to `decideTaskGate`, with the same guarantees: in-flight guard, run-and-key scoping, 404 notice and failure release. In the same commit (standing rule), delete the app-inbox tests of CONSOLE-17 to 22 and 29, and the inbox half of CONSOLE-23. CONSOLE-23 is one test, so it is deleted whole here because its inbox selectors break first; T043's mention only marks the end of the canvas interim. They drive the deleted entry components' test ids (`inbox-entry`, `inbox-accept`, `gate-revise`, `check-row`, `inbox-override`, `inbox-analysis`, `inbox-quarantine`, `gate-budget-note` …). T044 restores them on the v5 list and card in this phase. Name them in the commit body. T040 goes green. Commit T040 + T041.
 - [ ] T042 [US2] RED: extend `F/features/run/RunView.test.ts`:
