@@ -3,9 +3,11 @@
 # expensive error is a false approve.
 #
 # The model must not BE dev's or reviewer's model (check_adversary_model,
-# by model id -- NOT by provider prefix; see spec OQ-A4). glm-5.3-flash is a
-# different model id from dev (glm-5.3) and reviewer (glm-5.3), which is all
-# the check requires; it is the same vendor family, so the decorrelation is
-# weaker than the claude-sonnet-4-6 it replaced.
+# by model id -- NOT by provider prefix; see spec OQ-A4). Since 07232332 put
+# this role on glm-5.3-flash while R019 re-paired the corpus weak arm onto
+# the same model, every weak-arm benchmark cell died at the ADR-6 boundary
+# (adversary id == dev id). claude-sonnet-5 shares no id with either corpus
+# arm (glm-5.3 / glm-5.3-flash) or the reviewer (zai:glm-5.3) and restores
+# the cross-family decorrelation of the original claude-sonnet-4-6 design.
 kind: proposer
-model: zai:glm-5.3-flash
+model: anthropic:claude-sonnet-5
