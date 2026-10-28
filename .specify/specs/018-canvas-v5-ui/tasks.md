@@ -328,7 +328,7 @@ T031 goes green. Commit T031 + T032 (+ those app-tier test edits).
 
   Those fakes cover the Temporal side. The route also reads `poller.snapshot()`, and that file offers only `_NoPoller`, so write a minimal snapshot fake (a list of run ids, open and closed) with this test. Create `tests/test_018_diff_guard.py` (Routes rule 5), skipped unless `KROKER_DIFF_GUARD=1`. Fails.
 - [x] T046 [US3] Create `D/fleet_summary.py` (data-model §2.1) and `D/read_routes.py`, registering `GET /api/fleet/summary`. Add the single `register_read_routes(...)` call in `D/api.py` `create_router`. T045 goes green, and the diff guard passes with `KROKER_DIFF_GUARD=1`. Commit T045 + T046.
-- [ ] T047 [US3] Create `scripts/dump_read_fixtures.py`, which builds `F/api/__fixtures__/read/fleet-summary.json` from the T045 test inputs, never live data. Create `tests/test_read_fixtures_fresh.py`, pinned the way `tests/test_graph_fixtures_fresh.py` is. RED, then green in the same commit: the fixture is generated, and the freshness test fails on a hand-edited copy (a test case). Commit.
+- [x] T047 [US3] Create `scripts/dump_read_fixtures.py`, which builds `F/api/__fixtures__/read/fleet-summary.json` from the T045 test inputs, never live data. Create `tests/test_read_fixtures_fresh.py`, pinned the way `tests/test_graph_fixtures_fresh.py` is. RED, then green in the same commit: the fixture is generated, and the freshness test fails on a hand-edited copy (a test case). Commit.
 - [ ] T048 [US3] RED: create `F/api/http-read.test.ts`: `mapFleetSummary` on the recorded fixture gives camelCase `FleetSummary` (data-model §3.2). In `F/features/fleet/fleet.adapter.test.ts`:
   - rows carry v5's columns;
   - the arm reads `harness × model` verbatim (V10);

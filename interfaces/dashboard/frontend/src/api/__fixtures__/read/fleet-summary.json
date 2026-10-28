@@ -1,0 +1,220 @@
+{
+  "runs": [
+    {
+      "run_id": "graph-run",
+      "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+      "graph_name": "default",
+      "arm": {
+        "harness": "opencode",
+        "model": "zai-coding-plan/glm-5.3"
+      },
+      "traversals": [
+        {
+          "edge": {
+            "source": "architecture",
+            "source_port": "revise",
+            "target": "architect",
+            "target_port": "guidance"
+          },
+          "used": 0,
+          "max": 2
+        },
+        {
+          "edge": {
+            "source": "plan",
+            "source_port": "revise",
+            "target": "planner",
+            "target_port": "guidance"
+          },
+          "used": 0,
+          "max": 2
+        }
+      ],
+      "outcome": {
+        "state": "running",
+        "reason": null,
+        "result": null
+      },
+      "where": [
+        "intake"
+      ],
+      "gate_timeouts": [
+        {
+          "gate": "clarify",
+          "on_timeout": "reject"
+        },
+        {
+          "gate": "architecture",
+          "on_timeout": "reject"
+        },
+        {
+          "gate": "plan",
+          "on_timeout": "reject"
+        },
+        {
+          "gate": "merge",
+          "on_timeout": "hold"
+        },
+        {
+          "gate": "deploy",
+          "on_timeout": "reject"
+        }
+      ]
+    },
+    {
+      "run_id": "gated-run",
+      "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+      "graph_name": "default",
+      "arm": {
+        "harness": "opencode",
+        "model": "zai-coding-plan/glm-5.3"
+      },
+      "traversals": [
+        {
+          "edge": {
+            "source": "architecture",
+            "source_port": "revise",
+            "target": "architect",
+            "target_port": "guidance"
+          },
+          "used": 0,
+          "max": 2
+        },
+        {
+          "edge": {
+            "source": "plan",
+            "source_port": "revise",
+            "target": "planner",
+            "target_port": "guidance"
+          },
+          "used": 0,
+          "max": 2
+        }
+      ],
+      "outcome": {
+        "state": "running",
+        "reason": null,
+        "result": null
+      },
+      "where": [
+        "intake"
+      ],
+      "gate_timeouts": [
+        {
+          "gate": "architecture",
+          "on_timeout": "reject"
+        }
+      ]
+    },
+    {
+      "run_id": "custom-run",
+      "graph_sha": "1f953ed56f88a89248edbbb46e3ee98cae90e3dda3b3226635372daa1e8fa9e4",
+      "graph_name": null,
+      "arm": {
+        "harness": "opencode",
+        "model": "zai-coding-plan/glm-5.3"
+      },
+      "traversals": [],
+      "outcome": {
+        "state": "running",
+        "reason": null,
+        "result": null
+      },
+      "where": [],
+      "gate_timeouts": [
+        {
+          "gate": "clarify",
+          "on_timeout": "reject"
+        },
+        {
+          "gate": "architecture",
+          "on_timeout": "reject"
+        },
+        {
+          "gate": "plan",
+          "on_timeout": "reject"
+        },
+        {
+          "gate": "merge",
+          "on_timeout": "hold"
+        },
+        {
+          "gate": "deploy",
+          "on_timeout": "reject"
+        }
+      ]
+    },
+    {
+      "run_id": "legacy-run",
+      "graph_sha": null,
+      "graph_name": null,
+      "arm": null,
+      "traversals": [],
+      "outcome": null,
+      "where": [],
+      "gate_timeouts": []
+    },
+    {
+      "run_id": "closed-run",
+      "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+      "graph_name": "default",
+      "arm": {
+        "harness": "opencode",
+        "model": "zai-coding-plan/glm-5.3"
+      },
+      "traversals": [
+        {
+          "edge": {
+            "source": "architecture",
+            "source_port": "revise",
+            "target": "architect",
+            "target_port": "guidance"
+          },
+          "used": 0,
+          "max": 2
+        },
+        {
+          "edge": {
+            "source": "plan",
+            "source_port": "revise",
+            "target": "planner",
+            "target_port": "guidance"
+          },
+          "used": 0,
+          "max": 2
+        }
+      ],
+      "outcome": {
+        "state": "failed",
+        "reason": "interrupted:completed",
+        "result": null
+      },
+      "where": [],
+      "gate_timeouts": [
+        {
+          "gate": "clarify",
+          "on_timeout": "reject"
+        },
+        {
+          "gate": "architecture",
+          "on_timeout": "reject"
+        },
+        {
+          "gate": "plan",
+          "on_timeout": "reject"
+        },
+        {
+          "gate": "merge",
+          "on_timeout": "hold"
+        },
+        {
+          "gate": "deploy",
+          "on_timeout": "reject"
+        }
+      ]
+    }
+  ],
+  "unreadable": [
+    "unreadable-run"
+  ]
+}
