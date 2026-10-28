@@ -11,6 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
+from .catalog_wire import ShippedGraphsWire, shipped_graphs
 from .fleet_summary import FleetSummaryWire, fleet_summary
 from .run_graph import RunGraphs
 
@@ -21,5 +22,9 @@ def register_read_routes(poller: Any, *, run_graphs: RunGraphs) -> APIRouter:
     @router.get("/fleet/summary")
     async def read_fleet_summary() -> FleetSummaryWire:
         return await fleet_summary(poller, run_graphs)
+
+    @router.get("/graphs/shipped")
+    async def read_graphs_shipped() -> ShippedGraphsWire:
+        return shipped_graphs()
 
     return router

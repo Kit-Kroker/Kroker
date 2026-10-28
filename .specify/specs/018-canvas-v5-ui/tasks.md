@@ -377,7 +377,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 
 **Independent test**: `tests/test_dashboard_read_routes.py` (shipped), `catalog_card.spec.ts`, `GraphsView.test.ts`, `graphEditor.store.test.ts`, `DesignView.test.ts`; app tier CONSOLE-8, 9, 28, 37, 38, 42–44.
 
-- [ ] T056 [US5] RED: create `tests/test_dashboard_read_routes.py` with the shipped-graphs cases of Routes §shipped:
+- [x] T056 [US5] RED: create `tests/test_dashboard_read_routes.py` with the shipped-graphs cases of Routes §shipped:
   - node, gate and edge counts per shipped YAML (`seeded` has 0 gates);
   - `validate_run_roles` pass and fail with a monkeypatched role map;
   - the same-weights note when `model_id` values are equal (V8);
@@ -385,7 +385,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
   - no `GraphStore.put` (spy).
 
   Fails.
-- [ ] T057 [US5] Create `D/catalog_wire.py` and register `GET /api/graphs/shipped` in `D/read_routes.py`. Extend `scripts/dump_read_fixtures.py` to `F/api/__fixtures__/read/graphs-shipped.json`. T056 and the freshness test go green. Commit T056 + T057.
+- [x] T057 [US5] Create `D/catalog_wire.py` and register `GET /api/graphs/shipped` in `D/read_routes.py`. Extend `scripts/dump_read_fixtures.py` to `F/api/__fixtures__/read/graphs-shipped.json`. T056 and the freshness test go green. Commit T056 + T057.
 - [ ] T058 [P] [US5] RED: create `U/src/components/catalog_card/catalog_card.spec.ts`: kicker, name, sha, description, when, counts, and an action emitting `act`. A `null` description or when renders `not measured`. Fails.
 - [ ] T059 [P] [US5] Create the five files of `catalog_card` and register them. T058 goes green. Commit T058 + T059.
 - [ ] T060 [US5] RED: create `F/features/graphs/GraphsView.test.ts`:

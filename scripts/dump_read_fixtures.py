@@ -34,6 +34,7 @@ OUT = ROOT / "interfaces" / "dashboard" / "frontend" / "src" / "api" / "__fixtur
 from temporalio.client import WorkflowExecutionStatus  # noqa: E402
 
 from sdlc.core.models import GateConfig, PipelineConfig  # noqa: E402
+from sdlc.dashboard.catalog_wire import shipped_graphs  # noqa: E402
 from sdlc.dashboard.fleet_summary import fleet_summary  # noqa: E402
 from sdlc.dashboard.run_graph import RunGraphs  # noqa: E402
 from sdlc.graph.store import GraphStore  # noqa: E402
@@ -94,7 +95,10 @@ def _build_inputs() -> tuple[_Poller, RunGraphs]:
 def build() -> dict[str, Any]:
     poller, run_graphs = _build_inputs()
     wire = asyncio.run(fleet_summary(poller, run_graphs))
-    return {"fleet-summary.json": json.loads(wire.model_dump_json())}
+    return {
+        "fleet-summary.json": json.loads(wire.model_dump_json()),
+        "graphs-shipped.json": json.loads(shipped_graphs().model_dump_json()),
+    }
 
 
 def main() -> None:

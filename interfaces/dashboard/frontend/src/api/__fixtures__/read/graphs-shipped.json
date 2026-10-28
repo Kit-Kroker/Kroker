@@ -1,0 +1,244 @@
+{
+  "graphs": [
+    {
+      "name": "default",
+      "sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+      "description": null,
+      "when": null,
+      "nodes": 12,
+      "gates": 2,
+      "edges": 20
+    },
+    {
+      "name": "default-research",
+      "sha": "8897db11d9c19afad1fb19d8a08532a2958fd5fca5c9500cda90e34ae11cba9c",
+      "description": null,
+      "when": null,
+      "nodes": 13,
+      "gates": 2,
+      "edges": 22
+    },
+    {
+      "name": "seeded",
+      "sha": "c1bbef2d33379ca4252d8971ed4b65934dd54e7d4c306a887698df0f0520c5ab",
+      "description": null,
+      "when": null,
+      "nodes": 7,
+      "gates": 0,
+      "edges": 12
+    }
+  ],
+  "checks": [
+    {
+      "name": "validate_run_roles",
+      "state": "pass",
+      "text": "the live registry satisfies ADR-6: families differ, the adversary is its own model"
+    },
+    {
+      "name": "check_node_types",
+      "state": "pass",
+      "text": "every node type the shipped graphs use is served by the catalog"
+    },
+    {
+      "name": "containment",
+      "state": "pass",
+      "text": "containment policy v1: 5 rules across hook, native"
+    }
+  ],
+  "sections": [
+    {
+      "title": "Roles",
+      "note": "the resolved role map for a default run (harness \u00d7 model)",
+      "rows": [
+        {
+          "k": "adversary",
+          "v": "api \u00d7 zai:glm-5.3-flash"
+        },
+        {
+          "k": "analyst",
+          "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "architect",
+          "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "clarify",
+          "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "deep_review",
+          "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "dev",
+          "v": "opencode \u00d7 zai-coding-plan/glm-5.3"
+        },
+        {
+          "k": "devops",
+          "v": "opencode \u00d7 zai-coding-plan/glm-5.3"
+        },
+        {
+          "k": "devops_planner",
+          "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "discover",
+          "v": "api \u00d7 zai:glm-5.3-flash"
+        },
+        {
+          "k": "handoff",
+          "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "merge_verdict",
+          "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "planner",
+          "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "qa",
+          "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "research",
+          "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "reviewer",
+          "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "risk",
+          "v": "api \u00d7 zai:glm-5.3-flash"
+        },
+        {
+          "k": "test",
+          "v": "opencode \u00d7 zai-coding-plan/glm-5.2"
+        }
+      ]
+    },
+    {
+      "title": "Proposer roles",
+      "note": "model ids of the crew's proposing roles",
+      "rows": [
+        {
+          "k": "analyst",
+          "v": "zai:glm-5.3"
+        },
+        {
+          "k": "architect",
+          "v": "zai:glm-5.3"
+        },
+        {
+          "k": "clarify",
+          "v": "zai:glm-5.3"
+        },
+        {
+          "k": "devops_planner",
+          "v": "zai:glm-5.3"
+        },
+        {
+          "k": "merge_verdict",
+          "v": "zai:glm-5.3"
+        },
+        {
+          "k": "planner",
+          "v": "zai:glm-5.3"
+        },
+        {
+          "k": "qa",
+          "v": "zai:glm-5.3"
+        },
+        {
+          "k": "reviewer",
+          "v": "zai:glm-5.3"
+        }
+      ]
+    },
+    {
+      "title": "Gates",
+      "note": "gate policy, threshold and on_timeout for a default run",
+      "rows": [
+        {
+          "k": "architecture",
+          "v": "hard \u00b7 threshold 0.8 \u00b7 on_timeout reject"
+        },
+        {
+          "k": "clarify",
+          "v": "hard \u00b7 threshold 0.8 \u00b7 on_timeout reject"
+        },
+        {
+          "k": "deploy",
+          "v": "hard \u00b7 threshold 0.8 \u00b7 on_timeout reject"
+        },
+        {
+          "k": "merge",
+          "v": "hard \u00b7 threshold 0.8 \u00b7 on_timeout hold"
+        },
+        {
+          "k": "plan",
+          "v": "soft \u00b7 threshold 0.8 \u00b7 on_timeout reject"
+        }
+      ]
+    },
+    {
+      "title": "Limits",
+      "note": "the default run's scalar limits; None reads not measured",
+      "rows": [
+        {
+          "k": "max_fix_attempts",
+          "v": "2"
+        },
+        {
+          "k": "max_tool_escalations",
+          "v": "3"
+        },
+        {
+          "k": "max_gate_rounds",
+          "v": "2"
+        },
+        {
+          "k": "gate_timeout_hours",
+          "v": "48"
+        },
+        {
+          "k": "clarify_question_cap",
+          "v": "5"
+        },
+        {
+          "k": "coverage_threshold",
+          "v": "0.0"
+        },
+        {
+          "k": "run_budget_usd",
+          "v": "0.0"
+        },
+        {
+          "k": "remind_after_hours",
+          "v": null
+        },
+        {
+          "k": "escalate_after_hours",
+          "v": null
+        }
+      ]
+    },
+    {
+      "title": "Arms",
+      "note": "the harness arms a default run executes on, and the roles each carries",
+      "rows": [
+        {
+          "k": "opencode \u00d7 zai-coding-plan/glm-5.2",
+          "v": "test"
+        },
+        {
+          "k": "opencode \u00d7 zai-coding-plan/glm-5.3",
+          "v": "dev, devops"
+        }
+      ]
+    }
+  ]
+}
