@@ -1,4 +1,5 @@
-// The board tab of the run screen (018 T008, split from app.pw.ts; see
+// The run's Board tab (the v5 kanban) and the full Agent Board at
+// /runs/:id/board (018 T008, retargeted T054 per the standing rule; see
 // app.helpers.ts).
 import { test, expect } from '@playwright/test'
 import { APP_BASE_URL } from './app.helpers'
@@ -9,17 +10,19 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
 })
 
-// --- The board tab (002 group C): the four mock board runs carry the
+// --- The board surfaces (002 group C): the four mock board runs carry the
 // scenarios -- feature-graph-demo -> 'kroker' (populated), feature-add-sso
 // -> null (no project), fix-board-ghost-project -> 'ghost-project' (404),
-// feature-empty-board -> 'kroker-empty' (empty).
+// feature-empty-board -> 'kroker-empty' (empty). The run's Board tab is the
+// kanban; the task list, detail pane and counter strip live on the full
+// board (T054).
 
 test('the board tab round-trips through ?tab', async ({ page }) => {  // clause: CONSOLE-10
   await page.goto('/#/runs/feature-graph-demo?tab=board')
-  await expect(page.locator('[data-testid="board-tab"]')).toBeVisible()
+  await expect(page.locator('[data-testid="board-kanban"]')).toBeVisible()
   // A copied URL reopens on Board (SC-005).
   await page.reload()
-  await expect(page.locator('[data-testid="board-tab"]')).toBeVisible()
+  await expect(page.locator('[data-testid="board-kanban"]')).toBeVisible()
   // Selecting Graph clears ?tab (replace semantics).
   await page.locator('[data-testid="tab-graph"]').click()
   await expect(page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')).toBeVisible()
@@ -27,16 +30,18 @@ test('the board tab round-trips through ?tab', async ({ page }) => {  // clause:
   // Unknown and disabled values render Graph; the URL is left untouched.
   await page.goto('/#/runs/feature-graph-demo?tab=nonsense')
   await expect(page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')).toBeVisible()
-  await expect(page.locator('[data-testid="board-tab"]')).toHaveCount(0)
+  await expect(page.locator('[data-testid="board-kanban"]')).toHaveCount(0)
   // 011 T009 (CONSOLE-10's disabled example moves to gates): Cost is live
-  // through the #cost slot, so the disabled-value case is gates.
+  // through the rail, so the disabled-value case is gates.
   await page.goto('/#/runs/feature-graph-demo?tab=gates')
   await expect(page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')).toBeVisible()
-  await expect(page.locator('[data-testid="board-tab"]')).toHaveCount(0)
+  await expect(page.locator('[data-testid="board-kanban"]')).toHaveCount(0)
 })
 
-test('the board lists this run\'s tasks; a selection shows detail, evidence and timeline', async ({ page }) => {  // clause: CONSOLE-11
-  await page.goto('/#/runs/feature-graph-demo?tab=board')
+test('the full board lists this run\'s tasks; a selection shows detail, evidence and timeline', async ({ page }) => {  // clause: CONSOLE-11
+  // 018 T054: the list and its detail pane live on the full Agent Board.
+  await page.goto('/#/runs/feature-graph-demo/board')
+  await expect(page.locator('[data-testid="board-back"]')).toHaveAttribute('href', '#/runs/feature-graph-demo')
   const rows = page.locator('[data-testid="board-task-list"] [data-testid="list-row"]')
   await expect(rows).toHaveCount(7)
   await rows.filter({ hasText: 'T02' }).first().click()
@@ -47,8 +52,9 @@ test('the board lists this run\'s tasks; a selection shows detail, evidence and 
   await expect(detail.locator('[data-testid="timeline-entry"]')).toHaveCount(3)
 })
 
-test("the board counter strip reads 'this run'", async ({ page }) => {  // clause: CONSOLE-12
-  await page.goto('/#/runs/feature-graph-demo?tab=board')
+test("the full board's counter strip reads 'this run'", async ({ page }) => {  // clause: CONSOLE-12
+  // 018 T054: the counters live on the full Agent Board.
+  await page.goto('/#/runs/feature-graph-demo/board')
   const strip = page.locator('[data-testid="board-counters"]')
   await expect(strip).toBeVisible()
   await expect(strip).toContainText('pending · this run')
@@ -76,7 +82,7 @@ test('a healthy board never shows the connection-lost line', async ({ page }) =>
   // at the unit tier, where board.store.test.ts and BoardTab.test.ts drive
   // real 500s through the store. This tier pins the healthy absence.
   await page.goto('/#/runs/feature-graph-demo?tab=board')
-  await expect(page.locator('[data-testid="board-tab"]')).toBeVisible()
+  await expect(page.locator('[data-testid="board-kanban"]')).toBeVisible()
   await expect(page.locator('[data-testid="board-connection-lost"]')).toHaveCount(0)
 })
 
@@ -85,7 +91,7 @@ test('Graph is unchanged after a Board round trip', async ({ page }) => {  // cl
   const canvas = page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')
   await expect(canvas.locator('[data-testid="graph-node"]')).toHaveCount(12)
   await page.locator('[data-testid="tab-board"]').click()
-  await expect(page.locator('[data-testid="board-tab"]')).toBeVisible()
+  await expect(page.locator('[data-testid="board-kanban"]')).toBeVisible()
   await page.locator('[data-testid="tab-graph"]').click()
   await expect(canvas.locator('[data-testid="graph-node"]')).toHaveCount(12)
   // 018 T032: the run header's stage strip is gone (v5 draws none on the

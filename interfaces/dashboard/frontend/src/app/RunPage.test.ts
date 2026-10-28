@@ -1,5 +1,6 @@
 // T038 (RED): app/RunPage.vue, the run-page composition (R-13). RunPage
-// renders ONLY <RunView> and fills its typed #board slot with BoardTab --
+// renders ONLY <RunView> and fills its typed #board slot with the board
+// screen's tab (BoardKanban since 018 T054) --
 // the app layer is the only place features/board is reachable from. The
 // module does not exist yet, so every test here fails on that import until
 // T039 lands it.
@@ -151,14 +152,15 @@ afterEach(() => {
 })
 
 describe('RunPage composes the board (R-13)', () => {
-  it('renders RunView and fills its board panel with a live BoardTab', async () => {
+  it('renders RunView and fills its board panel with a live BoardKanban', async () => {
     const { w } = await mountPage('/runs/r1?tab=board', 'kroker')
     expect(w.find('[data-testid="run-view"]').exists()).toBe(true)
     const panel = w.find('[data-testid="run-tab-board"]')
     expect(panel.exists()).toBe(true)
-    // BoardTab's own testid contract (BoardTab.test.ts), rendered INSIDE
-    // the panel -- the slot is filled by RunPage, not by a test probe.
-    expect(panel.find('[data-testid="board-tab"]').exists()).toBe(true)
+    // The board surface's own testid contract (BoardKanban since T054),
+    // rendered INSIDE the panel -- the slot is filled by RunPage, not by a
+    // test probe.
+    expect(panel.find('[data-testid="board-kanban"]').exists()).toBe(true)
     // the board store really started: step 1 fired through the fake
     expect(boardApi.project).toHaveBeenCalledWith('kroker')
   })
@@ -183,7 +185,7 @@ describe('RunPage composes the board (R-13)', () => {
     expect(w.find('[data-testid="rail-cost"]').exists()).toBe(true)
 
     const { w: w2 } = await mountPage('/runs/r1?tab=board', 'kroker')
-    expect(w2.find('[data-testid="board-tab"]').exists()).toBe(true)
+    expect(w2.find('[data-testid="board-kanban"]').exists()).toBe(true)
   })
 })
 

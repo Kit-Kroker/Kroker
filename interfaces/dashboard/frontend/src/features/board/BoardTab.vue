@@ -1,9 +1,10 @@
 <script setup lang="ts">
-// The Board tab (002, FR-021..FR-024, R-13): rendered inside RunView's
-// #board slot by app/RunPage.vue. Owns the board store's lifecycle --
-// start on mount, stop on unmount, restart when the run's project changes
-// (FR-023). Read-only: the store exposes no write path and this view adds
-// none (FR-024). All mapping goes through the pure board.adapter.
+// The full Agent Board (002, FR-021..FR-024, R-13; 018 T054): rendered at
+// /runs/:id/board (standalone, with its back link to the run) and owning
+// the board store's lifecycle -- start on mount, stop on unmount, restart
+// when the run's project changes (FR-023). Read-only: the store exposes no
+// write path and this view adds none (FR-024). All mapping goes through
+// the pure board.adapter.
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import DetailPane from '@kroker/ui/components/detail_pane/DetailPane.vue'
 import DetailSection from '@kroker/ui/components/detail_pane/DetailSection.vue'
@@ -14,14 +15,29 @@ import Timeline from '@kroker/ui/components/timeline/Timeline.vue'
 import { toCounters, toTaskDetail, toTaskRow, toTimeline, toVersionRows } from './board.adapter'
 import type { VersionRow } from './board.adapter'
 import { useBoardStore } from './board.store'
+import { useFleetStore } from '../../shared/fleet.store'
 
-const props = defineProps<{ runId: string; projectKey: string | null }>()
+const props = defineProps<{
+  runId: string
+  /** Undefined (the standalone route passes none) resolves from the run's
+   * row; null stays the explicit absent value (FR-020a). */
+  projectKey?: string | null
+  /** The standalone route renders the back link to the run. */
+  back?: boolean
+}>()
 const board = useBoardStore()
+const fleet = useFleetStore()
 
-onMounted(() => board.start({ runId: props.runId, projectKey: props.projectKey }))
+const resolvedKey = computed(() =>
+  props.projectKey !== undefined
+    ? props.projectKey
+    : (fleet.runs.find((r) => r.id === props.runId)?.projectKey ?? null),
+)
+
+onMounted(() => board.start({ runId: props.runId, projectKey: resolvedKey.value }))
 onBeforeUnmount(() => board.stop())
 watch(
-  () => [props.runId, props.projectKey] as const,
+  () => [props.runId, resolvedKey.value] as const,
   ([runId, projectKey]) => board.start({ runId, projectKey }),
 )
 
@@ -38,6 +54,10 @@ const versionRows = computed<VersionRow[]>(() => {
 
 <template>
   <section data-testid="board-tab" class="board">
+    <!-- 018 T054: the standalone route's back link to the run. -->
+    <RouterLink v-if="back" class="back" data-testid="board-back" :to="`/runs/${runId}`">
+      ← back to the run
+    </RouterLink>
     <!-- FR-022/FR-023a: the two permanent banners and the transient line.
          Only these conditions produce a banner; everything else renders. -->
     <p v-if="board.reason === 'no_project'" class="banner" data-testid="board-banner-no-project">
@@ -110,6 +130,12 @@ const versionRows = computed<VersionRow[]>(() => {
 <style scoped>
 .board { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 12px; }
 .banner { margin: 0; color: var(--ink-subtle); font-family: var(--font-mono); font-size: 12px; }
+.back {
+  align-self: flex-start;
+  color: var(--link); text-decoration: none;
+  font-family: var(--font-mono); font-size: 11.5px;
+}
+.back:hover { text-decoration: underline; }
 .strip { display: flex; flex-wrap: wrap; gap: var(--space-4); padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; }
 .cols { display: flex; gap: 16px; flex: 1; min-height: 0; align-items: flex-start; }
 .list { flex: 1 1 55%; display: flex; flex-direction: column; gap: 2px; overflow: auto; min-height: 0; }

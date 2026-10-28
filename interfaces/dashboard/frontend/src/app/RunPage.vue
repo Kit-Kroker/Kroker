@@ -6,7 +6,7 @@
 // into the rail (S3): RunView renders it; no cost slot exists.
 import { watch } from 'vue'
 import RunView from '../features/run/RunView.vue'
-import BoardTab from '../features/board/BoardTab.vue'
+import BoardKanban from '../features/board/BoardKanban.vue'
 import { usePrefsStore } from './prefs.store'
 
 const props = defineProps<{ id: string; tab?: string; rail?: string }>()
@@ -26,7 +26,7 @@ watch(
 <template>
   <RunView :id="id" :tab="tab" :rail="rail">
     <template #board="{ runId, projectKey }">
-      <BoardTab :run-id="runId" :project-key="projectKey" />
+      <BoardKanban :run-id="runId" :project-key="projectKey" />
     </template>
   </RunView>
 </template>

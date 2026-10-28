@@ -360,13 +360,13 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 
 - [x] T051 [P] [US4] RED: create `U/src/components/kanban/kanban.spec.ts`: columns render with title, count and cards; a card shows id, optional title, tag and meta; the `link` renders when given. Fails.
 - [x] T052 [P] [US4] Create the five files of `kanban` and register them. T051 goes green. Commit T051 + T052.
-- [ ] T053 [US4] RED: create `F/features/board/kanban.adapter.test.ts`:
+- [x] T053 [US4] RED: create `F/features/board/kanban.adapter.test.ts`:
   - columns come only from the wire statuses present (`pending · in_progress · done · failed · blocked · quarantined`), never `claimed` or `queued` (V7);
   - a task whose `status` differs from `authoritative_status` shows both in its tag;
   - meta carries the fix attempts.
 
   Fails.
-- [ ] T054 [US4] Create `F/features/board/kanban.adapter.ts` and `F/features/board/BoardKanban.vue`. The latter reuses `board.store.ts`, its banners and its empty state, and links "Open full Agent Board →" to `/runs/:id/board`. Add the route in `F/app/router.ts`: `/runs/:id/board` renders `BoardTab.vue`, unchanged except for a back link to the run. `F/app/RunPage.vue` fills the Board slot with `BoardKanban`. In the same commit, update the app-tier tests of CONSOLE-10 to CONSOLE-16 so that each drives the surface its rule now lives on (the kanban, or `/runs/:id/board`), per the standing rule. T055 finalises the wording. T053 goes green; every `BoardTab.test.ts` and `board.store.test.ts` test is a PIN. Commit T053 + T054.
+- [x] T054 [US4] Create `F/features/board/kanban.adapter.ts` and `F/features/board/BoardKanban.vue`. The latter reuses `board.store.ts`, its banners and its empty state, and links "Open full Agent Board →" to `/runs/:id/board`. Add the route in `F/app/router.ts`: `/runs/:id/board` renders `BoardTab.vue`, unchanged except for a back link to the run. `F/app/RunPage.vue` fills the Board slot with `BoardKanban`. In the same commit, update the app-tier tests of CONSOLE-10 to CONSOLE-16 so that each drives the surface its rule now lives on (the kanban, or `/runs/:id/board`), per the standing rule. T055 finalises the wording. T053 goes green; every `BoardTab.test.ts` and `board.store.test.ts` test is a PIN. Commit T053 + T054.
 - [ ] T055 [US4] App tier: rewrite CONSOLE-10 to 16 onto the kanban and the full board, and add CONSOLE-36, with tests in `U/app.board.pw.ts`. `check_ui.py`, then `check_clauses.py`. Commit.
 
 ---

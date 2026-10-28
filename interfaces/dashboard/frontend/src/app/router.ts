@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import FleetView from '../features/fleet/FleetView.vue'
 import InboxView from '../features/inbox/InboxView.vue'
 import RunPage from './RunPage.vue'
+import BoardTab from '../features/board/BoardTab.vue'
 import GraphEditorView from '../features/graphs/GraphEditorView.vue'
 
 export const router = createRouter({
@@ -25,5 +26,13 @@ export const router = createRouter({
       }),
     },
     { path: '/graphs', name: 'graphs', component: GraphEditorView },
+    {
+      // 018 T054 (S7): the full Agent Board. BoardTab with its back link;
+      // the run's row supplies the project key (BoardTab resolves it).
+      path: '/runs/:id/board',
+      name: 'run-board',
+      component: BoardTab,
+      props: (r) => ({ runId: r.params.id as string, back: true }),
+    },
   ],
 })
