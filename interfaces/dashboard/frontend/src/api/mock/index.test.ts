@@ -429,3 +429,32 @@ describe('the fleet summary mock (018 T048)', () => {
     expect((await api.getFleetSummary()).unreadable).toEqual([])
   })
 })
+
+// --- 018 T060 (RED): the shipped-graphs mock. T061 lands mock/shippedGraphs.ts
+// and wires getShippedGraphs into createMockApi; today the method is absent,
+// which is the RED. The mock replays the recorded fixture's shape.
+
+describe('the shipped graphs mock (018 T060)', () => {
+  let api: ReturnType<typeof createMockApi>
+  beforeEach(() => {
+    api = createMockApi({ simulateLive: false })
+  })
+
+  it('serves three graphs by name with their shas', async () => {
+    const graphs = (await api.getShippedGraphs()).graphs
+    expect(graphs.map((g: { name: string }) => g.name)).toEqual([
+      'default', 'default-research', 'seeded',
+    ])
+    expect(graphs.find((g: { name: string }) => g.name === 'default')!.sha).toBe(
+      'a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38',
+    )
+  })
+
+  it('the checks pass and the Limits rows carry their nulls', async () => {
+    const shipped = await api.getShippedGraphs()
+    expect(shipped.checks.every((c: { state: string }) => c.state === 'pass')).toBe(true)
+    const limits = shipped.sections.find((s: { title: string }) => s.title === 'Limits')!
+    const nulls = (limits.rows as Array<{ k: string; v: string | null }>).filter((r) => r.v === null)
+    expect(nulls.map((r) => r.k)).toEqual(['remind_after_hours', 'escalate_after_hours'])
+  })
+})

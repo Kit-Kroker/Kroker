@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { mapFleetSummary } from './http-read'
+import { mapFleetSummary, mapShippedGraphs } from './http-read'
 import fixture from './__fixtures__/read/fleet-summary.json'
+import shippedFixture from './__fixtures__/read/graphs-shipped.json'
 
 // 018 T048 (RED): the fleet-summary read mapper. The recorded fixture is the
 // wire; the mapper answers camelCase. RED cause: ./http-read does not exist.
@@ -34,5 +35,39 @@ describe('mapFleetSummary (018 T048 RED)', () => {
     const summary = mapFleetSummary(fixture as never)
     const gated = summary.runs.find((r) => r.runId === 'gated-run')!
     expect(gated.gateTimeouts).toEqual([{ gate: 'architecture', onTimeout: 'reject' }])
+  })
+})
+
+// --- 018 T060 (RED): the shipped-graphs mapper --------------------------------
+
+describe('mapShippedGraphs (018 T060 RED)', () => {
+  it('maps the recorded fixture: three graphs, null description/when preserved, counts from the wire numbers', () => {
+    const shipped = mapShippedGraphs(shippedFixture as never)
+    expect(shipped.graphs.map((g: { name: string }) => g.name)).toEqual([
+      'default', 'default-research', 'seeded',
+    ])
+    const def = shipped.graphs[0] as Record<string, unknown>
+    expect(def['sha']).toBe('a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38')
+    expect(def['description']).toBeNull()
+    expect(def['when']).toBeNull()
+    expect(def['counts']).toEqual([
+      { label: 'nodes', n: 12 },
+      { label: 'gates', n: 2 },
+      { label: 'edges', n: 20 },
+    ])
+    const seeded = shipped.graphs[2] as Record<string, unknown>
+    expect((seeded['counts'] as Array<{ label: string; n: number }>)[1]).toEqual({ label: 'gates', n: 0 })
+  })
+
+  it('carries the checks and sections through, null row values intact', () => {
+    const shipped = mapShippedGraphs(shippedFixture as never)
+    expect(shipped.checks).toHaveLength(3)
+    expect(shipped.checks.every((c: { state: string }) => c.state === 'pass')).toBe(true)
+    expect(shipped.sections.map((s: { title: string }) => s.title)).toEqual([
+      'Roles', 'Proposer roles', 'Gates', 'Limits', 'Arms',
+    ])
+    const limits = shipped.sections.find((s: { title: string }) => s.title === 'Limits')!
+    const nulls = (limits.rows as Array<{ k: string; v: string | null }>).filter((r) => r.v === null)
+    expect(nulls.map((r) => r.k)).toEqual(['remind_after_hours', 'escalate_after_hours'])
   })
 })

@@ -1,7 +1,15 @@
 // 018 T049 (read-routes rule 4): the recorded fixtures are the contract;
 // these mappers turn the snake_case wire into the camelCase mirrors of
 // read-types.ts, exactly as the fixtures shape them.
-import type { Arm, FleetRunSummary, FleetSummary, GateTimeout, Traversal } from './read-types'
+import type {
+  Arm,
+  FleetRunSummary,
+  FleetSummary,
+  GateTimeout,
+  ShippedGraph,
+  ShippedGraphs,
+  Traversal,
+} from './read-types'
 
 type Wire = Record<string, unknown>
 
@@ -43,5 +51,28 @@ export function mapFleetSummary(raw: Wire): FleetSummary {
       }),
     ),
     unreadable: (raw.unreadable as string[]) ?? [],
+  }
+}
+
+// 018 T061 (data-model §2.2, R-7): the shipped-graphs read. The graph rows
+// gain their card counts (nodes/gates/edges); checks and sections pass
+// through as served - their text is the panel's copy, verbatim.
+export function mapShippedGraphs(raw: Wire): ShippedGraphs {
+  return {
+    graphs: (raw.graphs as Wire[]).map(
+      (g): ShippedGraph => ({
+        name: g.name as string,
+        sha: g.sha as string,
+        description: (g.description as string | null) ?? null,
+        when: (g.when as string | null) ?? null,
+        counts: [
+          { label: 'nodes', n: g.nodes as number },
+          { label: 'gates', n: g.gates as number },
+          { label: 'edges', n: g.edges as number },
+        ],
+      }),
+    ),
+    checks: raw.checks as ShippedGraphs['checks'],
+    sections: raw.sections as ShippedGraphs['sections'],
   }
 }

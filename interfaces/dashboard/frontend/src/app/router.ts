@@ -3,7 +3,7 @@ import FleetView from '../features/fleet/FleetView.vue'
 import InboxView from '../features/inbox/InboxView.vue'
 import RunPage from './RunPage.vue'
 import BoardTab from '../features/board/BoardTab.vue'
-import GraphEditorView from '../features/graphs/GraphEditorView.vue'
+import GraphsView from '../features/graphs/GraphsView.vue'
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -25,7 +25,10 @@ export const router = createRouter({
         ...(typeof r.query.rail === 'string' ? { rail: r.query.rail } : {}),
       }),
     },
-    { path: '/graphs', name: 'graphs', component: GraphEditorView },
+    // 018 T061 (S8): /graphs is the v5 catalog (cards + the PipelineConfig
+    // panel); Design at /graphs/:sha lands with T063. GraphEditorView stays
+    // for its own tests until T063 retires it.
+    { path: '/graphs', name: 'graphs', component: GraphsView },
     {
       // 018 T054 (S7): the full Agent Board. BoardTab with its back link;
       // the run's row supplies the project key (BoardTab resolves it).

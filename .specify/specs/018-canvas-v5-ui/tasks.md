@@ -388,14 +388,14 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 - [x] T057 [US5] Create `D/catalog_wire.py` and register `GET /api/graphs/shipped` in `D/read_routes.py`. Extend `scripts/dump_read_fixtures.py` to `F/api/__fixtures__/read/graphs-shipped.json`. T056 and the freshness test go green. Commit T056 + T057.
 - [x] T058 [P] [US5] RED: create `U/src/components/catalog_card/catalog_card.spec.ts`: kicker, name, sha, description, when, counts, and an action emitting `act`. A `null` description or when renders `not measured`. Fails.
 - [x] T059 [P] [US5] Create the five files of `catalog_card` and register them. T058 goes green. Commit T058 + T059.
-- [ ] T060 [US5] RED: create `F/features/graphs/GraphsView.test.ts`:
+- [x] T060 [US5] RED: create `F/features/graphs/GraphsView.test.ts`:
   - one card per shipped graph;
   - "Open in Design" navigates to `/graphs/<sha>`;
   - the PipelineConfig panel renders the three checks (pass, fail or off) and the five sections, with `not measured` for null values;
   - the V8 note renders with the fixture's ids.
 
   Add `F/api/http-read.test.ts` and mock cases for `getShippedGraphs`. Fails.
-- [ ] T061 [US5] Create `F/features/graphs/GraphsView.vue` and add the read types, mappers and `F/api/mock/shippedGraphs.ts`. Route `/graphs` renders `GraphsView`. Set `navManifest` Graphs to `available` (if not already). T060 goes green. Commit T060 + T061.
+- [x] T061 [US5] Create `F/features/graphs/GraphsView.vue` and add the read types, mappers and `F/api/mock/shippedGraphs.ts`. Route `/graphs` renders `GraphsView`. Set `navManifest` Graphs to `available` (if not already). T060 goes green. Commit T060 + T061.
 - [ ] T062 [US5] RED: create `F/features/graphs/DesignView.test.ts` and rewrite `F/features/graphs/graphEditor.store.test.ts` for v5 Design (Clauses CONSOLE-8, 9, 37, 38, 42, 43):
   - the palette is built from the catalog, grouped by `canonical_stage` in `CANONICAL_STAGES` order;
   - planned types (feedback §4) are shown dashed, refuse placement, and those with no stage read `unmapped` (V9);

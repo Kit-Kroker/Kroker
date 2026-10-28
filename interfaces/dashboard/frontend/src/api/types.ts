@@ -2,7 +2,7 @@ import type {
   CatalogWire, GraphResponse, GraphStateResponse, GraphWire, LoadWire, ParseWire, SaveWire,
   SerializeWire, ValidationWire,
 } from './graph-types'
-import type { FleetSummary } from './read-types'
+import type { FleetSummary, ShippedGraphs } from './read-types'
 
 export type Status = 'running' | 'blocked' | 'failed' | 'done'
 export type GateOutcome = 'approve' | 'revise' | 'reject'
@@ -159,6 +159,8 @@ export interface DashboardApi {
   getInboxState(): Promise<InboxState>
   /** 018 R-6: the v5 Fleet columns' summary read (one request per poll). */
   getFleetSummary(): Promise<FleetSummary>
+  /** 018 R-7: the Graphs catalog and its PipelineConfig panel. */
+  getShippedGraphs(): Promise<ShippedGraphs>
   answerClarify(runId: string, key: string, answer: string): Promise<void>
   decideGate(runId: string, key: string, outcome: GateOutcome, comment: string): Promise<void>
   overrideMerge(runId: string, key: string, approve: boolean, justification: string): Promise<void>
