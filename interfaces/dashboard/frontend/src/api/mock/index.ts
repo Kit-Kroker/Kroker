@@ -11,7 +11,7 @@ import type {
   StartRunInput,
 } from '../types'
 import { createMockGraph } from './graph'
-import { BUDGET_ITEM, CLOSED_GATES_RUN, ESCALATED_RUN, HALTED_RUN, MULTISINK_RUN, RETIRED_RUN, TOOL_APPROVAL_ITEM } from './decisions'
+import { BUDGET_ITEM, BUDGET_RUN, CLOSED_GATES_RUN, ESCALATED_RUN, HALTED_RUN, MULTISINK_RUN, RETIRED_RUN, TOOL_APPROVAL_ITEM } from './decisions'
 import { mockFleetSummary } from './fleetSummary'
 import { HttpStatusError } from '../errors'
 import { BUDGET_SCOPE_NOTE, totalPrice } from '../../shared/cost'
@@ -85,6 +85,7 @@ function seedRuns(): Run[] {
     ESCALATED_RUN,
     MULTISINK_RUN,
     RETIRED_RUN,
+    BUDGET_RUN,
     {
       id: 'feature-add-sso',
       title: 'Add SSO to customer portal',

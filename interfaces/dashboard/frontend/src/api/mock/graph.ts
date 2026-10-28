@@ -48,6 +48,15 @@ function haltedIntoFailed(base: GraphStateResponse): GraphStateResponse {
   return s
 }
 
+/** V6 (T050): the recorded completed projection, rejected at the budget
+ * gate — the run ends `rejected:budget` (FR-033); no node fails. */
+function budgetRejected(base: GraphStateResponse): GraphStateResponse {
+  const s = clone(base)
+  if (s.kind !== 'state') return s
+  s.outcome = { state: 'rejected', reason: null, result: 'rejected:budget' }
+  return s
+}
+
 /** V3: the recorded completed projection on a graph whose plan leg is cut — two completion points. */
 function multiSinkCompletion(base: GraphStateResponse): GraphStateResponse {
   return clone(base)
@@ -105,6 +114,12 @@ const RUN_SCRIPTS: Record<string, RunScript> = {
   'feature-retired-demo': {
     initial: 'retired',
     states: { retired: { state: { kind: 'unavailable', reason: 'retention_expired', problems: [] }, on: {} } },
+  },
+  // 018 T050 (V6): the budget fixture mirrors the halted derivation with the
+  // budget gate's terminal outcome (FR-033).
+  'feature-budget-demo': {
+    initial: 'budget_rejected',
+    states: { budget_rejected: { state: budgetRejected(RECORDED_STATES.completed), on: {} } },
   },
 }
 

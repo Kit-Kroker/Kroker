@@ -143,3 +143,26 @@ export const RETIRED_RUN: Run = {
   decisions: [],
   projectKey: null,
 }
+
+// 018 T050 (quickstart 2): the budget fixture — a run the budget gate
+// rejected (FR-033). On Fleet it reads its result string verbatim (V6).
+export const BUDGET_RUN: Run = {
+  id: 'feature-budget-demo',
+  title: 'Rejected at the budget gate',
+  mode: 'greenfield',
+  repo: 'git@github.com:acme/graph-demo',
+  activeStages: [],
+  stageMarks: null,
+  status: 'failed',
+  blocker: '',
+  cost: 6.3,
+  budget: null,
+  roles: [],
+  budgetThreshold: null,
+  budgetCounted: null,
+  budgetCrossings: 0,
+  budgetNotice: null,
+  age: '4h 10m',
+  decisions: [],
+  projectKey: null,
+}

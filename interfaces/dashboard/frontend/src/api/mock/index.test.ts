@@ -27,11 +27,11 @@ describe('mock api decision flows', () => {
     api = createMockApi({ simulateLive: false })
   })
 
-  it('seeds 15 runs and 8 inbox items, including the graph demo run', async () => {
+  it('seeds 16 runs and 8 inbox items, including the graph demo run', async () => {
     // 018 T033/T044 triage: the four Observe outcome fixtures plus the
     // closed-gates run (15 runs), and the always-on tool-approval and
     // budget card seeds (8 items).
-    expect(await api.listRuns()).toHaveLength(15)
+    expect(await api.listRuns()).toHaveLength(16)
     expect(await api.listInbox()).toHaveLength(8)
   })
 
@@ -412,6 +412,17 @@ describe('the fleet summary mock (018 T048)', () => {
     const row = (await api.getFleetSummary()).runs.find((r) => r.runId === 'feature-add-sso')
     expect(row).toBeDefined()
     expect(row!.graphSha).toBeNull()
+  })
+
+  // 018 T050 (quickstart 2): the outcome fixtures read their result strings.
+  it('the halted row reads its failed result string', async () => {
+    const row = (await api.getFleetSummary()).runs.find((r) => r.runId === 'feature-halted-demo')
+    expect(row!.outcome).toEqual({ state: 'failed', reason: null, result: 'failed:quarantined-tasks' })
+  })
+
+  it('the budget fixture reads rejected:budget', async () => {
+    const row = (await api.getFleetSummary()).runs.find((r) => r.runId === 'feature-budget-demo')
+    expect(row!.outcome).toEqual({ state: 'rejected', reason: null, result: 'rejected:budget' })
   })
 
   it('unreadable is empty', async () => {

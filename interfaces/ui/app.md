@@ -10,18 +10,16 @@ because a net stretched only over the showcase misses the pages that ship
 ## Requirements
 
 ### CONSOLE-1
-The fleet view renders one row per run reported by the active provider;
-while the provider reports runs, the empty state never shows. Asserted
-against the mock provider on a built SPA. [FR-601]
+The fleet view renders one v5 row per run reported by the active provider —
+Run, Graph, Arm, Outcome, Where/reason, revise traversals, Cost, Elapsed
+and the row's single Open action; while the provider reports runs, the
+empty state never shows. Asserted against the mock provider on a built SPA.
+[FR-601, FR-041]
 
 ### CONSOLE-2
 The header's inbox badge appears when the provider reports inbox items and
 carries the pending count. The v5 header shows no run counter and no spend
 stats — totals live in the footer (CONSOLE-27, CONSOLE-50). [FR-601]
-
-### CONSOLE-3
-The fleet strip renders one mark per canonical stage the provider's catalog
-serves (18 today), keyed by name. [FR-1205, E-76 U4]
 
 ### CONSOLE-7
 The graph editor renders the canvas after applying well-shaped recorded text,
@@ -186,8 +184,16 @@ escalated" — with the Design slice.)
 
 ### CONSOLE-35
 V6 — With no budget the rail reads "off" with no bar. A
-`rejected:budget` run shows that result string on Fleet (slice 4
-extends the test).
+`rejected:budget` run shows that result string on Fleet.
+
+### CONSOLE-39
+V10 — Fleet's arm cell shows harness and model id verbatim from the
+fixture, and an unpriced run's cost never reads `$0.00`.
+
+### CONSOLE-53
+A Fleet row waiting on a person (gate, clarify or escalation) offers
+"Decide", the run in context offers "Open run", and every other row
+offers "Open" (S16).
 
 ### CONSOLE-49
 The Observe inspector of a node whose configured model differs from the

@@ -348,7 +348,7 @@ T031 goes green. Commit T031 + T032 (+ those app-tier test edits).
   5. Retarget `U/scripts/build-ds-bundle.spec.ts` (DS_BUNDLE-1..3) from `dist-ds/stage_dots/every-state.html` and `.cmp-stage-dot` to a surviving profile and its class: `dist-ds/status_pip/running.html` and `.cmp-status-pip`. Confirm after `check_ui.py`'s ds-bundle step that the file exists and contains the class. If not, pick another surviving profile and name it in the commit body.
 
 In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-dot` ×18). T050 tombstones the clause in this phase. Verify the CONSOLE-1 test: if the v5 rebuild changes `fleet-view`, `fleet-row` or `fleet-empty`, update it in place (T050 rewrites the wording). Name both in the commit body. Verify `F/app/App.poll.test.ts`: if its api fake lacks `getFleetSummary`, add it as `vi.fn(async () => ({ runs: [], unreadable: [] }))` and change nothing else (named in the commit body). T048 goes green. Commit T048 + T049.
-- [ ] T050 [US3] App tier: rewrite CONSOLE-1, **retire CONSOLE-3** (tombstone with Clauses' reason), and add CONSOLE-39 and CONSOLE-53, with tests in `U/app.fleet.pw.ts`. Extend CONSOLE-35's test with the `rejected:budget` fleet row. `check_ui.py`, then `check_clauses.py`. Commit.
+- [x] T050 [US3] App tier: rewrite CONSOLE-1, **retire CONSOLE-3** (tombstone with Clauses' reason), and add CONSOLE-39 and CONSOLE-53, with tests in `U/app.fleet.pw.ts`. Extend CONSOLE-35's test with the `rejected:budget` fleet row. `check_ui.py`, then `check_clauses.py`. Commit.
 
 ---
 

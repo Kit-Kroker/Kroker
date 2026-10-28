@@ -214,6 +214,10 @@ test('V6: with no budget the rail reads off and draws no bar', async ({ page }) 
   await page.goto('/#/runs/feature-dark-mode')
   await expect(page.locator('[data-testid="rail-budget"]')).toContainText('off')
   await expect(page.locator('[data-testid="rail-budget-bar"]')).toHaveCount(0)
+  // Slice 4 (T050): a rejected:budget run shows that string on Fleet.
+  await page.goto('/')
+  const row = page.locator('[data-testid="fleet-row"]', { hasText: 'Rejected at the budget gate' })
+  await expect(row.locator('.col-outcome')).toHaveText('rejected:budget')
 })
 
 // --- The inspector (018 T033, S13/CONSOLE-49) and the rail's remaining
