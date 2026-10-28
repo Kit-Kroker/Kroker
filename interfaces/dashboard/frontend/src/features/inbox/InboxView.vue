@@ -125,6 +125,11 @@ async function onAct(actId: string, text: string): Promise<void> {
           </button>
         </div>
         <div v-if="model && selected" class="pane" data-testid="inbox-card">
+          <RouterLink
+            class="run-ref"
+            data-testid="card-run-link"
+            :to="`/runs/${selected.runId}`"
+          >{{ selected.runId }}</RouterLink>
           <p v-if="inbox.notice[selectedKeyOf()]" class="notice" data-testid="inbox-notice">
             {{ inbox.notice[selectedKeyOf()] }}
           </p>
@@ -168,5 +173,6 @@ async function onAct(actId: string, text: string): Promise<void> {
 .title { color: var(--ink-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .where { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-subtle); }
 .pane { display: flex; flex-direction: column; gap: 8px; }
+.run-ref { font-family: var(--font-mono); font-size: 11px; color: var(--link); }
 .notice { margin: 0; font-family: var(--font-mono); font-size: 11px; color: var(--status-waiting); }
 </style>

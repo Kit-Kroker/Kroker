@@ -41,6 +41,53 @@ test('run-state re-renders never drop the canvas edges', async ({ page }) => {  
 // (gate-decision / gate-approve test ids); T044 restores the clause on the
 // v5 card. CONSOLE-23's inbox half went with T041's inbox tests.
 
+test('selecting a pending node opens its card; deciding closes it and clears the mark', async ({ page }) => {  // clause: CONSOLE-5
+  await page.goto('/#/runs/feature-graph-demo')
+  // The rail carries one call to action for the recorded pending gate.
+  await expect(page.locator('[data-testid="rail-call"]')).toHaveCount(1)
+  // Selecting the node with the pending opens the same card over the canvas.
+  await page.locator('[data-testid="graph-node"][data-key="architecture"]').dispatchEvent('click')
+  const card = page.locator('[data-testid="run-card"]')
+  await expect(card).toBeVisible()
+  await expect(card).toContainText('architecture#1')
+  // Deciding there closes the card, and the next state clears both the
+  // call to action and the node's pending mark.
+  await card.locator('[data-testid="card-action"]', { hasText: 'Approve' }).click()
+  await expect(card).toHaveCount(0)
+  await expect(page.locator('[data-testid="rail-call"]')).toHaveCount(0)
+  await expect(page.locator('[data-testid="run-view"] [data-testid="pending-mark"]')).toHaveCount(0)
+})
+
+test('the rail offers one call to action per pending item, each opening the card', async ({ page }) => {  // clause: CONSOLE-40
+  await page.goto('/#/runs/feature-graph-demo')
+  const call = page.locator('[data-testid="rail-call"]')
+  await expect(call).toHaveCount(1)
+  await expect(call).toContainText('architecture#1')
+  await call.click()
+  const card = page.locator('[data-testid="run-card"]')
+  await expect(card).toBeVisible()
+  // The card carries the Inbox's actions (the same mapping).
+  await expect(card.locator('[data-testid="card-action"]')).toHaveCount(3)
+  await expect(card.locator('[data-testid="card-action"]', { hasText: 'Revise' })).toBeDisabled()
+})
+
+test('Events lists live decisions with the notes, and closed untimed decisions', async ({ page }) => {  // clause: CONSOLE-41
+  // Live (blocked) run: the human decision is timed, and both FR-022
+  // notes show.
+  await page.goto('/#/runs/feature-graph-demo')
+  const events = page.locator('[data-testid="rail-events"]')
+  await expect(events).toContainText('revise architecture r1')
+  await expect(events).toContainText('Human decisions only while the run is open.')
+  await expect(events).toContainText('automatic and timed-out decisions appear when the run ends')
+  // Closed run: gates-derived history, untimed, a non-approval reads
+  // 'not approved', and no live notes.
+  await page.goto('/#/runs/feature-closed-gates')
+  const closed = page.locator('[data-testid="rail-events"]')
+  await expect(closed).toContainText('approve architecture r1')
+  await expect(closed).toContainText('not approved merge r1')
+  await expect(closed).not.toContainText('Human decisions only while the run is open.')
+})
+
 test('a legacy run shows the no-graph empty state and no canvas', async ({ page }) => {  // clause: CONSOLE-6
   await page.goto('/#/runs/feature-add-sso')
   await expect(page.locator('[data-testid="run-graph-empty"]')).toBeVisible()

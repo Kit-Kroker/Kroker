@@ -23,7 +23,6 @@ import commandPalette from '../src/components/command_palette/command_palette.pr
 import toggleMenu from '../src/components/toggle_menu/toggle_menu.profiles'
 import toasts from '../src/components/toasts/toasts.profiles'
 import startRunModal from '../src/components/start_run_modal/start_run_modal.profiles'
-import gateDecision from '../src/components/gate_decision/gate_decision.profiles'
 import nodePalette from '../src/components/node_palette/node_palette.profiles'
 import issueList from '../src/components/issue_list/issue_list.profiles'
 import yamlPane from '../src/components/yaml_pane/yaml_pane.profiles'
@@ -58,7 +57,6 @@ export const REGISTRY: ProfileSet[] = [
   fleetRow,
   fleetTable,
   startRunModal,
-  gateDecision,
   nodePalette,
   issueList,
   yamlPane,

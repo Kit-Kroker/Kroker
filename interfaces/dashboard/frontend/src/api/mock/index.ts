@@ -11,6 +11,7 @@ import type {
   StartRunInput,
 } from '../types'
 import { createMockGraph } from './graph'
+import { BUDGET_ITEM, CLOSED_GATES_RUN, ESCALATED_RUN, HALTED_RUN, MULTISINK_RUN, RETIRED_RUN, TOOL_APPROVAL_ITEM } from './decisions'
 import { HttpStatusError } from '../errors'
 import { BUDGET_SCOPE_NOTE, totalPrice } from '../../shared/cost'
 import catalogJson from '../__fixtures__/graph/catalog.json'
@@ -78,80 +79,11 @@ function seedRuns(): Run[] {
       // features/board/__fixtures__).
       projectKey: 'kroker',
     },
-    {
-      // 018 T033 (V1): the Observe halted-into-failed fixture — the run
-      // ended on the code node's fail port; the failed sink carries the
-      // result string (mock/graph.ts over the recorded completed state).
-      id: 'feature-halted-demo',
-      title: 'Halted at the code node',
-      mode: 'greenfield',
-      repo: 'git@github.com:acme/graph-demo',
-      activeStages: [],
-      stageMarks: null,
-      status: 'failed',
-      blocker: '',
-      cost: 1.2,
-      budget: null,
-      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
-      age: '1h 05m',
-      decisions: [],
-      projectKey: null,
-    },
-    {
-      // 018 T033 (V2): the escalated fixture — the recorded
-      // escalated_revise_exhausted projection served as-is.
-      id: 'feature-escalated-demo',
-      title: 'Escalated after revise exhaustion',
-      mode: 'greenfield',
-      repo: 'git@github.com:acme/graph-demo',
-      activeStages: [],
-      stageMarks: null,
-      status: 'failed',
-      blocker: '',
-      cost: 2.0,
-      budget: null,
-      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
-      age: '3h 40m',
-      decisions: [],
-      projectKey: null,
-    },
-    {
-      // 018 T033 (V3): the multi-sink completion — the recorded completed
-      // projection on a graph whose plan leg is cut, so plan and deploy
-      // both complete the run.
-      id: 'feature-multisink-demo',
-      title: 'Completed at two sinks',
-      mode: 'greenfield',
-      repo: 'git@github.com:acme/graph-demo',
-      activeStages: [],
-      stageMarks: null,
-      status: 'done',
-      blocker: '',
-      cost: 3.4,
-      budget: null,
-      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
-      age: '2h 30m',
-      decisions: [],
-      projectKey: null,
-    },
-    {
-      // 018 T033 (R-5a/CONSOLE-51): the retention fixture — the fleet knows
-      // the run, the graph state answers unavailable.
-      id: 'feature-retired-demo',
-      title: 'Retention expired',
-      mode: 'greenfield',
-      repo: 'git@github.com:acme/graph-demo',
-      activeStages: [],
-      stageMarks: null,
-      status: 'running',
-      blocker: '',
-      cost: 0.9,
-      budget: null,
-      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
-      age: '5d',
-      decisions: [],
-      projectKey: null,
-    },
+    // 018 T033/T044: the Observe outcome fixtures live in mock/decisions.ts.
+    HALTED_RUN,
+    ESCALATED_RUN,
+    MULTISINK_RUN,
+    RETIRED_RUN,
     {
       id: 'feature-add-sso',
       title: 'Add SSO to customer portal',
@@ -331,16 +263,15 @@ function seedRuns(): Run[] {
       ],
       projectKey: 'kroker',
     },
+    // 018 T044 (R-4): the closed run carrying a non-approval gate row.
+    CLOSED_GATES_RUN,
   ]
 }
 
-// 011 R-9 (contract §7): the budget-gate entry exists on the mock only
-// behind this default-off switch, so the pinned six-item inbox and the
-// badge-count chains never see it. The assembled console opts in with
-// /?mockBudgetGate=1 (the search part precedes the hash).
-export const MOCK_BUDGET_GATE_PARAM = 'mockBudgetGate'
+// 018 T044: the tool-approval and budget seeds moved to mock/decisions.ts
+// (always-on card surfaces); the default-off URL switch retired with them.
 
-function seedInbox(budgetGate = false): InboxItem[] {
+function seedInbox(): InboxItem[] {
   return [
     {
       // The recorded blocked_at_architecture pending gate (architecture#1).
@@ -412,34 +343,21 @@ function seedInbox(budgetGate = false): InboxItem[] {
       body: 'QA fix loop hit MAX_REPAIR_ATTEMPTS. The task branch stays parked on its worktree; wave 3 is holding.',
       analysis: 'test_retry_budget flakes on wall-clock timing. A reliable fix needs an injected clock in RateLimiter, but rate_limiter/core.py is outside the task’s declared file scope. Recommend widening scope or quarantining.',
     },
-    ...(budgetGate
-      ? [
-          {
-            // The seeded budget run has budget 20, one crossing approved
-            // (limit now 40); this second crossing is round 2.
-            id: 'budget#2',
-            type: 'gate',
-            gate: 'budget',
-            runId: 'feature-graph-demo',
-            round: 2,
-            age: '1m',
-            title: 'Budget (round 2) — graph demo',
-            body: 'Run cost $40.2000 >= budget $40.00',
-          } as GateItem,
-        ]
-      : []),
+    // 018 T044: the always-on decision-card seeds (mock/decisions.ts) — the
+    // tool-approval and budget gates are the V4/V6 card surfaces.
+    TOOL_APPROVAL_ITEM,
+    BUDGET_ITEM,
   ]
 }
 
 export interface MockOptions {
   simulateLive?: boolean
-  budgetGate?: boolean
 }
 
 export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(): void } {
   const simulateLive = opts.simulateLive ?? true
   let runs: Run[] = seedRuns()
-  let inbox: InboxItem[] = seedInbox(opts.budgetGate ?? false)
+  let inbox: InboxItem[] = seedInbox()
   const graph = createMockGraph()
 
   const delay = () => new Promise<void>((r) => setTimeout(r, 120 + Math.random() * 180))

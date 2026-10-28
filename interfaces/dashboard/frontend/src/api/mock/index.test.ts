@@ -27,14 +27,15 @@ describe('mock api decision flows', () => {
     api = createMockApi({ simulateLive: false })
   })
 
-  it('seeds 14 runs and 6 inbox items, including the graph demo run', async () => {
-    // 018 T033 triage: the four Observe outcome fixtures (halted, escalated,
-    // multi-sink, retention) join the fleet — 10 + 4.
-    expect(await api.listRuns()).toHaveLength(14)
-    expect(await api.listInbox()).toHaveLength(6)
+  it('seeds 15 runs and 8 inbox items, including the graph demo run', async () => {
+    // 018 T033/T044 triage: the four Observe outcome fixtures plus the
+    // closed-gates run (15 runs), and the always-on tool-approval and
+    // budget card seeds (8 items).
+    expect(await api.listRuns()).toHaveLength(15)
+    expect(await api.listInbox()).toHaveLength(8)
   })
 
-  it('getInboxState returns the six items and no unreadable runs', async () => {
+  it('getInboxState returns the seeded items and no unreadable runs', async () => {
     // 010 T004 (RED): the mock has one snapshot, so nothing is unreadable
     // and the items are the same list listInbox serves (contract §1).
     const state = await api.getInboxState()
@@ -339,32 +340,22 @@ describe('tickCosts funds the first role (011 T007)', () => {
   })
 })
 
-// --- 011 T015 (RED): the default-off budget-gate switch ----------------------
-// MockOptions.budgetGate (default false): with it off (and by default) the
-// inbox seed stays at exactly SIX items, none of gate 'budget'; with it on a
-// SEVENTH item is appended, exactly as data-model §2.4 gives it. Nothing at
-// runtime creates a budget gate, so the switch is the only source.
+// --- 018 T044: the always-on decision-card seeds (mock/decisions.ts) --------
+// The budget and tool-approval gates are permanent inbox items now (V6/V4
+// card surfaces); the default-off URL switch retired with CONSOLE-29's old
+// test. The note math the old switch test pinned still holds.
 
-describe('the budget-gate switch (011 T015)', () => {
-  it('by default the inbox stays at six items, none of gate budget', async () => {
-    const def = createMockApi({ simulateLive: false })
-    const noOptions = createMockApi()
-    for (const api of [def, noOptions]) {
-      const inbox = await api.listInbox()
-      expect(inbox).toHaveLength(6)
-      expect(inbox.some((i) => (i as { gate?: string }).gate === 'budget')).toBe(false)
-      const state = await api.getInboxState()
-      expect(state.items).toHaveLength(6)
-      expect(state.items.some((i) => (i as { gate?: string }).gate === 'budget')).toBe(false)
-    }
-  })
-
-  it('budgetGate: true seeds the seventh item verbatim with the note math intact', async () => {
-    const api = createMockApi({ simulateLive: false, budgetGate: true })
+describe('the decision-card seeds (018 T044)', () => {
+  it('the tool-approval and budget gates are always seeded, verbatim', async () => {
+    const api = createMockApi({ simulateLive: false })
     const inbox = await api.listInbox()
-    expect(inbox).toHaveLength(7)
-    const seventh = inbox[6]
-    expect(seventh).toEqual({
+    expect(inbox).toHaveLength(8)
+    expect(inbox.find((i) => i.id === 'tool#1')).toMatchObject({
+      type: 'gate',
+      gate: 'tool_approval',
+      runId: 'feature-graph-demo',
+    })
+    expect(inbox.find((i) => i.id === 'budget#2')).toEqual({
       id: 'budget#2',
       type: 'gate',
       gate: 'budget',
@@ -381,8 +372,12 @@ describe('the budget-gate switch (011 T015)', () => {
     expect(run?.budgetThreshold).toBe(40)
   })
 
-  it('exports the URL param constant', async () => {
-    const mod = await import('./index')
-    expect(mod.MOCK_BUDGET_GATE_PARAM).toBe('mockBudgetGate')
+  it('the closed-gates run carries approve and not-approved history rows', async () => {
+    const api = createMockApi({ simulateLive: false })
+    const run = (await api.listRuns()).find((r) => r.id === 'feature-closed-gates')
+    expect(run?.decisions).toEqual([
+      { ts: '08:40', gate: 'architecture r1', outcome: 'approve', comment: '', decider: 'sam' },
+      { ts: '09:55', gate: 'merge r1', outcome: 'reject', comment: 'not approved', decider: 'policy (auto)' },
+    ])
   })
 })

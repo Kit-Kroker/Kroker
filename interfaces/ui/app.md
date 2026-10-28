@@ -39,9 +39,11 @@ The run view of a graph-executed run renders one canvas node per graph node,
 a loop-edge counter as `used/max`, and its backward edge curved. [FR-1205]
 
 ### CONSOLE-5
-Deciding a pending gate from the run view's canvas clears that gate's
-controls once the provider's next run state no longer lists it. [FR-1205,
-FR-301/302]
+Selecting a canvas node with a pending gate opens its card over the
+canvas (PRD FR-1205). Deciding there, or from the rail's call to
+action, closes the card. Once the next run state no longer lists the
+item, both the node's pending mark and the call to action are gone.
+[FR-1205, FR-301/302]
 
 ### CONSOLE-6
 A legacy run shows the no-graph empty state; the rail still shows the
@@ -92,37 +94,40 @@ node count), and the run header — title and stage strip — persists above the
 tab bar on every tab. [FR-017, FR-018]
 
 ### CONSOLE-17
-The inbox renders one entry per item the provider reports as waiting, each
-showing its kind, its run, its age and its title; the number of entries
-equals the header's inbox badge; and an entry's run link opens that run's
-page. [FR-601, FR-305]
+v5 list: one row per item (kind label, age, title, where). The count
+equals the badge. Selecting a row shows its card. The card's run
+reference opens that run. [FR-601, FR-305]
 
 ### CONSOLE-18
-On a clarify entry, accepting the suggestion sends it with that one action;
-a typed answer is sent only when it is not blank. Either way the entry
-leaves the list and the badge drops by one. [FR-601]
+Same rules on the v5 clarify card: accepting the suggestion is one
+action; a typed answer is sent only when it is not blank. [FR-601]
 
 ### CONSOLE-19
-On a gate entry, approve and reject send at once and revise is unavailable
-until a comment is entered; a decided entry leaves the list. [FR-601,
-FR-301/302]
+Same rules on the v5 gate card (generic gate names): approve and
+reject send at once; revise is unavailable until a comment is entered.
+[FR-601, FR-301/302]
 
 ### CONSOLE-20
-A merge override entry shows the verdict and one check row per check;
-override is unavailable until a justification is entered, and send-back is
-not; a resolved entry leaves the list. [FR-601, FR-304]
+Same rules on the v5 override card: the verdict and one row per check
+render; override is unavailable until a justification is entered, and
+send-back is not. [FR-601, FR-304]
 
 ### CONSOLE-21
-An escalation entry shows the analysis; retry and quarantine each resolve
-it, with or without guidance, and the entry leaves the list. [FR-601]
+The task card offers approve, revise (guidance, thaw tests) and
+reject. Each sends exactly that outcome, and retry is never sent as
+approve (R-3, V5). [FR-601]
 
 ### CONSOLE-22
-When every waiting item has been resolved the inbox shows its explicit
-empty state and the header shows no inbox badge. [FR-601]
+When every waiting item has been resolved the inbox shows "Nothing
+waiting on you" and the header shows no badge. [FR-601]
 
 ### CONSOLE-23
-A gate decided in the inbox is no longer offered for decision on that run's
-canvas. [FR-601, FR-302]
+A gate decided in the inbox is no longer offered in that run's rail.
+[FR-601, FR-302]
+
+### CONSOLE-29
+The budget card says approve grants one more increment and reject ends
+the run `rejected:budget` (V6). [FR-008, FR-701]
 
 ### CONSOLE-24
 The rail's Cost section: one row per role with calls, tokens and
@@ -149,9 +154,6 @@ The figure never folds a pricing miss in as zero. [FR-003]
 The start form accepts an optional budget; a budget that is not a number
 greater than zero blocks the start with a message, and a run started with a
 budget shows that budget on its Cost tab. [FR-006, FR-007]
-
-### CONSOLE-29
-A budget gate entry in the inbox says what approving grants. [FR-008, FR-701]
 
 ### CONSOLE-48
 The header shows Fleet · Inbox · run-in-context and Graphs · Compare ·
@@ -202,9 +204,32 @@ empty.
 The rail's Cost section has a "Revise traversals" group with one row
 per revise edge, used against max (S16).
 
+### CONSOLE-33
+V4 — The tool-escalation card offers Approve and Deny only and states
+that a timeout counts as not approved. No Halt action exists.
+
+### CONSOLE-34
+V5 — The task card states the reject consequence
+(`failed:quarantined-tasks` after the wave) before the action.
+
+### CONSOLE-40
+FR-601 — A run with pending items shows one call to action per item in
+its rail. Each opens that item's card over the canvas with the Inbox's
+actions.
+
+### CONSOLE-41
+FR-022 — The rail's Events list past decisions for a live run (human
+decisions, timed, with the "automatic and timed-out decisions appear
+when the run ends" note) and for a closed run (untimed, "not approved"
+for a closed non-approval). The rail says history is unavailable when
+neither source exists.
+
 ## Retired clauses
 
-(empty for now — slice tasks tombstone retired clauses here)
+- GATE_DECISION-1..3 — retired 018 T044: the gate_decision component is
+  deleted (the decision card replaces it; a grep shows no importer, and
+  the ds-bundle spec never referenced it). Their rules live on in
+  DECISION_CARD-1..6 and CONSOLE-5.
 
 ## Failure modes
 

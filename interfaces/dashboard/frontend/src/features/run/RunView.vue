@@ -155,14 +155,27 @@ const railHead = computed<RailHead>(() => ({
   },
 }))
 
+// FR-022: a closed run's decision history is untimed — a non-approval
+// reads 'not approved' (R-4); a live run's decisions are timed.
+const liveEvents = computed(() => {
+  const live = run.value?.status === 'running' || run.value?.status === 'blocked'
+  const decisions = run.value?.decisions ?? []
+  return {
+    decisions: live ? decisions : [],
+    closedDecisions: live ? [] : decisions,
+  }
+})
+
 const events = computed(() =>
   railEventsOf({
-    decisions: run.value?.decisions ?? [],
+    ...liveEvents.value,
     pending: state.value?.pending ?? [],
     prev: prevState.value,
     curr: state.value,
     budgetCrossings: run.value?.budgetCrossings ?? 0,
-    open: run.value?.status === 'running',
+    // A blocked run is live too — it waits on a person, and the note is
+    // exactly for that audience (FR-022).
+    open: run.value?.status === 'running' || run.value?.status === 'blocked',
   }),
 )
 
