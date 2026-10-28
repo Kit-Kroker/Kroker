@@ -272,14 +272,14 @@ T031 goes green. Commit T031 + T032 (+ those app-tier test edits).
 
   Fails.
 - [x] T035 [P] [US2] Create the five files of `decision_card` and register them. T034 goes green. Commit T034 + T035.
-- [ ] T036 [US2] RED: in `F/api/http.test.ts`:
+- [x] T036 [US2] RED: in `F/api/http.test.ts`:
   - `decideTaskGate(run, key, 'revise', 'g', true)` posts `{key, outcome:'revise', text:'g', thaw_tests:true}`;
   - `approve` and `reject` post no `thaw_tests`;
   - `decideGate` bodies are unchanged (PIN);
   - `mapClosed` maps `gates` into `decisions` (approved → `approve`; not approved → `reject` with comment `not approved`), and an empty `gates` gives `[]`.
 
   In `F/api/mock/index.test.ts`, rewrite "escalation retry resumes the task" to the corrected mapping (R-3) and add `decideTaskGate` cases. Fails.
-- [ ] T037 [US2] In `F/api/types.ts` add `decideTaskGate` to `DashboardApi` and **remove `resolveEscalation`** (data-model §3.1). In `F/api/http.ts`, `decide()` gains an optional `thawTests`, sent only when true; add `decideTaskGate`; delete `resolveEscalation`; fix `mapClosed`. In `F/api/mock/index.ts` make the same change, keeping the mock seed. T036 goes green, and `vue-tsc` proves both providers. Commit T036 + T037.
+- [x] T037 [US2] In `F/api/types.ts` add `decideTaskGate` to `DashboardApi` and **remove `resolveEscalation`** (data-model §3.1). In `F/api/http.ts`, `decide()` gains an optional `thawTests`, sent only when true; add `decideTaskGate`; delete `resolveEscalation`; fix `mapClosed`. In `F/api/mock/index.ts` make the same change, keeping the mock seed. T036 goes green, and `vue-tsc` proves both providers. Commit T036 + T037.
 - [ ] T038 [US2] RED: create `F/shared/decisionCard.adapter.test.ts`. `decisionCardOf(item, timeouts)` gives, per R-3's table:
   - clarify: accept suggestion only when there is a suggestion, and answer needs text;
   - generic gate: approve, revise (needs text), reject;

@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import snapshot from './__fixtures__/fleet-snapshot.json'
-import { mapInboxState, mapSnapshot } from './http'
+import { createHttpApi, mapInboxState, mapSnapshot } from './http'
 
 const NOW = new Date('2026-08-18T11:00:00Z')
 
@@ -281,5 +281,99 @@ describe('011 budget and roles mapping', () => {
     unpriced.cost_usd_total = 0.0
     const row = mapSnapshot(s as never, NOW).runs.find((r) => r.id === 'feature-unpriced')!
     expect(row.cost).toBeNull()
+  })
+})
+
+// --- 018 T036 (RED): decideTaskGate replaces resolveEscalation (R-3), and a
+// closed run's `gates` map onto decisions through mapClosed. The write-verb
+// cases reuse client.test.ts's vi.stubGlobal('fetch') harness; the POST body
+// is read off the recorded fetch call.
+
+describe('decideTaskGate and mapClosed (018 T036)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const postSpy = () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  it('decideTaskGate with thawTests posts the body plus thaw_tests', async () => {
+    const fetchMock = postSpy()
+    await createHttpApi().decideTaskGate('r1', 'k1', 'revise', 'g', true)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(path).toBe('/api/runs/r1/decide')
+    expect(JSON.parse(String(init.body))).toEqual({ key: 'k1', outcome: 'revise', text: 'g', thaw_tests: true })
+  })
+
+  it('decideTaskGate without thawTests posts no thaw_tests key at all', async () => {
+    const fetchMock = postSpy()
+    const api = createHttpApi()
+    await api.decideTaskGate('r1', 'k1', 'approve', '', false)
+    await api.decideTaskGate('r1', 'k1', 'reject', '', false)
+    for (const call of fetchMock.mock.calls) {
+      const body = JSON.parse(String((call[1] as RequestInit).body))
+      expect(body).toEqual({ key: 'k1', outcome: body.outcome, text: '' })
+      expect('thaw_tests' in body).toBe(false)
+    }
+  })
+
+  it('decideGate bodies are unchanged and resolveEscalation is gone (PIN)', async () => {
+    const fetchMock = postSpy()
+    const api = createHttpApi()
+    await api.decideGate('r1', 'k1', 'approve', 'ok')
+    const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(path).toBe('/api/runs/r1/decide')
+    expect(JSON.parse(String(init.body))).toEqual({ key: 'k1', outcome: 'approve', text: 'ok' })
+    expect(typeof (api as Record<string, unknown>)['resolveEscalation']).toBe('undefined')
+  })
+
+  it("a closed run's gates map onto decisions, approve and not-approved alike", () => {
+    const s = {
+      runs: [],
+      closed: [
+        {
+          run_id: 'r-closed',
+          title: 'Closed run',
+          mode: 'brownfield',
+          repo_url: 'r',
+          terminal_stage: 'verify',
+          outcome: 'deployed:x',
+          cost_usd_total: 0,
+          budget_usd: null,
+          started_at: '2026-09-14T09:00:00Z',
+          gates: [
+            { gate: 'architecture', round: 2, approved: true, decided_by: 'sam', decided_at: '2026-09-14T09:31:00Z' },
+            { gate: 'merge', round: 1, approved: false, decided_by: 'policy', decided_at: '2026-09-14T11:02:00Z' },
+          ],
+        },
+      ],
+    }
+    const closed = mapSnapshot(s as never, NOW).runs.find((r) => r.id === 'r-closed')!
+    expect(closed.decisions).toEqual([
+      { ts: '09:31', gate: 'architecture r2', outcome: 'approve', comment: '', decider: 'sam' },
+      { ts: '11:02', gate: 'merge r1', outcome: 'reject', comment: 'not approved', decider: 'policy' },
+    ])
+  })
+
+  it('a closed run without gates (or with none) maps to an empty decisions list', () => {
+    const bare = {
+      runs: [],
+      closed: [
+        {
+          run_id: 'r-bare', title: 'Bare', mode: 'brownfield', repo_url: 'r',
+          terminal_stage: 'verify', outcome: 'deployed:x', cost_usd_total: 0,
+          budget_usd: null, started_at: '2026-09-14T09:00:00Z',
+        },
+      ],
+    }
+    expect(mapSnapshot(bare as never, NOW).runs.find((r) => r.id === 'r-bare')!.decisions).toEqual([])
+
+    const empty = structuredClone(bare) as { closed: Record<string, unknown>[] }
+    empty.closed[0]['gates'] = []
+    expect(mapSnapshot(empty as never, NOW).runs.find((r) => r.id === 'r-bare')!.decisions).toEqual([])
   })
 })

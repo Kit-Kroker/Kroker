@@ -125,8 +125,10 @@ export const useInboxStore = defineStore('inbox', () => {
   async function resolveEscalation(
     runId: string, key: string, retry: boolean, guidance: string,
   ): Promise<void> {
+    // 018 T037 stopgap: the wire action is decideTaskGate now (T041 renames
+    // this store action); retry maps to approve, quarantine to reject.
     await send(entryKey({ runId, id: key }), () =>
-      api.resolveEscalation(runId, key, retry, guidance))
+      api.decideTaskGate(runId, key, retry ? 'approve' : 'reject', guidance, false))
   }
 
   function setDraft(id: string, v: string) {

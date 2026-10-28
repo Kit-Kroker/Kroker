@@ -535,13 +535,16 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
       }
     },
 
-    async resolveEscalation(runId: string, key: string, retry: boolean, guidance: string) {
+    // 018 T037 (data-model §3.1): the task gate replaces the dedicated
+    // escalation resolution; retry maps to approve, quarantine to reject,
+    // and the thaw flag rides only when true.
+    async decideTaskGate(runId: string, key: string, outcome: GateOutcome, guidance: string, thawTests: boolean) {
       await delay()
       const it = inbox.find((i) => i.id === key && i.runId === runId && i.type === 'escalation') as EscalationItem | undefined
       if (!it) throw new HttpStatusError(404, `no pending item ${key} on ${runId}`)
       removeItem(key)
-      if (retry) {
-        addDecision(it.runId, { gate: 'escalation T-07', outcome: 'approve', comment: `retry w/ guidance: ${guidance || '(none)'}` })
+      if (outcome === 'approve') {
+        addDecision(it.runId, { gate: 'escalation T-07', outcome: 'approve', comment: `retry w/ guidance: ${guidance || '(none)'}${thawTests ? ' (tests thawed)' : ''}` })
         patchRun(it.runId, { status: 'running', blocker: 'repair attempt 4 (guided)' })
       } else {
         addDecision(it.runId, { gate: 'escalation T-07', outcome: 'reject', comment: guidance ? `quarantined: ${guidance}` : 'quarantined' })

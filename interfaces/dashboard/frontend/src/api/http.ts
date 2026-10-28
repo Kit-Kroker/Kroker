@@ -125,7 +125,15 @@ function mapClosed(s: any, marks: Record<string, DotState> | null | undefined, n
     budgetCrossings: s.budget_crossings ?? 0,
     budgetNotice: null,
     age: age(s.started_at, now),
-    decisions: [],
+    // 018 R-4: a closed run's gates are its decision history — approved maps
+    // to approve, anything else to reject with comment 'not approved'.
+    decisions: (s.gates ?? []).map((g: any) => ({
+      ts: hhmm(g.decided_at),
+      gate: `${g.gate} r${g.round}`,
+      outcome: g.approved ? ('approve' as const) : ('reject' as const),
+      comment: g.approved ? '' : 'not approved',
+      decider: g.decided_by,
+    })),
     // 002 G4: same rule on closed rows (run_summary replay or old payload).
     projectKey: s.project_key ?? null,
   }
@@ -241,9 +249,11 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
       decide(runId, key, {
         outcome: approve ? 'approve' : 'revise', text: justification,
       }),
-    resolveEscalation: (runId, key, retry, guidance) =>
+    // 018 data-model §3.1: thaw_tests rides only when true.
+    decideTaskGate: (runId, key, outcome, guidance, thawTests) =>
       decide(runId, key, {
-        outcome: retry ? 'approve' : 'reject', text: guidance,
+        outcome, text: guidance,
+        ...(thawTests ? { thaw_tests: true } : {}),
       }),
 
     async startRun(input: StartRunInput) {

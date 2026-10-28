@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   decideGate: vi.fn(),
   overrideMerge: vi.fn(),
   resolveEscalation: vi.fn(),
+  decideTaskGate: vi.fn(),
 }))
 vi.mock('../api/client', () => ({ api }))
 
@@ -228,6 +229,7 @@ describe('useInboxStore', () => {
     api.decideGate.mockResolvedValue(undefined)
     api.overrideMerge.mockResolvedValue(undefined)
     api.resolveEscalation.mockResolvedValue(undefined)
+    api.decideTaskGate.mockResolvedValue(undefined)
 
     await store.answerClarify('r1', 'q1', 'text')
     expect(api.answerClarify).toHaveBeenCalledWith('r1', 'q1', 'text')
@@ -240,10 +242,12 @@ describe('useInboxStore', () => {
     const overrideArgs = api.overrideMerge.mock.calls[0] as unknown[]
     expect(overrideArgs[2]).toBe(true)
 
+    // 018 T037: the store's escalation action rides the task gate now
+    // (retry -> approve, quarantine -> reject, no thaw); T041 renames it.
     await store.resolveEscalation('r1', 'e1', false, '')
-    expect(api.resolveEscalation).toHaveBeenCalledWith('r1', 'e1', false, '')
-    const escalationArgs = api.resolveEscalation.mock.calls[0] as unknown[]
-    expect(escalationArgs[2]).toBe(false)
+    expect(api.decideTaskGate).toHaveBeenCalledWith('r1', 'e1', 'reject', '', false)
+    const escalationArgs = api.decideTaskGate.mock.calls[0] as unknown[]
+    expect(escalationArgs[4]).toBe(false)
   })
 
   // --- contract §2.3: release, cleanup, namespacing

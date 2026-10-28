@@ -93,13 +93,27 @@ describe('mock api decision flows', () => {
   })
 
   it('escalation retry resumes the task', async () => {
-    await api.resolveEscalation('fix-rate-limit-retry', 'e1', true, 'inject a clock')
+    // 018 T036 (R-3): retry goes through decideTaskGate now — approve, with
+    // no thaw; the observable outcome is unchanged.
+    await api.decideTaskGate('fix-rate-limit-retry', 'e1', 'approve', 'inject a clock', false)
     const run = await api.getRun('fix-rate-limit-retry')
     expect(run?.blocker).toContain('repair attempt 4')
   })
 
+  it('decideTaskGate with thawed tests marks the seed and denies un-pending keys', async () => {
+    // Thaw revision: the entry leaves the inbox like any decide.
+    await api.decideTaskGate('fix-rate-limit-retry', 'e1', 'revise', 'retry with the clock', true)
+    expect((await api.listInbox()).find((i) => i.id === 'e1')).toBeUndefined()
+
+    // Run-and-key scoping is the same loud failure as every other verb.
+    await expect(
+      api.decideTaskGate('feature-add-sso', 'nope', 'approve', '', false),
+    ).rejects.toThrow('no pending item nope on feature-add-sso')
+  })
+
   it('escalation quarantine keeps the wave going', async () => {
-    await api.resolveEscalation('fix-rate-limit-retry', 'e1', false, '')
+    // 018 T037: quarantine is the task gate's reject.
+    await api.decideTaskGate('fix-rate-limit-retry', 'e1', 'reject', '', false)
     const run = await api.getRun('fix-rate-limit-retry')
     expect(run?.blocker).toContain('quarantined')
     expect(run?.status).toBe('running')

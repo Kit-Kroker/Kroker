@@ -156,7 +156,8 @@ export interface DashboardApi {
   answerClarify(runId: string, key: string, answer: string): Promise<void>
   decideGate(runId: string, key: string, outcome: GateOutcome, comment: string): Promise<void>
   overrideMerge(runId: string, key: string, approve: boolean, justification: string): Promise<void>
-  resolveEscalation(runId: string, key: string, retry: boolean, guidance: string): Promise<void>
+  /** 018 data-model §3.1: the task gate — an optional thawed-tests flag rides only when true. */
+  decideTaskGate(runId: string, key: string, outcome: GateOutcome, guidance: string, thawTests: boolean): Promise<void>
   startRun(input: StartRunInput): Promise<Run>
   subscribe(cb: (s: FleetState) => void): () => void
 
