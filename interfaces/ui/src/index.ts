@@ -1,8 +1,6 @@
 export * from './profile'
 export { default as StatusPip } from './components/status_pip/StatusPip.vue'
 export { default as StatusTag } from './components/status_tag/StatusTag.vue'
-export { default as StageDots } from './components/stage_dots/StageDots.vue'
-export type { DotState, StageDot } from './components/stage_dots/StageDots.vue'
 export { default as Button } from './components/button/Button.vue'
 export type { ButtonVariant, ButtonSize } from './components/button/Button.vue'
 export { default as SegmentedControl } from './components/segmented_control/SegmentedControl.vue'

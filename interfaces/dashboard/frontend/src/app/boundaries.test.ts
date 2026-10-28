@@ -467,10 +467,8 @@ describe('shared layer layout (T004)', () => {
       'shared/graphCanvas.adapter.test.ts',
       'shared/format.ts',
       'shared/format.test.ts',
-      'shared/stageState.ts',
-      'shared/stageState.test.ts',
-      'shared/stageStrip.adapter.ts',
-      'shared/stageStrip.adapter.test.ts',
+      // 018 T049 (S6): the stage strip retired — stageState and
+      // stageStrip.adapter are deleted, not moved.
     ]
     const missing = targets.filter((rel) => !existsSync(join(srcRoot, rel)))
     expect(missing).toEqual([])
@@ -562,10 +560,9 @@ describe('screen folders layout (T005)', () => {
 // test file). All six fail today: shared/ does not exist yet, and
 // adapters/fleet.ts still exports toStageDots.
 describe('shared split shape (T004)', () => {
-  it('shared/stageStrip.adapter exports toStageDots', async () => {
-    const m = await import('../shared/stageStrip.adapter')
-    expect(typeof m.toStageDots).toBe('function')
-  })
+  // 018 T049 (S6): the stageStrip.adapter and stageState export pins were
+  // deleted with the modules — the strip retired. Their absence is pinned
+  // by the layout test above (the files must not exist).
 
   it('the fleet adapter keeps toFleetRow and no longer exports toStageDots', async () => {
     // T004 pinned the remnant at adapters/fleet; T005 moved it to the
@@ -582,11 +579,6 @@ describe('shared split shape (T004)', () => {
     // pin must stay opaque to the transformer and throw at runtime.
     const gone = '../stores/fleet'
     await expect(import(/* @vite-ignore */ gone)).rejects.toThrow()
-  })
-
-  it('shared/stageState exports stageStates', async () => {
-    const m = await import('../shared/stageState')
-    expect(typeof m.stageStates).toBe('function')
   })
 
   it('shared/graphCanvas.adapter exports the canvas mappers', async () => {

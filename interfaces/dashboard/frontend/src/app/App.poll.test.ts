@@ -28,6 +28,7 @@ vi.mock('../api/client', () => ({
     listRuns: vi.fn(async () => []),
     listInbox: vi.fn(async () => []),
     getInboxState: vi.fn(async () => ({ items: [], unreadable: [] })),
+    getFleetSummary: vi.fn(async () => ({ runs: [], unreadable: [] })),
     startRun: vi.fn(),
   },
   // board.api selects its transport through API_MODE at import time

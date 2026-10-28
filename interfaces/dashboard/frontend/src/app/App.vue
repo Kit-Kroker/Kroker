@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useFleetStore } from '../shared/fleet.store'
+import { useFleetSummaryStore } from '../shared/fleetSummary.store'
 import { useInboxStore } from './inbox.store'
 import { useCatalogStore } from '../shared/catalog.store'
 import { usePrefsStore } from './prefs.store'
@@ -15,6 +16,7 @@ import CommandPalette from '@kroker/ui/components/command_palette/CommandPalette
 import ToggleMenu from '@kroker/ui/components/toggle_menu/ToggleMenu.vue'
 
 const fleet = useFleetStore()
+const fleetSummary = useFleetSummaryStore()
 const inbox = useInboxStore()
 const catalog = useCatalogStore()
 const prefs = usePrefsStore()
@@ -122,10 +124,12 @@ onMounted(() => {
   // starts unconditionally.
   void catalog.load()
   void fleet.refresh()
+  void fleetSummary.refresh()
   void inbox.refresh()
   pollId = setInterval(() => {
     if (document.visibilityState === 'visible') {
       void fleet.refresh()
+      void fleetSummary.refresh()
       void inbox.refresh()
     }
   }, 5000)

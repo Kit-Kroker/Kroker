@@ -12,6 +12,7 @@ import type {
 } from '../types'
 import { createMockGraph } from './graph'
 import { BUDGET_ITEM, CLOSED_GATES_RUN, ESCALATED_RUN, HALTED_RUN, MULTISINK_RUN, RETIRED_RUN, TOOL_APPROVAL_ITEM } from './decisions'
+import { mockFleetSummary } from './fleetSummary'
 import { HttpStatusError } from '../errors'
 import { BUDGET_SCOPE_NOTE, totalPrice } from '../../shared/cost'
 import catalogJson from '../__fixtures__/graph/catalog.json'
@@ -405,6 +406,10 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
     async getInboxState() {
       await delay()
       return { items: clone(inbox), unreadable: [] }
+    },
+    async getFleetSummary() {
+      await delay()
+      return mockFleetSummary(runs.map((r) => r.id))
     },
 
     async answerClarify(runId: string, key: string, answer: string) {

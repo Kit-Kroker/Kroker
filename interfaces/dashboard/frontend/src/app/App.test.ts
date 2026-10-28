@@ -10,6 +10,7 @@ vi.mock('../api/client', () => ({
     listInbox: vi.fn(async () => []),
     // 010 T007: the store reads getInboxState now; still nothing waiting.
     getInboxState: vi.fn(async () => ({ items: [], unreadable: [] })),
+    getFleetSummary: vi.fn(async () => ({ runs: [], unreadable: [] })),
   },
   // board.api selects its transport through API_MODE at import time
   API_MODE: 'mock' as const,

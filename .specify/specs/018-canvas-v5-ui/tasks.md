@@ -329,7 +329,7 @@ T031 goes green. Commit T031 + T032 (+ those app-tier test edits).
   Those fakes cover the Temporal side. The route also reads `poller.snapshot()`, and that file offers only `_NoPoller`, so write a minimal snapshot fake (a list of run ids, open and closed) with this test. Create `tests/test_018_diff_guard.py` (Routes rule 5), skipped unless `KROKER_DIFF_GUARD=1`. Fails.
 - [x] T046 [US3] Create `D/fleet_summary.py` (data-model §2.1) and `D/read_routes.py`, registering `GET /api/fleet/summary`. Add the single `register_read_routes(...)` call in `D/api.py` `create_router`. T045 goes green, and the diff guard passes with `KROKER_DIFF_GUARD=1`. Commit T045 + T046.
 - [x] T047 [US3] Create `scripts/dump_read_fixtures.py`, which builds `F/api/__fixtures__/read/fleet-summary.json` from the T045 test inputs, never live data. Create `tests/test_read_fixtures_fresh.py`, pinned the way `tests/test_graph_fixtures_fresh.py` is. RED, then green in the same commit: the fixture is generated, and the freshness test fails on a hand-edited copy (a test case). Commit.
-- [ ] T048 [US3] RED: create `F/api/http-read.test.ts`: `mapFleetSummary` on the recorded fixture gives camelCase `FleetSummary` (data-model §3.2). In `F/features/fleet/fleet.adapter.test.ts`:
+- [x] T048 [US3] RED: create `F/api/http-read.test.ts`: `mapFleetSummary` on the recorded fixture gives camelCase `FleetSummary` (data-model §3.2). In `F/features/fleet/fleet.adapter.test.ts`:
   - rows carry v5's columns;
   - the arm reads `harness × model` verbatim (V10);
   - the outcome shows the result string; `rejected:budget` is shown as served and `halted` never appears (V1, V6);
@@ -337,7 +337,7 @@ T031 goes green. Commit T031 + T032 (+ those app-tier test edits).
   - the open label is `Decide` for runs waiting on a person, `Open run` for the run in context, and `Open` otherwise (S16).
 
   Add `F/api/mock/fleetSummary.ts` cases to `F/api/mock/index.test.ts`. Rewrite `F/features/fleet/FleetTable.test.ts` and `F/features/fleet/FleetView.test.ts` for the v5 rows. The "one stage dot per canonical stage, 18 marks" case is deleted with CONSOLE-3 (S6). Fails.
-- [ ] T049 [US3] Create `F/api/read-types.ts` (fleet part), `F/api/http-read.ts`, `F/api/mock/fleetSummary.ts` and `F/shared/fleetSummary.store.ts`, refreshed with the fleet poll in `F/app/App.vue` (one request per refresh). Rebuild `F/features/fleet/FleetView.vue` and `FleetTable.vue` to v5, and drop `toStageDots` from `F/features/fleet/fleet.adapter.ts`. Then retire the strip completely (S6, SC-009):
+- [x] T049 [US3] Create `F/api/read-types.ts` (fleet part), `F/api/http-read.ts`, `F/api/mock/fleetSummary.ts` and `F/shared/fleetSummary.store.ts`, refreshed with the fleet poll in `F/app/App.vue` (one request per refresh). Rebuild `F/features/fleet/FleetView.vue` and `FleetTable.vue` to v5, and drop `toStageDots` from `F/features/fleet/fleet.adapter.ts`. Then retire the strip completely (S6, SC-009):
 - Re-home `DotState`: declare it in `F/api/types.ts` exactly as data-model §5, and point `F/api/http.ts` at it. The `Run.stageMarks` wire field is unchanged.
 - Delete `F/shared/stageStrip.adapter.ts`, `F/shared/stageState.ts` and their two tests. Their only importers (`RunView.vue`, `fleet.adapter.ts`) lost the strip in T032 and T048; confirm by grep that nothing else imports them (SG-3 if something does).
 - **In this order** (reviewer tasks-3):

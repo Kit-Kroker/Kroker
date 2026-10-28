@@ -381,3 +381,40 @@ describe('the decision-card seeds (018 T044)', () => {
     ])
   })
 })
+
+// --- 018 T048 (RED): the fleet summary mock. T049 lands mock/fleetSummary.ts
+// and wires getFleetSummary into createMockApi; today the method is absent,
+// which is the RED. Row count is pinned structurally against listRuns() (the
+// seed count is the other describe's pin, not repeated here).
+
+describe('the fleet summary mock (018 T048)', () => {
+  let api: ReturnType<typeof createMockApi>
+  beforeEach(() => {
+    api = createMockApi({ simulateLive: false })
+  })
+
+  it('answers with one row per seeded run id', async () => {
+    const summary = await api.getFleetSummary()
+    expect(summary.runs).toHaveLength((await api.listRuns()).length)
+    expect(summary.runs.map((r) => r.runId).sort()).toEqual(
+      (await api.listRuns()).map((r) => r.id).sort(),
+    )
+  })
+
+  it('the graph-demo row carries the default graph name and the opencode arm', async () => {
+    const row = (await api.getFleetSummary()).runs.find((r) => r.runId === 'feature-graph-demo')
+    expect(row).toBeDefined()
+    expect(row!.graphName).toBe('default')
+    expect(row!.arm).toMatchObject({ harness: 'opencode' })
+  })
+
+  it('feature-add-sso is the legacy row: no graph sha', async () => {
+    const row = (await api.getFleetSummary()).runs.find((r) => r.runId === 'feature-add-sso')
+    expect(row).toBeDefined()
+    expect(row!.graphSha).toBeNull()
+  })
+
+  it('unreadable is empty', async () => {
+    expect((await api.getFleetSummary()).unreadable).toEqual([])
+  })
+})

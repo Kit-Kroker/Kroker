@@ -1,9 +1,9 @@
-// T5 (sbatch-2026-10-19, RED): the fleet view's honest states, mirroring
-// InboxView's 010 treatment (contracts/inbox-screen.md §3.1 shape). The
-// store is seeded directly -- the view must not refresh on mount, so no
-// api mock exists in this file. The RED cause is the missing state
-// branches: FleetView today always renders the table, come what may.
-import { describe, it, expect, beforeEach } from 'vitest'
+// v5 FleetView (018 T048 RED): the view composes the fleet and fleetSummary
+// stores into FleetTable's v5 rows and forwards prefs.runInContext. The
+// honest-state rules (loading / load-error / stale banner) are ported as-is.
+// The 'one stage dot per canonical stage' case is DELETED with CONSOLE-3
+// (S6 retires the stage strip; T050 tombstones the clause).
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia, getActivePinia } from 'pinia'
@@ -11,9 +11,19 @@ import FleetView from './FleetView.vue'
 import FleetTable from './FleetTable.vue'
 import { useFleetStore } from '../../shared/fleet.store'
 import { useCatalogStore } from '../../shared/catalog.store'
+import { usePrefsStore } from '../../app/prefs.store'
 import catalogJson from '../../api/__fixtures__/graph/catalog.json'
 import type { CatalogWire } from '../../api/graph-types'
 import type { Run } from '../../api/types'
+
+// T049 lands shared/fleetSummary.store.ts. The mock is a vi.hoisted state
+// object the factory closes over -- no import of the absent module anywhere
+// (Vite resolves even dynamic literal imports at transform time), so this
+// file's RED stays scoped to the view wiring.
+const summaryState = vi.hoisted(() => ({ byRun: {} as Record<string, unknown> }))
+vi.mock('../../shared/fleetSummary.store', () => ({
+  useFleetSummaryStore: () => summaryState,
+}))
 
 const RouterLinkStub = {
   props: ['to'],
@@ -26,10 +36,21 @@ const mkRun = (over: Partial<Run> = {}): Run => ({
   decisions: [], ...over,
 })
 
+const summaryOf = (runId: string, graphName: string | null) => ({
+  runId,
+  graphSha: graphName ? 'a021c25b8f7e' : null,
+  graphName,
+  arm: graphName ? { harness: 'opencode', model: 'glm' } : null,
+  traversals: [],
+  outcome: null,
+  where: [],
+  gateTimeouts: [],
+})
+
 beforeEach(() => {
   setActivePinia(createPinia())
-  // FleetTable maps rows through catalog.canonicalStages; seed the fixture
-  // exactly like FleetTable.test.ts so rendering never depends on a load.
+  // The catalog seed FleetTable's old path needed; harmless if the v5 table
+  // stops reading it, so it stays.
   useCatalogStore().catalog = catalogJson as unknown as CatalogWire
 })
 
@@ -38,7 +59,7 @@ const mountView = (): VueWrapper =>
     global: { plugins: [getActivePinia() as never], stubs: { RouterLink: RouterLinkStub } },
   })
 
-describe('FleetView states', () => {
+describe('FleetView states (ported)', () => {
   it('not loaded, no error: only the loading state shows, the table waits', () => {
     const fleet = useFleetStore()
     fleet.runs = []
@@ -76,5 +97,25 @@ describe('FleetView states', () => {
     expect(w.find('[data-testid="fleet-load-error"]').exists()).toBe(false)
     expect(w.findComponent(FleetTable).exists()).toBe(true)
     expect(w.findAll('[data-testid="fleet-row"]')).toHaveLength(2)
+  })
+})
+
+describe('FleetView composes the v5 table (018 T048 RED)', () => {
+  it('passes rows built from the fleet and summary stores and prefs.runInContext', () => {
+    const fleet = useFleetStore()
+    fleet.runs = [mkRun({ id: 'r1' }), mkRun({ id: 'r2' })]
+    fleet.loaded = true
+    fleet.loadError = null
+    summaryState.byRun = { r1: summaryOf('r1', 'default') }
+    usePrefsStore().runInContext = 'r1'
+
+    const w = mountView()
+    const table = w.findComponent(FleetTable)
+    expect(table.exists()).toBe(true)
+    const rows = table.props('rows') as Array<Record<string, unknown>>
+    expect(rows).toHaveLength(2)
+    expect(rows[0]['graph']).toBe('default')
+    expect(rows[1]['graph']).toBe('—')
+    expect(table.props('runInContext')).toBe('r1')
   })
 })

@@ -1,5 +1,4 @@
 import type { ProfileSet } from '../src/profile'
-import stageDots from '../src/components/stage_dots/stage_dots.profiles'
 import statusPip from '../src/components/status_pip/status_pip.profiles'
 import statusTag from '../src/components/status_tag/status_tag.profiles'
 import stat from '../src/components/stat/stat.profiles'
@@ -15,8 +14,6 @@ import filterChip from '../src/components/filter_chip/filter_chip.profiles'
 import field from '../src/components/field/field.profiles'
 import decisionCard from '../src/components/decision_card/decision_card.profiles'
 import checkRow from '../src/components/check_row/check_row.profiles'
-import fleetRow from '../src/components/fleet_row/fleet_row.profiles'
-import fleetTable from '../src/components/fleet_table/fleet_table.profiles'
 import appHeader from '../src/components/app_header/app_header.profiles'
 import footerBar from '../src/components/footer_bar/footer_bar.profiles'
 import commandPalette from '../src/components/command_palette/command_palette.profiles'
@@ -42,7 +39,6 @@ export const REGISTRY: ProfileSet[] = [
   decisionCard,
   statusPip,
   statusTag,
-  stageDots,
   stat,
   listRow,
   detailPane,
@@ -54,8 +50,6 @@ export const REGISTRY: ProfileSet[] = [
   toggleMenu,
   tabBar,
   toasts,
-  fleetRow,
-  fleetTable,
   startRunModal,
   nodePalette,
   issueList,

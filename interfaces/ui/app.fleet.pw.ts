@@ -15,8 +15,6 @@ test('the fleet view renders rows from the provider', async ({ page }) => {  // 
   await expect(page.locator('[data-testid="fleet-empty"]')).toHaveCount(0)
 })
 
-test('the fleet strip renders one mark per served canonical stage', async ({ page }) => {  // clause: CONSOLE-3
-  const firstRow = page.locator('[data-testid="fleet-row"]').first()
-  await expect(firstRow.locator('[data-testid="stage-dot"]')).toHaveCount(18)
-  await expect(firstRow.locator('[data-testid="stage-dot"]').nth(4)).toHaveAttribute('title', /^research · /)
-})
+// 018 T049 (S6): the CONSOLE-3 test ('the fleet strip renders one mark per
+// served canonical stage') is deleted with the stage strip; T050 tombstones
+// the clause. The Observe canvas is the per-run stage spine (FR-601).

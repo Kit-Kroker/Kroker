@@ -1,9 +1,9 @@
 import type {
-  ClarifyItem, DashboardApi, Decision, EscalationItem, FleetState, GateItem,
+  ClarifyItem, DashboardApi, Decision, DotState, EscalationItem, FleetState, GateItem,
   GateOutcome, InboxItem, InboxState, OverrideItem, RoleCost, Run, StartRunInput, Status,
 } from './types'
-import type { DotState } from '@kroker/ui/components/stage_dots/StageDots.vue'
 import { createHttpGraphApi } from './http-graph'
+import { mapFleetSummary } from './http-read'
 import { HttpStatusError } from './errors'
 import { totalPrice } from '../shared/cost'
 
@@ -237,6 +237,7 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
     async getRun(id) { return (await snapshot()).runs.find((r) => r.id === id) },
     async listInbox() { return (await snapshot()).inbox },
     async getInboxState() { return mapInboxState(await json('/inbox')) },
+    async getFleetSummary() { return mapFleetSummary(await json('/fleet/summary')) },
 
     async answerClarify(runId, key, answer) {
       await json(`/runs/${encodeURIComponent(runId)}/answer`, {

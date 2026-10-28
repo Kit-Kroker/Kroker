@@ -2,10 +2,14 @@ import type {
   CatalogWire, GraphResponse, GraphStateResponse, GraphWire, LoadWire, ParseWire, SaveWire,
   SerializeWire, ValidationWire,
 } from './graph-types'
-import type { DotState } from '@kroker/ui/components/stage_dots/StageDots.vue'
+import type { FleetSummary } from './read-types'
 
 export type Status = 'running' | 'blocked' | 'failed' | 'done'
 export type GateOutcome = 'approve' | 'revise' | 'reject'
+
+// 018 T049 (data-model §5): DotState re-homed from the deleted stage_dots
+// component; it stays only as the value type of Run.stageMarks.
+export type DotState = 'pending' | 'active' | 'done' | 'blocked' | 'failed' | 'skipped'
 export type ProjectMode = 'brownfield' | 'greenfield'
 
 export interface Decision {
@@ -153,6 +157,8 @@ export interface DashboardApi {
   getRun(id: string): Promise<Run | undefined>
   listInbox(): Promise<InboxItem[]>
   getInboxState(): Promise<InboxState>
+  /** 018 R-6: the v5 Fleet columns' summary read (one request per poll). */
+  getFleetSummary(): Promise<FleetSummary>
   answerClarify(runId: string, key: string, answer: string): Promise<void>
   decideGate(runId: string, key: string, outcome: GateOutcome, comment: string): Promise<void>
   overrideMerge(runId: string, key: string, approve: boolean, justification: string): Promise<void>

@@ -230,6 +230,14 @@ neither source exists.
   deleted (the decision card replaces it; a grep shows no importer, and
   the ds-bundle spec never referenced it). Their rules live on in
   DECISION_CARD-1..6 and CONSOLE-5.
+- FLEET_ROW-*, FLEET_TABLE-*, STAGE_DOTS-* — retired 018 T049 (S6): the
+  v5 Fleet table is screen-local (features/fleet/FleetTable.vue over
+  fleetRows), and the stage strip retired with CONSOLE-3 — the Observe
+  canvas is the per-run stage spine (FR-601). A grep shows no importer
+  beyond the removed showcase entries; the ds-bundle contract is
+  retargeted to status_pip (DS_BUNDLE-1..3).
+- CONSOLE-3 — retired 018 T050 (S6): the fleet stage strip; the per-run
+  stage spine is the Observe canvas (FR-601).
 
 ## Failure modes
 

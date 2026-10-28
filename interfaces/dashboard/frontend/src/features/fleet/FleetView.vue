@@ -1,17 +1,27 @@
 <script setup lang="ts">
+// 018 T049 (S6): the v5 Fleet view — the table's rows come from the fleet
+// store and the fleet-summary read (one request per poll, App.vue refreshes
+// both), with prefs.runInContext marking the Open-run row. The three honest
+// states and the stale banner keep their rules.
 import { computed } from 'vue'
 import { useFleetStore } from '../../shared/fleet.store'
+import { useFleetSummaryStore } from '../../shared/fleetSummary.store'
+import { usePrefsStore } from '../../app/prefs.store'
 import FleetTable from './FleetTable.vue'
+import { fleetRows } from './fleet.adapter'
 
 const fleet = useFleetStore()
-const summary = computed(() => `${fleet.runs.length} runs · ${fleet.blockedCount} blocked on humans`)
+const summary = useFleetSummaryStore()
+const prefs = usePrefsStore()
+
+const rows = computed(() => fleetRows(fleet.runs, summary.byRun, prefs.runInContext))
 </script>
 
 <template>
   <main data-testid="fleet-view" data-screen-label="Fleet" class="view">
     <div class="head-row">
       <h1 class="title">Fleet</h1>
-      <span class="summary">{{ summary }}</span>
+      <span class="summary">{{ fleet.runs.length }} runs</span>
     </div>
     <!-- T5 (010 inbox pattern): three honest states before the table. -->
     <div v-if="!fleet.loaded && !fleet.loadError" class="state" data-testid="fleet-loading">loading…</div>
@@ -29,7 +39,7 @@ const summary = computed(() => `${fleet.runs.length} runs · ${fleet.blockedCoun
       >
         <p class="line">The fleet could not be refreshed; showing the last known list.</p>
       </div>
-      <FleetTable />
+      <FleetTable :rows="rows" :run-in-context="prefs.runInContext" />
     </template>
   </main>
 </template>
@@ -52,6 +62,11 @@ const summary = computed(() => `${fleet.runs.length} runs · ${fleet.blockedCoun
   font-weight: 600;
   color: var(--ink-primary);
 }
+.summary {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-subtle);
+}
 .state {
   color: var(--ink-subtle);
   font-family: var(--font-mono);
@@ -59,18 +74,13 @@ const summary = computed(() => `${fleet.runs.length} runs · ${fleet.blockedCoun
 }
 .incomplete {
   border: 1px solid var(--status-blocked);
-  border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-3);
-  margin-bottom: var(--space-4);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 12px;
 }
 .incomplete .line {
   margin: 0;
-  font-size: var(--text-sm);
+  font-size: 12px;
   color: var(--ink-secondary);
-}
-.summary {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-subtle);
 }
 </style>
