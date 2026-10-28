@@ -46,6 +46,7 @@ from .fleet import (
     check_fleet_capacity,
     fleet_pending_cap,
 )
+from .read_routes import register_read_routes
 from .run_graph import RunGraphs, RunNotFound, RunQueryFailed
 
 HEARTBEAT_S = 15.0
@@ -379,4 +380,7 @@ def create_router(
 
         return StartedRun(run_id=wf_id, budget_notice=budget_notice(cfg))
 
+    # 018 T046 (read-routes): the read-only summary routes share the poller
+    # and the run-graph source; GET-only, no writes.
+    router.include_router(register_read_routes(poller, run_graphs=graphs))
     return router

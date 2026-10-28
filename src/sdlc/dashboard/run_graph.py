@@ -89,6 +89,14 @@ class RunGraphs:
         return self._store
 
     async def source(self, run_id: str) -> RunSource:
+        return await self._source(run_id, backfill=True)
+
+    async def source_readonly(self, run_id: str) -> RunSource:
+        """source() without the content-addressed backfill. The read routes
+        (018 read-routes rule 1) never write to the store."""
+        return await self._source(run_id, backfill=False)
+
+    async def _source(self, run_id: str, *, backfill: bool) -> RunSource:
         client = await self._client()
         handle = client.get_workflow_handle(run_id)
         try:
@@ -101,7 +109,7 @@ class RunGraphs:
         close_status = desc.status.name.lower() if closed and desc.status is not None else None
         if desc.workflow_type != GRAPH_TYPE:
             return RunSource(handle, desc.workflow_type, closed, close_status, None, None)
-        run_input, topology = await self._input(client, handle, run_id)
+        run_input, topology = await self._input(client, handle, run_id, backfill=backfill)
         return RunSource(
             handle,
             desc.workflow_type,
@@ -114,7 +122,7 @@ class RunGraphs:
         )
 
     async def _input(
-        self, client: Any, handle: Any, run_id: str
+        self, client: Any, handle: Any, run_id: str, *, backfill: bool = True
     ) -> tuple[GraphRunInput, Topology | None]:
         cached = self._inputs.get(run_id)
         if cached is not None:
@@ -154,7 +162,8 @@ class RunGraphs:
             if topology is None:
                 problems = tuple(p.message for p in report.problems)
         try:
-            self._store.put(run_input.graph)
+            if backfill:
+                self._store.put(run_input.graph)
         except Exception:  # noqa: BLE001 -- serving never depends on the store
             _log.warning("graph store backfill failed for %s", run_id, exc_info=True)
         self._inputs.put(run_id, (run_input, topology))
