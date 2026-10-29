@@ -433,7 +433,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 
 **Independent test**: `tests/test_dashboard_compare.py`, `heatmap.spec.ts`, `CompareView.test.ts`; app tier CONSOLE-45.
 
-- [ ] T067 [US6] RED: create `tests/test_dashboard_compare.py` (Routes §compare) over a fixture tree under `tests/fixtures/compare/`:
+- [x] T067 [US6] RED: create `tests/test_dashboard_compare.py` (Routes §compare) over a fixture tree under `tests/fixtures/compare/`:
   - an empty root → `available: False` with `root`;
   - two arms × two graphs;
   - a truncated JSONL line is skipped, with no 500;
@@ -442,7 +442,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
   - importing the module does not import `sdlc.benchmarks.report`.
 
   Fails.
-- [ ] T068 [US6] Create `D/compare_wire.py`, register `GET /api/compare`, and extend the fixture dump to `F/api/__fixtures__/read/compare.json`. T067 and the freshness test go green. Commit T067 + T068.
+- [x] T068 [US6] Create `D/compare_wire.py`, register `GET /api/compare`, and extend the fixture dump to `F/api/__fixtures__/read/compare.json`. T067 and the freshness test go green. Commit T067 + T068.
 - [ ] T069 [P] [US6] RED: create `U/src/components/heatmap/heatmap.spec.ts`: a column header per column; cells render a value, `low_n` (muted) or blank; colour comes from a token scale, with no literal. Fails.
 - [ ] T070 [P] [US6] Create the five files of `heatmap` and register them. T069 goes green. Commit T069 + T070.
 - [ ] T071 [US6] RED: create `F/features/compare/CompareView.test.ts`:

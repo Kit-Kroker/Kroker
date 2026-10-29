@@ -1,0 +1,72 @@
+{
+  "available": true,
+  "root": "D:\\own\\Kroker\\tests\\fixtures\\compare",
+  "description": "SC weights quality 0.6 \u00b7 cost 0.2 \u00b7 speed 0.2, judge anthropic:claude-sonnet-5",
+  "graphs": [
+    "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+    "c1bbef2d33379ca4252d8971ed4b65934dd54e7d4c306a887698df0f0520c5ab"
+  ],
+  "arms": [
+    {
+      "name": "glm-5.2",
+      "harness": "opencode",
+      "model": "zai-coding-plan/glm-5.2",
+      "note": null,
+      "cells": [
+        {
+          "graph": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+          "sc": 1.0,
+          "cost_per_case": null
+        },
+        {
+          "graph": "c1bbef2d33379ca4252d8971ed4b65934dd54e7d4c306a887698df0f0520c5ab",
+          "sc": 1.0,
+          "cost_per_case": 1.0
+        }
+      ]
+    },
+    {
+      "name": "glm-5.3",
+      "harness": "opencode",
+      "model": "zai-coding-plan/glm-5.3",
+      "note": null,
+      "cells": [
+        {
+          "graph": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+          "sc": 1.0,
+          "cost_per_case": 1.5
+        },
+        {
+          "graph": "c1bbef2d33379ca4252d8971ed4b65934dd54e7d4c306a887698df0f0520c5ab",
+          "sc": 1.0,
+          "cost_per_case": 2.0
+        }
+      ]
+    }
+  ],
+  "heat_columns": [
+    "code"
+  ],
+  "heat_rows": [
+    {
+      "name": "glm-5.2",
+      "cells": [
+        {
+          "state": "low_n",
+          "value": 0.0,
+          "n": 2
+        }
+      ]
+    },
+    {
+      "name": "glm-5.3",
+      "cells": [
+        {
+          "state": "low_n",
+          "value": 0.0,
+          "n": 2
+        }
+      ]
+    }
+  ]
+}

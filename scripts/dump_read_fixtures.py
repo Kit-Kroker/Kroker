@@ -35,6 +35,7 @@ from temporalio.client import WorkflowExecutionStatus  # noqa: E402
 
 from sdlc.core.models import GateConfig, PipelineConfig  # noqa: E402
 from sdlc.dashboard.catalog_wire import shipped_graphs  # noqa: E402
+from sdlc.dashboard.compare_wire import compare  # noqa: E402
 from sdlc.dashboard.fleet_summary import fleet_summary  # noqa: E402
 from sdlc.dashboard.run_graph import RunGraphs  # noqa: E402
 from sdlc.graph.store import GraphStore  # noqa: E402
@@ -95,9 +96,13 @@ def _build_inputs() -> tuple[_Poller, RunGraphs]:
 def build() -> dict[str, Any]:
     poller, run_graphs = _build_inputs()
     wire = asyncio.run(fleet_summary(poller, run_graphs))
+    # 018 T068 (R-9): the compare recording reads the same fixture tree the
+    # route tests drive (tests/fixtures/compare - never live data).
+    compare_wire = compare(runs_root=str(ROOT / "tests" / "fixtures" / "compare"))
     return {
         "fleet-summary.json": json.loads(wire.model_dump_json()),
         "graphs-shipped.json": json.loads(shipped_graphs().model_dump_json()),
+        "compare.json": json.loads(compare_wire.model_dump_json()),
     }
 
 
