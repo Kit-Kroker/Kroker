@@ -38,3 +38,5 @@ export { default as CatalogCard } from './components/catalog_card/CatalogCard.vu
 export type { CatalogCount } from './components/catalog_card/CatalogCard.vue'
 export { default as Heatmap } from './components/heatmap/Heatmap.vue'
 export type { HeatCell } from './components/heatmap/Heatmap.vue'
+export { default as CheckMatrix } from './components/check_matrix/CheckMatrix.vue'
+export type { CellState, MatrixCell } from './components/check_matrix/CheckMatrix.vue'

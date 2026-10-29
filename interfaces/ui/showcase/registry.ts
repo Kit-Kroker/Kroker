@@ -28,6 +28,7 @@ import rail from '../src/components/rail/rail.profiles'
 import stepList from '../src/components/step_list/step_list.profiles'
 import kanban from '../src/components/kanban/kanban.profiles'
 import heatmap from '../src/components/heatmap/heatmap.profiles'
+import checkMatrix from '../src/components/check_matrix/check_matrix.profiles'
 
 export const REGISTRY: ProfileSet[] = [
   // primitives first: the showcase reads top-down from foundations to screens
@@ -60,4 +61,5 @@ export const REGISTRY: ProfileSet[] = [
   stepList,
   kanban,
   heatmap,
+  checkMatrix,
 ]
