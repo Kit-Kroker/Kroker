@@ -485,8 +485,8 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 
 ## Phase 11: Close-out (slice 9)
 
-- [ ] T081 Remove the `/graphs?sha=` and `/graphs?from=` redirects if quickstart §2 shows no in-app link still producing them. Otherwise keep them and list them in verification.md. Confirm that `?tab=cost` still lands on the rail (CONSOLE-24). Update `F/app/boundaries.test.ts` only if a new screen folder needs an entry, and name the change in the commit. Commit.
-- [ ] T082 Documents (FR-074; plan "Document changes"):
+- [x] T081 Remove the `/graphs?sha=` and `/graphs?from=` redirects if quickstart §2 shows no in-app link still producing them. Otherwise keep them and list them in verification.md. Confirm that `?tab=cost` still lands on the rail (CONSOLE-24). Update `F/app/boundaries.test.ts` only if a new screen folder needs an entry, and name the change in the commit. Commit.
+- [x] T082 Documents (FR-074; plan "Document changes"):
   - `ROADMAP.md` FR-601: closure evidence on this round, proposed `[x]`, and "Last verified" prepended;
   - `README.md` dashboard paragraph: the v5 screens, plus `SDLC_RUNS_ROOT` and `KROKER_RUNS_BIND` for Compare (R-16);
   - `interfaces/dashboard/frontend/README.md`: current status and screens.

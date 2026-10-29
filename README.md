@@ -208,19 +208,25 @@ than a partial render; the JSON route stays available as the escape hatch.
 **Dashboard.** The same process mounts the operator console's API under
 `/api` (live run state read from Temporal) next to the board routes. The
 Vue frontend in `interfaces/dashboard/frontend/` is built from the
-`@kroker/ui` design system (`interfaces/ui/`) and organised by screen: the
-fleet, the run page, the graph editor, and the decision inbox. The inbox
-lists everything waiting on a person across runs and lets the operator
-answer questions, decide gates, override or send back a merge, and retry
-or quarantine an escalated task.
-The run page is a tab host — Graph | Board | Gates | Cost, with Cost live
-(per-role spend, tokens, the total and the budget's counted dollars) and
-Gates not built yet. The tab is kept in the URL (`#/runs/<id>?tab=board`).
-The Board tab is a read-only view of the run's tasks, their evidence and
-event timeline, and the artifact versions the run published. It reads the
-`/projects/*` routes above, keyed by the run's `project_key`. A run with no
-project, or a project with no board, shows a banner instead. The screen
-map and import rules are in [`interfaces/AGENTS.md`](interfaces/AGENTS.md).
+`@kroker/ui` design system (`interfaces/ui/`) and organised by screen
+(the v5 console, spec 018): the Fleet, the decision inbox, the run page
+(Graph | Board | Cost tabs), the Graphs catalog and its Design editor,
+the Compare benchmark view, and the Interfaces containment matrix. The
+fleet lists every run with its arm, traversals, outcome and pending
+gates; the run page keeps its tab in the URL (`#/runs/<id>?tab=board`);
+the Board tab is the v5 kanban over the run's tasks; Design edits a
+graph copy on the shared canvas and admits only its diff back. The
+inbox lists everything waiting on a person across runs and lets the
+operator answer questions, decide gates, override or send back a merge,
+and retry or quarantine an escalated task.
+The Compare view (`/compare`, 018) reads the benchmark records under
+`$SDLC_RUNS_ROOT` (or `./runs` next to the process) — arms × graphs
+with SC and $/case and the rework-by-stage heatmap; an empty root is
+named in the empty state, so a configuration gap reads as such. Under
+Compose the runs live in the `worker-runs` named volume unless
+`KROKER_RUNS_BIND` names a host path (`.env`), which is how a
+host-run dashboard sees them (R-16). The screen map and import rules
+are in [`interfaces/AGENTS.md`](interfaces/AGENTS.md).
 
 ```bash
 cd interfaces/dashboard/frontend

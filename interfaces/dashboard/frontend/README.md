@@ -34,12 +34,26 @@ interface. The active provider is selected by `VITE_API`:
 
 ## Status
 
-- Built: the Fleet view, the run page (Graph, Board and Cost tabs), the
-  graph editor, and the decision inbox (`src/features/inbox/` — it lists
-  every item waiting on a person across runs and resolves all four kinds:
-  clarify answers, gate decisions, merge overrides, escalations). The Cost
-  tab (`src/features/cost/`, 011) shows per-role spend and tokens, the
-  priced/partial total, and the budget block with the dollars counted
-  toward the gate.
-- Not built: the run page's Gates tab (disabled placeholder, ruling G7 of
-  spec 002).
+The v5 console (spec 018): six screens over the `@kroker/ui` library.
+
+- Fleet (`/`) — every run with its arm, graph, traversals, outcome and
+  pending gates (the v5 read `/fleet/summary`).
+- Decision inbox (`/inbox`) — everything waiting on a person across
+  runs; resolves all four kinds: clarify answers, gate decisions, merge
+  overrides, escalations.
+- Run page (`/runs/:id`) — tab host: Graph (the observe canvas), Board
+  (the v5 kanban over the run's tasks) and Cost (per-role spend,
+  tokens, the priced/partial total and the budget block). The Gates tab
+  is not built (disabled placeholder, ruling G7 of spec 002).
+- Graphs (`/graphs`) — the shipped-graph catalog with the
+  PipelineConfig panel; `/graphs/:sha` is the Design editor (palette,
+  validation, undo/redo; "Run this version" for the saved shipped
+  default).
+- Compare (`/compare`) — benchmark arms × graphs with SC and $/case and
+  the rework-by-canonical-stage heatmap; an unavailable root names
+  itself.
+- Interfaces (`/interfaces`) — the harness containment matrix (layers,
+  strict parity, family) and the adapter facts.
+
+The mock replays the recorded read fixtures (`src/api/__fixtures__/read/`);
+`VITE_API=mock` needs no backend.
