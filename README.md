@@ -210,8 +210,9 @@ than a partial render; the JSON route stays available as the escape hatch.
 Vue frontend in `interfaces/dashboard/frontend/` is built from the
 `@kroker/ui` design system (`interfaces/ui/`) and organised by screen
 (the v5 console, spec 018): the Fleet, the decision inbox, the run page
-(Graph | Board | Cost tabs), the Graphs catalog and its Design editor,
-the Compare benchmark view, and the Interfaces containment matrix. The
+(Graph | Board tabs, Cost in the run rail), the Graphs catalog and its
+Design editor, the Compare benchmark view, and the Interfaces
+containment matrix. The
 fleet lists every run with its arm, traversals, outcome and pending
 gates; the run page keeps its tab in the URL (`#/runs/<id>?tab=board`);
 the Board tab is the v5 kanban over the run's tasks; Design edits a

@@ -455,7 +455,8 @@ should emit a **row per run** with these fields, aggregated across the matrix.
 - **Research spend split (round 017, FR-034 / A-1).** Trace-derived surfaces
   include all research spend (planner, sub-question execution, synthesis, and
   dead-attempt ledger folds): the run summary (`RunSummary.roles`), the live
-  `run_state` role view and total (`cost_usd_total`), the Cost tab, and
+  `run_state` role view and total (`cost_usd_total`), the run rail's
+  Cost section (the Cost tab, pre-v5), and
   benchmark records (`BenchmarkRecord.cost`). In contrast, `_role_usage`-derived
   surfaces exclude research spend: `_check_budget` (the pipeline budget gate),
   `budget_counted_usd`, and per-activation `graph_view` spend. The E-75 §4.3

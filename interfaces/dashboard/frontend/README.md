@@ -41,10 +41,11 @@ The v5 console (spec 018): six screens over the `@kroker/ui` library.
 - Decision inbox (`/inbox`) — everything waiting on a person across
   runs; resolves all four kinds: clarify answers, gate decisions, merge
   overrides, escalations.
-- Run page (`/runs/:id`) — tab host: Graph (the observe canvas), Board
-  (the v5 kanban over the run's tasks) and Cost (per-role spend,
-  tokens, the priced/partial total and the budget block). The Gates tab
-  is not built (disabled placeholder, ruling G7 of spec 002).
+- Run page (`/runs/:id`) — tab host: Graph (the observe canvas) and
+  Board (the v5 kanban over the run's tasks); Cost lives in the run
+  rail (per-role spend, tokens, the priced/partial total and the budget
+  block). There is no Gates tab — v5 surfaces pending gates in the
+  rail, the run header and the inbox.
 - Graphs (`/graphs`) — the shipped-graph catalog with the
   PipelineConfig panel; `/graphs/:sha` is the Design editor (palette,
   validation, undo/redo; "Run this version" for the saved shipped
