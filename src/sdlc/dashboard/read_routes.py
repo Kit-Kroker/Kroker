@@ -14,6 +14,7 @@ from fastapi import APIRouter
 from .catalog_wire import ShippedGraphsWire, shipped_graphs
 from .compare_wire import CompareWire, compare
 from .fleet_summary import FleetSummaryWire, fleet_summary
+from .interfaces_wire import InterfaceMatrixWire, interfaces
 from .run_graph import RunGraphs
 
 
@@ -35,5 +36,11 @@ def register_read_routes(
         # 018 T068 (R-9): the runs root rides the env contract
         # ($SDLC_RUNS_ROOT or ./runs) unless the caller pins one.
         return compare(runs_root)
+
+    @router.get("/interfaces")
+    async def read_interfaces() -> InterfaceMatrixWire:
+        # 018 T075 (R-8): the containment matrix. Reads the policy and
+        # the registry at request time; never writes (rule 1).
+        return interfaces()
 
     return router

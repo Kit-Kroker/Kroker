@@ -37,6 +37,7 @@ from sdlc.core.models import GateConfig, PipelineConfig  # noqa: E402
 from sdlc.dashboard.catalog_wire import shipped_graphs  # noqa: E402
 from sdlc.dashboard.compare_wire import compare  # noqa: E402
 from sdlc.dashboard.fleet_summary import fleet_summary  # noqa: E402
+from sdlc.dashboard.interfaces_wire import interfaces  # noqa: E402
 from sdlc.dashboard.run_graph import RunGraphs  # noqa: E402
 from sdlc.graph.store import GraphStore  # noqa: E402
 from sdlc.workflows.graph_catalog import build_run_input  # noqa: E402
@@ -103,6 +104,9 @@ def build() -> dict[str, Any]:
         "fleet-summary.json": json.loads(wire.model_dump_json()),
         "graphs-shipped.json": json.loads(shipped_graphs().model_dump_json()),
         "compare.json": json.loads(compare_wire.model_dump_json()),
+        # 018 T075 (R-8): the interfaces recording over the shipped policy
+        # and the repo's own registry - the same read the route serves.
+        "interfaces.json": json.loads(interfaces().model_dump_json()),
     }
 
 

@@ -464,7 +464,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 
 **Independent test**: `tests/test_dashboard_interfaces.py`, `check_matrix.spec.ts`, `InterfacesView.test.ts`; app tier CONSOLE-46.
 
-- [ ] T074 [US7] RED: create `tests/test_dashboard_interfaces.py` (Routes §interfaces):
+- [x] T074 [US7] RED: create `tests/test_dashboard_interfaces.py` (Routes §interfaces):
   - columns in key order;
   - claude_code layers `native + hook`, opencode `native`, cursor `none`, crew `per role harness`;
   - `installed`, `checkpoint` and `session` are `not_measured` on every row;
@@ -474,7 +474,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
   - importing the module writes nothing (a filesystem spy).
 
   Fails.
-- [ ] T075 [US7] Create `D/interfaces_wire.py`, register `GET /api/interfaces`, and extend the fixture dump to `F/api/__fixtures__/read/interfaces.json`. T074 and the freshness test go green. Commit T074 + T075.
+- [x] T075 [US7] Create `D/interfaces_wire.py`, register `GET /api/interfaces`, and extend the fixture dump to `F/api/__fixtures__/read/interfaces.json`. T074 and the freshness test go green. Commit T074 + T075.
 - [ ] T076 [P] [US7] RED: create `U/src/components/check_matrix/check_matrix.spec.ts`: a header per column with name and ref; cell marks for yes, no, partial, not measured and planned; planned rows dimmed; facts with severity. Fails.
 - [ ] T077 [P] [US7] Create the five files of `check_matrix` and register them. T076 goes green. Commit T076 + T077.
 - [ ] T078 [US7] RED: create `F/features/interfaces/InterfacesView.test.ts` from the recorded fixture: five rows, the `not measured` cells, the family cell on one row only, and two facts. Add mapper and mock cases. Fails.
