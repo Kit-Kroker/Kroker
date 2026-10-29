@@ -79,16 +79,20 @@ def _graph_rows() -> list[ShippedGraphWire]:
 
 def _roles_check() -> ConfigCheckWire:
     """ADR-6 over the LIVE registry, read at request time (V8: the
-    same-weights note comes from check_adversary_model's copy)."""
+    same-weights note comes from check_adversary_model's copy). The text
+    carries the registry's real dev and reviewer ids (CONSOLE-37)."""
     role_models = {name: cfg.model for name, cfg in roles.REGISTRY.items() if cfg.model is not None}
     try:
         validate_run_roles(role_models)
     except RegistryError as e:
         return ConfigCheckWire(name="validate_run_roles", state="fail", text=str(e))
+    dev = role_models.get("dev", "unknown")
+    reviewer = role_models.get("reviewer", "unknown")
     return ConfigCheckWire(
         name="validate_run_roles",
         state="pass",
-        text="the live registry satisfies ADR-6: families differ, the adversary is its own model",
+        text=f"pass: dev {dev}, reviewer {reviewer} — families differ, the adversary "
+        "is its own model (a shared model_id would read same weights)",
     )
 
 

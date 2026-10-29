@@ -24,9 +24,31 @@ stats — totals live in the footer (CONSOLE-27, CONSOLE-50). [FR-601]
 ### CONSOLE-9
 In Design, editing an edge's `max_traversals` and applying it round-trips
 through the provider's parse and commits: the working copy gains the parse's
-sha and the inspector shows no error. (T063 deleted the YAML-flow test per
-the orchestrator ruling; T066 restores it on Design — the clause reads
-untested mid-phase, and SG-5 checks at phase end.) [FR-1205, E-76 U8]
+sha and the inspector shows no error. [FR-1205, FR-047]
+
+### CONSOLE-37
+V8 — The PipelineConfig panel's `validate_run_roles` check shows the
+registry's real reviewer and dev ids, and marks "same model weights" when
+their `model_id` is equal.
+
+### CONSOLE-38
+V9 — The Design palette groups node types by `canonical_stage` in served
+`CANONICAL_STAGES` order. Planned types are marked planned and cannot be
+placed. A planned type with no stage is labelled unmapped.
+
+### CONSOLE-42
+Design refuses a drop whose payloads differ, and says why. No edge is
+created.
+
+### CONSOLE-43
+Design: a layout-only save keeps the sha and an edge change alters it.
+"Run this version" is available only for the saved, unchanged shipped
+`default` graph, and states its reason otherwise (R-15).
+
+### CONSOLE-44
+Graphs shows one card per shipped graph (name, sha, counts, "Open in
+Design") and the PipelineConfig panel. A value without a source reads
+`not measured`.
 
 ### CONSOLE-4
 The run view of a graph-executed run renders one canvas node per graph node,
@@ -45,8 +67,9 @@ run block. The run header's stage strip is gone — v5 draws none on the
 run. [FR-1205, E-76 U7]
 
 ### CONSOLE-8
-The run view offers no edit affordance; its "open copy in editor" link lands
-on the graph editor holding the run's graph. [FR-1205]
+The run view offers no edit affordance; the header's Observe/Design switch
+lands on Design holding the run's graph (the run copy loaded at its pinned
+sha). [FR-1205]
 
 ### CONSOLE-10
 The run page's tab state round-trips through the URL: `?tab=board` opens the
@@ -147,9 +170,10 @@ out; when nothing is priced it reads `not priced`, and with no runs `—`.
 The figure never folds a pricing miss in as zero. [FR-003]
 
 ### CONSOLE-28
-The start form accepts an optional budget; a budget that is not a number
+The start form (opened from Design's "Run this version" — the header Start
+button is gone) accepts an optional budget; a budget that is not a number
 greater than zero blocks the start with a message, and a run started with a
-budget shows that budget on its Cost tab. [FR-006, FR-007]
+budget shows that budget in its rail's Cost section. [FR-006, FR-007]
 
 ### CONSOLE-48
 The header shows Fleet · Inbox · run-in-context and Graphs · Compare ·

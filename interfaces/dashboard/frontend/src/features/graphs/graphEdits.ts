@@ -3,7 +3,7 @@
 // the complete set of guards: each protects the editor's own addressing or
 // reversibility, removes no expressiveness (text apply still reaches every
 // graph), and reports nothing as a validation result.
-import type { EdgeWire, GraphWire, NodeWire } from '../../api/graph-types'
+import type { EdgeWire, GraphWire, NodeWire, PortWire } from '../../api/graph-types'
 import { edgeKeys, nodeKeys } from '../../shared/graphCanvas.adapter'
 
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x))
@@ -127,4 +127,29 @@ export function withoutEmptyLabel<T extends { label?: string }>(element: T): T {
   if (element.label !== '') return element
   const { label: _label, ...rest } = element
   return rest as T
+}
+
+/** FR-047 (018 T063): the payload-equality refusal reason for a candidate
+ * connection, or null when the payloads match (or a port is not catalogued
+ * — not ours to refuse). Pure; reused by the store's connect and Design's
+ * refused-drop notice so both say exactly the same thing. */
+export function payloadRefusal(
+  graph: GraphWire,
+  typeOf: (type: string) => { ports: PortWire[] } | undefined,
+  fromKey: string,
+  fromPort: string,
+  toKey: string,
+  toPort: string,
+): string | null {
+  const fromNode = graph.nodes[nodeKeys(graph).indexOf(fromKey)]
+  const toNode = graph.nodes[nodeKeys(graph).indexOf(toKey)]
+  if (!fromNode || !toNode) return null
+  const out = typeOf(fromNode.type)?.ports.find((p) => p.name === fromPort && p.direction === 'out')
+  const inn = typeOf(toNode.type)?.ports.find((p) => p.name === toPort && p.direction === 'in')
+  if (!out || !inn) return null
+  if (out.payload === inn.payload) return null
+  return (
+    `connection refused: ${fromNode.id}.${fromPort} carries ${out.payload}, ` +
+    `${toNode.id}.${toPort} expects ${inn.payload} — payloads must be exactly equal`
+  )
 }

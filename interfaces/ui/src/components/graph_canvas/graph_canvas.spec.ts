@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import GraphCanvas from './GraphCanvas.vue'
 import type { CanvasNode } from './types'
 
@@ -66,6 +67,28 @@ describe('GraphCanvas', () => {
     const rw = mount(GraphCanvas, { props: { nodes: [node('a')], edges: [], selectedKey: 'a', editable: true } })
     await rw.find('[data-testid="graph-canvas"]').trigger('keydown', { key: 'Delete' })
     expect(rw.emitted('remove')).toEqual([[{ kind: 'node', key: 'a' }]])
+  })
+
+  it('a fenced drop in edit mode emits connect-refused with the port refs; the fence still decides', async () => {  // clause: GRAPH_CANVAS-6
+    const conn = { source: 'a', sourceHandle: 'out:spec', target: 'b', targetHandle: 'in:plan' }
+    const w = mount(GraphCanvas, {
+      props: { nodes: [node('a'), node('b')], edges: [], editable: true, connectable: () => false },
+      global: { stubs: { VueFlow: VueFlowStub } },
+    })
+    w.findComponent(VueFlowStub).vm.$emit('connect', conn)
+    await nextTick()
+    expect(w.emitted('connect')).toBeUndefined()
+    expect(w.emitted('connect-refused')).toEqual([
+      [{ from: { node: 'a', port: 'spec' }, to: { node: 'b', port: 'plan' } }],
+    ])
+    // Not editable: the refusal is silent too (GRAPH_CANVAS-5's fence).
+    const ro = mount(GraphCanvas, {
+      props: { nodes: [node('a'), node('b')], edges: [], connectable: () => false },
+      global: { stubs: { VueFlow: VueFlowStub } },
+    })
+    ro.findComponent(VueFlowStub).vm.$emit('connect', conn)
+    await nextTick()
+    expect(ro.emitted('connect-refused')).toBeUndefined()
   })
 
   it('lays out an unpositioned node and emits its finite position only when editable', () => {  // clause: GRAPH_CANVAS-8

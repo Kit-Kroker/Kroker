@@ -8,8 +8,8 @@ import { api } from '../../api/client'
 import type { EdgeWire, GraphWire, NodeWire, ShapeError, ValidationWire } from '../../api/graph-types'
 import { useCatalogStore } from '../../shared/catalog.store'
 import {
-  addNode as addNodeOp, connect as connectOp, edgeEditCandidate, moveNode, nodeEditCandidate, removeElement,
-  withoutEmptyLabel, type EditResult,
+  addNode as addNodeOp, connect as connectOp, edgeEditCandidate, moveNode, nodeEditCandidate, payloadRefusal,
+  removeElement, withoutEmptyLabel, type EditResult,
 } from './graphEdits'
 import { edgeKeys, locWithin, nodeKeys } from '../../shared/graphCanvas.adapter'
 
@@ -203,25 +203,15 @@ export const useGraphEditorStore = defineStore('graphEditor', () => {
     applyEdit(addNodeOp(working.value, type, spec.default_id, x, y))
   }
   function connect(fromKey: string, fromPort: string, toKey: string, toPort: string) {
-    if (applying.value || !working.value) return
+    if (canvasLocked.value || !working.value) return
     // FR-047 (018 T063): a connection whose payloads are not exactly equal
     // is refused at drop time, with the reason; no edge is created.
-    const graph = working.value
-    const fromNode = graph.nodes[nodeKeys(graph).indexOf(fromKey)]
-    const toNode = graph.nodes[nodeKeys(graph).indexOf(toKey)]
-    if (fromNode && toNode) {
-      const fromType = catalog.typeOf(fromNode.type)
-      const toType = catalog.typeOf(toNode.type)
-      const out = fromType?.ports.find((p) => p.name === fromPort && p.direction === 'out')
-      const inn = toType?.ports.find((p) => p.name === toPort && p.direction === 'in')
-      if (out && inn && out.payload !== inn.payload) {
-        notice.value =
-          `connection refused: ${fromNode.id}.${fromPort} carries ${out.payload}, ` +
-          `${toNode.id}.${toPort} expects ${inn.payload} — payloads must be exactly equal`
-        return
-      }
+    const reason = payloadRefusal(working.value, (t) => catalog.typeOf(t), fromKey, fromPort, toKey, toPort)
+    if (reason) {
+      notice.value = reason
+      return
     }
-    applyEdit(connectOp(graph, fromKey, fromPort, toKey, toPort))
+    applyEdit(connectOp(working.value, fromKey, fromPort, toKey, toPort))
   }
   function move(key: string, x: number, y: number) {
     if (applying.value || !working.value) return

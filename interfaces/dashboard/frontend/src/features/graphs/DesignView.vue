@@ -16,6 +16,7 @@ import { api } from '../../api/client'
 import { useCatalogStore } from '../../shared/catalog.store'
 import { useGraphEditorStore } from './graphEditor.store'
 import { useUiStore } from '../../app/ui.store'
+import { payloadRefusal } from './graphEdits'
 import { nodeKeys, toCanvas } from '../../shared/graphCanvas.adapter'
 
 const props = defineProps<{ sha?: string }>()
@@ -72,6 +73,15 @@ const plannedTypes = computed(() => [...planned.value].filter((t) => !catalog.ty
 function onDropType(d: { type: string; x: number; y: number }) {
   if (planned.value.has(d.type)) return
   editor.addNode(d.type, d.x, d.y)
+}
+
+// FR-047/CONSOLE-42: the canvas's fence rejects a mismatched drop; Design
+// says why, with the same reason the store's own refusal would give.
+function onConnectRefused(r: { from: { node: string; port: string }; to: { node: string; port: string } }) {
+  const reason = editor.working
+    ? payloadRefusal(editor.working, (t) => catalog.typeOf(t), r.from.node, r.from.port, r.to.node, r.to.port)
+    : null
+  editor.notice = reason ?? `connection refused: the catalog does not allow ${r.from.node}.${r.from.port} → ${r.to.node}.${r.to.port}`
 }
 
 function typeOfKey(key: string): string | undefined {
@@ -179,6 +189,7 @@ const runReason = computed(() => {
           :selected-key="editor.selection"
           :tidy-request="editor.tidyRequest"
           @connect="(c) => editor.connect(c.from.node, c.from.port, c.to.node, c.to.port)"
+          @connect-refused="onConnectRefused"
           @move="(m) => editor.move(m.key, m.x, m.y)"
           @remove="(r) => editor.remove(r.kind, r.key)"
           @select="editor.select"

@@ -32,7 +32,7 @@
     {
       "name": "validate_run_roles",
       "state": "pass",
-      "text": "the live registry satisfies ADR-6: families differ, the adversary is its own model"
+      "text": "pass: dev zai-coding-plan/glm-5.3, reviewer zai:glm-5.3 \u2014 families differ, the adversary is its own model (a shared model_id would read same weights)"
     },
     {
       "name": "check_node_types",

@@ -196,6 +196,28 @@ describe('Run this version opens the start form (018 T064 RED)', () => {
   // the modal lives: src/app/shell/StartRunModal.test.ts (boundary rule).
 })
 
+// CONSOLE-42's app wiring: the canvas fences a mismatched drop and reports
+// it (connect-refused); Design states the shared payload reason. (The
+// headless drag itself is not cooperative at vue-flow's fit-view zoom —
+// the pw tier pins the no-edge half and attempts the drag.)
+describe('the refused-drop notice (018 T066)', () => {
+  it('a fenced payload mismatch states the shared refusal reason', async () => {
+    loadRun(DEFAULT_SHA)
+    const { w } = await mountAt(`/graphs/${DEFAULT_SHA}?from=run:r1`)
+    await flushPromises()
+    const canvas = w.findComponent({ name: 'GraphCanvas' })
+    // architect.spec (ArchitectureSpec) -> clarifier.trigger (no payload):
+    // an unequal pair from the loaded graph and the served catalog.
+    canvas.vm.$emit('connect-refused', {
+      from: { node: 'architect', port: 'spec' },
+      to: { node: 'clarifier', port: 'trigger' },
+    })
+    await flushPromises()
+    expect(w.find('[data-testid="design-notice"]').text()).toContain('connection refused')
+    expect(w.find('[data-testid="design-notice"]').text()).toContain('payloads must be exactly equal')
+  })
+})
+
 describe('the from=run load', () => {
   it('loads through getRunGraph with the run id (FR-1205 path)', async () => {
     loadRun(DEFAULT_SHA)

@@ -29,6 +29,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'connect', v: { from: PortRef; to: PortRef }): void
+  (e: 'connect-refused', v: { from: PortRef; to: PortRef }): void
   (e: 'move', v: { key: string } & Point): void
   (e: 'remove', v: { kind: 'node' | 'edge'; key: string }): void
   (e: 'select', key: string | null): void
@@ -144,7 +145,11 @@ const edgeText = (key: string): string | undefined => {
 const accepts = (c: Connection) => acceptConnection(props.editable, props.connectable, c)
 
 function onConnect(c: Connection) {
+  // The fence (GRAPH_CANVAS-6) decides acceptance; a fenced drop in edit
+  // mode is REPORTED (connect-refused) so the caller can say why — the
+  // component itself still evaluates no rule of its own.
   if (accepts(c)) emit('connect', toPortRefs(c))
+  else if (props.editable) emit('connect-refused', toPortRefs(c))
 }
 
 function onDragStop(ev: NodeDragEvent) {

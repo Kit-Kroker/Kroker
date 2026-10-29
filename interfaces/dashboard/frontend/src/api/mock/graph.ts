@@ -156,11 +156,19 @@ export interface MockGraph extends GraphApi {
 
 export function createMockGraph(): MockGraph {
   const byText = new Map(SCENARIOS.map((s) => [s.yaml, s]))
+  // FR-049: node positions are layout, not content — a moved node keeps the
+  // graph's content key (a layout-only save keeps the sha), so every graph
+  // key below is computed over the position-stripped copy.
+  const contentOf = (graph: GraphWire): GraphWire => ({
+    ...graph,
+    nodes: graph.nodes.map(({ position: _position, ...node }) => node),
+  })
+  const keyOf = (graph: GraphWire): string => lookupKey(contentOf(graph))
   const byGraph = new Map<string, { parse: ParseWire; base: string }>()
-  for (const s of SCENARIOS) if (s.parse.ok) byGraph.set(lookupKey(s.parse.graph), { parse: s.parse, base: s.name })
-  for (const o of OBJECTS) byGraph.set(lookupKey(o.graph), { parse: o.parse, base: o.base })
+  for (const s of SCENARIOS) if (s.parse.ok) byGraph.set(keyOf(s.parse.graph), { parse: s.parse, base: s.name })
+  for (const o of OBJECTS) byGraph.set(keyOf(o.graph), { parse: o.parse, base: o.base })
   const serialized = new Map<string, string>()
-  for (const s of SCENARIOS) if (s.parse.ok && s.serialize) serialized.set(lookupKey(s.parse.graph), s.serialize.yaml)
+  for (const s of SCENARIOS) if (s.parse.ok && s.serialize) serialized.set(keyOf(s.parse.graph), s.serialize.yaml)
 
   let scenario: string | null = null
   let savedSeq = 0
@@ -208,7 +216,7 @@ export function createMockGraph(): MockGraph {
         return clone(hit.parse)
       }
       if ('graph' in input && input.graph && typeof input.graph === 'object') {
-        const key = lookupKey(input.graph)
+        const key = keyOf(input.graph)
         const hit = byGraph.get(key)
         if (!hit) {
           console.warn(`mock parseGraph: unrecorded graph (nearest recording: ${nearest(key)})`, key)
@@ -221,7 +229,7 @@ export function createMockGraph(): MockGraph {
     },
 
     async serializeGraph(graph) {
-      const yaml = serialized.get(lookupKey(graph)) ?? JSON.stringify(graph, null, 2)
+      const yaml = serialized.get(keyOf(graph)) ?? JSON.stringify(graph, null, 2)
       return { ok: true, yaml }
     },
 
@@ -231,14 +239,17 @@ export function createMockGraph(): MockGraph {
     },
 
     async saveGraph(graph) {
-      const hit = byGraph.get(lookupKey(graph))
+      const hit = byGraph.get(keyOf(graph))
       const sha = hit && hit.parse.ok ? hit.parse.sha : `mock-sha-${++savedSeq}`
       saved.set(sha, clone(graph))
       return { ok: true, sha, validation: clone(scenario ? VALIDATION[scenario] ?? UNRECORDED_VALIDATION : UNRECORDED_VALIDATION) }
     },
 
     async loadGraph(sha) {
-      const graph = saved.get(sha)
+      // A saved graph, or the shipped default by its sha (the route serves
+      // it; the other shipped graphs have no recorded response yet).
+      const recorded = RECORDED_RESPONSE.kind === 'graph' ? RECORDED_RESPONSE : null
+      const graph = saved.get(sha) ?? (recorded && sha === recorded.sha ? recorded.graph : undefined)
       return graph ? { ok: true, sha, graph: clone(graph) } : { ok: false, reason: 'not_found' }
     },
 
