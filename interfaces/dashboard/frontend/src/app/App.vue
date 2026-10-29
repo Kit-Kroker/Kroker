@@ -86,9 +86,11 @@ function runCommand(id: string): void {
       const sha = fleetSummary.byRun[runInContext.value]?.graphSha
       if (sha) void router.push(`/graphs/${sha}?from=run:${runInContext.value}`)
     }
+  } else if (id === 'compare') {
+    void router.push('/compare')
+  } else if (id === 'interfaces') {
+    void router.push('/interfaces')
   }
-  // compare and interfaces have no target surface yet (slices 6-7); the
-  // palette closing is their whole effect until then.
 }
 
 // The four session toggles (data-model §5), labels shared with the

@@ -479,7 +479,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 - [x] T077 [P] [US7] Create the five files of `check_matrix` and register them. T076 goes green. Commit T076 + T077.
 - [x] T078 [US7] RED: create `F/features/interfaces/InterfacesView.test.ts` from the recorded fixture: five rows, the `not measured` cells, the family cell on one row only, and two facts. Add mapper and mock cases. Fails.
 - [x] T079 [US7] Create `F/features/interfaces/InterfacesView.vue`, the read types, mapper and `F/api/mock/interfaces.ts`, and the `/interfaces` route. Set `navManifest` Interfaces to `available`. T078 goes green. Commit T078 + T079.
-- [ ] T080 [US7] App tier: add CONSOLE-46, with tests in `U/app.interfaces.pw.ts`. Every command in `commandsOf` is now available; extend CONSOLE-47's test to run "Compare arms × graphs" and "Harness interfaces". `check_ui.py`, then `check_clauses.py`. Commit.
+- [x] T080 [US7] App tier: add CONSOLE-46, with tests in `U/app.interfaces.pw.ts`. Every command in `commandsOf` is now available; extend CONSOLE-47's test to run "Compare arms × graphs" and "Harness interfaces". `check_ui.py`, then `check_clauses.py`. Commit.
 
 ---
 

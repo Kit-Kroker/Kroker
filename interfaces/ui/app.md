@@ -56,6 +56,12 @@ description line, and the rework heatmap. An unpriced cell reads `not
 measured`, never `$0.00`; an unavailable root renders the empty state
 naming the root. The nav item and the palette command are live.
 
+### CONSOLE-46
+Interfaces shows the harness containment matrix (headers with their
+refs, cell marks by state, the planned row dimmed) and the adapter
+facts with their severities. The nav item and the palette command are
+live.
+
 ### CONSOLE-4
 The run view of a graph-executed run renders one canvas node per graph node,
 a loop-edge counter as `used/max`, and its backward edge curved. [FR-1205]
