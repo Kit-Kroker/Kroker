@@ -18,20 +18,31 @@ test('the header shows the inbox badge with the pending count', async ({ page })
 })
 
 test('the header shows the primary and secondary nav, each navigating', async ({ page }) => {  // clause: CONSOLE-48
-  // Slice 1: Compare and Interfaces are not yet available and do not
-  // render; the run entry carries the newest seeded run's id.
+  // Slice 6: Compare is live since T072; Interfaces still waits for its
+  // slice and does not render. The run entry carries the newest seeded
+  // run's id and lands with the fleet state - wait for it by name, never
+  // by count (a count can be satisfied before it arrives).
   const tabs = page.locator('.cmp-app-header [data-testid="nav-item"]')
-  await expect(tabs).toHaveCount(4)
+  const runTab = tabs.filter({ hasText: /feature-/ })
+  await expect(runTab).toBeVisible()
+  await expect(tabs).toHaveCount(5)
   const labels = await tabs.allInnerTexts()
   expect(labels[0].trim()).toBe('Fleet')
   expect(labels[1].trim()).toBe('Inbox')
   expect(labels[2].trim()).toMatch(/feature-/)
   expect(labels[3].trim()).toBe('Graphs')
-  await tabs.nth(2).click()
+  expect(labels[4].trim()).toBe('Compare')
+  expect(labels.join(' ')).not.toContain('Interfaces')
+  await runTab.click()
   await expect(page).toHaveURL(/\/#\/runs\/feature-/)
   await page.goto('/')
+  await expect(runTab).toBeVisible()
   await tabs.nth(3).click()
   await expect(page).toHaveURL(/\/#\/graphs/)
+  await page.goto('/')
+  await expect(runTab).toBeVisible()
+  await tabs.nth(4).click()
+  await expect(page).toHaveURL(/\/#\/compare/)
 })
 
 // --- The footer (018 T012): totals moved out of the header.

@@ -454,7 +454,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 
   Add mapper and mock cases. Fails.
 - [x] T072 [US6] Create `F/features/compare/CompareView.vue`, the compare read types, mapper and `F/api/mock/compare.ts`, and the `/compare` route. Set `navManifest` Compare to `available`. T071 goes green. Commit T071 + T072.
-- [ ] T073 [US6] App tier: add CONSOLE-45, with tests in `U/app.compare.pw.ts`. `check_ui.py`, then `check_clauses.py`. Commit.
+- [x] T073 [US6] App tier: add CONSOLE-45, with tests in `U/app.compare.pw.ts`. `check_ui.py`, then `check_clauses.py`. Commit.
 
 ---
 

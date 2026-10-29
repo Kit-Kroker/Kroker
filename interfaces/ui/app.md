@@ -50,6 +50,12 @@ Graphs shows one card per shipped graph (name, sha, counts, "Open in
 Design") and the PipelineConfig panel. A value without a source reads
 `not measured`.
 
+### CONSOLE-45
+Compare shows one row per arm (name, note, SC and $/case per graph), the
+description line, and the rework heatmap. An unpriced cell reads `not
+measured`, never `$0.00`; an unavailable root renders the empty state
+naming the root. The nav item and the palette command are live.
+
 ### CONSOLE-4
 The run view of a graph-executed run renders one canvas node per graph node,
 a loop-edge counter as `used/max`, and its backward edge curved. [FR-1205]
