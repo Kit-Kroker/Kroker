@@ -492,7 +492,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
   - `interfaces/dashboard/frontend/README.md`: current status and screens.
 
   Write the proposed `interfaces/AGENTS.md` screen table, the stale `stage_dots/` clause-naming example in `interfaces/ui/AGENTS.md:10` (propose a surviving component, for example `status_pip/`), and the ADR-8 note into `verification.md` §Proposals; do not edit those files (SG-2) until the orchestrator approves. Commit.
-- [ ] T083 Run the full quickstart §1, each step in its own shell call, and walk quickstart §2 on the mock build. In `.specify/specs/018-canvas-v5-ui/verification.md` record:
+- [x] T083 Run the full quickstart §1, each step in its own shell call, and walk quickstart §2 on the mock build. In `.specify/specs/018-canvas-v5-ui/verification.md` record:
   - each gate's result against baseline.md;
   - the clause report (0 dangling; untested ⊆ baseline);
   - for each of CONSOLE-30 to CONSOLE-39, the reviewer's revert check: which line was reverted, and that the test failed (R-11);

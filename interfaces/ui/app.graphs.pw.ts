@@ -13,7 +13,10 @@ test.use({ baseURL: APP_BASE_URL })
 const DEFAULT_SHA = 'a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38'
 // The recorded parse of the default with architect.spec's edge capped at 5
 // (the toolbar displays the first 12 chars).
-const EDGE_MT_SHA12 = '5f4dcc3b5aa7'
+// The sha the backend's parse_object really computes for the default
+// with architect.spec->architecture.artifact max_traversals 5 (the
+// recorded fixture's parse.sha; regenerate to re-check).
+const EDGE_MT_SHA12 = 'c12486c5664d'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')

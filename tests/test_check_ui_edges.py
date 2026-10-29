@@ -74,9 +74,11 @@ def test_vitest_timeout_flag_is_well_formed_and_behind_exactly_one_separator():
 
 def _parity_key(argv: list[str]) -> list[str]:
     """tests/test_verify.py's ``_gate_key`` reduction, replicated locally
-    on a token list (the original reduces shell strings): drop dash-prefixed
-    and python tokens, keep the first two."""
-    parts = [t for t in argv if not t.startswith("-") and t not in ("python", "python3")]
+    on a token list (the original reduces shell strings): drop
+    dash-prefixed and launcher tokens (python, npm — 018 05aafb8e made
+    STEPS entries full commands, so the npm launcher rides in argv),
+    keep the first two."""
+    parts = [t for t in argv if not t.startswith("-") and t not in ("python", "python3", "npm")]
     return parts[:2]
 
 

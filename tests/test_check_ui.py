@@ -1,5 +1,6 @@
 """The Node gate's contract (spec C §9)."""
 
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,8 +19,13 @@ def test_says_so_loudly_when_it_skips(monkeypatch, capsys):
 
 
 def test_every_step_is_a_workspace_aware_npm_invocation():
+    # 018 05aafb8e: STEPS entries are FULL commands (the raw-colours step
+    # runs the interpreter), so npm steps lead with the npm token itself.
     for _, args in STEPS:
-        assert args[0] in {"ci", "run", "exec"}
+        if args[0] == "npm":
+            assert args[1] in {"ci", "run", "exec"}, args
+        else:
+            assert args[0] == sys.executable, f"non-npm step must run python: {args}"
 
 
 def test_ci_invokes_this_script_and_never_npm_directly():
@@ -83,13 +89,14 @@ def test_only_the_two_vitest_steps_carry_the_timeout_flag():
         "the two vitest steps and no others"
     )
     for label, args in STEPS:
-        assert args[0] in {"ci", "run", "exec"}, f"step {label!r} lost its npm verb"
+        if args[0] == "npm":
+            assert args[1] in {"ci", "run", "exec"}, f"step {label!r} lost its npm verb"
         if label.startswith("vitest"):
             # tests/test_verify.py reduces a command to its first two
-            # non-flag tokens — these must stay [run, test] or the wrapper
-            # parity check breaks.
-            assert args[:2] == ["run", "test"], (
-                f"step {label!r} starts {args[:2]}; must stay ['run', 'test']"
+            # non-launcher tokens — these must stay [run, test] or the
+            # wrapper parity check breaks.
+            assert args[1:3] == ["run", "test"], (
+                f"step {label!r} starts {args[:3]}; must stay ['npm', 'run', 'test']"
             )
 
 

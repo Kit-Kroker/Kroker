@@ -31,6 +31,7 @@ from sdlc.core.models import GateConfig, PipelineConfig, RunState, RunSummary, T
 from sdlc.dashboard.fleet import FleetSnapshot
 from sdlc.dashboard.read_routes import register_read_routes
 from sdlc.dashboard.run_graph import RunGraphs
+from sdlc.graph import NODE_TYPES, GraphRouter, GraphRunView, validate
 from sdlc.graph.store import GraphStore
 from sdlc.workflows.graph_catalog import SHIPPED, build_run_input
 from tests.fakes.canned import greenfield_idea
@@ -101,7 +102,12 @@ class _Poller:
 
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
-    from sdlc.graph import NODE_TYPES, GraphRouter, GraphRunView, validate
+    # 018 T083: the graph imports live at MODULE scope on purpose. The
+    # Temporal replay tests (tests/replay/*, collected earlier) rebind
+    # sdlc.graph.validate from the function to the SUBMODULE through the
+    # workflow sandbox importer; a runtime `from sdlc.graph import
+    # validate` then picks up the module and is not callable. A
+    # collection-time import binds the function and keeps it.
     from tests.graph.fixtures.registries import graph as ggraph
     from tests.graph.fixtures.registries import node as gnode
 

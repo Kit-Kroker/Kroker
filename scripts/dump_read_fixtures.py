@@ -50,12 +50,15 @@ from tests.test_dashboard_run_graph_routes import RUN_INPUT, _Client, _Handle  #
 _OPEN_RUNS = ["graph-run", "gated-run", "custom-run", "legacy-run"]
 _CLOSED_RUNS = ["closed-run"]
 
+# 018 T083: module scope on purpose. The Temporal replay tests rebind
+# sdlc.graph.validate to the SUBMODULE through the workflow sandbox
+# importer; a runtime import then picks up the module (not callable).
+from sdlc.graph import NODE_TYPES, GraphRunView, validate  # noqa: E402
+
 
 def _build_inputs() -> tuple[_Poller, RunGraphs]:
     """The T045 fixture inputs, rebuilt without pytest: the same handles and
     poller seam the route tests drive."""
-    from sdlc.graph import NODE_TYPES, GraphRunView, validate
-
     gated_input = build_run_input(
         greenfield_idea(), PipelineConfig(gates={"architecture": GateConfig()})
     )

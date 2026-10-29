@@ -109,6 +109,20 @@ def _objects(pre_code: dict[str, Any]) -> dict[str, dict[str, Any]]:
     }
 
 
+def _set_max_traversals(
+    graph: dict[str, Any], source: str, source_port: str, maximum: int
+) -> dict[str, Any]:
+    """018 T066: the Design edge-cap edit fixture -- one edge's traversal
+    cap raised on a copy of the shipped default (the mock's
+    default_edge_traversals replay)."""
+    out = copy.deepcopy(graph)
+    for edge in out["edges"]:
+        if edge["source"] == source and edge["source_port"] == source_port:
+            edge["max_traversals"] = maximum
+            return out
+    raise AssertionError(f"edge {source}:{source_port} not found")
+
+
 def _dump(model: Any) -> Any:
     return model.model_dump(mode="json")
 
@@ -243,6 +257,27 @@ def build() -> dict[str, Any]:
         files[f"objects/{name}.json"] = {
             "name": name,
             "base": "pre_code",  # the scenario whose canned validation applies
+            "graph": graph,
+            "parse": _dump(graph_wire.parse_object(graph)),
+        }
+    # 018 T066: the Design objects replay the shipped default and its
+    # edge-cap edit (the mock's loadGraph sha fallback and the
+    # edge-max-traversals demo). The graph is the PARSED shape -- the
+    # same normalization `parse_object` applies -- so the frontend's
+    # contentKey over it matches the recorded parse sha.
+    parsed_default = graph_wire.parse_object(_dump(SHIPPED["default"]))
+    assert isinstance(parsed_default, graph_wire.ParseOk)
+    default_graph = parsed_default.graph
+    for name, graph in (
+        ("default_graph", default_graph),
+        (
+            "default_edge_traversals",
+            _set_max_traversals(default_graph, "architect", "spec", 5),
+        ),
+    ):
+        files[f"objects/{name}.json"] = {
+            "name": name,
+            "base": "default",
             "graph": graph,
             "parse": _dump(graph_wire.parse_object(graph)),
         }
