@@ -2,7 +2,9 @@
 // these mappers turn the snake_case wire into the camelCase mirrors of
 // read-types.ts, exactly as the fixtures shape them.
 import type {
+  AdapterFact,
   Arm,
+  CellState,
   Compare,
   CompareArm,
   CompareCell,
@@ -10,6 +12,10 @@ import type {
   FleetSummary,
   GateTimeout,
   HeatCell,
+  InterfaceMatrix,
+  MatrixCell,
+  MatrixColumn,
+  MatrixRow,
   ShippedGraph,
   ShippedGraphs,
   Traversal,
@@ -121,5 +127,40 @@ export function mapCompare(raw: Wire): Compare {
         }),
       ),
     })),
+  }
+}
+
+// 018 T079 (data-model §2.3, R-8): the interfaces read. The wire is
+// camelCase already - the mirror spells nothing of its own, and the
+// cell state keeps the wire's 'not_measured'.
+export function mapInterfaces(raw: Wire): InterfaceMatrix {
+  return {
+    columns: (raw.columns as Wire[]).map(
+      (c): MatrixColumn => ({
+        key: c.key as string,
+        name: c.name as string,
+        ref: c.ref as string,
+      }),
+    ),
+    rows: (raw.rows as Wire[]).map(
+      (r): MatrixRow => ({
+        harness: r.harness as string,
+        sub: (r.sub as string) ?? '',
+        planned: (r.planned as boolean) ?? false,
+        cells: (r.cells as Wire[]).map(
+          (c): MatrixCell => ({
+            state: c.state as CellState,
+            text: (c.text as string) ?? '',
+          }),
+        ),
+      }),
+    ),
+    facts: (raw.facts as Wire[]).map(
+      (f): AdapterFact => ({
+        who: f.who as string,
+        severity: f.severity as AdapterFact['severity'],
+        text: f.text as string,
+      }),
+    ),
   }
 }

@@ -100,3 +100,39 @@ export interface Compare {
   heatColumns: string[]
   heatRows: { name: string; cells: HeatCell[] }[]
 }
+
+// 018 T079 (data-model §2.3, R-8): the interfaces read. The wire is
+// camelCase already; the cell state keeps its wire spelling
+// ('not_measured') everywhere.
+
+export type CellState = 'yes' | 'no' | 'partial' | 'not_measured' | 'planned'
+
+export interface MatrixCell {
+  state: CellState
+  text: string
+}
+
+export interface MatrixColumn {
+  key: string
+  name: string
+  ref: string
+}
+
+export interface MatrixRow {
+  harness: string
+  sub: string
+  planned: boolean
+  cells: MatrixCell[]
+}
+
+export interface AdapterFact {
+  who: string
+  severity: 'warn' | 'error'
+  text: string
+}
+
+export interface InterfaceMatrix {
+  columns: MatrixColumn[]
+  rows: MatrixRow[]
+  facts: AdapterFact[]
+}

@@ -2,7 +2,7 @@ import type {
   CatalogWire, GraphResponse, GraphStateResponse, GraphWire, LoadWire, ParseWire, SaveWire,
   SerializeWire, ValidationWire,
 } from './graph-types'
-import type { Compare, FleetSummary, ShippedGraphs } from './read-types'
+import type { Compare, FleetSummary, InterfaceMatrix, ShippedGraphs } from './read-types'
 
 export type Status = 'running' | 'blocked' | 'failed' | 'done'
 export type GateOutcome = 'approve' | 'revise' | 'reject'
@@ -168,6 +168,8 @@ export interface DashboardApi {
   /** 018 R-9 (S10): the Compare read - arms × graphs with SC and $/case,
    * the rework heatmap. */
   getCompare(): Promise<Compare>
+  /** 018 R-8 (S12): the Interfaces read - the harness containment matrix. */
+  getInterfaces(): Promise<InterfaceMatrix>
   answerClarify(runId: string, key: string, answer: string): Promise<void>
   decideGate(runId: string, key: string, outcome: GateOutcome, comment: string): Promise<void>
   overrideMerge(runId: string, key: string, approve: boolean, justification: string): Promise<void>

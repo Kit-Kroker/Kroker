@@ -9,9 +9,9 @@ export const navManifest: NavItem[] = [
   { id: 'inbox', label: 'Inbox', to: '/inbox', available: true },
   { id: 'run', label: 'Run', to: '/runs', available: true },
   { id: 'graphs', label: 'Graphs', to: '/graphs', available: true },
-  // Slice 7 lights interfaces up; compare landed with slice 6 (T072).
+  // Compare landed with slice 6 (T072); Interfaces with slice 7 (T079).
   { id: 'compare', label: 'Compare', to: '/compare', available: true },
-  { id: 'interfaces', label: 'Interfaces', to: '/interfaces', available: false },
+  { id: 'interfaces', label: 'Interfaces', to: '/interfaces', available: true },
 ]
 
 // 018 T063: the Design route landed. Gates the header's Observe/Design

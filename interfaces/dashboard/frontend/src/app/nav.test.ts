@@ -16,15 +16,15 @@ describe('navManifest', () => {
     ])
   })
 
-  it('Compare is available since T072; Interfaces waits for its slice', () => {
-    const byId = new Map(navManifest.map((n) => [n.id, n]))
-    expect(byId.get('compare')?.available).toBe(true)
-    expect(byId.get('interfaces')?.available).toBe(false)
+  it('every v5 entry is available since T079', () => {
+    for (const item of navManifest) {
+      expect(item.available, item.id).toBe(true)
+    }
   })
 
   it('Fleet, Inbox, run, Graphs and Compare are available', () => {
     const byId = new Map(navManifest.map((n) => [n.id, n]))
-    for (const id of ['fleet', 'inbox', 'run', 'graphs', 'compare']) {
+    for (const id of ['fleet', 'inbox', 'run', 'graphs', 'compare', 'interfaces']) {
       expect(byId.get(id)?.available, id).toBe(true)
     }
   })

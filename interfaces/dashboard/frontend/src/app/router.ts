@@ -6,6 +6,7 @@ import BoardTab from '../features/board/BoardTab.vue'
 import GraphsView from '../features/graphs/GraphsView.vue'
 import DesignView from '../features/graphs/DesignView.vue'
 import CompareView from '../features/compare/CompareView.vue'
+import InterfacesView from '../features/interfaces/InterfacesView.vue'
 import { api } from '../api/client'
 
 export const router = createRouter({
@@ -16,6 +17,8 @@ export const router = createRouter({
     // 018 T072 (S10): /compare is the v5 benchmark view (arms × graphs +
     // the rework heatmap).
     { path: '/compare', name: 'compare', component: CompareView },
+    // 018 T079 (S12): /interfaces is the harness containment matrix.
+    { path: '/interfaces', name: 'interfaces', component: InterfacesView },
     {
       path: '/runs/:id',
       name: 'run',

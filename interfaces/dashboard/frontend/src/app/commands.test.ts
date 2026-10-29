@@ -22,7 +22,7 @@ const STATE = {
   graphs: ['ingest', 'enrich'],
 }
 
-describe('commandsOf with the real nav (designAvailable true since T063, compare available since T072, interfaces unavailable)', () => {
+describe('commandsOf with the real nav (every command available since T079)', () => {
   it('returns exactly the available commands in S11 order', () => {
     const expected: PaletteCommand[] = [
       { id: 'review-gate-1', label: 'Review Merge gate', hint: 'waiting' },
@@ -36,6 +36,7 @@ describe('commandsOf with the real nav (designAvailable true since T063, compare
       { id: 'validate-graph', label: 'Validate graph' },
       { id: 'fit-graph', label: 'Fit graph to view' },
       { id: 'compare', label: 'Compare arms × graphs' },
+      { id: 'interfaces', label: 'Harness interfaces' },
     ]
     expect(commandsOf(STATE)).toEqual(expected)
   })
