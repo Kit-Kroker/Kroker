@@ -443,8 +443,8 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 
   Fails.
 - [x] T068 [US6] Create `D/compare_wire.py`, register `GET /api/compare`, and extend the fixture dump to `F/api/__fixtures__/read/compare.json`. T067 and the freshness test go green. Commit T067 + T068.
-- [ ] T069 [P] [US6] RED: create `U/src/components/heatmap/heatmap.spec.ts`: a column header per column; cells render a value, `low_n` (muted) or blank; colour comes from a token scale, with no literal. Fails.
-- [ ] T070 [P] [US6] Create the five files of `heatmap` and register them. T069 goes green. Commit T069 + T070.
+- [x] T069 [P] [US6] RED: create `U/src/components/heatmap/heatmap.spec.ts`: a column header per column; cells render a value, `low_n` (muted) or blank; colour comes from a token scale, with no literal. Fails.
+- [x] T070 [P] [US6] Create the five files of `heatmap` and register them. T069 goes green. Commit T069 + T070.
 - [ ] T071 [US6] RED: create `F/features/compare/CompareView.test.ts`:
   - one row per arm with name and note, and SC and $/case per graph;
   - `null` reads `not measured`;
