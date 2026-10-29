@@ -68,3 +68,35 @@ export interface ShippedGraphs {
   checks: ConfigCheck[]
   sections: ConfigSection[]
 }
+
+// 018 T072 (data-model §2.4, R-9): the compare read.
+
+export interface HeatCell {
+  state: 'value' | 'low_n' | 'blank'
+  value: number | null
+  n: number
+}
+
+export interface CompareCell {
+  graph: string
+  sc: number | null
+  costPerCase: number | null // null renders `not measured`
+}
+
+export interface CompareArm {
+  name: string
+  harness: string
+  model: string
+  note: string | null
+  cells: CompareCell[]
+}
+
+export interface Compare {
+  available: boolean
+  root: string
+  description: string | null
+  graphs: string[]
+  arms: CompareArm[]
+  heatColumns: string[]
+  heatRows: { name: string; cells: HeatCell[] }[]
+}

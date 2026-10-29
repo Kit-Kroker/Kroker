@@ -3,7 +3,7 @@ import type {
   GateOutcome, InboxItem, InboxState, OverrideItem, RoleCost, Run, StartRunInput, Status,
 } from './types'
 import { createHttpGraphApi } from './http-graph'
-import { mapFleetSummary, mapShippedGraphs } from './http-read'
+import { mapCompare, mapFleetSummary, mapShippedGraphs } from './http-read'
 import { HttpStatusError } from './errors'
 import { totalPrice } from '../shared/cost'
 
@@ -239,6 +239,7 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
     async getInboxState() { return mapInboxState(await json('/inbox')) },
     async getFleetSummary() { return mapFleetSummary(await json('/fleet/summary')) },
     async getShippedGraphs() { return mapShippedGraphs(await json('/graphs/shipped')) },
+    async getCompare() { return mapCompare(await json('/compare')) },
     async getPlannedTypes() { return [] as string[] },
 
     async answerClarify(runId, key, answer) {

@@ -16,15 +16,15 @@ describe('navManifest', () => {
     ])
   })
 
-  it('Compare and Interfaces are unavailable in this slice', () => {
+  it('Compare is available since T072; Interfaces waits for its slice', () => {
     const byId = new Map(navManifest.map((n) => [n.id, n]))
-    expect(byId.get('compare')?.available).toBe(false)
+    expect(byId.get('compare')?.available).toBe(true)
     expect(byId.get('interfaces')?.available).toBe(false)
   })
 
-  it('Fleet, Inbox, run and Graphs are available', () => {
+  it('Fleet, Inbox, run, Graphs and Compare are available', () => {
     const byId = new Map(navManifest.map((n) => [n.id, n]))
-    for (const id of ['fleet', 'inbox', 'run', 'graphs']) {
+    for (const id of ['fleet', 'inbox', 'run', 'graphs', 'compare']) {
       expect(byId.get(id)?.available, id).toBe(true)
     }
   })

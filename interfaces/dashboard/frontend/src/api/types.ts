@@ -2,7 +2,7 @@ import type {
   CatalogWire, GraphResponse, GraphStateResponse, GraphWire, LoadWire, ParseWire, SaveWire,
   SerializeWire, ValidationWire,
 } from './graph-types'
-import type { FleetSummary, ShippedGraphs } from './read-types'
+import type { Compare, FleetSummary, ShippedGraphs } from './read-types'
 
 export type Status = 'running' | 'blocked' | 'failed' | 'done'
 export type GateOutcome = 'approve' | 'revise' | 'reject'
@@ -165,6 +165,9 @@ export interface DashboardApi {
    * unplaceable in Design. No read route exists yet; the http provider
    * serves none until one does. */
   getPlannedTypes(): Promise<string[]>
+  /** 018 R-9 (S10): the Compare read - arms × graphs with SC and $/case,
+   * the rework heatmap. */
+  getCompare(): Promise<Compare>
   answerClarify(runId: string, key: string, answer: string): Promise<void>
   decideGate(runId: string, key: string, outcome: GateOutcome, comment: string): Promise<void>
   overrideMerge(runId: string, key: string, approve: boolean, justification: string): Promise<void>

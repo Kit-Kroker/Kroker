@@ -9,8 +9,8 @@ export const navManifest: NavItem[] = [
   { id: 'inbox', label: 'Inbox', to: '/inbox', available: true },
   { id: 'run', label: 'Run', to: '/runs', available: true },
   { id: 'graphs', label: 'Graphs', to: '/graphs', available: true },
-  // Later slices light these up (compare slice 6, interfaces slice 7).
-  { id: 'compare', label: 'Compare', to: '/compare', available: false },
+  // Slice 7 lights interfaces up; compare landed with slice 6 (T072).
+  { id: 'compare', label: 'Compare', to: '/compare', available: true },
   { id: 'interfaces', label: 'Interfaces', to: '/interfaces', available: false },
 ]
 

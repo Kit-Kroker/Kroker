@@ -5,6 +5,7 @@ import RunPage from './RunPage.vue'
 import BoardTab from '../features/board/BoardTab.vue'
 import GraphsView from '../features/graphs/GraphsView.vue'
 import DesignView from '../features/graphs/DesignView.vue'
+import CompareView from '../features/compare/CompareView.vue'
 import { api } from '../api/client'
 
 export const router = createRouter({
@@ -12,6 +13,9 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'fleet', component: FleetView },
     { path: '/inbox', name: 'inbox', component: InboxView },
+    // 018 T072 (S10): /compare is the v5 benchmark view (arms × graphs +
+    // the rework heatmap).
+    { path: '/compare', name: 'compare', component: CompareView },
     {
       path: '/runs/:id',
       name: 'run',

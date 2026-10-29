@@ -445,7 +445,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
 - [x] T068 [US6] Create `D/compare_wire.py`, register `GET /api/compare`, and extend the fixture dump to `F/api/__fixtures__/read/compare.json`. T067 and the freshness test go green. Commit T067 + T068.
 - [x] T069 [P] [US6] RED: create `U/src/components/heatmap/heatmap.spec.ts`: a column header per column; cells render a value, `low_n` (muted) or blank; colour comes from a token scale, with no literal. Fails.
 - [x] T070 [P] [US6] Create the five files of `heatmap` and register them. T069 goes green. Commit T069 + T070.
-- [ ] T071 [US6] RED: create `F/features/compare/CompareView.test.ts`:
+- [x] T071 [US6] RED: create `F/features/compare/CompareView.test.ts`:
   - one row per arm with name and note, and SC and $/case per graph;
   - `null` reads `not measured`;
   - the description line comes from the wire;
@@ -453,7 +453,7 @@ In the same commit (standing rule), delete the app-fleet CONSOLE-3 test (`stage-
   - `available: false` renders the empty state naming `root`.
 
   Add mapper and mock cases. Fails.
-- [ ] T072 [US6] Create `F/features/compare/CompareView.vue`, the compare read types, mapper and `F/api/mock/compare.ts`, and the `/compare` route. Set `navManifest` Compare to `available`. T071 goes green. Commit T071 + T072.
+- [x] T072 [US6] Create `F/features/compare/CompareView.vue`, the compare read types, mapper and `F/api/mock/compare.ts`, and the `/compare` route. Set `navManifest` Compare to `available`. T071 goes green. Commit T071 + T072.
 - [ ] T073 [US6] App tier: add CONSOLE-45, with tests in `U/app.compare.pw.ts`. `check_ui.py`, then `check_clauses.py`. Commit.
 
 ---

@@ -14,6 +14,7 @@ import { createMockGraph } from './graph'
 import { BUDGET_ITEM, BUDGET_RUN, CLOSED_GATES_RUN, ESCALATED_RUN, HALTED_RUN, MULTISINK_RUN, RETIRED_RUN, TOOL_APPROVAL_ITEM } from './decisions'
 import { mockFleetSummary } from './fleetSummary'
 import { mockShippedGraphs } from './shippedGraphs'
+import { mockCompare } from './compare'
 import { mockPlannedTypes } from './plannedTypes'
 import { HttpStatusError } from '../errors'
 import { BUDGET_SCOPE_NOTE, totalPrice } from '../../shared/cost'
@@ -421,6 +422,10 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
     async getPlannedTypes() {
       await delay()
       return mockPlannedTypes()
+    },
+    async getCompare() {
+      await delay()
+      return mockCompare()
     },
 
     async answerClarify(runId: string, key: string, answer: string) {

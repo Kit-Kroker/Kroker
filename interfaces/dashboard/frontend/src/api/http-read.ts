@@ -3,9 +3,13 @@
 // read-types.ts, exactly as the fixtures shape them.
 import type {
   Arm,
+  Compare,
+  CompareArm,
+  CompareCell,
   FleetRunSummary,
   FleetSummary,
   GateTimeout,
+  HeatCell,
   ShippedGraph,
   ShippedGraphs,
   Traversal,
@@ -74,5 +78,48 @@ export function mapShippedGraphs(raw: Wire): ShippedGraphs {
     ),
     checks: raw.checks as ShippedGraphs['checks'],
     sections: raw.sections as ShippedGraphs['sections'],
+  }
+}
+
+// 018 T072 (data-model §2.4, R-9): the compare read. Nulls stay null -
+// an unpriced arm is `not measured`, never a folded-in zero. The mapper
+// is idempotent: the raw snake_case wire or an already-mapped shape both
+// map cleanly (the view maps whatever its api hands it; the mock
+// pre-maps from the same fixture).
+const pick = <T,>(raw: Wire, snake: string, camel: string): T | null =>
+  ((raw[snake] ?? raw[camel]) as T | null | undefined) ?? null
+
+export function mapCompare(raw: Wire): Compare {
+  return {
+    available: (pick<boolean>(raw, 'available', 'available')) ?? false,
+    root: pick<string>(raw, 'root', 'root') ?? '',
+    description: pick<string>(raw, 'description', 'description'),
+    graphs: (raw.graphs as string[]) ?? [],
+    arms: (raw.arms as Wire[]).map(
+      (a): CompareArm => ({
+        name: a.name as string,
+        harness: (a.harness as string) ?? '',
+        model: (a.model as string) ?? '',
+        note: pick<string>(a, 'note', 'note'),
+        cells: (a.cells as Wire[]).map(
+          (c): CompareCell => ({
+            graph: c.graph as string,
+            sc: pick<number>(c, 'sc', 'sc'),
+            costPerCase: pick<number>(c, 'cost_per_case', 'costPerCase'),
+          }),
+        ),
+      }),
+    ),
+    heatColumns: (pick<string[]>(raw, 'heat_columns', 'heatColumns')) ?? [],
+    heatRows: ((pick<Wire[]>(raw, 'heat_rows', 'heatRows')) ?? []).map((r) => ({
+      name: r.name as string,
+      cells: (r.cells as Wire[]).map(
+        (c): HeatCell => ({
+          state: c.state as HeatCell['state'],
+          value: pick<number>(c, 'value', 'value'),
+          n: (pick<number>(c, 'n', 'n')) ?? 0,
+        }),
+      ),
+    })),
   }
 }
