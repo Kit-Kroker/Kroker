@@ -73,6 +73,20 @@ describe('StartRunModal', () => {
     expect(h.startRunCalls[0].budget).toBe(5) // a number, not '5'
   })
 
+  it('018 T064 (R-15): the form carries the budget field and the payload sends NO graph field', async () => {
+    const ui = useUiStore()
+    ui.openStart()
+    ui.startTitle = 'Budgeted default run'
+    ui.startBudget = '20'
+    const w = mount(StartRunModal)
+    expect(w.find('[data-testid="start-budget-input"]').exists()).toBe(true)
+    await w.find('[data-testid="submit"]').trigger('click')
+    await flushPromises()
+    expect(h.startRunCalls).toHaveLength(1)
+    expect(h.startRunCalls[0].budget).toBe(20)
+    expect('graph' in (h.startRunCalls[0] as Record<string, unknown>)).toBe(false) // R-15
+  })
+
   it('a budget notice on the returned run toasts', async () => {
     const notice =
       'Budget $5.00 counts priced planning-agent spend only. ' +

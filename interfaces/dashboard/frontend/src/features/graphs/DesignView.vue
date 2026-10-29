@@ -15,12 +15,14 @@ import GraphInspector from './GraphInspector.vue'
 import { api } from '../../api/client'
 import { useCatalogStore } from '../../shared/catalog.store'
 import { useGraphEditorStore } from './graphEditor.store'
+import { useUiStore } from '../../app/ui.store'
 import { nodeKeys, toCanvas } from '../../shared/graphCanvas.adapter'
 
 const props = defineProps<{ sha?: string }>()
 const route = useRoute()
 const catalog = useCatalogStore()
 const editor = useGraphEditorStore()
+const ui = useUiStore()
 
 // V9: the planned node types (feedback A-4), a presentation-only read.
 const planned = ref<Set<string>>(new Set())
@@ -147,14 +149,15 @@ const runReason = computed(() => {
         <span v-if="editor.sha" class="sha" data-testid="design-sha">{{ editor.sha.slice(0, 12) }}</span>
         <span v-if="editor.validation && !editor.runnable" class="badge" data-testid="not-runnable">not runnable · {{ editor.errorCount }}</span>
         <span v-if="editor.notice" class="notice" data-testid="design-notice">{{ editor.notice }}</span>
-        <!-- R-15: T065 wires the enabled button to the start form (no graph
-             field); until then the reason states why it cannot run. -->
         <span class="spacer" />
+        <!-- R-15 (T065): the enabled button opens the existing start form —
+             sending no graph field; the run always starts on the shipped
+             default. -->
         <button
           class="btn run"
           data-testid="run-this-version"
           :disabled="!canRun"
-          @click="() => {}"
+          @click="ui.openStart()"
         >Run this version</button>
         <span v-if="runReason" class="reason" data-testid="run-reason">{{ runReason }}</span>
         <button

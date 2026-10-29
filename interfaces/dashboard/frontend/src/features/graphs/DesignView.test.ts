@@ -7,7 +7,7 @@
 // compares against comes from ``getShippedGraphs``.
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createPinia, setActivePinia } from 'pinia'
+import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { createMemoryHistory, createRouter, RouterView, type Router } from 'vue-router'
 import preCode from '../../api/__fixtures__/graph/scenarios/pre_code.json'
 import shippedFixture from '../../api/__fixtures__/read/graphs-shipped.json'
@@ -29,6 +29,7 @@ vi.mock('../../api/client', () => ({ api }))
 import DesignView from './DesignView.vue'
 import { useCatalogStore } from '../../shared/catalog.store'
 import { useGraphEditorStore } from './graphEditor.store'
+import { useUiStore } from '../../app/ui.store'
 import catalogJson from '../../api/__fixtures__/graph/catalog.json'
 import type { CatalogWire } from '../../api/graph-types'
 
@@ -36,8 +37,10 @@ const PRE = preCode.parse as { ok: true; graph: GraphWire; sha: string }
 const DEFAULT_SHA = 'a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38'
 const RouterLinkStub = { props: ['to'], template: '<a data-testid="stub-link"><slot /></a>' }
 
+let pinia: Pinia
 beforeEach(() => {
-  setActivePinia(createPinia())
+  pinia = createPinia()
+  setActivePinia(pinia)
   vi.resetAllMocks()
   useCatalogStore().catalog = catalogJson as unknown as CatalogWire
   api.getCatalog.mockResolvedValue(catalogJson)
@@ -64,7 +67,7 @@ const mountAt = async (path: string) => {
   await router.push(path)
   await router.isReady()
   const Host = { components: { RouterView }, template: '<RouterView />' }
-  const w = mount(Host, { global: { plugins: [router], stubs: { RouterLink: RouterLinkStub } } })
+  const w = mount(Host, { global: { plugins: [router, pinia], stubs: { RouterLink: RouterLinkStub } } })
   await flushPromises()
   return { w, router }
 }
@@ -161,6 +164,36 @@ describe('Run this version (R-15, 018 T062 RED)', () => {
     expect((button.element as HTMLButtonElement).disabled).toBe(true)
     expect(w.find('[data-testid="run-reason"]').text()).toBeTruthy()
   })
+})
+
+// --- 018 T064 (RED): the button opens the existing start form (T065 wires
+// it), the form still carries its budget field, and the start payload sends
+// NO graph field (R-15). CONSOLE-28's rail half (the started run's budget
+// renders in rail-budget) is already pinned green in RunView.test.ts.
+
+describe('Run this version opens the start form (018 T064 RED)', () => {
+  it('enabled for the saved unchanged shipped default; the click opens the form', async () => {
+    // Mounted WITHOUT ?from=run (a run copy carries no sha association, so
+    // it can never satisfy R-15's saved-unchanged rule). The saved state is
+    // reached through the REAL flow — a save the server answers with the
+    // default's sha — never by mutating the store handle (under a full-file
+    // run the view's store instance is not the test's handle, and the
+    // mutation silently lands elsewhere).
+    api.loadGraph.mockResolvedValue({ ok: true, sha: DEFAULT_SHA, graph: PRE.graph })
+    api.saveGraph.mockResolvedValue({ ok: true, sha: DEFAULT_SHA, validation: null })
+    const { w } = await mountAt(`/graphs/${DEFAULT_SHA}`)
+    await flushPromises()
+    await w.find('[data-testid="design-save"]').trigger('click')
+    await flushPromises()
+    const button = w.find('[data-testid="run-this-version"]')
+    await vi.waitFor(() => {
+      expect((button.element as HTMLButtonElement).disabled).toBe(false)
+    })
+    await button.trigger('click')
+    expect(useUiStore().startOpen).toBe(true) // T065 wires openStart
+  })
+  // The form's budget field and the R-15 no-graph payload are pinned where
+  // the modal lives: src/app/shell/StartRunModal.test.ts (boundary rule).
 })
 
 describe('the from=run load', () => {

@@ -6,7 +6,6 @@ import { useFleetStore } from '../../shared/fleet.store'
 import { useFleetSummaryStore } from '../../shared/fleetSummary.store'
 import { useInboxStore } from '../inbox.store'
 import { usePrefsStore } from '../prefs.store'
-import { useUiStore } from '../ui.store'
 import AppHeader from '@kroker/ui/components/app_header/AppHeader.vue'
 import type { NavItem, RunSwitch } from '@kroker/ui/components/app_header/AppHeader.vue'
 
@@ -15,7 +14,6 @@ const fleet = useFleetStore()
 const summary = useFleetSummaryStore()
 const inbox = useInboxStore()
 const prefs = usePrefsStore()
-const ui = useUiStore()
 
 // 018 T012: the manifest's static primary entries with the run entry
 // rebuilt from live state. A fresh array every render — the exported
@@ -72,8 +70,8 @@ const emit = defineEmits<{ search: []; menu: [] }>()
       @search="emit('search')"
       @menu="emit('menu')"
     />
-    <!-- R-1: the Start-run button stays in the shell until slice 6 (T066). -->
-    <button data-testid="start-btn" class="start" @click="ui.openStart()">+ START RUN</button>
+    <!-- 018 T065 (R-1 ends): the header Start button is gone — runs start
+         from Design's "Run this version" (the same start form). -->
   </div>
 </template>
 
@@ -85,22 +83,5 @@ const emit = defineEmits<{ search: []; menu: [] }>()
 .shell-header > :first-child {
   flex: 1;
   min-width: 0;
-}
-.start {
-  flex: none;
-  align-self: center;
-  margin-right: 12px;
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 7px 14px;
-  background: var(--status-waiting);
-  color: var(--ink-inverse);
-  border: none;
-  border-radius: 4px;
-}
-.start:hover {
-  background: var(--ink-secondary);
 }
 </style>

@@ -110,12 +110,17 @@ describe('shell AppHeader (v5 wiring, 018 T011 RED)', () => {
     expect(run!['available']).toBe(true)
   })
 
-  it('keeps the Start-run button until T066 (R-1) and it opens the modal', async () => {
+  it('018 T065 (R-1 ends): the Start-run button is gone; runs start from Design', () => {
     const ui = useUiStore()
     const w = mountShell()
-    expect(w.find('[data-testid="start-btn"]').exists()).toBe(true)
-    await w.find('[data-testid="start-btn"]').trigger('click')
-    expect(ui.startOpen).toBe(true)
+    expect(w.find('[data-testid="start-btn"]').exists()).toBe(false)
+    expect(ui.startOpen).toBe(false)
+  })
+
+  it('no Start button remains anywhere in the shell header (018 T064 RED, T065 removes it)', () => {
+    const w = mountShell()
+    expect(w.findAll('[data-testid="start-btn"]')).toHaveLength(0)
+    expect(w.text()).not.toContain('START RUN')
   })
 })
 

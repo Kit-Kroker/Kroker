@@ -74,30 +74,8 @@ test('the ⋯ menu light theme switches data-theme on the document', async ({ pa
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
 })
 
-// --- The start form's budget (011 T016): the form lives in the shell
-// (the header's Start button) and starts a run on the fleet.
-test('the start form rejects a zero budget and starts a budgeted run', async ({ page }) => {  // clause: CONSOLE-28
-  await page.goto('/')
-  // The fleet must be rendered before its rows are counted (the provider
-  // answers asynchronously; CONSOLE-1's first-row wait).
-  await expect(page.locator('[data-testid="fleet-row"]').first()).toBeVisible()
-  const before = await page.locator('[data-testid="fleet-row"]').count()
-  await page.locator('[data-testid="start-btn"]').click()
-  await expect(page.locator('[data-testid="modal-card"]')).toBeVisible()
-  // Zero is refused with the omit-it message; nothing is added.
-  await page.locator('[data-testid="start-budget-input"]').fill('0')
-  await expect(page.locator('[data-testid="start-budget-error"]')).toContainText(
-    'omit it to run without a budget',
-  )
-  await expect(page.locator('[data-testid="submit"]')).toBeDisabled()
-  expect(await page.locator('[data-testid="fleet-row"]').count()).toBe(before)
-  // A valid budget starts the run, and the new run's Cost section (the
-  // rail, 018 T032 — the Cost tab is retired) shows it. ?rail=cost opens
-  // the section (SC-005 for cost).
-  await page.locator('[data-testid="start-title-input"]').fill('Budgeted demo')
-  await page.locator('[data-testid="start-budget-input"]').fill('5')
-  await page.locator('[data-testid="submit"]').click()
-  await page.goto('/#/runs/feature-budgeted-demo?rail=cost')
-  await expect(page.locator('[data-testid="rail-cost"]')).toBeVisible()
-  await expect(page.locator('[data-testid="rail-cost"] [data-testid="rail-budget"]')).toContainText('5.00')
-})
+// --- 018 T065 (R-1 ends): the CONSOLE-28 test ('the start form rejects a
+// zero budget and starts a budgeted run') is deleted — it opened the form
+// via the header's start-btn, removed with T065. T066 restores it in this
+// phase, opened from Design's "Run this version", with the budget shown in
+// the rail. The clause reads untested mid-phase; SG-5 checks at phase end.
