@@ -143,3 +143,33 @@ def test_the_route_writes_no_graph_to_the_store(setup):
     client, _, puts = setup
     _body(client)
     assert puts == []  # read-routes rule 1
+
+
+def test_shipped_wins_over_the_sha_route_in_the_composed_app(tmp_path):
+    """Regression (2026-10-31 live report): FastAPI matches in registration
+    order, and create_router declared /graphs/{sha} before it included the
+    read routes -- so GET /api/graphs/shipped answered 422 "sha must be 64
+    lowercase hex chars" and the v5 Graphs screen lived at loading forever.
+    The isolated mount above cannot catch this; only the composed router
+    (the shape main.py serves) can."""
+    from sdlc.dashboard.api import create_router
+    from sdlc.dashboard.run_graph import RunGraphs
+
+    async def get_client():
+        return _Client({})
+
+    app = FastAPI()
+    app.include_router(
+        create_router(_NoPoller(), run_graphs=RunGraphs(get_client, store=GraphStore(tmp_path)))
+    )
+    client = TestClient(app)
+
+    r = client.get("/graphs/shipped")
+    assert r.status_code == 200, r.text
+    assert r.json()["graphs"], "the shipped catalog came back, not the sha error"
+
+    # A real 64-hex sha still reaches the load route (200, missing store).
+    sha = "a" * 64
+    r = client.get(f"/graphs/{sha}")
+    assert r.status_code == 200, r.text
+    assert r.json()["reason"] == "not_found"

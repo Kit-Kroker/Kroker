@@ -226,6 +226,14 @@ def create_router(
     async def graph_catalog():
         return graph_wire.catalog()
 
+    # 018 T046 (read-routes): the read-only summary routes share the poller
+    # and the run-graph source; GET-only, no writes. Included here, before
+    # /graphs/{sha} is declared, because FastAPI matches in registration
+    # order: registered later, the literal /graphs/shipped was captured by
+    # the {sha} param and every catalog read died as 422 "sha must be 64
+    # lowercase hex chars" (live-only; the mock provider never hits HTTP).
+    router.include_router(register_read_routes(poller, run_graphs=graphs))
+
     @router.post("/graphs/parse", response_model=graph_wire.ParseOk | graph_wire.ParseErr)
     async def graph_parse(request: Request):
         body = await _graph_body(request)
@@ -380,7 +388,4 @@ def create_router(
 
         return StartedRun(run_id=wf_id, budget_notice=budget_notice(cfg))
 
-    # 018 T046 (read-routes): the read-only summary routes share the poller
-    # and the run-graph source; GET-only, no writes.
-    router.include_router(register_read_routes(poller, run_graphs=graphs))
     return router
