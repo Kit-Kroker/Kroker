@@ -1,7 +1,7 @@
 case_id: deveval-readtime
 verdict: not_assessed
 reason: null
-note: no strong arm runs
+note: no weak arm runs
 oracle_id: sha256:7335319053ea7fca22f89fc95332d7671d5ba0542b653afb31731b650b8561cf
 oracle_tests: 12
 reference:
@@ -20,10 +20,19 @@ separation:
   passed: null
   strong:
     arm: zai-coding-plan-glm-5.3
-    run_ids: []
-    scores: []
-    mean: null
-    stall_points: []
+    run_ids:
+    - bench-deveval-readtime-1793592253/deveval-readtime#opencode#zai-coding-plan-glm-5.3
+    - bench-deveval-readtime-1793598943/deveval-readtime#opencode#zai-coding-plan-glm-5.3
+    - bench-deveval-readtime-1793609614/deveval-readtime#opencode#zai-coding-plan-glm-5.3
+    scores:
+    - 0.3333333333333333
+    - 0.16666666666666666
+    - 0.16666666666666666
+    mean: 0.2222222222222222
+    stall_points:
+    - merge
+    - deploy
+    - merge
   weak:
     arm: zai-coding-plan-glm-5.3-flash
     run_ids: []
@@ -36,5 +45,5 @@ separation:
 role: corpus
 visibility: public
 exposure: repo_public
-kroker_commit: 194e3ec6
-updated: '2026-10-27T20:11:53.047520+00:00'
+kroker_commit: 7a43462cf42e85514ac1e9f45eb91265099ac4c6
+updated: '2026-11-02T11:36:16.563293+00:00'

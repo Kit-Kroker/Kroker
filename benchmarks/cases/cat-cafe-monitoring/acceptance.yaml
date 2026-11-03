@@ -1,7 +1,7 @@
 case_id: cat-cafe-monitoring
-verdict: not_assessed
-reason: null
-note: no strong arm runs
+verdict: rejected
+reason: no_separation
+note: strong 0.8287, weak 0.7037, margin 0.1250
 oracle_id: sha256:f9a25268b472a6c0f0c4a475082b19b0e63e3450fbeb12519b537defc2643f28
 oracle_tests: 36
 reference:
@@ -36,26 +36,59 @@ floor:
     oracle/test_risk.py::test_calm_resting_cat_is_not_risk, oracle/test_risk.py::test_risk_is_independent_per_cat,
     oracle/test_risk.py::test_single_reading_cat_has_boolean_at_risk'
 separation:
-  passed: null
+  passed: false
   strong:
     arm: zai-coding-plan-glm-5.3
-    run_ids: []
-    scores: []
-    mean: null
-    stall_points: []
+    run_ids:
+    - bench-cat-cafe-monitoring-1793263254/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3
+    - bench-cat-cafe-monitoring-1793291808/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3
+    - bench-cat-cafe-monitoring-1793302800/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3
+    - bench-cat-cafe-monitoring-1793479593/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3
+    - bench-cat-cafe-monitoring-1793500533/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3
+    - bench-cat-cafe-monitoring-1793519920/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3
+    scores:
+    - 0.6944444444444444
+    - 0.7222222222222222
+    - 0.8888888888888888
+    - 0.8611111111111112
+    - 0.9166666666666666
+    - 0.8888888888888888
+    mean: 0.8287037037037037
+    stall_points:
+    - deploy
+    - deploy
+    - deploy
+    - merge
+    - deploy
+    - merge
   weak:
     arm: zai-coding-plan-glm-5.3-flash
     run_ids:
     - bench-cat-cafe-monitoring-1792148180/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3-flash
+    - bench-cat-cafe-monitoring-1793263254/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3-flash
+    - bench-cat-cafe-monitoring-1793302800/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3-flash
+    - bench-cat-cafe-monitoring-1793479593/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3-flash
+    - bench-cat-cafe-monitoring-1793500533/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3-flash
+    - bench-cat-cafe-monitoring-1793519920/cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3-flash
     scores:
     - 0.8333333333333334
-    mean: 0.8333333333333334
-    stall_points: []
-  margin: null
+    - 0.0
+    - 0.75
+    - 0.9166666666666666
+    - 0.7777777777777778
+    - 0.9444444444444444
+    mean: 0.7037037037037037
+    stall_points:
+    - deploy
+    - deploy
+    - deploy
+    - deploy
+    - merge
+  margin: 0.125
   not_comparable: 11
   detail: ''
 role: corpus
 visibility: private
 exposure: repo_public
-kroker_commit: 194e3ec6
-updated: '2026-10-27T20:09:12.172368+00:00'
+kroker_commit: 7a43462cf42e85514ac1e9f45eb91265099ac4c6
+updated: '2026-11-01T14:08:01.768879+00:00'

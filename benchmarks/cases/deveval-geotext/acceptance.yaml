@@ -1,7 +1,7 @@
 case_id: deveval-geotext
-verdict: not_assessed
-reason: null
-note: no strong arm runs
+verdict: rejected
+reason: no_separation
+note: strong 0.6667, weak 0.5926, margin 0.0741
 oracle_id: sha256:432171468574f494c0a0d455ad699b38fcfedc00f4365c0e03dd793194a3ab3d
 oracle_tests: 9
 reference:
@@ -16,24 +16,36 @@ floor:
   detail: '0/2 oracle tests passed; failed: oracle/acceptance_tests/test_acceptance.py::oracle.acceptance_tests.test_acceptance,
     oracle/unit_tests/test_geotext.py::oracle.unit_tests.test_geotext'
 separation:
-  passed: null
+  passed: false
   strong:
     arm: zai-coding-plan-glm-5.3
-    run_ids: []
-    scores: []
-    mean: null
-    stall_points: []
+    run_ids:
+    - bench-deveval-geotext-1793569657/deveval-geotext#opencode#zai-coding-plan-glm-5.3
+    scores:
+    - 0.6666666666666666
+    mean: 0.6666666666666666
+    stall_points:
+    - merge
   weak:
     arm: zai-coding-plan-glm-5.3-flash
-    run_ids: []
-    scores: []
-    mean: null
-    stall_points: []
-  margin: null
+    run_ids:
+    - bench-deveval-geotext-1793542173/deveval-geotext#opencode#zai-coding-plan-glm-5.3-flash
+    - bench-deveval-geotext-1793553763/deveval-geotext#opencode#zai-coding-plan-glm-5.3-flash
+    - bench-deveval-geotext-1793569657/deveval-geotext#opencode#zai-coding-plan-glm-5.3-flash
+    scores:
+    - 0.3333333333333333
+    - 0.5555555555555556
+    - 0.8888888888888888
+    mean: 0.5925925925925926
+    stall_points:
+    - merge
+    - merge
+    - merge
+  margin: 0.07407407407407407
   not_comparable: 2
   detail: ''
 role: corpus
 visibility: public
 exposure: repo_public
-kroker_commit: 194e3ec6
-updated: '2026-10-27T20:10:37.461669+00:00'
+kroker_commit: 7a43462cf42e85514ac1e9f45eb91265099ac4c6
+updated: '2026-11-02T04:03:13.938178+00:00'
