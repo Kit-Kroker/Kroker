@@ -67,6 +67,18 @@
 > the glm-5.2 arm read as history, never as live evidence. **No benchmark
 > was re-run** for this change.
 
+> **RE-PROVE RESULT MARKER — 2026-11-03 (R019 follow-up paid series).** Both
+> arms rerun on one commit (`7a43462c`, 3 valid cycles per case; adversary
+> moved to `anthropic:claude-sonnet-5` in that same commit — its model id
+> collided with the new weak arm at the ADR-6 boundary). Verdict: **the
+> `glm-5.3` / `glm-5.3-flash` pairing does not separate** (margins 0.000,
+> 0.074, 0.125 against the 0.15 bar; readtime `not_assessed` — the flash
+> arm died at clarify 3/3; numbers in the corpus table below). Tally stays
+> **0 of 8** — now on live same-commit evidence instead of re-labelled
+> history. Weak-arm fragility was systemic (7 lost weak runs). Restoring a
+> separable corpus needs an arm re-selection round (flash-strong with no
+> weak, or a cross-provider pair under ADR-6), not more reruns.
+
 > **RESEARCH-SPEND BREAK MARKER — 2026-10-04 (008 research cap handling).** A
 > research sub-question that hits a bound — its request limit or a tool
 > budget cap — now reports and prices the model spend it incurred before
@@ -652,25 +664,29 @@ Acceptance into the corpus is determined by `sdlc benchmark accept --case <id>`:
      records each run's `last_stage` (empty for pre-017 runs).
 
 **Corpus table:**
-Run `sdlc benchmark corpus` to display status across all cases (state after the
-R019 arm retirement, 2026-10-27 — tally: **0 of 8 accepted or
-provisional, 0 of 2 private**; the verdicts below are the current ones, and
-the figures in parentheses are the older glm-5.2-era evidence, kept as history
-and now `not_comparable`, see the R019 break marker at the top). A row prints `Stale: yes` for either of two
+Run `sdlc benchmark corpus` to display status across all cases (state after
+the R019 re-prove series, 2026-11-03 — tally: **0 of 8 accepted or
+provisional, 0 of 2 private**; the four re-proven cases carry live
+same-commit evidence from the paid series on `7a43462c`, see the re-prove
+result marker at the top, and the figures in parentheses are the older
+glm-5.2-era evidence, kept as history and now `not_comparable`). A row prints `Stale: yes` for either of two
 causes: **oracle drift** (the record's `oracle_id` no longer matches the
 current hash of `oracle/`) and, since R019 (FR-009), **arm drift** (the
 record's separation arms differ from the case's `strong_arm`/`weak_arm`);
 stale rows stay out of the tally. Known limits of the arm rule: it compares
 arm **names** only (a renamed `role_models` payload under the same name does
 not trip it), and records with `separation: null` are exempt.
-- `cat-cafe-monitoring`: `corpus`, `private`, **`not_assessed`** (R019: strong
-  `glm-5.3` has no runs yet; formerly `provisional` — strong
+- `cat-cafe-monitoring`: `corpus`, `private`, **`rejected`
+  (`no_separation`)** on the 2026-11-03 re-prove series (commit `7a43462c`:
+  strong `glm-5.3` 0.829 vs weak `glm-5.3-flash` 0.704, margin 0.125 < 0.15,
+  n=6 per arm); formerly `provisional` on glm-5.2-era evidence (strong
   `glm-5.3-flash` 0.833 vs weak `glm-5.2` 0.472, margin +0.361, n=1 per arm —
-  the only case where the harness agrees with the public model ordering)
-- `deveval-geotext`: `corpus`, `public`, **`not_assessed`** (R019; formerly
-  `rejected` (`no_separation`): flash
-  0.222 vs glm-5.2 0.778, margin −0.556 — the harness inverts the public
-  ordering here; its R2-era `provisional` was an artifact of the inverted arm
+  then the only case where the harness agreed with the public model ordering)
+- `deveval-geotext`: `corpus`, `public`, **`rejected` (`no_separation`)** on
+  the 2026-11-03 re-prove series (`7a43462c`: 0.667 vs 0.593, margin 0.074);
+  formerly `rejected` on glm-5.2-era evidence (flash
+  0.222 vs glm-5.2 0.778, margin −0.556 — the harness inverted the public
+  ordering there; its R2-era `provisional` was an artifact of the inverted arm
   labels, see R4-r2)
 - `deveval-hone`: `parked`, `public` — saturated at screening (oracle 1.000 =
   strong arm 1.0 on all runs; nothing left to separate)
@@ -678,14 +694,19 @@ not trip it), and records with `separation: null` are exempt.
 - `deveval-particle-swarm-optimization`: `parked`, `public` — unassessed (lost
   twice at plan-validation: glm-5.3 emits dangling task deps, `T7→T6`; the
   single repeat was spent)
-- `deveval-readtime`: `corpus`, `public`, **`not_assessed`** (R019; formerly
-  `rejected` (`no_separation`): flash
+- `deveval-readtime`: `corpus`, `public`, **`not_assessed`** — on the
+  2026-11-03 re-prove series the weak `glm-5.3-flash` arm died at clarify in
+  3/3 cycles (no weak runs); the strong arm graded 3/3. Formerly `rejected`
+  (`no_separation`) on glm-5.2-era evidence (flash
   0.250 vs glm-5.2 0.167, margin +0.083 < 0.15 — a near-tie under either
   labeling)
 - `deveval-stocktrends`: `parked`, `public` — degenerate at screening (oracle
   0.000 on all runs)
-- `theatre-box-office`: `corpus`, `private`, `isolated`, **`not_assessed`**
-  since R019 (no strong-arm runs); formerly **`rejected` (`no_separation`)** on
+- `theatre-box-office`: `corpus`, `private`, `isolated`, **`rejected`
+  (`no_separation`)** on the 2026-11-03 re-prove series (`7a43462c`: strong
+  `glm-5.3` 0.018 vs weak `glm-5.3-flash` 0.018, margin 0.000 — both arms
+  flat on the oracle, n=3 valid cycles); formerly **`rejected`
+  (`no_separation`)** on
   round 016 pre-017 records (pin `1e697522`, oracle `a66c0c4e`: strong
   flash 0.0179 vs weak glm-5.2 0.0179, margin 0, n=1 per arm — both arms
   graded but failed at `merge`, so the oracle scored broken integration trees;
