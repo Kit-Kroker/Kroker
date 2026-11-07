@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import pytest
@@ -7,12 +6,14 @@ import yaml
 from sdlc.benchmarks.corpus import load_corpus, smoke_case
 from sdlc.benchmarks.matrix import expand_matrix
 from sdlc.benchmarks.models import CaseRole, CaseVisibility
+from tests.conftest import REAL_PRIVATE_ROOT
 
 CASES_ROOT = Path(__file__).resolve().parents[1] / "benchmarks" / "cases"
 
-# 016 D-12: the machine's real store binding, captured at import BEFORE the
-# autouse fixture clears the variable; the two iterate-all tests re-apply it.
-REAL_PRIVATE_ROOT = os.environ.get("SDLC_PRIVATE_CASES_ROOT")
+# 016 D-12: the machine's real store binding, captured once at conftest
+# import (see tests/conftest.py -- a module-local capture raced the
+# import-time load_dotenv() in src/sdlc/worker.py); the two iterate-all
+# tests re-apply it at runtime under the autouse fixture.
 
 CORPUS_WEAK_CELL_IDS = {
     "cat-cafe-monitoring": "cat-cafe-monitoring#opencode#zai-coding-plan-glm-5.3-flash",

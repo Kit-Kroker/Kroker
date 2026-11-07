@@ -14,10 +14,14 @@ import pytest
 import yaml
 
 from scripts.check_private_leak import collect_tokens, scan
+from tests.conftest import REAL_PRIVATE_ROOT
 
-# 016 D-12: the machine's real store binding, captured at import BEFORE the
-# autouse fixture clears the variable (same capture as test_benchmark_corpus).
-REAL_PRIVATE_ROOT = os.environ.get("SDLC_PRIVATE_CASES_ROOT")
+# 016 D-12: the machine's real store binding. Captured once at conftest
+# import (see tests/conftest.py) -- a module-local os.environ.get() here
+# raced the import-time load_dotenv() in src/sdlc/worker.py, so whether the
+# binding was visible depended on which test module imported sdlc.worker
+# first: the opt-in scan below then ran inside the full-suite fast tier and
+# skipped when the file ran alone.
 
 # The six fixed error-class names (ERROR_CLASSES) must never become tokens.
 ERROR_CLASS_NAMES = [

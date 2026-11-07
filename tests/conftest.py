@@ -31,6 +31,24 @@ os.environ.setdefault("ZAI_API_KEY", "test-dummy")
 # refuses -- pin an absolute store whatever the shell exported.
 if not Path(os.environ.get("SDLC_GRAPH_STORE", "")).is_absolute():
     os.environ["SDLC_GRAPH_STORE"] = str(Path(tempfile.gettempdir()) / "sdlc-test-graphs")
+# 016 D-12: the machine's real store binding, captured HERE at conftest
+# import. pytest imports conftest before any test module and this file
+# imports nothing from sdlc, so the read precedes any import-time
+# load_dotenv() (src/sdlc/worker.py) that a test module's import chain could
+# trigger. The opt-in tests (test_private_leak, test_benchmark_corpus)
+# import REAL_PRIVATE_ROOT from here instead of reading os.environ at their
+# own module import: a module-local capture raced dotenv -- on a machine
+# binding the store in .env, a full-suite run saw the binding and ran a
+# 60s+ repo scan inside the fast tier, while the file alone skipped it.
+# Backlog: .workspace/tasks/2026-11-03-private-leak-dotenv-import-order.md
+REAL_PRIVATE_ROOT = os.environ.get("SDLC_PRIVATE_CASES_ROOT")
+# With importmode=prepend and no tests/__init__.py, pytest imports this file
+# as top-level `conftest`, while the repo's helper-import convention
+# (`from tests.conftest import X`) resolves the same file a second time as
+# `tests.conftest` -- re-executing the capture above at first-consumer
+# import, mid-suite, and reopening the dotenv race. Pin one module object
+# under both names (no-op if pytest already used the `tests.conftest` name).
+sys.modules.setdefault("tests.conftest", sys.modules[__name__])
 
 
 def _pid_alive(pid: int) -> bool:
