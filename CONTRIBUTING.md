@@ -24,8 +24,10 @@ pre-commit install
 ```
 
 Python 3.13 is the version CI and the image run. `git` must be on `PATH`.
-The repository ships a dev container (`.devcontainer/`) built from the same
-Dockerfile as the worker image; using it avoids platform differences.
+The primary workflow is native Ubuntu: work in the checkout or a git worktree
+with `uv sync`. The repository also ships a dev container (`.devcontainer/`)
+built from the same Dockerfile as the worker image; it is optional, and crew
+tasks are not started in it.
 
 ## Checks
 
