@@ -17,6 +17,7 @@ from sdlc.core.models import (
 from sdlc.core.models import (
     ProjectMode,
 )
+from sdlc.stages.architecture.step import _requirements_for_downstream
 from sdlc.stages.clarify.models import (
     ClarifiedRequirements,
     ClarifyRoute,
@@ -26,9 +27,6 @@ from sdlc.stages.clarify.models import (
 from sdlc.stages.clarify.step import (
     _clarify_fanout,
     _probe_results_from,
-)
-from sdlc.workflows.feature import (
-    _requirements_for_downstream,
 )
 
 C3, C4, C6 = (CD.TECHNICAL_CONTEXT, CD.INTERFACE_SPEC, CD.DATA_SEMANTICS)

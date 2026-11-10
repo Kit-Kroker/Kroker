@@ -3,8 +3,8 @@
 from sdlc.stages.analyze.models import (
     AnalysisReport,
     CriterionTrace,
+    untraced_criteria,
 )
-from sdlc.workflows.feature import untraced_criteria
 
 
 def test_full_mapping_leaves_nothing_untraced():

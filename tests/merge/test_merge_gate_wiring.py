@@ -86,9 +86,9 @@ def test_advisory_failure_passes_with_audited_override(required_checks):
     assert "coverage" in report.overridden
 
 
+from sdlc.stages.merge.step import _merge_evidence_all_green
 from sdlc.stages.qa.models import QAReport
 from sdlc.stages.review.lenses import LensOutcome, LensPresence
-from sdlc.workflows.feature import _merge_evidence_all_green
 from sdlc.workflows.models import TaskResult
 
 
