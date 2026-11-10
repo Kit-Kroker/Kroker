@@ -121,7 +121,7 @@ def create_router(
             raise HTTPException(404, e.message) from e
         except LegacyRunError as e:
             # 020 contract §5: a stale tab reaching a closed
-            # FeatureWorkflow run is a 410, not a 500.
+            # legacy-workflow run is a 410, not a 500.
             raise HTTPException(410, str(e)) from e
         # match_key drops match()'s reply-kind narrowing (the operator
         # addressed an exact key), so the route enforces the kind itself:

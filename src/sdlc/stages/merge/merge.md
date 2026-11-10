@@ -2,7 +2,7 @@
 
 The merge stage evaluates quality and safety gates (Stage 10 / SC-5) before integrating changes into the codebase or opening pull requests. It runs integration checks against the merged integration worktree (ADR-14), evaluates the deterministic quality gate, escalates advisory checks or soft-policy verdicts to human review, records benchmark records and gate feedback memory, and opens a pull request.
 
-The orchestrator (`FeatureWorkflow._build_and_merge`) delegates to `merge.step`.
+The orchestrator (the graph's merge node) delegates to `merge.step`.
 
 ## Requirements
 

@@ -1,6 +1,6 @@
 """Pure prompt composition for the proposer roles.
 
-Extracted verbatim from FeatureWorkflow's inline expressions so that the
+Extracted verbatim from the original workflow's inline expressions so that the
 production pipeline and the eval fixture generator build the same string
 from the same code. Divergence is now a code change, not silent rot.
 

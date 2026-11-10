@@ -67,7 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         dest="gate_policy",
         help="override the case's gate_policy for every gate "
-        "in the child FeatureWorkflow (default: use the "
+        "in the child pipeline run (default: use the "
         "case's own setting, SOFT unless the case file "
         "says otherwise)",
     )

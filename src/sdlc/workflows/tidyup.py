@@ -1,7 +1,7 @@
 """TidyUpWorkflow (E-44) -- Tier 0's fix half.
 
 Assess -> fix -> PROVE. Accepted MECHANICAL findings become governed
-brownfield pipeline child runs (GraphWorkflow; FeatureWorkflow for children started before E-74),
+brownfield pipeline child runs (GraphWorkflow for all children since E-74's cutover),
 re-runs against a composite verification branch so the before/after delta is
 recorded evidence rather than a claim.
 
@@ -83,7 +83,7 @@ class TidyUpInput(BaseModel):
 class FixRunResult(BaseModel):
     identity: str
     workflow_id: str
-    outcome: str  # FeatureWorkflow's return string, verbatim
+    outcome: str  # the pipeline workflow's return string, verbatim
     pr_url: str | None = None
     branch: str | None = None
     merged_into_verify: bool = False
@@ -126,7 +126,7 @@ def fix_workflow_id(tidyup_id: str, index: int) -> str:
 
 def reached_a_pr(outcome: str) -> bool:
     """Whether a fix run produced a branch worth merging into the
-    verification tree. The return string is the only thing FeatureWorkflow
+    verification tree. The return string is the only thing the workflow
     gives a caller, and `deployed:` / `merged-not-deployed:` are the two
     prefixes reachable only after the absolute merge gate passed."""
     return outcome.startswith(("deployed:", "merged-not-deployed:"))

@@ -6,7 +6,7 @@ scan signals over the repository tree at the pinned integration head commit, pro
 a `CodebaseMap` (modules, contracts, and hot spots), and verifies that collection was measured
 (fail-closed per FR-915).
 
-The orchestrator (`FeatureWorkflow._pipeline`) coordinates setup of the integration branch and
+The orchestrator (the pipeline workflow) coordinates setup of the integration branch and
 passes the pinned commit SHA to `context.step`. Greenfield runs bypass context mapping completely.
 Downstream architecture proposals use the resulting `CodebaseMap` and verify architecture deltas
 against the repository tree via `check_brownfield_delta`.

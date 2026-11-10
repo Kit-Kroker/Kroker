@@ -27,7 +27,7 @@ class SeededWork(BaseModel):
     """E-44 D1: an ImplementationPlan authored deterministically rather than by
     the planner.
 
-    A FeatureWorkflow handed one of these skips stages 0-3 (research, clarify,
+    The pipeline workflow handed one of these skips stages 0-3 (research, clarify,
     architecture, planning) and enters at the code stage. Everything from
     _dev_task down is unchanged and still binding -- clean-context review
     (ADR-6/FR-204), the bounded fix loop (FR-105), the deterministic quality

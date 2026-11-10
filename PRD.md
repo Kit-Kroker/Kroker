@@ -454,7 +454,7 @@ risk) executed as durable, typed, gated stages.
   record) SHALL be an **absolute** check.
 - **FR-919 — Remediation backlog.** `generate` SHALL emit capability-scoped
   specification seeds naming only files that exist. Each accepted seed SHALL
-  start a brownfield `FeatureWorkflow` child run (NG5). The seed's validation
+  start a brownfield child pipeline run (NG5; GraphWorkflow since 020). The seed's validation
   criteria SHALL become that run's acceptance criteria, so a fix is graded
   against the assessment that motivated it.
 - **FR-920 — Re-assessment and delta.** An assessment SHALL be re-runnable at a

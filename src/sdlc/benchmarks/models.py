@@ -159,7 +159,7 @@ class WasteBag(BaseModel):
 class GraphAttribution(BaseModel):
     """E-77: which graph a record's run pinned, and where inside it the
     record was emitted. `BenchmarkRecord.graph = None` means pre-E-77 or a
-    FeatureWorkflow run (FR-024: readers treat absent as not recorded)."""
+    pre-graph run (FR-024: readers treat absent as not recorded)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -298,7 +298,7 @@ class BenchmarkRecord(BaseModel):
     outcome: BenchmarkOutcome
     fix_attempts: int = 0
     error: str | None = None
-    # E-77: the graph the record's run pinned; None = FeatureWorkflow or a
+    # E-77: the graph the record's run pinned; None = a pre-graph run or a
     # pre-E-77 record (contracts/records-and-store.md).
     graph: GraphAttribution | None = None
     # 012 (data-model §1.1): provenance and cell identity. None = the record
@@ -389,7 +389,7 @@ class CaseSpec(BaseModel):
     # harnesses). When empty, `models` is desugared to one arm per model
     # (harness roles only) for backward compatibility — see expand_matrix.
     arms: list[Arm] = Field(default_factory=list)
-    # Every gate in the child FeatureWorkflow runs under this policy (SOFT:
+    # Every gate in the child run's workflow runs under this policy (SOFT:
     # auto-approve on a passing quality signal, else escalate; HARD: always
     # escalate; OFF: always auto-approve). SOFT is the default so a task that
     # exhausts its fix budget still gets judged instead of rubber-stamped

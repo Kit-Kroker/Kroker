@@ -7,7 +7,7 @@ specialist dimension probes (E-85), presents open questions to the human if gate
 active (or uses suggested answers if unattended), judges quality, and outputs a
 validated `ClarifiedRequirements` artifact.
 
-The caller (`FeatureWorkflow._pipeline`) owns the orchestrator workflow lifecycle,
+The caller (the pipeline workflow) owns the orchestrator workflow lifecycle,
 board publishing (`_board_publish`), memory retention (`_retain`), and budget checks
 (`_check_budget`). The stage owns agent prompt assembly, probe fan-out and merge,
 question resolution interaction, quality judging, and benchmark recording.

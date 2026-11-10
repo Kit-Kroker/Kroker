@@ -2,7 +2,7 @@
 
 A step never receives the workflow instance. It receives StageServices: a
 frozen record of exactly the eleven capabilities the orchestrator offers,
-built once in FeatureWorkflow.__init__ from its own bound methods. B0 §1.1
+built once in the workflow's __init__ from its own bound methods. B0 §1.1
 rejects passing `self` because that exposes everything; this makes "a stage
 does not reach into the workflow class" true at runtime rather than by
 convention, and it lets a step be unit-tested by handing it stubs, with no
@@ -76,7 +76,7 @@ class StageContext(Protocol):
 @dataclass(frozen=True, slots=True)
 class StageServices:
     """The Protocol's only production implementation. Constructed once, in
-    the workflow's __init__ (GraphWorkflow since 020 deleted FeatureWorkflow),
+    the workflow's __init__ (GraphWorkflow, since 020 deleted the legacy workflow),
     from bound methods — never lazily inside a step, where a conditional
     construction could diverge on replay.
 

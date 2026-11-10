@@ -31,7 +31,7 @@ class ReportHost:
         self._role_usage: dict[str, RoleUsage] = {}
         # E-75 §4.3: priced spend per graph activation (sum, all-priced) and the
         # remainder spent outside any activation (preamble, retro). Memory-only;
-        # always empty on FeatureWorkflow, where ACTIVATION is never set.
+        # always empty off the graph, where ACTIVATION is never set.
         self._activation_spend: dict[str, tuple[float, bool]] = {}
         self._unattributed_spend: tuple[float, bool] = (0.0, True)
 

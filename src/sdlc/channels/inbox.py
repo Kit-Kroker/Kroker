@@ -4,8 +4,8 @@ resolve()'s sibling -- the same query/validate path
 (``transport.fetch_pending``) applied to many handles instead of one the
 caller already named.
 
-020 (FR-005): FeatureWorkflow left the open-run types with the workflow
-itself. Closed FeatureWorkflow runs are the dashboard fleet's legacy rows
+020 (FR-005): the legacy workflow left the open-run types when it was deleted
+with it. Closed legacy runs are the dashboard fleet's legacy rows
 (``dashboard/fleet.py``), never queried here.
 """
 
@@ -82,7 +82,7 @@ def _open_runs_query(*types: str) -> str:
 async def list_open_run_ids(client, *types: str) -> list[str]:
     """Every currently-running workflow id of the given types.
 
-    Defaults to GraphWorkflow (020 FR-005: FeatureWorkflow is deleted;
+    Defaults to GraphWorkflow (020 FR-005: the legacy workflow is deleted;
     before it, the default was the E-74 grace pair) -- ReflectWorkflow
     and BenchmarkWorkflow share the task queue and never expose
     pending_decisions, so they are excluded here rather than probed and

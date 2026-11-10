@@ -685,3 +685,45 @@ No STOP condition is met: no gate FAIL, the golden re-baseline diff is
 provenance-only (§T019), and the durability failures are exactly the
 known baseline plus its ruled inheritor. **Executor STOP after T034
 stands; T035–T037 are orchestrator-only.**
+
+## §T032 (plan T080, FR-013)
+
+`S/workflows/AGENTS.md`: the "Grace edits while FeatureWorkflow is
+registered (E-74 U6)" section deleted; every ownership row's
+FeatureWorkflow readers/writers re-homed to GraphWorkflow (the four
+orphaned attributes — `_base_sha`, `_integration_wt`, `_codebase_map`,
+`_integration_head` — re-homed to GraphWorkflow's precode nodes); rule
+4 names `GraphWorkflow` and `GateHost`. `T/replay/AGENTS.md` created
+with the three replay rules (capture-tests-only writers; GraphWorkflow
+re-baselines with the projection diff attached; SG-2/SG-3 stand,
+including the never-re-record rule for frozen durability anchors).
+Reviewer APPROVE (a6f8c514).
+
+## §SC-002 (T033, plan T081, FR-014)
+
+Every non-historical `FeatureWorkflow` mention under `src/`, the living
+docs (`docs/framework.md`, `docs/reference/foundation.md`), the stage
+`.md` contracts, `ROADMAP.md`, `PRD.md`, `ARCHITECTURE.md` and root
+`AGENTS.md` reworded. ROADMAP FR-1203 records the deletion as done
+(2026-11-10, fixtures re-baselined, legacy rows via the fleet
+partition); the pipeline-as-data follow-up line records it done; the
+obsolete "workflow class is FeatureWorkflow" cosmetic TODO is closed;
+ARCHITECTURE's component table, no-switch-back note, tidy-up execute
+note and file tree updated (feature.py's tree line deleted); the
+user-visible `--help` string in `S/cli.py` reworded. Kept verbatim by
+the task's own instruction: E-74 "Landed" prose, PRD OQ-10's resolution
+text, and the epic-history lines (ROADMAP P1/FR-904/NFR-9 narrations,
+tier docs, mode write-ups, docs/reports).
+
+`grep -rn FeatureWorkflow src/` after the sweep — exactly the SC-002
+allowed list, nothing else:
+
+```text
+src/sdlc/dashboard/fleet.py:20,63,91,123,211,216,217
+src/sdlc/workflows/pipeline_child.py:7          (docstring)
+src/sdlc/channels/transport.py:143,146,151,157,167
+src/sdlc/core/models.py:512,555,558             (field comments)
+```
+
+(Verbatim output retained at scratchpad `sc002-grep.txt`; 16 lines.)
+ruff/format clean over `src/sdlc/`; clauses gate unchanged (243/0).

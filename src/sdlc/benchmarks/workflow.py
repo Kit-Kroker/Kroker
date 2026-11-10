@@ -1,7 +1,7 @@
 """BenchmarkWorkflow — the matrix runner.
 
 For each (case × harness × model) cell, start a pipeline child (GraphWorkflow;
-FeatureWorkflow for children started before E-74) with
+all children since E-74's cutover) with
 the cell's roles overridden and benchmark config set. Collect nothing in-
 workflow — the record_benchmark activity writes each record to the file
 store; after all cells complete, the finalize_benchmark_report activity
@@ -149,7 +149,7 @@ def _cell_config(
         tree_dirty=(provenance.tree_dirty if provenance is not None else None),
     )
     # A benchmark matrix run is unattended by default, so every gate in the
-    # child FeatureWorkflow runs under spec.gate_policy (SOFT unless the case
+    # child run's workflow runs under spec.gate_policy (SOFT unless the case
     # or --gate-policy overrides it) rather than the case's own gates dict —
     # a HARD policy here blocks a cell on gate_timeout_hours if nothing
     # answers the escalation. default_gate_policy covers dynamic gates not

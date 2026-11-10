@@ -5,7 +5,7 @@ memories, prepares codebase-map grounding and research tools, runs the
 architect proposer role with memoization caching and brownfield delta
 checks, judges and records the outcome, and retains the architecture
 summary in memory. The graph's architect_node composes these directly
-(020 T027 deleted the FeatureWorkflow-era `step` composite; the revisable
+(020 T027 deleted the legacy-era `step` composite; the revisable
 gate loop lives in the node's gate.architecture wiring).
 """
 

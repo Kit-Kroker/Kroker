@@ -1,6 +1,6 @@
 """Worker entrypoint.
 
-Registers the GraphWorkflow (020: FeatureWorkflow is deleted), plain
+Registers the GraphWorkflow (020 deleted the legacy pipeline workflow), plain
 activities, and the durable activities the TemporalDurability capability
 generates for each Pydantic AI agent (model requests, tool calls). Uses
 the Pydantic data converter so pipeline models serialize cleanly through

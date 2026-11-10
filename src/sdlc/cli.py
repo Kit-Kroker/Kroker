@@ -289,7 +289,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["off", "soft", "hard"],
         default=None,
         dest="gate_policy",
-        help="override the case's gate_policy for every gate in the child FeatureWorkflow",
+        help="override the case's gate_policy for every gate in the child pipeline run",
     )
     br.add_argument("--arm", default=None, help="run only cells for this arm name")
     br.add_argument(
@@ -728,7 +728,7 @@ async def main() -> None:
         wf_id = triage_workflow_id(repo)
         assert client is not None
         # (call-overload: mypy misses the start_workflow overload for a
-        # run-method plus id/task_queue keywords -- the FeatureWorkflow form
+        # run-method plus id/task_queue keywords -- the legacy-workflow form
         # above only passes because its run() takes an optional argument.)
         handle = await client.start_workflow(
             TriageWorkflow.run,  # type: ignore[call-overload,arg-type]
@@ -894,7 +894,7 @@ async def main() -> None:
             raise SystemExit(1) from None
         except Exception as e:  # noqa: BLE001 -- classified by the helper
             # The same describe-on-failure check the reply path uses: a
-            # closed FeatureWorkflow run answers with the message and exit
+            # closed legacy run answers with the message and exit
             # 1, anything else propagates as it always did.
             try:
                 await fail_legacy_if_closed_feature(handle, e)

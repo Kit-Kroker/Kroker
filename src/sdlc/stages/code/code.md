@@ -2,7 +2,7 @@
 
 The code stage (Stage 4 / spec A §3.3 / spec A §5) executes coding tasks inside an isolated git worktree, either using a coding harness (`run_coding_task`) or multi-agent crew (`CrewTaskWorkflow`). It evaluates tool escalations, runs clean-context QA and review, drives the bounded fix loop, and returns a schema-validated `TaskResult`.
 
-The orchestrator (`TaskHost` / `FeatureWorkflow`) delegates per-task execution to `code.step`.
+The orchestrator (`TaskHost` on the workflow) delegates per-task execution to `code.step`.
 
 ## Requirements
 

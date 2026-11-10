@@ -2,12 +2,12 @@
 
 The architecture stage (Stage 2 / spec A §3.3 / spec A §5) generates a schema-validated `ArchitectureSpec` from clarified requirements and brownfield codebase grounding. It runs the architect proposer role with memoization caching, checks proposed filesystem deltas against the repository tree via `check_brownfield_delta`, and handles human gate approval through the revisable stage review loop.
 
-The orchestrator (`GraphWorkflow`, since 020 deleted FeatureWorkflow) composes the architecture stage across the `architect` and `gate.architecture` graph nodes; the slice itself exports `prepare`, `produce` and `finish`.
+The orchestrator (`GraphWorkflow`, since 020 deleted the legacy workflow) composes the architecture stage across the `architect` and `gate.architecture` graph nodes; the slice itself exports `prepare`, `produce` and `finish`.
 
 ## Requirements
 
 ### ARCH-1.1
-The architecture stage slice exports `prompt_digest` and `ACTIVITIES = []` (the FeatureWorkflow-era `step` composite was deleted in 020; `step` remains only as the submodule holding the slice functions). The slice functions (`prepare`, `produce`, `finish`) each accept `ctx: StageContext` as their first argument and receive configuration, clarified requirements, codebase map, memory watermark, idea brief, and agents as keyword arguments, never the workflow instance. [FR-201, spec A §3.3, 020 FR-006]
+The architecture stage slice exports `prompt_digest` and `ACTIVITIES = []` (the legacy-era `step` composite was deleted in 020; `step` remains only as the submodule holding the slice functions). The slice functions (`prepare`, `produce`, `finish`) each accept `ctx: StageContext` as their first argument and receive configuration, clarified requirements, codebase map, memory watermark, idea brief, and agents as keyword arguments, never the workflow instance. [FR-201, spec A §3.3, 020 FR-006]
 
 ### ARCH-1.2
 `produce` returns an `ArchitectureSpec`; the gate decision belongs to the graph's `gate.architecture` wiring, and the orchestrator handles board publishing and gate branching without exposing workflow handlers or state across the slice boundary. [FR-202, spec A §3.4, 020 FR-006]

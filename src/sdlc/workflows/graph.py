@@ -2,7 +2,7 @@
 
 A thin Temporal layer over E-73's GraphRouter: validate the pinned graph,
 capture the memory watermark, run the dispatcher, return today's outcome
-string (spec §5.6), run retro. Every new run starts here; FeatureWorkflow
+string (spec §5.6), run retro. Every new run starts here (020 deleted the legacy workflow;
 stays registered only for in-flight executions (grace-retention, OQ-10).
 """
 
@@ -203,7 +203,7 @@ class GraphWorkflow(
         self._dispatcher = dispatcher
         outcome = await dispatcher.run()
         if outcome.stored_failure is not None:
-            raise outcome.stored_failure  # D8: same failure as FeatureWorkflow; retro not run (U9)
+            raise outcome.stored_failure  # D8: legacy-workflow failure; retro not run (U9)
         result = outcome_string(outcome, router.topology)
         await self._retro(cfg, idea, result)
         self._result = result  # E-75 F3: never a success string while retro can still fail
@@ -211,7 +211,7 @@ class GraphWorkflow(
         return result
 
     async def _teardown_worktrees(self) -> None:
-        """A-terminal: same contract as FeatureWorkflow's — the run's
+        """A-terminal: same contract as the legacy workflow's — the run's
         worktrees are dead weight at the terminal state, the branches stay
         in the repos, a failed sweep never fails the run after the fact,
         and the janitor (vcs/janitor.py) covers killed runs. Behind a

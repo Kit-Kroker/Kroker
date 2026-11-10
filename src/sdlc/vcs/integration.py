@@ -198,7 +198,7 @@ _KEEP_ON_CLEAN = ".sdlc-venv"
 class BaseWorktreeInput:
     integration_wt: str  # any worktree of the repository; git worktree add runs here
     run_id: str
-    base_sha: str  # FeatureWorkflow._base_sha, pinned at setup (DS2)
+    base_sha: str  # the run's _base_sha, pinned at setup (DS2)
 
 
 @dataclass

@@ -50,7 +50,7 @@ def translate(exc: Exception, *, hint: str = "") -> ToolError:
             f"first (the inbox lists them)."
         )
     elif isinstance(exc, LegacyRunError):
-        # 020 contract §5: the run id is a closed FeatureWorkflow run; the
+        # 020 contract §5: the run id is a closed legacy-workflow run; the
         # message itself is the actionable content (verbatim, not scrubbed).
         msg = str(exc)
     else:

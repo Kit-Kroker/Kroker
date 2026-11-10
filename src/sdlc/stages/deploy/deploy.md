@@ -2,7 +2,7 @@
 
 The deploy stage (Stage 13 / E-67 / FR-1104) manages deployment to target environments behind configurable gates and smoke verification checks. It consults the human deploy gate, delegates deterministic apply/smoke/rollback execution to `DeploymentWorkflow`, handles failed deployment retries via human-in-the-loop review, records benchmark records, and emits stage status transitions.
 
-The orchestrator (`FeatureWorkflow`) delegates deployment to `deploy.step`.
+The orchestrator (the pipeline workflow) delegates deployment to `deploy.step`.
 
 ## Requirements
 

@@ -1,8 +1,8 @@
 """RunHost -- what every pipeline-run workflow shares (E-74 spec §4.3).
 
-A mixin, following GateHost (workflows/gates.py:54). FeatureWorkflow and
+A mixin, following GateHost (workflows/gates.py:54). GraphWorkflow and the
 GraphWorkflow list it BEFORE GateHost so its gate hooks override GateHost's
-no-ops. Bodies are moved verbatim from FeatureWorkflow; the run_state and
+no-ops. Bodies are moved verbatim from the original workflow; the run_state and
 run_summary queries stay on each concrete class as one-line delegates
 (workflows/AGENTS.md rule 4 -- the dashboard queries by name).
 
@@ -118,7 +118,7 @@ class RunHost:
                 title=idea.title,
                 repo_url=idea.repo_url,
                 # E-77 R-3: the run's pinned graph, when the host is a
-                # GraphWorkflow; None for FeatureWorkflow (content only, no
+                # GraphWorkflow; None off-graph (content only, no
                 # command change, U6).
                 graph_sha=getattr(self, "_graph_sha", "") or None,
                 # 002 G4: the board's project key, from the run's own config.

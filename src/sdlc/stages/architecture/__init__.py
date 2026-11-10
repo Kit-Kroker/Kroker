@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from .models import ArchitectureDecision, ArchitectureSpec, ValidationContract
 
-# 020 T027 (R-6, C5): the `step` composite is deleted with FeatureWorkflow —
+# 020 T027 (R-6, C5): the `step` composite is deleted with the legacy workflow —
 # the graph's architect_node composes prepare/produce/finish directly, and
 # with it the lazy re-export and its shadow-proofing module class are gone.
 

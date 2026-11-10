@@ -38,7 +38,7 @@ async def step(ctx: StageContext, ...) -> Artifact:
     ...
 ```
 
-The orchestrator (`FeatureWorkflow` in `src/sdlc/workflows/feature.py`) is the
+The orchestrator (`GraphWorkflow` in `src/sdlc/workflows/graph.py`; 020 deleted the legacy `FeatureWorkflow`) is the
 sole coordinator. It passes run state as explicit arguments and supplies a
 `StageContext` instance providing access to workflow-level services.
 
@@ -71,7 +71,7 @@ sole coordinator. It passes run state as explicit arguments and supplies a
    workflow instance or on module-level globals.
 
    *Worked example of the failure:* `_escalation_round` (`feature.py:865`,
-   `:2025`) was attached as instance state on `FeatureWorkflow`. When wave mode
+   `:2025`) was attached as instance state on the workflow. When wave mode
    executes tasks concurrently or when gate approvals interleave, concurrent
    steps mutate and overwrite the instance attribute, corrupting loop counters.
    `workflows/gates.py:84-88` documents the exact same hazard for gate confidence:
@@ -91,7 +91,7 @@ be present on the Method Resolution Order (MRO) of the `@workflow.defn` class.
 
 `GateHost` (`src/sdlc/workflows/gates.py:54`) demonstrates the correct pattern:
 it is a mixin class defining `@workflow.signal submit_gate_decision` (`:98`) and
-three `@workflow.query` handlers (`:108`, `:112`, `:116`). `FeatureWorkflow`
+three `@workflow.query` handlers (`:108`, `:112`, `:116`). The workflow
 inherits from `GateHost`.
 A handler defined inside an external step module is not on the workflow class's
 MRO and will silently never be registered by the Temporal worker.

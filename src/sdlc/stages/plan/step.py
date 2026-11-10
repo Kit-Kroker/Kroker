@@ -4,7 +4,7 @@ prepare / produce / finish for the plan stage: recalls prior memories,
 runs the planner proposer role with memoization caching, judges and
 records the outcome, and retains the plan summary in memory. The graph's
 planner node composes these directly (020 T027 deleted the
-FeatureWorkflow-era `step` composite; the revisable gate loop lives in
+legacy-era `step` composite; the revisable gate loop lives in
 the node's gate.plan wiring).
 """
 

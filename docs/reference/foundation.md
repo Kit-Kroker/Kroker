@@ -10,7 +10,7 @@ Developer companion to the merged **Foundation** change set. It aligned
 mechanisms (revision loop, integration setup/merge orchestration,
 token-threshold trigger, running the deterministic gate before the merge
 gate) is deliberately **not** wired yet — see
-[Deferred to Plan 2](#deferred-to-plan-2). `FeatureWorkflow` still branches
+[Deferred to Plan 2](#deferred-to-plan-2). The pipeline workflow (pre-020: `FeatureWorkflow`) still branched
 every task from `base_branch` and still gates fresh sessions on
 `max_session_resumes`.
 

@@ -1,7 +1,7 @@
 # `src/sdlc/workflows/` — Attribute-Ownership Table
 
 Attributes on the MRO of `GraphWorkflow` across its service-host mixins.
-(020: FeatureWorkflow is deleted; every FeatureWorkflow-owned row below was
+(020: the legacy workflow is deleted; every row it owned below was
 re-homed to `GraphWorkflow`.)
 
 ## Rules of MRO Attribute Ownership
@@ -32,7 +32,7 @@ re-homed to `GraphWorkflow`.)
 | `_started_at` | `RunHost` | `RunHost._snapshot_run_state`, `GraphWorkflow.run_summary` | `GraphWorkflow.run` | Run start timestamp |
 | `_run_id` | `RunHost` | `GraphWorkflow` | `GraphWorkflow.run` | Stashed run ID for offline unit tests |
 | `_run_summary` | `RunHost` | `GraphWorkflow.run_summary`, `RunHost._retro` | `GraphWorkflow` | Terminal `RunSummary`, built once at end of run |
-| `_integration_head` | `GraphWorkflow` | `GraphWorkflow` (precode's setup/context nodes) | `GraphWorkflow` | Current commit on integration branch (020: re-homed from the deleted FeatureWorkflow) |
+| `_integration_head` | `GraphWorkflow` | `GraphWorkflow` (precode's setup/context nodes) | `GraphWorkflow` | Current commit on integration branch (020: re-homed from the deleted legacy workflow) |
 | `_base_sha` | `GraphWorkflow` | `GraphWorkflow` (integration diff, `merge.step`) | `GraphWorkflow.run` (once, at setup) | Setup head of the integration branch, pinned as the merge gate's baseline (diff-scoped gates DS2); distinct from the advancing `_integration_head` |
 | `_integration_wt` | `GraphWorkflow` | `GraphWorkflow` (precode's setup node; the merge gate reads it) | `GraphWorkflow` | Path to task integration worktree (020: re-homed) |
 | `_budget_threshold` | `RoleHost` | `RoleHost._check_budget`, `GraphWorkflow`, `RunHost._snapshot_run_state` | `RoleHost._check_budget` | Budget threshold dollar amount |

@@ -1,6 +1,6 @@
 """E-84 D1: the scan fan-out, shared by both tiers.
 
-AssessmentWorkflow calls this with a RepoTriage; FeatureWorkflow's brownfield
+AssessmentWorkflow calls this with a RepoTriage; the pipeline's brownfield
 context stage calls it with triage=None. One function means the audit tier and
 the pipeline physically cannot produce two different maps of one tree, because
 they run the same waves against the same memo -- and a brownfield run over a

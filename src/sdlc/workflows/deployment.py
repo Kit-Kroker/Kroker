@@ -2,7 +2,7 @@
 
 Deterministic by construction: no model call, no gate. It sequences four
 activities and returns a DeployReport. The HITL `deploy_failed` gate lives in
-FeatureWorkflow (D-6): a Temporal human-in-the-loop interaction targets a
+the pipeline workflow (D-6): a Temporal human-in-the-loop interaction targets a
 workflow id, and operators know their run's id, not a child's.
 
 This is also the seam E-70 attaches to: an ObservationWorkflow starts here

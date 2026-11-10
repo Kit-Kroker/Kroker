@@ -1,10 +1,10 @@
 # Retro Stage
 
-The retro stage (Stage 14, E-32) fires on every terminal execution path of `FeatureWorkflow`.
+The retro stage (Stage 14, E-32) fires on every terminal execution path of the pipeline workflow.
 It finalizes run observability, records the terminal stage outcome, updates episodic memory,
 and exports all run artifacts and session logs for auditing and dashboards.
 
-The caller (`FeatureWorkflow.run` / `_retro`) coordinates top-level workflow completion,
+The caller (the workflow's run / `_retro`) coordinates top-level workflow completion,
 builds the `RunSummary` envelope from in-flight run trace events, and handles top-level return strings.
 The retro stage owns emitting terminal lifecycle events, memory retention of the run summary,
 nightly reflection triggers, artifact bundle export, and session retention policy enforcement.

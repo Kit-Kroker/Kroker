@@ -77,7 +77,7 @@ through its validated diff artifact.
 | Component | Owns | Never does |
 |---|---|---|
 | Temporal server | run state, event history, timers, signals, schedules, visibility | business logic |
-| GraphWorkflow (FeatureWorkflow retained for in-flight runs) | stage sequencing, gate waits, fix-loop bounds, budget counters | I/O, subprocesses, memory, nondeterminism |
+| GraphWorkflow (the legacy FeatureWorkflow was deleted in round 020) | stage sequencing, gate waits, fix-loop bounds, budget counters | I/O, subprocesses, memory, nondeterminism |
 | MaintenanceWorkflow **(P4 — designed, not built)** | DAPER cycle, repair gating, child factory runs | direct code patches |
 | Proposer agents | typed artifact proposals (Requirements … RepairPlan) | tool calls, file access. *Target (plan, not built):* owns typed evidence gathered with read-only repo tools; never writes, never runs unlisted commands, never computes its own verdict |
 | Harness runner activity | `claude -p` / `opencode run` execution, heartbeats, checkpoint commits, cost capture | leaving the worktree; choosing its own permissions |
@@ -94,7 +94,7 @@ through its validated diff artifact.
 Stage DAG (SDLC-spec v2 §1). One `GraphWorkflow` per run, executing a pinned
 `PipelineGraph` (E-74); the code stage fans out per-task child work in
 dependency-ordered parallel waves. Rollback of E-74 is roll-forward only:
-there is no start-site switch back to FeatureWorkflow.
+there is no start-site switch back to the deleted legacy workflow.
 
 ```mermaid
 flowchart LR
@@ -544,7 +544,7 @@ Per-project proactive workflow: wake on timer or `nudge` signal →
 tasks, error budgets — then agent triage with a confidence floor) →
 **Analyze** → **Plan** (`RepairPlan{confidence, actions[]}`) → confidence
 gate (below threshold: notify + hard gate; timeout = inaction) →
-**Execute** — `code_fix` actions start brownfield FeatureWorkflow children
+**Execute** — `code_fix` actions start brownfield GraphWorkflow children
 (repairs go *through* the factory, never around it); ops actions
 (rollback/restart/scale) run directly under risk classes → **Report**,
 which is *re-verification*, not summary: detection re-runs on the repaired
@@ -781,7 +781,7 @@ ADR-12 carry the agent architecture plan's decisions.
 was a *design* tree that had drifted from the repository it claimed to
 describe: it named `src/factory/` (the package is `src/sdlc/`), `models/` and
 `activities/` as packages (both are single modules), `workflows/factory.py`
-(it is `feature.py`), `harness/claude_code.py` (it is `adapters.py`), and a
+(it was `feature.py`, deleted in round 020), `harness/claude_code.py` (it is `adapters.py`), and a
 `config/` directory that does not exist — while omitting roughly twenty real
 packages. What follows is the tree as it is; annotations say what each part
 owns.
@@ -817,7 +817,6 @@ Kroker/
 │   ├── activities.py          # the main non-deterministic surface: harness runs, git,
 │   │                          #   worktrees, tests, PRs, containment resolution
 │   ├── workflows/             # deterministic only (Temporal sandbox)
-│   │   ├── feature.py         #   FeatureWorkflow — retained for in-flight runs (E-74 grace)
 │   │   ├── graph.py           #   GraphWorkflow — the pipeline as data (E-74)
 │   │   ├── graph_nodes/       #   node handlers over the stage steps
 │   │   ├── crew.py            #   CrewTaskWorkflow (E-88) — the round loop + brakes

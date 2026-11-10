@@ -112,7 +112,7 @@ not None` checks collapse into *is there a node*.
   `default-research`, `seeded`), and GraphWorkflow reproduces FeatureWorkflow's
   golden traces exactly (stage/gate trace, command projection, close). `code` is one
   coarse node; **follow-ups:** per-task topology with `max_fix_attempts → max_traversals`
-  (E74-OQ-3), research-as-topology (E74-OQ-2), and the FeatureWorkflow deletion gated
+  (E74-OQ-3), research-as-topology (E74-OQ-2), and the FeatureWorkflow deletion — **done 2026-11-10, round 020** — gated
   on the two Running queries of spec §8.5. Rollback is roll-forward only.
 - [x] **E-75 — graph queries on the dashboard backend** → FR-1204. `GraphWorkflow` exposes a `graph_view` query (router state + per-activation timing, attributed cost and pendings, recorded in memory with no new commands); the dashboard serves `GET /runs/{id}/graph` (the pinned start input, read from history), `GET /runs/{id}/graph_state` and `POST /graphs/validate` (`executable()` problems as `not_executable`), and `RunState.stage_marks` renders `skipped` stages for graph runs. Graphs are stored content-addressed as `graphs/<sha>.yaml` (`sdlc/graph/store.py`), written at client start and backfilled on first read; no graph database.
 

@@ -1,10 +1,11 @@
-"""Stage 4 task scheduler, shared by FeatureWorkflow and the graph `code` node
+"""Stage 4 task scheduler, shared by the graph `code` node (and, before 020,
+the legacy workflow)
 (E-74 spec §4.3). Moved verbatim from feature.py's _build_and_merge; the host
 supplies the TaskHost/BoardHost/RoleHost capabilities.
 
 Determinism: task dicts are insertion-ordered and keyed by task id, and the
 wave gather runs over the batch in plan order. Both orderings are replay-safe
-and must never be "fixed" by sorting (that changes FeatureWorkflow's command
+and must never be "fixed" by sorting (that changes the workflow's command
 sequence and fails tests/replay/test_feature_replay.py).
 """
 

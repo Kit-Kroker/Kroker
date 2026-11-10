@@ -7,7 +7,7 @@ every other one still reports. The activity's own try/except cannot keep it,
 because these failures happen outside the activity.
 
 Two copies of that rule would agree only by coincidence -- the reason E-42 D2
-extracted GateHost out of FeatureWorkflow.
+extracted GateHost out of the original monolithic workflow.
 """
 
 from __future__ import annotations

@@ -74,7 +74,7 @@ def _iter_events(history: Any):
 # rather than inline is what makes the omission testable.
 #
 # NOTE for _run_drift's future implementation: run_crew_turn events live
-# in the CHILD workflow's (CrewTaskWorkflow) history, not FeatureWorkflow's
+# in the CHILD workflow's (CrewTaskWorkflow) history, not the parent's
 # — list_completed/fetch_history must walk child executions, or crew turns
 # never surface.
 CODING_ACTIVITIES = frozenset({"run_coding_task", "run_crew_turn"})

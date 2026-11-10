@@ -1,6 +1,6 @@
 """GateHost -- durable human-in-the-loop gate mechanics (FR-301/302/303).
 
-Extracted from FeatureWorkflow (E-42 D2) so a second workflow can host a gate
+Extracted from the original monolithic workflow (E-42 D2) so a second workflow can host a gate
 without restating "first decision for (gate, round) wins". Duplicating that
 rule is the failure shape 2026-07-16-registry-drives-every-role was written
 about: an invariant that holds only while two copies happen to agree.
@@ -8,7 +8,7 @@ about: an invariant that holds only while two copies happen to agree.
 What this owns: policy resolution, (gate, round) identity, the notification
 schedule, the timeout decision, and the four HITL handlers. What it does NOT
 own: what a workflow *does* with a decided gate. That is three no-op hooks --
-FeatureWorkflow emits a RunEvent and retains a memory; TriageWorkflow does
+the full pipeline workflow emits a RunEvent and retains a memory; TriageWorkflow does
 neither, and a base that did either would force this module to import
 RunEventKind and the memory activities.
 

@@ -5,7 +5,7 @@ before any downstream analysis or planning begins. It checks repository accessib
 branch resolution, and verifies whether the observed repository structure matches the declared
 `ProjectMode` (`GREENFIELD` vs `BROWNFIELD`).
 
-The caller (`FeatureWorkflow._pipeline`) coordinates subsequent pipeline stages, setup of the
+The caller (the pipeline workflow) coordinates subsequent pipeline stages, setup of the
 integration branch, and overall run lifecycle. The intake stage owns repository probing via
 `classify_repo`, project mode compatibility classification, warning emissions, and fail-closed
 rejections when preconditions are violated.
