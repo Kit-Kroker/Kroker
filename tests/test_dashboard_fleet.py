@@ -382,3 +382,171 @@ async def test_the_guard_admits_when_the_fetched_fleet_is_below_cap(monkeypatch)
     monkeypatch.setenv("SDLC_FLEET_PENDING_CAP", "2")
     client = _Client({"run-a": _Handle(state=_state("run-a"), pending=[ARCH])})
     await guard_fleet_capacity(client)  # 1 pending < cap 2
+
+
+# ---------------------------------------------------------------------------
+# 020 T008 (US3, contract §1, data-model §1-2): closed FeatureWorkflow rows
+# are legacy entries. Visibility rows carry type, status and times; a legacy
+# row gets no handle and no query. Cases c, e and f are owned by qa-chaos.
+# ---------------------------------------------------------------------------
+
+
+def _vis_row(run_id, wf_type, status="COMPLETED"):
+    """A visibility row. status is a real temporal enum, so .name is what
+    the contract's wf.status.name.lower() reads."""
+    from temporalio.client import WorkflowExecutionStatus
+
+    return SimpleNamespace(
+        id=run_id,
+        workflow_type=wf_type,
+        status=getattr(WorkflowExecutionStatus, status),
+        start_time=AT,
+        close_time=AT,
+    )
+
+
+class _HandleCountingClient:
+    """Closed rows only (every list query is the closed query here). Counts
+    every get_workflow_handle call per id, which is what case (a) asserts on."""
+
+    def __init__(self, closed_rows, handles):
+        self._rows = closed_rows
+        self._handles = handles
+        self.handle_calls: list[str] = []
+
+    async def list_workflows(self, query):
+        if "!=" not in query:
+            return
+            yield  # pragma: no cover -- makes this an async generator
+        for row in self._rows:
+            yield row
+
+    def get_workflow_handle(self, run_id):
+        self.handle_calls.append(run_id)
+        return self._handles[run_id]
+
+
+@pytest.mark.asyncio
+async def test_t008a_closed_feature_rows_become_three_legacy_entries_with_no_handle():
+    rows = [_vis_row(f"legacy-{i}", "FeatureWorkflow") for i in (1, 2, 3)]
+    client = _HandleCountingClient(rows, {r.id: _Handle(summary=_summary(r.id)) for r in rows})
+    snap = await fetch_fleet(client, now=AT)
+    assert [e.run_id for e in snap.closed_legacy] == ["legacy-1", "legacy-2", "legacy-3"]
+    first = snap.closed_legacy[0]
+    assert first.status == "completed"
+    assert first.start_time == AT
+    assert first.close_time == AT
+    assert client.handle_calls == []
+    assert snap.errors == []
+    assert snap.closed == []
+    assert snap.closed_marks == {}
+
+
+@pytest.mark.asyncio
+async def test_t008b_mixed_window_queries_graph_and_crew_and_never_the_feature_row():
+    rows = [
+        _vis_row("graph-1", "GraphWorkflow"),
+        _vis_row("legacy-1", "FeatureWorkflow"),
+        _vis_row("graph-2", "GraphWorkflow"),
+        _vis_row("crew-1", "CrewTaskWorkflow"),
+    ]
+    handles = {
+        "graph-1": _Handle(summary=_summary("graph-1")),
+        "graph-2": _Handle(summary=_summary("graph-2")),
+        "crew-1": _Handle(summary=_summary("crew-1")),
+        "legacy-1": _Handle(summary=_summary("legacy-1")),
+    }
+    client = _HandleCountingClient(rows, handles)
+    snap = await fetch_fleet(client, now=AT)
+    assert {s.run_id for s in snap.closed} == {"graph-1", "graph-2", "crew-1"}
+    assert [e.run_id for e in snap.closed_legacy] == ["legacy-1"]
+    assert "legacy-1" not in client.handle_calls
+    assert "crew-1" in client.handle_calls
+    assert snap.errors == []
+
+
+@pytest.mark.asyncio
+async def test_t008d_untyped_closed_row_is_still_queried_and_lands_in_closed():
+    """Contract §1 rule 2: a row with no workflow_type keeps today's queried
+    path. It must not be dropped and must not become a legacy entry."""
+    untyped = SimpleNamespace(id="untyped-1")
+    client = _HandleCountingClient([untyped], {"untyped-1": _Handle(summary=_summary("untyped-1"))})
+    snap = await fetch_fleet(client, now=AT)
+    assert [s.run_id for s in snap.closed] == ["untyped-1"]
+    assert "untyped-1" in client.handle_calls
+    assert snap.errors == []
+
+
+@pytest.mark.asyncio
+async def test_t008_wire_default_closed_legacy_is_empty_on_a_fleet_with_no_legacy_rows():
+    """FleetSnapshot.closed_legacy is additive: it defaults to [] and an
+    empty fleet serves it as an empty list, not a missing key."""
+    snap = await fetch_fleet(_HandleCountingClient([], {}), now=AT)
+    assert snap.closed_legacy == []
+    assert FleetSnapshot(at=AT).closed_legacy == []
+
+
+class _TwoPassClient(_HandleCountingClient):
+    """Extends the closed-only fake with an open pass (ids answer the
+    non-'!=' query) and a record of every query sent, so cases can pin which
+    closed query ran. Reuses _HandleCountingClient's rows and handle counting."""
+
+    def __init__(self, closed_rows, handles, open_ids=()):
+        super().__init__(closed_rows, handles)
+        self._open_ids = list(open_ids)
+        self.queries: list[str] = []
+
+    async def list_workflows(self, query):
+        self.queries.append(query)
+        if "!=" not in query:
+            for run_id in self._open_ids:
+                yield SimpleNamespace(id=run_id)
+            return
+        for row in self._rows:
+            yield row
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ordered", [True, False], ids=["ordered", "unordered"])
+async def test_t008c_a_closed_feature_row_is_legacy_on_both_query_paths(monkeypatch, ordered):
+    """Contract §1 rule 1, on BOTH closed queries: the ORDER BY path and the
+    unordered fallback each send one closed query, and a FeatureWorkflow row
+    from either lands in closed_legacy with no handle and no error."""
+    import sdlc.dashboard.fleet as fleet_mod
+
+    monkeypatch.setattr(fleet_mod, "_ORDER_BY_SUPPORTED", ordered)
+    rows = [_vis_row("legacy-1", "FeatureWorkflow")]
+    client = _TwoPassClient(rows, {"legacy-1": _Handle(summary=_summary("legacy-1"))})
+    snap = await fetch_fleet(client, now=AT)
+    expected = fleet_mod._CLOSED_QUERY if ordered else fleet_mod._CLOSED_QUERY_UNORDERED
+    assert [q for q in client.queries if "!=" in q] == [expected]
+    assert [e.run_id for e in snap.closed_legacy] == ["legacy-1"]
+    assert client.handle_calls == []
+    assert snap.closed == []
+    assert snap.errors == []
+
+
+@pytest.mark.asyncio
+async def test_t008e_a_legacy_id_also_in_the_open_set_is_dropped_from_closed_legacy():
+    """Contract §1 rule 3: the open pass renders the id as Running; the closed
+    pass must neither add a legacy entry nor duplicate the row (the same
+    dedupe rule `closed` uses)."""
+    rows = [_vis_row("run-x", "FeatureWorkflow")]
+    handles = {"run-x": _Handle(state=_state("run-x"), pending=[])}
+    client = _TwoPassClient(rows, handles, open_ids=["run-x"])
+    snap = await fetch_fleet(client, now=AT)
+    assert [r.run_id for r in snap.runs] == ["run-x"]
+    assert snap.runs[0].status == "running"
+    assert snap.closed_legacy == []
+    assert snap.closed == []
+    assert snap.errors == []
+
+
+def test_t008f_both_closed_queries_keep_the_feature_workflow_filter():
+    """Contract §1 rule 4: the legacy filter is permanent in both closed
+    queries ('never removed: pre-cutover runs stay visible'). Passes today;
+    must keep passing."""
+    import sdlc.dashboard.fleet as fleet_mod
+
+    for query in (fleet_mod._CLOSED_QUERY, fleet_mod._CLOSED_QUERY_UNORDERED):
+        assert "WorkflowType='FeatureWorkflow'" in query
