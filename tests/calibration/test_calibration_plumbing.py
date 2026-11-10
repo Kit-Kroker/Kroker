@@ -200,3 +200,15 @@ def test_both_proposer_stages_pass_their_resolved_model():
         idx = src.find("revisable_stage(")
         assert idx != -1, path
         assert "author_model=prep.resolved_model" in src[idx : idx + 200], path
+
+
+def test_precode_hands_the_resolved_model_to_both_producer_results():
+    """020 T006 (plan T013): the live producers store the model they resolved.
+    gate_node reads that stored author_model for ctx.gate(author_model=...), so
+    both precode nodes must return prep.resolved_model on their NodeResult.
+    The architecture node is the 'spec' port, the plan node is the 'plan' port."""
+    import pathlib
+
+    src = pathlib.Path("src/sdlc/workflows/graph_nodes/precode.py").read_text(encoding="utf-8")
+    assert 'return NodeResult(port="spec", payload=spec, author_model=prep.resolved_model)' in src
+    assert 'return NodeResult(port="plan", payload=plan, author_model=prep.resolved_model)' in src
