@@ -1,0 +1,13 @@
+# Advisor brief 1 — 020 delete FeatureWorkflow (spec: .specify/specs/020-delete-featureworkflow/spec.md, approved GATE 1)
+
+Read the spec first (Rulings Q1=A, Q2=A). Give a recommendation + one-line reason for each decision below. Write your answer to .specify/specs/020-delete-featureworkflow/advisor-answer-1.md. Read-only otherwise: do not edit any other file.
+
+D1 (FR-009) `execute_pipeline_child` (src/sdlc/workflows/pipeline_child.py) calls `workflow.patched(f"e74-graph-child:{child_id}")`. Checked-in `tests/replay/histories/benchmark_one_cell.json` (BenchmarkWorkflow, replayed by tests/replay/test_benchmark_replay.py) carries that marker. Options: (a) `workflow.deprecate_patch(id)` + unconditional graph path; (b) drop the patch call entirely (relying on Temporal Python SDK tolerating unrequested patch markers in replay), (c) keep `patched()` and raise a non-retryable error in the else branch. Which, and what test proves it?
+
+D2 (FR-004, Q1=A) FleetSnapshot (src/sdlc/dashboard/fleet.py) has `closed: list[RunSummary]`; the frontend (interfaces/dashboard/frontend/src/api/http.ts) maps it. A legacy row has only visibility metadata (id, status, close time). Options: (a) new additive field `closed_legacy: list[LegacyRun]` on FleetSnapshot + frontend row; (b) synthesize a RunSummary with sentinel values into `closed`; (c) reuse `errors`. Also: should /api/fleet/summary (fleet_summary.py) count legacy rows?
+
+D3 (FR-010) `research_retain_grounded` history is a FeatureWorkflow run and is the 009 research-retain replay proof (tests/replay/test_research_retain_replay.py, uses FEATURE_STARTER). `greenfield_happy` (FeatureWorkflow) is the baseline of test_graph_golden_chaos.py, durability/test_inflight_resume.py and durability/test_priced_usage_parity.py. Options per fixture: (a) capture a NEW GraphWorkflow history (new file name, provenance header) and re-point the test; (b) re-point to the golden projection only; (c) delete the test. Which per test?
+
+D4 (FR-011) Re-baselining goldens: goldens in tests/replay/golden were captured via FEATURE_STARTER (tests/replay/harness.py). Should the re-baseline (a) regenerate with GRAPH_STARTER and commit only if diff empty (commit = provenance change only), or (b) leave files byte-identical and change only provenance docs/tests since parity already holds?
+
+D5 Ordering/rollout: one PR or two (PR-1: fleet legacy row + inbox open-type removal + test migrations, harmless while FeatureWorkflow still registered; PR-2: deletion + worker deploy after gate re-run)? Where does the FR-002 gate re-run sit relative to merge vs deploy for a compose-deployed worker?
