@@ -324,6 +324,8 @@ class RoleHost:
         except Exception:
             return INSUFFICIENT
 
+    # no graph node calls this; kept per 020 FR-006; see
+    # .workspace/tasks/2026-11-08-revisable-stage-deletion.md
     async def _revisable_stage(
         self,
         name: str,
