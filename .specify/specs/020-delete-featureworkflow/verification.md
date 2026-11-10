@@ -114,4 +114,59 @@ tests/replay/test_graph_golden.py -q`: exit 1 with exactly the 3
 pre-existing §Baseline addendum failures; both new pinned tests green.
 Pinned tests are temporal-marked (`-m ""` selects them when run alone).
 
+## §PR-1 (T014, plan T019) — executor STOP follows this record
+
+Quickstart §1, in full (worktree `../Kroker-020-1`):
+
+```text
+pytest tests/test_dashboard_fleet.py tests/test_dashboard_fleet_marks.py \
+       tests/test_dashboard_fleet_summary.py tests/test_read_fixtures_fresh.py \
+       tests/test_channel_inbox.py tests/test_inbox_query.py -q
+  -> only the 2 pre-existing test_read_fixtures_fresh failures (of the 8 known)
+pytest tests/calibration tests/test_soft_gate_auto_approval.py -q
+  -> 21 passed
+(cd interfaces/dashboard/frontend && npm test -- src/api/http.test.ts)
+  -> 37 passed (legacy row renders "legacy run, summary unavailable")
+pytest -q && ruff check . && ruff format --check . && mypy
+  -> ruff check: pass; ruff format --check: 1909 files formatted; mypy: clean
+```
+
+Expected §1 behaviours are pinned in the suites: a fake closed
+`FeatureWorkflow` row yields one `closed_legacy` entry with zero handle
+calls and `errors == []` (test_t008a), a None-typed row is still queried
+(test_t008d), the frontend renders the legacy title (http.test.ts).
+
+Full fast tier vs the §Baseline list: **exactly the same 8 ids, nothing
+new** (test_benchmark_acceptance_stalled, test_deveval_corpus ×3,
+test_prompt_migration, test_read_fixtures_fresh ×2,
+test_todo_api_case_loads).
+
+`pytest -m temporal tests/replay tests/durability -q`: `tests/replay`
+fully green — **`tests/replay/test_feature_replay.py` is green** (it is
+fast-tier and also green there); the only failures are the 3
+pre-existing §Baseline-addendum durability drifts.
+
+Two comparison fixes landed under T014 (both found by the §Baseline
+comparison):
+- `interfaces/dashboard/frontend/src/api/__fixtures__/fleet-snapshot.json`
+  regenerated with `python scripts/dump_dashboard_fixtures.py` (the
+  additive `closed_legacy: []` wire field; never hand-edited);
+- `tests/test_tidyup_cli_wiring.py::test_approve_reaches_a_tidyup_workflow_unchanged`
+  narrowed to its documented intent (transport **imports** nothing
+  workflow-specific): transport legitimately names FeatureWorkflow since
+  T013's LegacyRunError check, as SC-002's allowed list anticipates.
+
+**Integration note (for T015)**: from PR-1 on, closed FeatureWorkflow
+rows render as `closed_legacy` rows ("legacy run, summary unavailable")
+and are never queried, while the type is still registered (Q1 = A).
+PR-1 changed nothing any registered workflow executes.
+
+Environment note: the machine had no Node; a userspace Node v22.20.0
+was installed at `~/.local/node` (symlinked into `~/.local/bin`) to run
+vitest.
+
+**Executor STOP: hands back to the orchestrator for T015 (fast-forward)
+and T016 (gate run 1). T017 resumes only on a gate PASS.**
+
+
 

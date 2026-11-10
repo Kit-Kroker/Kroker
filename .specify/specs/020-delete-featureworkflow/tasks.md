@@ -107,7 +107,7 @@ where the gate has to run.
   - `.specify/feature.json`, `CLAUDE.md`.
 
   Subject: `docs(020): spec, plan and tasks for FeatureWorkflow deletion`.
-- [ ] T002 Create the worktree `../Kroker-020-1` on the new branch
+- [x] T002 Create the worktree `../Kroker-020-1` on the new branch
   `020-delete-featureworkflow`, and run `uv sync --frozen --extra dev` in
   it. Run `pytest -q` and write the failing test ids to
   `F/verification.md` §Baseline as the known-failure list. Run
@@ -116,7 +116,7 @@ where the gate has to run.
 
 ## Phase 2: Foundational (PR-1; blocks every later phase)
 
-- [ ] T003 Finalise the test classification (plan T010, FR-012) in
+- [x] T003 Finalise the test classification (plan T010, FR-012) in
   `F/test-inventory.md`:
   - give each of the 76 `.py` rows exactly one class: `delete`, `migrate`,
     `repoint`, `comment-only` or `keep`;
@@ -125,7 +125,7 @@ where the gate has to run.
   - each `migrate` says what replaces the FeatureWorkflow leg.
 
   Add a closing tally line, which must total 76. Commit this document only.
-- [ ] T004 [P] Move `replayer()` (plan T011) from
+- [x] T004 [P] Move `replayer()` (plan T011) from
   `T/replay/test_feature_replay.py` into `T/replay/harness.py` as
   `replayer(*workflows: type)`, with an explicit default tuple unchanged
   from today. Re-point its four users to import from `tests.replay.harness`:
@@ -135,7 +135,7 @@ where the gate has to run.
   - `T/replay/test_research_retain_replay.py`.
 
   Verify with `pytest -m temporal T/replay -q`, which must stay green.
-- [ ] T005 [P] Re-point the six helper imports (plan T012) per
+- [x] T005 [P] Re-point the six helper imports (plan T012) per
   `F/test-inventory.md` "Known special cases":
   - `T/plan/test_plan_validation_module.py:5` and
     `T/plan/test_plan_graph_validation.py:9` become
@@ -150,7 +150,7 @@ where the gate has to run.
     `_requirements_for_downstream` from `sdlc.stages.architecture.step`.
 
   Run those six files.
-- [ ] T006 [P] Pin the live graph gate path (plan T013, R-7, C2) in three
+- [x] T006 [P] Pin the live graph gate path (plan T013, R-7, C2) in three
   files:
   - `T/calibration/test_gate_requires_calibration.py`: add tests that
     `S/workflows/graph_nodes/gate.py` passes `judge_error` and
@@ -165,7 +165,7 @@ where the gate has to run.
   the source with the asserted argument removed, see it fail, and record
   the output in `F/verification.md` §T006. Then run it green on the real
   source.
-- [ ] T007 [P] Pin the values that need FeatureWorkflow alive (plan T014,
+- [x] T007 [P] Pin the values that need FeatureWorkflow alive (plan T014,
   R-5):
   1. Write `T/durability/fixtures/priced_usage_pre_e74.json` holding the
      `price_usage` tuples extracted from the current
@@ -188,7 +188,7 @@ still green.
 
 **Independent test**: quickstart §1, SC-005.
 
-- [ ] T008 [US3] Write the fleet tests first in `T/test_dashboard_fleet.py`.
+- [x] T008 [US3] Write the fleet tests first in `T/test_dashboard_fleet.py`.
   The fake `list_workflows` yields rows with `workflow_type`, `status`,
   `start_time` and `close_time`, and a handle factory counts calls per id.
   The cases are:
@@ -203,7 +203,7 @@ still green.
     `WorkflowType='FeatureWorkflow'`.
 
   Run them and confirm (a), (b), (c) and (e) fail.
-- [ ] T009 [US3] Implement `LegacyRun`, `ClosedRef`,
+- [x] T009 [US3] Implement `LegacyRun`, `ClosedRef`,
   `FleetSnapshot.closed_legacy` and the partition in `S/dashboard/fleet.py`
   (plan T015), per contract §1 and data-model §1 and §2. Add the comment
   "never removed: pre-cutover runs stay visible" at `_PIPELINE_TYPES`.
@@ -211,12 +211,12 @@ still green.
   `T/test_dashboard_fleet_summary.py` and `T/test_read_fixtures_fresh.py`.
   If the `/api/inbox` read fixture changes, regenerate it with
   `python scripts/dump_read_fixtures.py` and commit the regenerated file.
-- [ ] T010 [US3] Make `GET /runs/{run_id}` in `S/dashboard/api.py` search
+- [x] T010 [US3] Make `GET /runs/{run_id}` in `S/dashboard/api.py` search
   `closed_legacy` after `closed` (contract §2), test first in
   `T/test_dashboard_api.py`. Add the comment "legacy
   FeatureWorkflow rows are intentionally absent (020 contract §3)" in
   `S/dashboard/fleet_summary.py` (plan T016).
-- [ ] T011 [P] [US3] Frontend (plan T017, contract §4), tests first in
+- [x] T011 [P] [US3] Frontend (plan T017, contract §4), tests first in
   `FE/api/http.test.ts`:
   - add the `LegacyRun` wire type and `Run.legacy: boolean` in
     `FE/api/types.ts`;
@@ -231,13 +231,13 @@ still green.
 
 **Goal**: a query on a legacy id fails cleanly (R-3, contract §5).
 
-- [ ] T012 [US5] (plan T018) Write the tests first for `LegacyRunError`, in
+- [x] T012 [US5] (plan T018) Write the tests first for `LegacyRunError`, in
   `T/test_channel_transport.py`:
   - a fake handle whose `query` raises and whose `describe()` reports
     `workflow_type="FeatureWorkflow"` raises `LegacyRunError`;
   - a non-legacy query failure re-raises the original exception;
   - the happy path calls `describe()` zero times.
-- [ ] T013 [US5] (plan T018) Implement `LegacyRunError` and the describe-on-failure
+- [x] T013 [US5] (plan T018) Implement `LegacyRunError` and the describe-on-failure
   check in `fetch_pending` in `S/channels/transport.py`.
   - Map it to HTTP 410 in `S/dashboard/api.py` (`/answer`, `/decide`).
   - Map it to an stderr message and exit 1 in `S/cli.py` (the reply path
@@ -251,7 +251,7 @@ still green.
     `approve --id` and `status --id` against a fake client print the
     message and exit 1;
   - `T/test_operator_errors.py`.
-- [ ] T014 PR-1 verification (plan T019):
+- [x] T014 PR-1 verification (plan T019):
   - quickstart §1 in full;
   - `pytest -q`, compared against the T002 list;
   - `pytest -m temporal T/replay T/durability -q`, where

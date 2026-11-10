@@ -46,13 +46,16 @@ def test_approve_reaches_a_tidyup_workflow_unchanged():
     """channels/transport.py resolves and submits BY NAME and imports nothing
     from FeatureWorkflow -- so the existing approve verb already works against
     TidyUpWorkflow. This test exists so a future refactor cannot quietly
-    break that."""
+    break that. 020: transport legitimately NAMES FeatureWorkflow again (the
+    LegacyRunError describe-check, contract §5, allowed by SC-002), so the
+    pin is the import, not any string mention."""
     import inspect
 
     from sdlc.channels import transport
 
     src = inspect.getsource(transport)
-    assert "FeatureWorkflow" not in src
+    assert "workflows.feature" not in src
+    assert "import FeatureWorkflow" not in src
 
 
 @pytest.mark.parametrize(

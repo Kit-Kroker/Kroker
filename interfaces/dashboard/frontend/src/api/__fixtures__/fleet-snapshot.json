@@ -299,5 +299,6 @@
       "deploy": "done",
       "retro": "done"
     }
-  }
+  },
+  "closed_legacy": []
 }
