@@ -647,3 +647,41 @@ The four early failures in the wedged run were the four known drift
 ids (positions 16, 17, 18, 25 = priced×2, provider_payload,
 wire_neutrality) — class (a) throughout; nothing was class (b) (no
 main-check needed — no unexplained failure remained).
+
+## §T031 / §PR-2 (T031, plan T059) — executor STOP follows
+
+All commands in `../Kroker-020-2` at HEAD `d4470879`:
+
+```text
+$ uv run pytest -q
+exactly the 8 §Baseline ids (diffed against the T002 list)      (/tmp/opencode/t031-fast.txt)
+
+$ pytest -m temporal tests/durability tests/replay tests/graph_workflow -q
+   (chunked per the orchestrator's standing order, --timeout=180 --timeout-method=thread)
+   durability: exit 1, exactly the four known priced-usage drift ids
+     (test_live_priced_usage_matches_the_frozen_recording,
+      test_pinned_tuples_match_the_recorded_history  [ruling-recorded inheritor],
+      test_provider_request_messages_match_the_frozen_capture,
+      test_no_override_wire_equals_the_frozen_baseline)
+   replay:        exit 0                                (/tmp/opencode/t031-replay.txt)
+   graph_workflow: exit 0                                (/tmp/opencode/t031-graph.txt)
+
+$ uv run python scripts/check_clauses.py
+243 clauses declared, 9 untested (the pre-existing set), 0 dangling
+
+$ uv run ruff check . && uv run ruff format --check . && uv run mypy
+All checks passed! · 1910 files already formatted ·
+Success: no issues found in 411 source files
+
+$ cd interfaces/dashboard/frontend && npm ci && npm test
+Test Files 52 passed (52) · Tests 630 passed (630)   (vitest; node_modules
+installed fresh in this worktree — the PR-1 install lived in ../Kroker-020-1)
+
+$ python -c "import sdlc.worker"      (CI dummy keys)
+worker import OK
+```
+
+No STOP condition is met: no gate FAIL, the golden re-baseline diff is
+provenance-only (§T019), and the durability failures are exactly the
+known baseline plus its ruled inheritor. **Executor STOP after T034
+stands; T035–T037 are orchestrator-only.**
