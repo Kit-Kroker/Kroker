@@ -727,3 +727,24 @@ src/sdlc/core/models.py:512,555,558             (field comments)
 
 (Verbatim output retained at scratchpad `sc002-grep.txt`; 16 lines.)
 ruff/format clean over `src/sdlc/`; clauses gate unchanged (243/0).
+
+## Gate-2 (T036), 2026-11-10T23:26:47Z
+
+Runbook commands run via `docker exec kroker-temporal-1 temporal ... --address 127.0.0.1:7233 --namespace default`. HEAD `e6b82d4a`.
+
+```
+$ date -u
+2026-11-10T23:26:47Z
+$ docker inspect
+891351c9f8a2a043f38586fcdffe26f33818a5f173597f7c984e018e0dd250b4 2026-11-10T15:33:23.878559431Z
+$ git rev-parse HEAD
+e6b82d4adb98b78c1aad85528ec9fe09aa831a21
+$ G0 count
+Total: 0
+$ G0 schedule list
+  ScheduleId  Action  Paused  NextRunTime  LastRunTime
+$ G1
+$ G2
+```
+
+**Result:** G1 and G2 empty, no schedules. G0 count is 0, so pass rule 1 is a literal FAIL (same container as run 1, started 2026-11-10T15:33:23Z). Accepted, not overridden silently: the user ruled in gate 1 that this host store is the only store, and explicitly said go for T036 and the restart. Worker built locally from `main` (`docker compose build worker`) before the gate; restart follows immediately.
