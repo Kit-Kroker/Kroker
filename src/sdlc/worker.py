@@ -1,9 +1,10 @@
 """Worker entrypoint.
 
-Registers the FeatureWorkflow, plain activities, and the durable activities
-the TemporalDurability capability generates for each Pydantic AI agent
-(model requests, tool calls). Uses the Pydantic data converter so pipeline
-models serialize cleanly through Temporal.
+Registers the GraphWorkflow (020: FeatureWorkflow is deleted), plain
+activities, and the durable activities the TemporalDurability capability
+generates for each Pydantic AI agent (model requests, tool calls). Uses
+the Pydantic data converter so pipeline models serialize cleanly through
+Temporal.
 """
 
 from __future__ import annotations
@@ -119,7 +120,6 @@ from .vcs.janitor import worktree_janitor
 from .workflows.assessment import AssessmentWorkflow
 from .workflows.crew import CrewTaskWorkflow
 from .workflows.deployment import DeploymentWorkflow
-from .workflows.feature import FeatureWorkflow
 from .workflows.graph import GraphWorkflow
 from .workflows.reflect import ReflectWorkflow
 from .workflows.tidyup import TidyUpWorkflow
@@ -283,7 +283,6 @@ async def main() -> None:
         client,
         task_queue=TASK_QUEUE,
         workflows=[
-            FeatureWorkflow,
             GraphWorkflow,
             BenchmarkWorkflow,
             ReflectWorkflow,

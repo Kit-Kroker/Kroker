@@ -527,3 +527,29 @@ GREEN: ......................... [100%]  (17/17 across both files)
 Fleet callers unaffected (`dashboard/fleet.py` uses the no-types default
 and lists RUNS; its closed-legacy queries are PR-1's and untouched):
 `tests/test_dashboard_fleet*.py` 52/52 green. ruff/format clean.
+
+## §T025 (T025, plan T050, FR-003 — FeatureWorkflow deleted)
+
+Executor-direct deletion (T021 precedent), pin first:
+`test_worker_registers_the_post_020_workflow_set` (ast-pins the
+`Worker(...)` workflows literal to the eight remaining names) was RED
+against the then-src (`FeatureWorkflow` still registered), then
+`S/workflows/feature.py` was `git rm`'d and `S/worker.py` lost its
+import, its registration and the docstring's FeatureWorkflow mention.
+
+```text
+RED:  test_worker_registers_the_post_020_workflow_set (assertion on
+      'FeatureWorkflow' not in registered)
+GREEN: pytest tests/test_worker_registration.py
+         tests/graph_workflow/test_cold_import.py
+         tests/graph_workflow/test_store_import_pin.py -q
+      ........... [100%] exit 0
+```
+
+`import sdlc.worker` OK (with the CI dummy keys the registry requires —
+bare import fails closed on EXA_API_KEY by design). ruff, format,
+mypy (411 files — feature.py gone), check_file_size clean. Pre-check:
+the only `src/` import of `workflows.feature` was worker.py; the three
+other mentions (sc_rollup.py, notify/render.py, plan/validation.py) are
+comments/docstrings only — T033's sweep rewords them. The wider
+`tests/` fallout (delete/migrate classes) is T026's, per the inventory.

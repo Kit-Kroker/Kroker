@@ -64,3 +64,31 @@ def test_worker_registers_research_verify_activity():
 
     names = [getattr(a, "__name__", str(a)) for a in worker.get_worker_activities()]
     assert "verify_brief_activity" in names
+
+
+def test_worker_registers_the_post_020_workflow_set():
+    """020 T025 (plan T050, FR-003): FeatureWorkflow is deleted with its
+    registration; the worker's workflow set is the remaining eight."""
+    import ast
+    import inspect
+
+    from sdlc import worker
+
+    registered: set[str] | None = None
+    for node in ast.walk(ast.parse(inspect.getsource(worker))):
+        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "Worker":
+            for kw in node.keywords:
+                if kw.arg == "workflows":
+                    registered = {elt.id for elt in kw.value.elts}
+    assert registered is not None, "no Worker(..., workflows=[...]) call found"
+    assert "FeatureWorkflow" not in registered
+    assert registered == {
+        "GraphWorkflow",
+        "BenchmarkWorkflow",
+        "ReflectWorkflow",
+        "DeploymentWorkflow",
+        "TriageWorkflow",
+        "TidyUpWorkflow",
+        "AssessmentWorkflow",
+        "CrewTaskWorkflow",
+    }
