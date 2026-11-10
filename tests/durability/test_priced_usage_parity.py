@@ -126,3 +126,29 @@ async def test_live_priced_usage_matches_the_frozen_recording(monkeypatch, tmp_p
     # the frozen history — the comparison is vacuous until one appears, and
     # bites the moment the scenario starts recording benchmarks).
     assert live_bench == recorded_bench, "benchmark spend drifted from the recording"
+
+
+def test_pinned_tuples_match_the_recorded_history():
+    """020 T007 (plan T014, R-5): the frozen anchor for the post-deletion gate.
+
+    FeatureWorkflow is deleted this round and the recording is re-captured as
+    GraphWorkflow, so the FeatureWorkflow tuples are pinned here RAW (no
+    _RECORDED_MODEL_MAP applied) in tests/durability/fixtures/. T020 re-points
+    the live GraphWorkflow leg against this fixture. The raw comparison is
+    exact: the map stays a comparison-time concern in the live test above.
+    """
+    import json
+    import pathlib
+
+    fixture = pathlib.Path("tests/durability/fixtures/priced_usage_pre_e74.json")
+    pinned = json.loads(fixture.read_text(encoding="utf-8"))
+    assert pinned["source_history"] == "tests/replay/histories/greenfield_happy.json"
+    assert pinned["activity"] == "price_usage"
+
+    recorded = load_history("greenfield_happy")
+    decoded = [
+        list(_price_tuple(p))
+        for p in _scheduled_inputs(recorded.events, "price_usage", PriceUsageInput)
+    ]
+    assert decoded, "frozen history carries no price_usage activities"
+    assert pinned["tuples"] == decoded

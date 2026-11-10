@@ -69,3 +69,49 @@ qa-chaos ran the same class of mutations independently (m1–m4 plus the
 m5/m6 gap before it was pinned) with the same outcome. Green on the real
 source: 35 passed, exit 0; `ruff check` clean on the three files.
 
+### §Baseline addendum (recorded at T007)
+
+The T002 baseline covered the fast tier and `tests/replay` only. The
+durability temporal tier was first run at T007 and carries **3
+pre-existing failures on `main`** (each reproduced in the primary
+checkout `/home/maksim/work/Kroker` at `4f6fc2c3`, untouched by this
+branch — all three are live-capture-vs-frozen-recording comparisons
+already drifted on `main`):
+
+```text
+FAILED tests/durability/test_priced_usage_parity.py::test_live_priced_usage_matches_the_frozen_recording
+FAILED tests/durability/test_provider_payload_parity.py::test_provider_request_messages_match_the_frozen_capture
+FAILED tests/durability/test_wire_neutrality.py::test_no_override_wire_equals_the_frozen_baseline
+```
+
+The priced-usage drift: live 6th tuple `('zai:glm-5.3', 314, 28, 0, 0)`
+vs frozen `('zai:glm-5.3', 195, 24, 0, 0)`. **Flagged for T020/T026**:
+re-pointing the live leg against the pre-e74 anchors (T007 fixture,
+wire baseline) will meet this same drift; needs an orchestrator ruling
+before Phase 6.
+
+## §T007 (T007, plan T014, R-5 — pinned constants)
+
+qa-happy authored, qa-chaos adversarially verified (4 mutations, each
+failing exactly its pin; fixture confirmed raw — `_RECORDED_MODEL_MAP`
+is not applied and is in fact inert for `price_usage` today).
+
+1. `tests/durability/fixtures/priced_usage_pre_e74.json` — 6 raw
+   `price_usage` tuples from the current FeatureWorkflow
+   `greenfield_happy` recording. One-off extraction command (scratchpad
+   script, not committed):
+   `EXA_API_KEY=test-dummy ANTHROPIC_API_KEY=test-dummy OPENAI_API_KEY=test-dummy ZAI_API_KEY=test-dummy PYTHONPATH=. uv run python <scratchpad>/extract_priced_usage.py`
+2. `test_pinned_tuples_match_the_recorded_history` — fixture equals the
+   decoded recorded history, raw. Green.
+3. `MEMO_PARITY_KEYS` in `tests/replay/test_graph_golden.py` — 3
+   `content_key` tuples (clarify, architect, plan) frozen verbatim from
+   one run of the FeatureWorkflow leg (temporary MEMO_DUMP print, removed
+   after; constant generated with ast.literal_eval).
+4. Both live legs asserted `== MEMO_PARITY_KEYS` (green on two runs).
+
+Commanded verification `pytest -m temporal tests/durability
+tests/replay/test_graph_golden.py -q`: exit 1 with exactly the 3
+pre-existing §Baseline addendum failures; both new pinned tests green.
+Pinned tests are temporal-marked (`-m ""` selects them when run alone).
+
+

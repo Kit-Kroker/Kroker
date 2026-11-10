@@ -1,0 +1,58 @@
+{
+  "description": "Raw price_usage tuples from the pre-E-74 FeatureWorkflow recording. Unmapped: _RECORDED_MODEL_MAP is applied at comparison time only.",
+  "source_history": "tests/replay/histories/greenfield_happy.json",
+  "source_workflow": "FeatureWorkflow",
+  "source_commit": "076db3633802c5612449fed1f64413fe3e2770ea",
+  "activity": "price_usage",
+  "fields": [
+    "model",
+    "input_tokens",
+    "output_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens"
+  ],
+  "tuples": [
+    [
+      "zai:glm-5.3",
+      114,
+      54,
+      0,
+      0
+    ],
+    [
+      "zai:glm-5.3",
+      247,
+      38,
+      0,
+      0
+    ],
+    [
+      "zai:glm-5.3",
+      349,
+      62,
+      0,
+      0
+    ],
+    [
+      "glm-5.3",
+      178,
+      14,
+      0,
+      0
+    ],
+    [
+      "zai:glm-5.3",
+      163,
+      9,
+      0,
+      0
+    ],
+    [
+      "zai:glm-5.3",
+      195,
+      24,
+      0,
+      0
+    ]
+  ]
+}

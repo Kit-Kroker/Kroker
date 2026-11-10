@@ -19,6 +19,34 @@ from tests.replay.scenarios import GOLDEN_SCENARIOS, SCENARIOS, A, answer_clarif
 pytestmark = pytest.mark.temporal
 GREENFIELD = next(s for s in SCENARIOS if s.name == "greenfield_happy")
 
+# 020 T007 (plan T014, R-5): the FeatureWorkflow memo-parity keys, frozen
+# verbatim from one run of test_memo_key_inputs_match_feature_workflow before
+# FeatureWorkflow is deleted. Each tuple is one content_key call:
+# (stage, input_json, digest, model, watermark), in call order.
+MEMO_PARITY_KEYS: list[tuple] = [
+    (
+        "clarify",
+        '{"title":"Hello service","description":"Add /hello","mode":"greenfield","repo_url":"/fake/repo","base_branch":"main","constraints":[]}',  # noqa: E501
+        "26db68a05e6b307a9f372378694db871b374584fd653af10d7d055953f6e8cc9",
+        "zai:glm-5.3",
+        "wm-e74",
+    ),
+    (
+        "architect",
+        '{"summary":"Add a greeting endpoint.","functional_requirements":["GET /hello returns 200"],"non_functional_requirements":["p95 < 100ms"],"out_of_scope":["auth"],"open_questions":[{"id":"q1","question":"Anonymous access ok?","why_it_matters":"scopes auth work","suggested_answer":"yes","answer":"yes","dimension":null,"asked_by":null,"materiality":null,"evidence":null}],"spec_ref":null}',  # noqa: E501
+        "21b8cd74f178a7d0830dd0adca58ea699294f8dffcafb7e461db6cdd52f36afd62579cdaf3c2bad333929e3200992b846fff534ac99cd259a94d811c6ac80e99",  # noqa: E501
+        "zai:glm-5.3",
+        "wm-e74",
+    ),
+    (
+        "plan",
+        '{"overview":"Single FastAPI service with one route.","decisions":[{"id":"d1","decision":"Use FastAPI","rationale":"matches team stack","alternatives_considered":[]}],"affected_modules":[],"new_components":["app/main.py"],"risks":[],"spec_ref":null,"confidence":0.95,"delta":null}',  # noqa: E501
+        "90bf1e5a44ad50328703903309f55d18e7efc3b81cd74c270321b82d59552d9b4997a572fb2dff55ccb556489ccdbbe2fae207f9b2c5410915262e3cb6fc7a82",  # noqa: E501
+        "zai:glm-5.3",
+        "wm-e74",
+    ),
+]
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("sandboxed", [False, True], ids=["unsandboxed", "sandboxed"])
@@ -114,4 +142,8 @@ async def test_memo_key_inputs_match_feature_workflow(monkeypatch, tmp_path):
         await capture(scenario, starter, monkeypatch, tmp_path / starter.name)
     assert seen["FeatureWorkflow"], "memoization must have computed keys"
     assert seen["GraphWorkflow"] == seen["FeatureWorkflow"]
+    # 020 T007: both live legs equal the frozen FeatureWorkflow keys, so the
+    # pin still holds after FeatureWorkflow is gone.
+    assert seen["FeatureWorkflow"] == MEMO_PARITY_KEYS
+    assert seen["GraphWorkflow"] == MEMO_PARITY_KEYS
     assert all(args[-1] == "wm-e74" for args in seen["GraphWorkflow"])
