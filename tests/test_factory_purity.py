@@ -7,12 +7,13 @@ pydantic-ai ``ModelResponse`` shape, and that proved intractable without
 deeper research. Instead we regression-protect the production-safety
 invariant STRUCTURALLY:
 
-    When ``cfg.benchmark.case_id is None``, ``FeatureWorkflow`` must make
+    When ``cfg.benchmark.case_id is None``, the workflow must make
     ZERO ``record_benchmark`` and ZERO ``judge_artifact`` activity calls.
 
 The invariant is enforced by two gated helpers — ``_record`` and ``_judge``
-on the ``BenchmarkHost`` mixin (composed into ``FeatureWorkflow`` via its
-MRO since spec A "stage surgery") — each guarded by
+on the ``BenchmarkHost`` mixin (composed into ``GraphWorkflow`` via its
+MRO since spec A "stage surgery"; 020 T026 dropped the deleted
+FeatureWorkflow's class scan) — each guarded by
 ``if not self._benchmarking(cfg): return`` before its activity call. These
 tests assert (a) those guards exist and precede the call, and (b) the
 benchmark activities are called ONLY through those helpers (no unguarded
@@ -33,9 +34,10 @@ from pathlib import Path
 
 import pytest
 
-FEATURE_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "feature.py"
-# Spec A "stage surgery": the benchmark helpers moved off FeatureWorkflow
-# onto the BenchmarkHost mixin; the workflow composes it via its MRO.
+# Spec A "stage surgery": the benchmark helpers live on the BenchmarkHost
+# mixin; the workflow composes it via its MRO. 020 T026: FeatureWorkflow
+# and its FEATURE_PY export are gone; the graph side is covered by the
+# GRAPH_MODULES scan below.
 BENCHMARK_HOST_PY = (
     Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "benchmark_host.py"
 )
@@ -48,7 +50,7 @@ def _load_class(tree: ast.AST, class_name: str) -> ast.ClassDef:
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef) and node.name == class_name:
             return node
-    pytest.fail(f"class {class_name!r} not found in {FEATURE_PY}")
+    pytest.fail(f"class {class_name!r} not found")
 
 
 def _methods(cls: ast.ClassDef) -> dict[str, ast.AsyncFunctionDef]:
@@ -144,13 +146,6 @@ def _activity_calls_in_method(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> set
 
 
 @pytest.fixture(scope="module")
-def feature_class() -> ast.ClassDef:
-    source = FEATURE_PY.read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(FEATURE_PY))
-    return _load_class(tree, "FeatureWorkflow")
-
-
-@pytest.fixture(scope="module")
 def benchmark_host_class() -> ast.ClassDef:
     source = BENCHMARK_HOST_PY.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(BENCHMARK_HOST_PY))
@@ -180,13 +175,14 @@ def test_judge_helper_is_guarded(benchmark_host_class):
 
 
 def test_benchmark_activities_only_called_through_gated_helpers(
-    feature_class, benchmark_host_class
+    benchmark_host_class,
 ):
     """No direct ``workflow.execute_activity(record_benchmark/judge_artifact,
     ...)`` calls outside ``_record``/``_judge``. Prevents an unguarded
-    call sneaking in on any other code path — on FeatureWorkflow or on the
-    BenchmarkHost mixin that now carries the helpers (spec A)."""
-    for cls in (feature_class, benchmark_host_class):
+    call sneaking in on any other code path — on the host classes or on
+    the BenchmarkHost mixin that carries the helpers (spec A). The graph
+    modules are swept by the GRAPH_MODULES test below (020 T026)."""
+    for cls in (benchmark_host_class,):
         methods = _methods(cls)
         for name, fn in methods.items():
             if name in _GATED_HELPERS:

@@ -54,7 +54,8 @@ from tests.fakes.fake_activities import git_fakes_except
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.deployment import DeploymentWorkflow
-    from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
+    from sdlc.workflows.graph_catalog import build_run_input
     from tests.fakes.fake_agents import fake_agent_activities
 
 pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]
@@ -65,7 +66,7 @@ TASK_GATE = "task:t1"
 @dataclass
 class TaskScript:
     """Module-level state so a test can script the coding/QA pair without
-    threading config through FeatureWorkflow's whole call chain (the
+    threading config through the workflow's whole call chain (the
     fake_deploy.DeployScript pattern).
 
     `qa_failures` is consumed one entry per run_test_suite call, so a REVISE
@@ -148,12 +149,11 @@ def _cfg(max_fix_attempts: int = 1, max_gate_rounds: int = 2):
 async def _wait_for_status(handle, target: str, timeout_s: float = 20.0):
     deadline = asyncio.get_event_loop().time() + timeout_s
     while asyncio.get_event_loop().time() < deadline:
-        if await handle.query(FeatureWorkflow.pending_gate) == target:
+        if await handle.query("pending_gate") == target:
             return
         await asyncio.sleep(0.05)
     raise AssertionError(
-        f"timed out waiting for {target!r}; "
-        f"last seen {await handle.query(FeatureWorkflow.pending_gate)!r}"
+        f"timed out waiting for {target!r}; last seen {await handle.query('pending_gate')!r}"
     )
 
 
@@ -165,7 +165,7 @@ async def _run(cfg, tmp_path, monkeypatch, tag, driver):
         async with Worker(
             env.client,
             task_queue=tag,
-            workflows=[FeatureWorkflow, DeploymentWorkflow],
+            workflows=[GraphWorkflow, DeploymentWorkflow],
             activities=[
                 evaluate_gate,
                 export_run_artifacts,
@@ -176,8 +176,8 @@ async def _run(cfg, tmp_path, monkeypatch, tag, driver):
             plugins=[SdlcPydanticAIPlugin()],
         ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run,
-                args=[greenfield_idea(), cfg, None],
+                GraphWorkflow.run,
+                build_run_input(greenfield_idea(), cfg, None),
                 id=f"{tag}-{uuid.uuid4()}",
                 task_queue=tag,
             )
@@ -188,7 +188,7 @@ async def _run(cfg, tmp_path, monkeypatch, tag, driver):
 
 async def _answer_clarify(handle):
     for qid in QUESTION_IDS:
-        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+        await handle.signal("answer_question", args=[qid, "yes"])
 
 
 async def test_task_gate_revise_retries_with_the_operator_guidance(tmp_path, monkeypatch):
@@ -202,7 +202,7 @@ async def test_task_gate_revise_retries_with_the_operator_guidance(tmp_path, mon
         await _answer_clarify(handle)
         await _wait_for_status(handle, f"awaiting:{TASK_GATE}")
         await handle.signal(
-            FeatureWorkflow.submit_gate_decision,
+            "submit_gate_decision",
             GateDecision(
                 gate=TASK_GATE,
                 round=1,
@@ -235,7 +235,7 @@ async def test_task_gate_reject_still_quarantines(tmp_path, monkeypatch):
         await _answer_clarify(handle)
         await _wait_for_status(handle, f"awaiting:{TASK_GATE}")
         await handle.signal(
-            FeatureWorkflow.submit_gate_decision,
+            "submit_gate_decision",
             GateDecision(gate=TASK_GATE, round=1, outcome=GateOutcome.REJECT, decided_by="human"),
         )
 
@@ -254,7 +254,7 @@ async def test_task_gate_revise_is_bounded_by_max_gate_rounds(tmp_path, monkeypa
         for round in (1, 2):
             await _wait_for_status(handle, f"awaiting:{TASK_GATE}")
             await handle.signal(
-                FeatureWorkflow.submit_gate_decision,
+                "submit_gate_decision",
                 GateDecision(
                     gate=TASK_GATE,
                     round=round,
@@ -267,7 +267,7 @@ async def test_task_gate_revise_is_bounded_by_max_gate_rounds(tmp_path, monkeypa
         # rather than looping, and a REJECT there ends it.
         await _wait_for_status(handle, f"awaiting:{TASK_GATE}")
         await handle.signal(
-            FeatureWorkflow.submit_gate_decision,
+            "submit_gate_decision",
             GateDecision(gate=TASK_GATE, round=3, outcome=GateOutcome.REJECT, decided_by="human"),
         )
 

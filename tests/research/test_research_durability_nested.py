@@ -42,7 +42,8 @@ from sdlc.stages.research.models import ResearchBrief
 from sdlc.stages.research.toolset import research_subquery
 from sdlc.stages.research.verify import verify_brief_activity
 from sdlc.workflows.deployment import DeploymentWorkflow
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
+from sdlc.workflows.graph_catalog import build_run_input
 from tests.fakes.canned import AGENT_SPECS, ARCH, greenfield_idea
 from tests.fakes.fake_activities import GIT_FAKES
 from tests.fakes.fake_agents import fake_agent_activities
@@ -134,14 +135,14 @@ async def test_nested_research_runs_in_activity_and_budget_still_bounds(tmp_path
         async with Worker(
             env.client,
             task_queue=QUEUE,
-            workflows=[FeatureWorkflow, DeploymentWorkflow],
+            workflows=[GraphWorkflow, DeploymentWorkflow],
             activities=activities,
             plugins=[SdlcPydanticAIPlugin()],
         ):
             with env.auto_time_skipping_disabled():
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"003-nested-{uuid.uuid4()}",
                     task_queue=QUEUE,
                 )

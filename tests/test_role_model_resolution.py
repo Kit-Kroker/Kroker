@@ -42,11 +42,19 @@ import re
 from pathlib import Path
 
 
-def test_no_raw_stage_models_lookup_in_feature_workflow():
+def test_no_raw_stage_models_lookup_in_the_workflow():
     """Every proposer model reference must go through resolve_role_model so
     per-run overrides and the memo key stay consistent. The only allowed raw
-    STAGE_MODELS[...] is inside resolve_role_model itself."""
-    src = Path("src/sdlc/workflows/feature.py").read_text(encoding="utf-8")
+    STAGE_MODELS[...] is inside resolve_role_model itself. 020 T026: the
+    scan follows the workflow code (graph.py + its nodes)."""
+    src = (
+        Path("src/sdlc/workflows/graph.py").read_text(encoding="utf-8")
+        + "\n"
+        + "\n".join(
+            p.read_text(encoding="utf-8")
+            for p in sorted(Path("src/sdlc/workflows/graph_nodes").glob("*.py"))
+        )
+    )
     # strip the resolver body (the one legitimate raw lookup)
     src_wo_resolver = re.sub(
         r"def resolve_role_model.*?return STAGE_MODELS\[stage\]", "", src, flags=re.DOTALL

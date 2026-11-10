@@ -44,7 +44,8 @@ from tests.fakes.fake_deploy import reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.deployment import DeploymentWorkflow
-    from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
+    from sdlc.workflows.graph_catalog import build_run_input
     from tests.fakes.fake_agents import fake_agent_activities
 
 pytestmark = pytest.mark.temporal
@@ -114,11 +115,15 @@ def _research_fake_activities(brief: ResearchBrief = _RESEARCH) -> list:
 
 
 async def _wait_for_status(handle, target: str, timeout_s: float = 30.0):
-    """Poll status() until it reports `target` (e.g. 'awaiting:clarify')."""
+    """Poll status() until it reports `target` (e.g. 'awaiting:clarify').
+
+    020 T026: the query and the signals below go by NAME — the hosts
+    (gates.py / question_host.py) are shared, so the same driver drives
+    GraphWorkflow."""
     deadline = asyncio.get_event_loop().time() + timeout_s
     last = None
     while asyncio.get_event_loop().time() < deadline:
-        status = await handle.query(FeatureWorkflow.status)
+        status = await handle.query("status")
         if status != last:
             last = status
         if status == target:
@@ -131,13 +136,15 @@ async def _drive(handle):
     # 1. clarify — answer the one open question (proves research handed off)
     await _wait_for_status(handle, "awaiting:clarify")
     for qid in QUESTION_IDS:
-        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+        await handle.signal("answer_question", args=[qid, "yes"])
     # 2. deploy gate — architecture/plan/research are OFF (auto-approved);
     #    merge auto-passes with clean fakes. Only deploy waits on a human.
     await _wait_for_status(handle, "awaiting:deploy")
     await handle.signal(
-        FeatureWorkflow.submit_gate_decision,
-        GateDecision(gate="deploy", round=1, outcome=GateOutcome.APPROVE, decided_by="human"),
+        "submit_gate_decision",
+        args=[
+            GateDecision(gate="deploy", round=1, outcome=GateOutcome.APPROVE, decided_by="human")
+        ],
     )
 
 
@@ -181,13 +188,13 @@ async def test_research_stage_runs_and_hands_off():
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                workflows=[GraphWorkflow, DeploymentWorkflow],
                 activities=activities,
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"e2e-research-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )
@@ -248,13 +255,13 @@ async def test_research_stage_degrades_instead_of_blocking_on_grounding_violatio
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                workflows=[GraphWorkflow, DeploymentWorkflow],
                 activities=activities,
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"e2e-research-violation-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )
@@ -270,15 +277,16 @@ async def test_research_stage_degrades_instead_of_crashing_on_usage_limit_exceed
     """bench-todo-api-greenfield-1785485669: the research stage burned past
     pydantic-ai's default UsageLimits(request_limit=50) and the raised
     UsageLimitExceeded propagated all the way out of t_research.run(),
-    crashing the entire FeatureWorkflow -- every other stage's records were
+    crashing the entire pipeline -- every other stage's records were
     lost along with it, not just the research stage's.
 
     max_requests=0 forces pydantic-ai's own usage limiter to raise
     UsageLimitExceeded on the very first request, deterministically
     reproducing that failure mode without depending on a flaky model. The
-    workflow must catch it (feature.py wraps t_research.run in try/except)
-    and substitute a degraded ResearchBrief, continuing to clarify/deploy
-    exactly like test_research_stage_runs_and_hands_off -- not crash."""
+    workflow must catch it (the research node wraps t_research.run in
+    try/except) and substitute a degraded ResearchBrief, continuing to
+    clarify/deploy exactly like test_research_stage_runs_and_hands_off
+    -- not crash."""
     activities = [
         evaluate_gate,
         verify_brief_activity,
@@ -308,13 +316,13 @@ async def test_research_stage_degrades_instead_of_crashing_on_usage_limit_exceed
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                workflows=[GraphWorkflow, DeploymentWorkflow],
                 activities=activities,
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"e2e-research-usagelimit-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )

@@ -10,7 +10,7 @@ import asyncio
 import uuid
 
 import pytest
-from temporalio import workflow
+from temporalio import activity, workflow
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
@@ -24,7 +24,9 @@ from sdlc.core.models import (
     PipelineConfig,
     TimeoutAction,
 )
+from sdlc.notify.contract import DeliveryResult, NotifyInput, Results
 from sdlc.observability.activities import export_run_artifacts
+from sdlc.pending import PendingDecision
 from sdlc.stages.merge.activities import evaluate_gate
 from tests.fakes.canned import (
     AGENT_SPECS,
@@ -35,7 +37,8 @@ from tests.fakes.canned import (
 from tests.fakes.fake_activities import GIT_FAKES
 
 with workflow.unsafe.imports_passed_through():
-    from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
+    from sdlc.workflows.graph_catalog import build_run_input
     from tests.fakes.fake_agents import fake_agent_activities
 
 
@@ -84,7 +87,7 @@ def test_overrides_round_trip_through_dict_coercion():
 async def _wait_for_status(handle, target, timeout_s=10.0):
     deadline = asyncio.get_event_loop().time() + timeout_s
     while asyncio.get_event_loop().time() < deadline:
-        if await handle.query(FeatureWorkflow.pending_gate) == target:
+        if await handle.query("pending_gate") == target:
             return
         await asyncio.sleep(0.05)
     raise AssertionError(f"timed out waiting for {target!r}")
@@ -103,7 +106,7 @@ async def test_architecture_gate_timeout_still_rejects(tmp_path, monkeypatch):
         async with Worker(
             env.client,
             task_queue="timeout",
-            workflows=[FeatureWorkflow],
+            workflows=[GraphWorkflow],
             activities=[
                 evaluate_gate,
                 export_run_artifacts,
@@ -113,15 +116,15 @@ async def test_architecture_gate_timeout_still_rejects(tmp_path, monkeypatch):
             plugins=[SdlcPydanticAIPlugin()],
         ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run,
-                args=[greenfield_idea(), cfg, None],
+                GraphWorkflow.run,
+                build_run_input(greenfield_idea(), cfg, None),
                 id=f"timeout-{uuid.uuid4()}",
                 task_queue="timeout",
             )
             with env.auto_time_skipping_disabled():
                 await _wait_for_status(handle, "awaiting:clarify")
                 for qid in QUESTION_IDS:
-                    await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+                    await handle.signal("answer_question", args=[qid, "yes"])
                 await _wait_for_status(handle, "awaiting:architecture")
             result = await handle.result()
     assert "architecture" in result and result.startswith("rejected:"), result
@@ -130,7 +133,18 @@ async def test_architecture_gate_timeout_still_rejects(tmp_path, monkeypatch):
 @pytest.mark.temporal
 @pytest.mark.asyncio
 async def test_hold_keeps_the_gate_pending_past_its_nominal_deadline(tmp_path, monkeypatch):
-    """A HOLD gate outlives gate_timeout_hours and stays decidable."""
+    """A HOLD gate outlives gate_timeout_hours and stays decidable.
+
+    020 T026: under GraphWorkflow the HOLD path's reminder calls the
+    notify activity (the gate host is shared with the notifications
+    suite), so the worker registers a quiet recording fake here too; the
+    pending_decisions query goes by name and is validated with
+    PendingDecision.model_validate (by-name queries return raw JSON)."""
+
+    @activity.defn(name="notify")
+    async def quiet_notify(inp: NotifyInput) -> Results:
+        return Results(results=[DeliveryResult(notifier="log", delivered=True)])
+
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     cfg = e2e_config()
     cfg.gate_timeout_hours = 1
@@ -141,32 +155,38 @@ async def test_hold_keeps_the_gate_pending_past_its_nominal_deadline(tmp_path, m
         async with Worker(
             env.client,
             task_queue="hold",
-            workflows=[FeatureWorkflow],
+            workflows=[GraphWorkflow],
             activities=[
                 evaluate_gate,
                 export_run_artifacts,
+                quiet_notify,
                 *GIT_FAKES,
                 *fake_agent_activities(AGENT_SPECS),
             ],
             plugins=[SdlcPydanticAIPlugin()],
         ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run,
-                args=[greenfield_idea(), cfg, None],
+                GraphWorkflow.run,
+                build_run_input(greenfield_idea(), cfg, None),
                 id=f"hold-{uuid.uuid4()}",
                 task_queue="hold",
             )
             with env.auto_time_skipping_disabled():
                 await _wait_for_status(handle, "awaiting:clarify")
                 for qid in QUESTION_IDS:
-                    await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+                    await handle.signal("answer_question", args=[qid, "yes"])
                 await _wait_for_status(handle, "awaiting:architecture")
             await env.sleep(7200)  # 2h -- twice the nominal timeout
-            assert await handle.query(FeatureWorkflow.pending_gate) == "awaiting:architecture"
-            pending = await handle.query(FeatureWorkflow.pending_decisions)
+            assert await handle.query("pending_gate") == "awaiting:architecture"
+            from pydantic import TypeAdapter
+
+            pending = [
+                TypeAdapter(PendingDecision).validate_python(p)
+                for p in await handle.query("pending_decisions")
+            ]
             assert any(p.gate == "architecture" for p in pending)
             await handle.signal(
-                FeatureWorkflow.submit_gate_decision,
+                "submit_gate_decision",
                 GateDecision(
                     gate="architecture", round=1, outcome=GateOutcome.REJECT, decided_by="human"
                 ),

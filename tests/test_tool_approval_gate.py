@@ -17,6 +17,7 @@ from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.core.models import (
     GateDecision,
     GateOutcome,
+    RunSummary,
 )
 from sdlc.harness.models import (
     ContainmentLayer,
@@ -40,7 +41,8 @@ from tests.fakes.fake_deploy import reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.deployment import DeploymentWorkflow
-    from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
+    from sdlc.workflows.graph_catalog import build_run_input
     from tests.fakes.fake_agents import fake_agent_activities
 
 pytestmark = pytest.mark.temporal
@@ -103,7 +105,7 @@ def _activities(coding):
 async def _wait_for_status(handle, target, timeout_s=10.0):
     deadline = asyncio.get_event_loop().time() + timeout_s
     while asyncio.get_event_loop().time() < deadline:
-        if await handle.query(FeatureWorkflow.pending_gate) == target:
+        if await handle.query("pending_gate") == target:
             return
         await asyncio.sleep(0.05)
     raise AssertionError(f"timed out waiting for {target!r}")
@@ -129,15 +131,15 @@ async def _run_workflow_with_driver(handle, drive_coro):
 async def _drive_to_tasks(handle):
     await _wait_for_status(handle, "awaiting:clarify")
     for qid in QUESTION_IDS:
-        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+        await handle.signal("answer_question", args=[qid, "yes"])
     await _wait_for_status(handle, "awaiting:architecture")
     await handle.signal(
-        FeatureWorkflow.submit_gate_decision,
+        "submit_gate_decision",
         GateDecision(gate="architecture", round=1, outcome=GateOutcome.APPROVE, decided_by="human"),
     )
     await _wait_for_status(handle, "awaiting:plan")
     await handle.signal(
-        FeatureWorkflow.submit_gate_decision,
+        "submit_gate_decision",
         GateDecision(gate="plan", round=1, outcome=GateOutcome.APPROVE, decided_by="human"),
     )
 
@@ -156,13 +158,13 @@ async def test_deferral_raises_a_gate_and_the_grant_reaches_the_resume(tmp_path,
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                workflows=[GraphWorkflow, DeploymentWorkflow],
                 activities=_activities(defer_once),
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"esc-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )
@@ -171,7 +173,7 @@ async def test_deferral_raises_a_gate_and_the_grant_reaches_the_resume(tmp_path,
                     await _drive_to_tasks(handle)
                     await _wait_for_status(handle, "awaiting:tool_approval")
                     await handle.signal(
-                        FeatureWorkflow.submit_gate_decision,
+                        "submit_gate_decision",
                         GateDecision(
                             gate="tool_approval",
                             round=1,
@@ -186,14 +188,14 @@ async def test_deferral_raises_a_gate_and_the_grant_reaches_the_resume(tmp_path,
                     # merge auto-passes, exactly as in test_e2e_greenfield.
                     await _wait_for_status(handle, "awaiting:deploy")
                     await handle.signal(
-                        FeatureWorkflow.submit_gate_decision,
+                        "submit_gate_decision",
                         GateDecision(
                             gate="deploy", round=1, outcome=GateOutcome.APPROVE, decided_by="human"
                         ),
                     )
 
                 result = await _run_workflow_with_driver(handle, drive())
-                summary = await handle.query(FeatureWorkflow.run_summary)
+                summary = RunSummary.model_validate(await handle.query("run_summary"))
 
     assert result.startswith("deployed:"), result
     # The gate was real, and used the stable configurable name.
@@ -226,13 +228,13 @@ async def test_rejection_is_delivered_and_the_task_continues(tmp_path, monkeypat
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                workflows=[GraphWorkflow, DeploymentWorkflow],
                 activities=_activities(defer_once),
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"esc-rej-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )
@@ -241,7 +243,7 @@ async def test_rejection_is_delivered_and_the_task_continues(tmp_path, monkeypat
                     await _drive_to_tasks(handle)
                     await _wait_for_status(handle, "awaiting:tool_approval")
                     await handle.signal(
-                        FeatureWorkflow.submit_gate_decision,
+                        "submit_gate_decision",
                         GateDecision(
                             gate="tool_approval",
                             round=1,
@@ -254,7 +256,7 @@ async def test_rejection_is_delivered_and_the_task_continues(tmp_path, monkeypat
                     # see test_deferral above for the contract note.
                     await _wait_for_status(handle, "awaiting:deploy")
                     await handle.signal(
-                        FeatureWorkflow.submit_gate_decision,
+                        "submit_gate_decision",
                         GateDecision(
                             gate="deploy", round=1, outcome=GateOutcome.APPROVE, decided_by="human"
                         ),
@@ -299,13 +301,13 @@ async def test_the_cap_stops_asking_and_the_loop_terminates(tmp_path, monkeypatc
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow],
+                workflows=[GraphWorkflow],
                 activities=_activities(always_defer),
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"esc-cap-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )
@@ -314,7 +316,7 @@ async def test_the_cap_stops_asking_and_the_loop_terminates(tmp_path, monkeypatc
                     await _drive_to_tasks(handle)
                     await _wait_for_status(handle, "awaiting:tool_approval")
                     await handle.signal(
-                        FeatureWorkflow.submit_gate_decision,
+                        "submit_gate_decision",
                         GateDecision(
                             gate="tool_approval",
                             round=1,
@@ -329,14 +331,14 @@ async def test_the_cap_stops_asking_and_the_loop_terminates(tmp_path, monkeypatc
                     # so the driver still services exactly one more gate.
                     await _wait_for_status(handle, "awaiting:deploy")
                     await handle.signal(
-                        FeatureWorkflow.submit_gate_decision,
+                        "submit_gate_decision",
                         GateDecision(
                             gate="deploy", round=1, outcome=GateOutcome.APPROVE, decided_by="human"
                         ),
                     )
 
                 await _run_workflow_with_driver(handle, drive())
-                summary = await handle.query(FeatureWorkflow.run_summary)
+                summary = RunSummary.model_validate(await handle.query("run_summary"))
 
     # Exactly one gate raised, then a refusal delivered, then no more
     # approval resumes — bounded regardless of how the harness behaves.

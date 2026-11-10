@@ -1,19 +1,19 @@
 """The QA report is judged against a rubric in its OWN record, leaving the
 deterministic stage="code" record's contract score untouched."""
 
-import inspect
 import pathlib
 import re
 
 import pytest
 
-from sdlc.workflows import feature
-
+# 020 T026: the _dev_task source term re-points to TaskHost (the mixin that
+# carries _dev_task since E-74); stages/code/step.py stays in the concat.
+TASK_HOST_PY = pathlib.Path("src/sdlc/workflows/task_host.py")
 CODE_STEP_PY = pathlib.Path("src/sdlc/stages/code/step.py")
 
 
 def _src() -> str:
-    src = inspect.getsource(feature.FeatureWorkflow._dev_task)
+    src = TASK_HOST_PY.read_text(encoding="utf-8")
     if CODE_STEP_PY.exists():
         src += "\n" + CODE_STEP_PY.read_text(encoding="utf-8")
     return src

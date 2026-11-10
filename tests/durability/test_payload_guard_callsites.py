@@ -13,7 +13,7 @@ claims (research R6); stop and report, do not edit ``src/``.
 
 Pinned paths:
 - ``RoleHost._run_role`` (the object wired into StageServices as
-  ``run_role``, ``workflows/feature.py``) propagates the SAME exception
+  ``run_role``, ``workflows/graph.py``) propagates the SAME exception
   object -- type, ``non_retryable`` flag and wire ``type`` field intact --
   and no usage is tracked: the guard fires before the model call, so
   neither ``price_usage`` nor ``_track_usage`` is reached;
@@ -50,7 +50,7 @@ from sdlc.stages.review.lenses import LensPresence, classify_lens
 from sdlc.stages.review.step import run_adversary
 from sdlc.workflows import graph_dispatch
 from sdlc.workflows.assessment import AssessmentInput, AssessmentWorkflow
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
 from sdlc.workflows.role_host import RoleHost
 from sdlc.workflows.scanning import ScanOutcome
 from tests.test_assessment_workflow import _risk_map, _scan_result, _triage
@@ -149,13 +149,13 @@ def test_run_role_propagates_the_guard_error_without_tracking_usage(monkeypatch)
     stage fails with IS the guard's error, and it fires before the model
     call, so neither pricing nor the per-role usage bag is touched."""
     err = _real_error(monkeypatch)
-    # FeatureWorkflow, not bare RoleHost: _run_role lives on the RoleHost
-    # mixin but _track_usage/_role_usage on ReportHost -- the full workflow
-    # is the object that carries both, and the mixins test constructs it
-    # bare.
-    host = FeatureWorkflow()
+    # GraphWorkflow (020 T026, was FeatureWorkflow), not bare RoleHost: _run_role
+    # lives on the RoleHost mixin but _track_usage/_role_usage on ReportHost --
+    # the full workflow is the object that carries both, and the mixins test
+    # constructs it bare.
+    host = GraphWorkflow()
     tracked: list[dict[str, object]] = []
-    monkeypatch.setattr(FeatureWorkflow, "_track_usage", lambda self, **kw: tracked.append(kw))
+    monkeypatch.setattr(GraphWorkflow, "_track_usage", lambda self, **kw: tracked.append(kw))
 
     with pytest.raises(ApplicationError) as excinfo:
         asyncio.run(

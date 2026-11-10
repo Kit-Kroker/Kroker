@@ -3,20 +3,21 @@ from __future__ import annotations
 import pathlib
 
 from sdlc.pending import StageGatePending
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
 
-SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+# 020 T026: feature.py is gone from the concat; the graph hosts the same
+# surface (its nodes drive GateHost/QuestionHost unchanged).
 GATES_SRC = pathlib.Path("src/sdlc/workflows/gates.py")
 QUESTION_SRC = pathlib.Path("src/sdlc/workflows/question_host.py")
 
 
 def test_new_workflow_has_empty_pending_registry():
-    wf = FeatureWorkflow()
+    wf = GraphWorkflow()
     assert wf.pending_decisions() == []
 
 
 def test_pending_decisions_query_returns_registry_values():
-    wf = FeatureWorkflow()
+    wf = GraphWorkflow()
     p = StageGatePending(key="architecture#1", gate="architecture", round=1, spec_summary="x")
     wf._pending[p.key] = p
     assert wf.pending_decisions() == [p]
@@ -25,7 +26,7 @@ def test_pending_decisions_query_returns_registry_values():
 def test_gate_accepts_context_param():
     import inspect
 
-    sig = inspect.signature(FeatureWorkflow._gate)
+    sig = inspect.signature(GraphWorkflow._gate)
     assert "context" in sig.parameters
 
 
@@ -38,9 +39,7 @@ def test_gate_surface_wires_pending_population():
     assert "self._pending" in gates
     assert "self._pending.pop(" in gates
 
-    sources = SRC.read_text(encoding="utf-8") + (
-        QUESTION_SRC.read_text(encoding="utf-8") if QUESTION_SRC.exists() else ""
-    )
+    sources = QUESTION_SRC.read_text(encoding="utf-8") if QUESTION_SRC.exists() else ""
     assert "clarify_pending(" in sources
 
 
@@ -54,7 +53,7 @@ from sdlc.pending import ClarifyPending
 
 
 def test_answer_question_pops_only_that_question():
-    wf = FeatureWorkflow()
+    wf = GraphWorkflow()
     for qid in ("Q1", "Q2"):
         wf._pending[qid] = ClarifyPending(key=qid, question=f"{qid}?", why_it_matters="w")
 
@@ -65,7 +64,7 @@ def test_answer_question_pops_only_that_question():
 
 
 def test_answer_question_is_still_first_answer_wins():
-    wf = FeatureWorkflow()
+    wf = GraphWorkflow()
     wf._pending["Q1"] = ClarifyPending(key="Q1", question="q", why_it_matters="w")
 
     wf.answer_question("Q1", "first")
@@ -76,11 +75,11 @@ def test_answer_question_is_still_first_answer_wins():
 
 
 def test_submit_gate_decision_pops_that_gate(monkeypatch):
-    from sdlc.workflows import feature as feat
+    from sdlc.workflows import gates as gates_mod
 
-    monkeypatch.setattr(feat.workflow, "now", lambda: dt.datetime(2026, 1, 1, tzinfo=dt.UTC))
+    monkeypatch.setattr(gates_mod.workflow, "now", lambda: dt.datetime(2026, 1, 1, tzinfo=dt.UTC))
 
-    wf = FeatureWorkflow()
+    wf = GraphWorkflow()
     wf._pending["architecture#2"] = StageGatePending(
         key="architecture#2", gate="architecture", round=2, spec_summary="s"
     )

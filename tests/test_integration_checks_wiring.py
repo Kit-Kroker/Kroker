@@ -12,18 +12,21 @@ stated intent robustly.
 import ast
 import pathlib
 
-FEATURE = pathlib.Path("src/sdlc/workflows/feature.py").read_text(encoding="utf-8")
-_TREE = ast.parse(FEATURE)
+# 020 T026: the pipeline-side read follows the graph's merge node —
+# feature.py is deleted; merge_node (postplan.py) is where the pipeline
+# calls merge.step.
+POSTPLAN = pathlib.Path("src/sdlc/workflows/graph_nodes/postplan.py").read_text(encoding="utf-8")
+_TREE = ast.parse(POSTPLAN)
 
 MERGE_SRC = pathlib.Path("src/sdlc/stages/merge/step.py").read_text(encoding="utf-8")
 _MERGE_TREE = ast.parse(MERGE_SRC)
 
 
-def _build_and_merge_node():
+def _merge_node():
     for n in ast.walk(_TREE):
-        if isinstance(n, ast.AsyncFunctionDef) and n.name == "_build_and_merge":
+        if isinstance(n, ast.AsyncFunctionDef) and n.name == "merge_node":
             return n
-    raise AssertionError("_build_and_merge not found")
+    raise AssertionError("merge_node not found")
 
 
 def _merge_step_node():
@@ -67,7 +70,7 @@ def test_merge_stage_runs_integration_checks_then_coverage_then_gate():
 def test_measure_coverage_called_exactly_once_in_pipeline():
     # It moved from analyze to merge — must not be left in both places.
     assert _activity_calls_in_order(_merge_step_node()).count("measure_coverage") == 1
-    assert "measure_coverage" not in _activity_calls_in_order(_build_and_merge_node())
+    assert "measure_coverage" not in _activity_calls_in_order(_merge_node())
 
 
 def test_worker_registers_run_integration_checks():
@@ -77,8 +80,8 @@ def test_worker_registers_run_integration_checks():
     assert "run_integration_checks" in names
 
 
-def test_feature_imports_run_integration_checks():
-    # Merge stage was lifted from feature.py into sdlc.stages.merge.step (spec A Task 20.7).
-    # FeatureWorkflow delegates to merge.step, which imports run_integration_checks.
-    assert "merge.step" in FEATURE
+def test_the_graph_delegates_to_merge_step():
+    # Merge stage lives in sdlc.stages.merge.step (spec A Task 20.7); the
+    # graph's merge_node delegates to it, and it imports run_integration_checks.
+    assert "merge.step" in POSTPLAN
     assert "run_integration_checks" in MERGE_SRC

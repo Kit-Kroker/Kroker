@@ -1,5 +1,5 @@
 """Spec section 8: the six stage-13 paths, driven through the real
-FeatureWorkflow with mocked deploy activities. No Docker, no fake adapter --
+GraphWorkflow with mocked deploy activities. No Docker, no fake adapter --
 the adapters themselves are never involved."""
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from sdlc.core.models import (
     GateDecision,
     GateOutcome,
     GatePolicy,
+    RunSummary,
 )
 from sdlc.observability.activities import export_run_artifacts
 from sdlc.stages.deploy.models import SmokeState
@@ -33,7 +34,8 @@ from tests.fakes.fake_deploy import DEPLOY_FAKES, reset
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.deployment import DeploymentWorkflow
-    from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
+    from sdlc.workflows.graph_catalog import build_run_input
     from tests.fakes.fake_agents import fake_agent_activities
 
 pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]
@@ -42,7 +44,7 @@ pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]
 async def _wait_for_status(handle, target, timeout_s=15.0):
     deadline = asyncio.get_event_loop().time() + timeout_s
     while asyncio.get_event_loop().time() < deadline:
-        if await handle.query(FeatureWorkflow.pending_gate) == target:
+        if await handle.query("pending_gate") == target:
             return
         await asyncio.sleep(0.05)
     raise AssertionError(f"timed out waiting for {target!r}")
@@ -75,7 +77,7 @@ async def _run(cfg, tmp_path, monkeypatch, tag, driver=None):
         async with Worker(
             env.client,
             task_queue=tag,
-            workflows=[FeatureWorkflow, DeploymentWorkflow],
+            workflows=[GraphWorkflow, DeploymentWorkflow],
             activities=[
                 evaluate_gate,
                 export_run_artifacts,
@@ -86,8 +88,8 @@ async def _run(cfg, tmp_path, monkeypatch, tag, driver=None):
             plugins=[SdlcPydanticAIPlugin()],
         ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run,
-                args=[greenfield_idea(), cfg, None],
+                GraphWorkflow.run,
+                build_run_input(greenfield_idea(), cfg, None),
                 id=f"{tag}-{uuid.uuid4()}",
                 task_queue=tag,
             )
@@ -95,7 +97,7 @@ async def _run(cfg, tmp_path, monkeypatch, tag, driver=None):
                 with env.auto_time_skipping_disabled():
                     await driver(handle)
             result = await handle.result()
-            summary = await handle.query(FeatureWorkflow.run_summary)
+            summary = RunSummary.model_validate(await handle.query("run_summary"))
             deploy = [s for s in summary.stages if s.stage == "deploy"]
             outcome = deploy[-1].outcome if deploy else None
             return result, outcome
@@ -140,7 +142,7 @@ async def test_4_revise_retries_with_a_second_child(tmp_path, monkeypatch):
     async def driver(handle):
         await _wait_for_status(handle, "awaiting:deploy_failed")
         await handle.signal(
-            FeatureWorkflow.submit_gate_decision,
+            "submit_gate_decision",
             GateDecision(
                 gate="deploy_failed",
                 round=1,

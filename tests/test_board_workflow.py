@@ -1,4 +1,4 @@
-"""Temporal integration test: FeatureWorkflow writes through the REAL board.
+"""Temporal integration test: the pipeline writes through the REAL board.
 
 The rest of the temporal suite registers no-op board fakes (so it can assert
 on return strings without a DB). This file is the one place a workflow
@@ -44,7 +44,8 @@ from tests.fakes.fake_deploy import reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.deployment import DeploymentWorkflow
-    from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
+    from sdlc.workflows.graph_catalog import build_run_input
     from tests.fakes.fake_agents import fake_agent_activities
 
 pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]
@@ -89,7 +90,7 @@ def _unattended_cfg():
 async def _wait_for_status(handle, target, timeout_s=20.0):
     deadline = asyncio.get_event_loop().time() + timeout_s
     while asyncio.get_event_loop().time() < deadline:
-        if await handle.query(FeatureWorkflow.pending_gate) == target:
+        if await handle.query("pending_gate") == target:
             return
         await asyncio.sleep(0.05)
     raise AssertionError(f"timed out waiting for {target!r}")
@@ -115,7 +116,7 @@ async def test_shipped_run_publishes_artifacts_tasks_and_evidence(board_env):
         async with Worker(
             env.client,
             task_queue=tag,
-            workflows=[FeatureWorkflow, DeploymentWorkflow],
+            workflows=[GraphWorkflow, DeploymentWorkflow],
             activities=[
                 evaluate_gate,
                 export_run_artifacts,
@@ -128,7 +129,10 @@ async def test_shipped_run_publishes_artifacts_tasks_and_evidence(board_env):
             plugins=[SdlcPydanticAIPlugin()],
         ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run, args=[greenfield_idea(), cfg, None], id=tag, task_queue=tag
+                GraphWorkflow.run,
+                build_run_input(greenfield_idea(), cfg, None),
+                id=tag,
+                task_queue=tag,
             )
             result = await handle.result()
 
@@ -177,7 +181,7 @@ async def test_rejected_architecture_records_rejected_and_keeps_pointer(board_en
             async with Worker(
                 env.client,
                 task_queue=tag,
-                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                workflows=[GraphWorkflow, DeploymentWorkflow],
                 activities=[
                     evaluate_gate,
                     export_run_artifacts,
@@ -190,13 +194,16 @@ async def test_rejected_architecture_records_rejected_and_keeps_pointer(board_en
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run, args=[greenfield_idea(), cfg, None], id=tag, task_queue=tag
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
+                    id=tag,
+                    task_queue=tag,
                 )
 
                 async def reject_arch(h):
                     await _wait_for_status(h, "awaiting:architecture")
                     await h.signal(
-                        FeatureWorkflow.submit_gate_decision,
+                        "submit_gate_decision",
                         GateDecision(
                             gate="architecture",
                             round=1,

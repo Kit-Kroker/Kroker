@@ -1,15 +1,20 @@
 """_stage_record calls workflow.info(), so it cannot run outside a Temporal
 context. Following tests/test_pending_wiring.py, assert the signature and
-the call-site wiring from source instead of spinning up a server."""
+the call-site wiring from source instead of spinning up a server.
+
+020 T026: the workflow-half source scan moved off feature.py (deleted) to
+the graph side — workflows/build.py plus graph_nodes/postplan.py, where
+the single `waste=WasteBag.from_digest(...)` site lives."""
 
 from __future__ import annotations
 
 import inspect
 import pathlib
 
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
 
-FEATURE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+BUILD_SRC = pathlib.Path("src/sdlc/workflows/build.py")
+POSTPLAN_SRC = pathlib.Path("src/sdlc/workflows/graph_nodes/postplan.py")
 TASK_HOST_SRC = pathlib.Path("src/sdlc/workflows/task_host.py")
 CODE_SRC = pathlib.Path("src/sdlc/stages/code/step.py")
 
@@ -17,7 +22,9 @@ CODE_SRC = pathlib.Path("src/sdlc/stages/code/step.py")
 class _Source:
     def read_text(self, encoding="utf-8") -> str:
         return (
-            FEATURE_SRC.read_text(encoding=encoding)
+            BUILD_SRC.read_text(encoding=encoding)
+            + "\n"
+            + POSTPLAN_SRC.read_text(encoding=encoding)
             + "\n"
             + TASK_HOST_SRC.read_text(encoding=encoding)
             + "\n"
@@ -29,12 +36,12 @@ SRC = _Source()
 
 
 def test_stage_record_accepts_waste():
-    sig = inspect.signature(FeatureWorkflow._stage_record)
+    sig = inspect.signature(GraphWorkflow._stage_record)
     assert "waste" in sig.parameters
     assert sig.parameters["waste"].default is None
 
 
-def test_feature_imports_waste_bag():
+def test_the_pipeline_imports_waste_bag():
     assert "WasteBag" in SRC.read_text(encoding="utf-8")
 
 

@@ -4,7 +4,9 @@ import pathlib
 import pytest
 
 SRC = pathlib.Path("src/sdlc/stages/merge/step.py")
-FEATURE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+# 020 T026: the delegation reader follows the graph's merge node —
+# feature.py is deleted; merge_node is where the pipeline calls merge.step.
+GRAPH_MERGE_SRC = pathlib.Path("src/sdlc/workflows/graph_nodes/postplan.py")
 
 
 def _fn(tree, name):
@@ -47,9 +49,9 @@ def test_merge_stage_terminates_on_absolute_failure(step_src):
     )
 
 
-def test_feature_workflow_delegates_to_merge_step():
-    f_src = FEATURE_SRC.read_text(encoding="utf-8")
-    assert "merge.step" in f_src
+def test_the_graph_delegates_to_merge_step():
+    g_src = GRAPH_MERGE_SRC.read_text(encoding="utf-8")
+    assert "merge.step" in g_src
 
 
 from sdlc.gate import (

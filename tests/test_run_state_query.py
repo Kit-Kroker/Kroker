@@ -14,13 +14,14 @@ from sdlc.core.models import (
     RoleUsage,
 )
 from sdlc.observability.trace import RunEvent, RunEventKind
-from sdlc.workflows.feature import FeatureWorkflow
 from sdlc.workflows.graph import GraphWorkflow
 
 AT = datetime(2026, 8, 18, 9, 0, tzinfo=UTC)
 
 
-@pytest.fixture(params=[FeatureWorkflow, GraphWorkflow], ids=["feature", "graph"])
+# 020 T026: the feature leg is gone with FeatureWorkflow; the graph class
+# carries the same RunHost.
+@pytest.fixture(params=[GraphWorkflow], ids=["graph"])
 def wf_cls(request):
     return request.param
 
@@ -232,15 +233,20 @@ def test_budget_is_reported_when_configured(wf_cls):
 def test_stage_started_emits_canonical_stage_names():
     """STAGE_STARTED must speak the canonical noun vocabulary (heatmap's
     CANONICAL_STAGES) -- STAGE_ENDED, terminal_stage, and the frontend's
-    stage strip already do; a gerund here parks every run at intake."""
+    stage strip already do; a gerund here parks every run at intake.
+
+    020 T026: the canonical-name scan moved off feature.py to the graph
+    nodes (every _stage call site now lives there)."""
     import re
     from pathlib import Path
 
-    import sdlc.workflows.feature as feature_mod
     from sdlc.benchmarks.heatmap import CANONICAL_STAGES
 
-    src = Path(feature_mod.__file__).read_text(encoding="utf-8")
-    calls = re.findall(r'_stage\("(\w+)"(?:,\s*"(\w+)")?\)', src)
+    node_files = sorted(Path("src/sdlc/workflows/graph_nodes").glob("*.py"))
+    assert node_files, "graph_nodes/ is empty -- moved?"
+    calls: list[tuple[str, str]] = []
+    for path in node_files:
+        calls += re.findall(r'_stage\("(\w+)"(?:,\s*"(\w+)")?\)', path.read_text(encoding="utf-8"))
     assert calls, "no _stage call sites found -- helper renamed?"
     for status, trace in calls:
         assert (trace or status) in CANONICAL_STAGES, (

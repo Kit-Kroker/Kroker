@@ -11,10 +11,13 @@ import ast
 from pathlib import Path
 
 import pytest
-from test_factory_purity import FEATURE_PY, _load_class, _methods
+from test_factory_purity import _load_class, _methods
 
-# Spec A "stage surgery": clarify's recall moved into the clarify slice
-# (ctx.recall in step.py); _dev_task moved onto the TaskHost mixin.
+# Spec A "stage surgery": clarify's recall lives in the clarify slice
+# (ctx.recall in step.py); _dev_task lives on the TaskHost mixin.
+# 020 T026: the _pipeline terms are gone with FeatureWorkflow — the slices
+# carry the counts, and the stage-summary retain points at the graph's
+# StageServices wiring (precode.py's ctx.retain).
 CLARIFY_STEP_PY = (
     Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" / "clarify" / "step.py"
 )
@@ -25,13 +28,6 @@ PLAN_STEP_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" /
 CODE_STEP_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "stages" / "code" / "step.py"
 TASK_HOST_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "task_host.py"
 RUN_HOST_PY = Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "run_host.py"
-
-
-@pytest.fixture(scope="module")
-def feature_class():
-    source = FEATURE_PY.read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(FEATURE_PY))
-    return _load_class(tree, "FeatureWorkflow")
 
 
 @pytest.fixture(scope="module")
@@ -61,27 +57,32 @@ def _calls_self_method(fn: ast.AST, method: str) -> bool:
     return False
 
 
-def test_run_calls_recall_at_least_three_times_source_count(feature_class):
-    methods = _methods(feature_class)
-    # E-32: the pipeline body lives in _pipeline now (run wraps it + _retro).
-    # Spec A: clarify, architecture, and plan recall moved into their slices
-    # (ctx.recall in step.py).
-    src = ast.unparse(methods["_pipeline"])
+def test_the_slices_recall_at_least_three_times_source_count():
+    """Spec A: clarify, architecture, and plan recall live in their slices
+    (ctx.recall in step.py); 020 T026 drops the workflow term."""
     slice_src = ast.unparse(ast.parse(CLARIFY_STEP_PY.read_text(encoding="utf-8")))
     arch_slice_src = ast.unparse(ast.parse(ARCH_STEP_PY.read_text(encoding="utf-8")))
     plan_slice_src = ast.unparse(ast.parse(PLAN_STEP_PY.read_text(encoding="utf-8")))
     assert (
-        src.count("self._recall(")
-        + slice_src.count("ctx.recall(")
+        slice_src.count("ctx.recall(")
         + arch_slice_src.count("ctx.recall(")
         + plan_slice_src.count("ctx.recall(")
         >= 3
     ), "expected recall before clarify/architect/plan at minimum"
 
 
-def test_run_calls_retain_for_stage_summaries(feature_class):
-    methods = _methods(feature_class)
-    assert _calls_self_method(methods["_pipeline"], "_retain")
+def test_the_graph_retains_stage_summaries():
+    """020 T026: the stage-summary retain lives in the graph's StageServices
+    wiring — precode.py's ctx.retain call."""
+    precode = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "sdlc"
+        / "workflows"
+        / "graph_nodes"
+        / "precode.py"
+    ).read_text(encoding="utf-8")
+    assert "ctx.retain(" in precode or "_retain(" in precode
 
 
 def test_gate_helper_retains_gate_feedback(run_host_class):

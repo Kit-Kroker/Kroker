@@ -63,7 +63,8 @@ def test_low_severity_adversary_findings_are_not_blocking():
 
 import pathlib
 
-FEATURE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+# 020 T026 (plan T051): the feature.py term is dropped — the live
+# async def _run_handoff lives in stages/code/step.py, already in the concat.
 TASK_HOST_SRC = pathlib.Path("src/sdlc/workflows/task_host.py")
 STAGE_SRC = pathlib.Path("src/sdlc/stages/review/step.py")
 CODE_SRC = pathlib.Path("src/sdlc/stages/code/step.py")
@@ -71,9 +72,7 @@ CODE_SRC = pathlib.Path("src/sdlc/stages/code/step.py")
 
 def _src() -> str:
     return (
-        FEATURE_SRC.read_text(encoding="utf-8")
-        + "\n"
-        + TASK_HOST_SRC.read_text(encoding="utf-8")
+        TASK_HOST_SRC.read_text(encoding="utf-8")
         + "\n"
         + STAGE_SRC.read_text(encoding="utf-8")
         + "\n"

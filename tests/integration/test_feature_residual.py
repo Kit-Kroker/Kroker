@@ -1,14 +1,11 @@
-"""Integration residual verification for Task 21."""
+"""Integration residual verification for Task 21.
+
+020 T026: the feature.py ceiling row is deleted with the file itself."""
 
 from __future__ import annotations
 
 import json
 import pathlib
-
-
-def test_feature_py_is_under_the_ceiling():
-    lines = pathlib.Path("src/sdlc/workflows/feature.py").read_text(encoding="utf-8").splitlines()
-    assert len(lines) < 1000, len(lines)
 
 
 def test_the_four_src_entries_left_the_baseline():

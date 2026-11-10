@@ -1,14 +1,20 @@
-"""ADR-14 wiring: FeatureWorkflow must drive a single integration branch
+"""ADR-14 wiring: the pipeline must drive a single integration branch
 that accumulates completed task work; each task branches from the current
 integration head and merges back on success. Tests are AST-based (matching
-the project's structural-purity convention — see test_factory_purity.py)."""
+the project's structural-purity convention — see test_factory_purity.py).
+
+020 T026: the workflow-half read moved off feature.py (deleted) to the
+graph side — graph_nodes/precode.py (setup_integration_branch,
+_integration_head, _integration_wt) plus graph.py (the attribute
+declarations)."""
 
 import ast
 import pathlib
 
 import pytest
 
-SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+PRECODE = pathlib.Path("src/sdlc/workflows/graph_nodes/precode.py")
+GRAPH = pathlib.Path("src/sdlc/workflows/graph.py")
 # Spec A "stage surgery": _merge_task and its merge_into_integration call
 TASK_HOST = pathlib.Path("src/sdlc/workflows/task_host.py")
 BUILD = pathlib.Path("src/sdlc/workflows/build.py")
@@ -17,7 +23,9 @@ ACT = pathlib.Path("src/sdlc/vcs/integration.py")
 
 @pytest.fixture(scope="module")
 def feature_src():
-    return SRC.read_text(encoding="utf-8")
+    # 020 T026: the name stays (the rows below read it); the content is the
+    # graph's precode node + graph.py.
+    return PRECODE.read_text(encoding="utf-8") + "\n" + GRAPH.read_text(encoding="utf-8")
 
 
 @pytest.fixture(scope="module")
@@ -28,11 +36,6 @@ def task_host_src():
 @pytest.fixture(scope="module")
 def build_src():
     return BUILD.read_text(encoding="utf-8")
-
-
-@pytest.fixture(scope="module")
-def feature_tree(feature_src):
-    return ast.parse(feature_src)
 
 
 @pytest.fixture(scope="module")
@@ -54,7 +57,7 @@ def _fn(tree, name):
 
 def test_workflow_calls_setup_integration_branch(feature_src):
     assert "setup_integration_branch" in feature_src, (
-        "FeatureWorkflow.run must call setup_integration_branch at run start"
+        "the graph's precode node must call setup_integration_branch at run start"
     )
 
 

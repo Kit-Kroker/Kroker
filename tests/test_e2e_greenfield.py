@@ -1,6 +1,6 @@
 """P1 end-to-end proof (orchestration-level, offline, deterministic).
 
-Runs the REAL FeatureWorkflow on a time-skipping worker with faked model +
+Runs the REAL GraphWorkflow on a time-skipping worker with faked model +
 activity seams, drives it through every gate via signals, and asserts it
 reaches `deployed:`."""
 
@@ -33,7 +33,8 @@ from tests.fakes.fake_deploy import reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.deployment import DeploymentWorkflow
-    from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
+    from sdlc.workflows.graph_catalog import build_run_input
     from tests.fakes.fake_agents import fake_agent_activities
 
 pytestmark = pytest.mark.temporal
@@ -45,7 +46,7 @@ async def _wait_for_status(handle, target: str, timeout_s: float = 10.0):
     """Poll pending_gate() until it reports `target` (e.g. 'awaiting:plan')."""
     deadline = asyncio.get_event_loop().time() + timeout_s
     while asyncio.get_event_loop().time() < deadline:
-        gate = await handle.query(FeatureWorkflow.pending_gate)
+        gate = await handle.query("pending_gate")
         if gate == target:
             return
         await asyncio.sleep(0.05)
@@ -56,13 +57,13 @@ async def _drive(handle):
     # 1. clarify — answer the one open question
     await _wait_for_status(handle, "awaiting:clarify")
     for qid in QUESTION_IDS:
-        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+        await handle.signal("answer_question", args=[qid, "yes"])
     # 2. architecture, plan, deploy gates — approve each (merge auto-passes
     #    clean, so it never enters awaiting:merge).
     for gate in ("architecture", "plan", "deploy"):
         await _wait_for_status(handle, f"awaiting:{gate}")
         await handle.signal(
-            FeatureWorkflow.submit_gate_decision,
+            "submit_gate_decision",
             GateDecision(gate=gate, round=1, outcome=GateOutcome.APPROVE, decided_by="human"),
         )
 
@@ -70,11 +71,11 @@ async def _drive(handle):
 async def _drive_with_merge(handle):
     await _wait_for_status(handle, "awaiting:clarify")
     for qid in QUESTION_IDS:
-        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+        await handle.signal("answer_question", args=[qid, "yes"])
     for gate in ("architecture", "plan", "merge", "deploy"):
         await _wait_for_status(handle, f"awaiting:{gate}")
         await handle.signal(
-            FeatureWorkflow.submit_gate_decision,
+            "submit_gate_decision",
             GateDecision(gate=gate, round=1, outcome=GateOutcome.APPROVE, decided_by="human"),
         )
 
@@ -103,13 +104,13 @@ async def test_greenfield_run_ships_end_to_end():
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                workflows=[GraphWorkflow, DeploymentWorkflow],
                 activities=activities,
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"e2e-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )
@@ -140,13 +141,13 @@ async def test_untraced_criterion_is_advisory_not_blocking():
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                workflows=[GraphWorkflow, DeploymentWorkflow],
                 activities=activities,
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"e2e-untraced-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )

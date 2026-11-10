@@ -17,6 +17,7 @@ from sdlc.artifacts.retention import RetentionInput
 from sdlc.core.models import (
     GateDecision,
     GateOutcome,
+    RunSummary,
 )
 from sdlc.observability.activities import RunExportInput, export_run_artifacts
 from sdlc.stages.merge.activities import evaluate_gate
@@ -27,7 +28,8 @@ from tests.fakes.fake_deploy import reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.deployment import DeploymentWorkflow
-    from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
+    from sdlc.workflows.graph_catalog import build_run_input
     from tests.fakes.fake_agents import fake_agent_activities
 
 pytestmark = pytest.mark.temporal
@@ -56,7 +58,7 @@ async def _record_retention(inp: RetentionInput) -> str:
 async def _wait_for_status(handle, target, timeout_s=10.0):
     deadline = asyncio.get_event_loop().time() + timeout_s
     while asyncio.get_event_loop().time() < deadline:
-        if await handle.query(FeatureWorkflow.pending_gate) == target:
+        if await handle.query("pending_gate") == target:
             return
         await asyncio.sleep(0.05)
     raise AssertionError(f"timed out waiting for {target!r}")
@@ -65,11 +67,11 @@ async def _wait_for_status(handle, target, timeout_s=10.0):
 async def _drive(handle):
     await _wait_for_status(handle, "awaiting:clarify")
     for qid in QUESTION_IDS:
-        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+        await handle.signal("answer_question", args=[qid, "yes"])
     for gate in ("architecture", "plan", "deploy"):
         await _wait_for_status(handle, f"awaiting:{gate}")
         await handle.signal(
-            FeatureWorkflow.submit_gate_decision,
+            "submit_gate_decision",
             GateDecision(gate=gate, round=1, outcome=GateOutcome.APPROVE, decided_by="human"),
         )
 
@@ -94,20 +96,20 @@ async def test_retro_populates_run_summary_on_deploy(tmp_path, monkeypatch):
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                workflows=[GraphWorkflow, DeploymentWorkflow],
                 activities=activities,
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"retro-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
                 await driver
-                summary = await handle.query(FeatureWorkflow.run_summary)
+                summary = RunSummary.model_validate(await handle.query("run_summary"))
     assert result.startswith("deployed:"), result
     assert summary is not None
     assert summary.outcome == result
@@ -122,10 +124,10 @@ async def test_retro_populates_run_summary_on_deploy(tmp_path, monkeypatch):
 async def _drive_reject_arch(handle):
     await _wait_for_status(handle, "awaiting:clarify")
     for qid in QUESTION_IDS:
-        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+        await handle.signal("answer_question", args=[qid, "yes"])
     await _wait_for_status(handle, "awaiting:architecture")
     await handle.signal(
-        FeatureWorkflow.submit_gate_decision,
+        "submit_gate_decision",
         GateDecision(gate="architecture", round=1, outcome=GateOutcome.REJECT, decided_by="human"),
     )
 
@@ -146,20 +148,20 @@ async def test_retro_fires_on_rejected_path(tmp_path, monkeypatch):
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow],
+                workflows=[GraphWorkflow],
                 activities=activities,
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), e2e_config(), None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), e2e_config(), None),
                     id=f"retro-rej-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )
                 driver = asyncio.create_task(_drive_reject_arch(handle))
                 result = await handle.result()
                 await driver
-                summary = await handle.query(FeatureWorkflow.run_summary)
+                summary = RunSummary.model_validate(await handle.query("run_summary"))
     assert result == "rejected:architecture", result
     assert summary is not None and summary.outcome == result
     assert summary.terminal_stage in ("clarify", "architecture")
@@ -185,20 +187,20 @@ async def test_export_failure_does_not_change_outcome(tmp_path, monkeypatch):
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                workflows=[GraphWorkflow, DeploymentWorkflow],
                 activities=activities,
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"retro-boom-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )
                 driver = asyncio.create_task(_drive(handle))
                 result = await handle.result()
                 await driver
-                summary = await handle.query(FeatureWorkflow.run_summary)
+                summary = RunSummary.model_validate(await handle.query("run_summary"))
     assert result.startswith("deployed:"), result  # export failed, run didn't
     assert summary is not None  # summary still built
 
@@ -227,13 +229,13 @@ async def test_retention_invoked_keep_full_on_rejected_path(tmp_path, monkeypatc
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow],
+                workflows=[GraphWorkflow],
                 activities=activities,
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), e2e_config(), None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), e2e_config(), None),
                     id=f"retro-ret-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )

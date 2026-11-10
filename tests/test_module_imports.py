@@ -24,4 +24,4 @@ def test_roles_and_workflow_import_cleanly():
     roles = importlib.import_module("sdlc.agents.roles")
     assert hasattr(roles, "t_merge_verdict")
     assert not hasattr(roles, "t_gate")  # renamed away
-    importlib.import_module("sdlc.workflows.feature")
+    importlib.import_module("sdlc.workflows.graph")  # 020 T026: feature is deleted

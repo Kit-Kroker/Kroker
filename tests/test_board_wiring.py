@@ -3,7 +3,8 @@
 
 import inspect
 
-from sdlc.workflows import board_host, feature
+from sdlc.workflows import board_host, graph_nodes
+from sdlc.workflows import graph as graph_mod
 
 
 def test_board_activity_options_have_retries():
@@ -13,8 +14,8 @@ def test_board_activity_options_have_retries():
 
 
 def test_workflow_imports_board_activities():
-    # Spec A "stage surgery": the board wiring moved off feature.py onto the
-    # BoardHost mixin (composed into FeatureWorkflow via its MRO).
+    # Spec A "stage surgery": the board wiring lives on the BoardHost mixin
+    # (composed into GraphWorkflow via its MRO; 020 T026).
     src = inspect.getsource(board_host)
     for name in (
         "publish_artifact_version",
@@ -26,7 +27,9 @@ def test_workflow_imports_board_activities():
 
 
 def test_every_project_artifact_key_is_published():
-    src = inspect.getsource(feature)
+    # 020 T026: the publish scan moved to the graph side — precode.py
+    # publishes "requirements"; gate.py publishes architecture/plan.
+    src = inspect.getsource(graph_nodes.precode) + "\n" + inspect.getsource(graph_nodes.gate)
     for key in ('"requirements"', '"architecture"', '"plan"'):
         assert key in src, f"no board publish for artifact key {key}"
 
@@ -39,4 +42,4 @@ def test_rejected_gate_publishes_rejected_status():
 
 def test_board_helpers_exist_on_the_workflow():
     for name in ("_board_publish", "_board_sync_tasks", "_board_task_status", "_board_evidence"):
-        assert hasattr(feature.FeatureWorkflow, name), f"missing {name}"
+        assert hasattr(graph_mod.GraphWorkflow, name), f"missing {name}"

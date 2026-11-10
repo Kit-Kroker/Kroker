@@ -32,7 +32,8 @@ from tests.fakes.fake_deploy import reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.deployment import DeploymentWorkflow
-    from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
+    from sdlc.workflows.graph_catalog import build_run_input
     from tests.fakes.fake_agents import fake_agent_activities
 
 pytestmark = pytest.mark.temporal
@@ -43,7 +44,7 @@ TASK_QUEUE = "usage"
 async def _wait_for_status(handle, target, timeout_s=10.0):
     deadline = asyncio.get_event_loop().time() + timeout_s
     while asyncio.get_event_loop().time() < deadline:
-        if await handle.query(FeatureWorkflow.pending_gate) == target:
+        if await handle.query("pending_gate") == target:
             return
         await asyncio.sleep(0.05)
     raise AssertionError(f"timed out waiting for {target!r}")
@@ -52,11 +53,11 @@ async def _wait_for_status(handle, target, timeout_s=10.0):
 async def _drive(handle):
     await _wait_for_status(handle, "awaiting:clarify")
     for qid in QUESTION_IDS:
-        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+        await handle.signal("answer_question", args=[qid, "yes"])
     for gate in ("architecture", "plan", "deploy"):
         await _wait_for_status(handle, f"awaiting:{gate}")
         await handle.signal(
-            FeatureWorkflow.submit_gate_decision,
+            "submit_gate_decision",
             GateDecision(gate=gate, round=1, outcome=GateOutcome.APPROVE, decided_by="human"),
         )
 
@@ -81,13 +82,13 @@ async def test_model_usage_events_exported(tmp_path, monkeypatch):
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                workflows=[GraphWorkflow, DeploymentWorkflow],
                 activities=activities,
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"usage-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )

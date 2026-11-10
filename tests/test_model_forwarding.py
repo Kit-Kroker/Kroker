@@ -55,7 +55,7 @@ from sdlc.stages.research.stage import SubQuestionInput, _research_subquestion_i
 from sdlc.workflows import role_host
 from tests.fakes.canned import greenfield_idea
 from tests.fakes.fake_agents import MODEL_RESOLUTIONS, fake_agent_activities
-from tests.replay.harness import FEATURE_STARTER, capture
+from tests.replay.harness import GRAPH_STARTER, capture  # 020 T026: graph starter
 from tests.replay.scenarios import SCENARIOS
 
 with workflow.unsafe.imports_passed_through():
@@ -144,7 +144,7 @@ async def _capture_with_override(
             base, activities=lambda: [*base.activities(), cache_get, cache_put]
         )
     sc = dataclasses.replace(sc, cfg=cfg)
-    return await capture(sc, FEATURE_STARTER, monkeypatch, tmp_path)
+    return await capture(sc, GRAPH_STARTER, monkeypatch, tmp_path)
 
 
 @pytest.mark.asyncio
@@ -286,7 +286,7 @@ async def test_e_benchmark_arm_default_serves_every_overridable_proposer_role(
     cfg_opus.benchmark = reference.benchmark
 
     sc = dataclasses.replace(base, cfg=lambda: cfg_opus)
-    await capture(sc, FEATURE_STARTER, monkeypatch, tmp_path)
+    await capture(sc, GRAPH_STARTER, monkeypatch, tmp_path)
     for agent in ("architect_agent", "planner_agent", "reviewer_agent"):
         assert (agent, _OPUS) in _ids(), (
             f"{agent} was not served by the arm default; recorded: {_ids()!r}"
@@ -401,7 +401,7 @@ async def test_h_override_provider_without_credential_fails_naming_it(monkeypatc
     sc = dataclasses.replace(base, cfg=cfg)
     failure: BaseException | None = None
     try:
-        await capture(sc, FEATURE_STARTER, monkeypatch, tmp_path)
+        await capture(sc, GRAPH_STARTER, monkeypatch, tmp_path)
     except Exception as exc:  # the expected failure shape
         failure = exc
     assert failure is not None, "an override whose provider has no credential must fail the run"

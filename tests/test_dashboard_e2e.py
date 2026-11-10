@@ -22,7 +22,8 @@ from sdlc.core.models import (
     RunState,
 )
 from sdlc.dashboard.fleet import fetch_fleet
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
+from sdlc.workflows.graph_catalog import build_run_input
 
 pytestmark = pytest.mark.temporal
 
@@ -37,15 +38,15 @@ async def test_run_state_answers_on_a_live_run():
     # env actually spawns serves the full visibility API.
     async with await WorkflowEnvironment.start_local(data_converter=pydantic_data_converter) as env:
         async with Worker(
-            env.client, task_queue="dash-e2e", workflows=[FeatureWorkflow], activities=[]
+            env.client, task_queue="dash-e2e", workflows=[GraphWorkflow], activities=[]
         ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run,
-                args=[
+                GraphWorkflow.run,
+                build_run_input(
                     IdeaBrief(title="Add SSO", description="d", mode=ProjectMode.GREENFIELD),
                     PipelineConfig(),
                     None,
-                ],
+                ),
                 id="feature-add-sso",
                 task_queue="dash-e2e",
             )

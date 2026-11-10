@@ -22,7 +22,8 @@ from tests.fakes.fake_activities import git_fakes_except
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.deployment import DeploymentWorkflow
-    from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
+    from sdlc.workflows.graph_catalog import build_run_input
     from tests.fakes.fake_agents import fake_agent_activities
 
 pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]
@@ -64,7 +65,7 @@ async def test_the_merge_gate_reads_the_setup_sha(tmp_path, monkeypatch):
         async with Worker(
             env.client,
             task_queue="pinned",
-            workflows=[FeatureWorkflow, DeploymentWorkflow],
+            workflows=[GraphWorkflow, DeploymentWorkflow],
             activities=[
                 evaluate_gate,
                 export_run_artifacts,
@@ -77,14 +78,14 @@ async def test_the_merge_gate_reads_the_setup_sha(tmp_path, monkeypatch):
             plugins=[SdlcPydanticAIPlugin()],
         ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run,
-                args=[greenfield_idea(), cfg, None],
+                GraphWorkflow.run,
+                build_run_input(greenfield_idea(), cfg, None),
                 id=f"pinned-{uuid.uuid4()}",
                 task_queue="pinned",
             )
             with env.auto_time_skipping_disabled():
                 for qid in QUESTION_IDS:
-                    await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+                    await handle.signal("answer_question", args=[qid, "yes"])
             await handle.result()
 
     integ = [d for d in DIFFS if d.worktree == "/fake/integ"]

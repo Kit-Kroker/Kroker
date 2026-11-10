@@ -16,12 +16,12 @@ from sdlc.core.models import (
     GateSettings,
 )
 from sdlc.pending import StageGatePending
-from sdlc.workflows.feature import FeatureWorkflow
 from sdlc.workflows.gates import GateHost
+from sdlc.workflows.graph import GraphWorkflow
 
 
 def test_feature_workflow_inherits_the_shared_gate():
-    assert issubclass(FeatureWorkflow, GateHost)
+    assert issubclass(GraphWorkflow, GateHost)
 
 
 def test_gate_takes_settings_not_pipeline_config():
@@ -58,8 +58,8 @@ def test_confidence_reaches_the_hook_as_a_parameter():
     )
     assert not hasattr(GateHost(), "_last_gate_confidence")
 
-    # FeatureWorkflow's override must accept it too, or _gate's call breaks.
-    assert "confidence" in inspect.signature(FeatureWorkflow._on_gate_decided).parameters
+    # GraphWorkflow's override must accept it too, or _gate's call breaks.
+    assert "confidence" in inspect.signature(GraphWorkflow._on_gate_decided).parameters
 
 
 @pytest.fixture

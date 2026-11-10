@@ -8,6 +8,9 @@ runs the SANDBOXED runner through that plugin, no UnsandboxedWorkflowRunner,
 because the sandbox path is the thing being measured.
 
 Temporal tier: spawns an ephemeral dev server.
+
+020 T026: re-pointed from FeatureWorkflow to GraphWorkflow (build_run_input);
+the plugin and sandbox posture are unchanged.
 """
 
 from __future__ import annotations
@@ -24,7 +27,8 @@ from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.workflows.deployment import DeploymentWorkflow
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
+from sdlc.workflows.graph_catalog import build_run_input
 from tests.replay.scenarios import SCENARIOS
 
 QUEUE = "003-first-task-time"
@@ -66,15 +70,15 @@ async def test_first_workflow_task_completes_under_the_deadlock_threshold(tmp_pa
         async with Worker(
             env.client,
             task_queue=QUEUE,
-            workflows=[FeatureWorkflow, DeploymentWorkflow],
+            workflows=[GraphWorkflow, DeploymentWorkflow],
             activities=scenario.activities(),
             plugins=[SdlcPydanticAIPlugin()],
         ):
             with env.auto_time_skipping_disabled():
                 start = time.perf_counter()
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[scenario.idea(), scenario.cfg(), scenario.seeded()],
+                    GraphWorkflow.run,
+                    build_run_input(scenario.idea(), scenario.cfg(), scenario.seeded()),
                     id=f"003-first-task-{uuid.uuid4()}",
                     task_queue=QUEUE,
                 )
@@ -132,15 +136,15 @@ async def test_first_task_under_budget_with_non_anthropic_override(tmp_path, mon
         async with Worker(
             env.client,
             task_queue=QUEUE,
-            workflows=[FeatureWorkflow, DeploymentWorkflow],
+            workflows=[GraphWorkflow, DeploymentWorkflow],
             activities=scenario.activities(),
             plugins=[SdlcPydanticAIPlugin()],
         ):
             with env.auto_time_skipping_disabled():
                 start = time.perf_counter()
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[scenario.idea(), cfg_with_openai_override(), scenario.seeded()],
+                    GraphWorkflow.run,
+                    build_run_input(scenario.idea(), cfg_with_openai_override(), scenario.seeded()),
                     id=f"004-first-task-openai-{uuid.uuid4()}",
                     task_queue=QUEUE,
                 )

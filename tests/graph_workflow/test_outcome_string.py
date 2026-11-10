@@ -10,7 +10,7 @@ from temporalio.worker import Replayer
 from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.graph import validate
 from sdlc.graph.router import NodeState, RouterState
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
 from sdlc.workflows.graph_catalog import SHIPPED
 from sdlc.workflows.graph_dispatch import FAILURE_TYPES, DispatchOutcome, outcome_string
 from tests.graph.fixtures.registries import roles
@@ -20,7 +20,7 @@ TOPOLOGY = validate(SHIPPED["default"], roles=roles()).topology
 
 def test_failure_types_cover_temporal_and_the_plugin():
     config = Replayer(
-        workflows=[FeatureWorkflow],
+        workflows=[GraphWorkflow],
         data_converter=pydantic_data_converter,
         plugins=[SdlcPydanticAIPlugin()],
     ).config(active_config=True)

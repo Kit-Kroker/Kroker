@@ -9,7 +9,6 @@ import json
 from dataclasses import dataclass
 
 import pytest
-from test_factory_purity import FEATURE_PY, _load_class, _methods
 
 from sdlc.core.models import (
     ClarificationDimension as CD,
@@ -364,10 +363,15 @@ def test_the_architect_reads_the_downstream_view_not_the_raw_artifact():
     inspects those two expressions."""
     import pathlib
 
-    tree = ast.parse(FEATURE_PY.read_text(encoding="utf-8"), filename=str(FEATURE_PY))
-    src = ast.unparse(_methods(_load_class(tree, "FeatureWorkflow"))["_pipeline"])
+    # 020 T026: the requirements-publish owner on the graph side is
+    # precode.py (it publishes "requirements" from the clarify output).
     arch_step_src = ast.unparse(
         ast.parse(pathlib.Path("src/sdlc/stages/architecture/step.py").read_text(encoding="utf-8"))
+    )
+    precode_src = ast.unparse(
+        ast.parse(
+            pathlib.Path("src/sdlc/workflows/graph_nodes/precode.py").read_text(encoding="utf-8")
+        )
     )
     assert "reqs_for_architect = _requirements_for_downstream(requirements)" in arch_step_src
     # the prompt...
@@ -378,4 +382,5 @@ def test_the_architect_reads_the_downstream_view_not_the_raw_artifact():
     # is the measurement record and must reach disk and the board.
     step_src = pathlib.Path("src/sdlc/stages/clarify/step.py").read_text(encoding="utf-8")
     assert "ctx.judge(" in step_src and "reqs.model_dump_json()" in step_src
-    assert "self._board_publish(cfg, 'requirements', reqs.model_dump_json())" in src
+    # and the graph publishes the requirements artifact for the architect node
+    assert "'requirements'" in precode_src

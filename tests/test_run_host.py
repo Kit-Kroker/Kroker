@@ -1,23 +1,23 @@
-"""E-74 §4.3: RunHost carries what FeatureWorkflow and GraphWorkflow share."""
+"""E-74 §4.3: RunHost carries what the pipeline workflows share (020: GraphWorkflow)."""
 
 from __future__ import annotations
 
-from sdlc.workflows.feature import FeatureWorkflow
 from sdlc.workflows.gates import GateHost
+from sdlc.workflows.graph import GraphWorkflow
 from sdlc.workflows.run_host import RunHost
 
 _MOVED = ("_on_gate_awaited", "_on_gate_decided", "_on_notified", "_retro", "_snapshot_run_state")
 
 
 def test_feature_workflow_composes_run_host_before_gate_host():
-    mro = FeatureWorkflow.__mro__
+    mro = GraphWorkflow.__mro__
     assert mro.index(RunHost) < mro.index(GateHost)
 
 
 def test_moved_members_resolve_to_run_host():
     for name in _MOVED:
-        assert getattr(FeatureWorkflow, name) is getattr(RunHost, name), name
-        assert name not in vars(FeatureWorkflow), name
+        assert getattr(GraphWorkflow, name) is getattr(RunHost, name), name
+        assert name not in vars(GraphWorkflow), name
 
 
 def test_run_host_declares_no_workflow_handlers():
@@ -28,7 +28,7 @@ def test_run_host_declares_no_workflow_handlers():
 
 
 def test_run_state_query_delegates_to_the_snapshot():
-    wf = FeatureWorkflow()
+    wf = GraphWorkflow()
     assert wf.run_state() is None  # no brief stashed yet
     assert wf._run_id == "" and wf._run_summary is None
 
@@ -41,7 +41,7 @@ def test_snapshot_run_state_carries_the_cfg_project_key():
 
     from sdlc.core.models import IdeaBrief, PipelineConfig, ProjectMode
 
-    wf = FeatureWorkflow()
+    wf = GraphWorkflow()
     # Minimal live-run state: the snapshot returns None until the brief and
     # a start time are stashed; everything else it reads (_status, _trace,
     # _role_usage, _gate_decisions, _budget_crossings) is mixin state a

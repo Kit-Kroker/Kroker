@@ -4,10 +4,9 @@ The unit tests here pin the contract and the skip predicate; the end-to-end
 'no proposer was called' assertion is the temporal test at the bottom.
 """
 
-import inspect
-
 import pytest
 
+from sdlc.core.models import PipelineConfig
 from sdlc.stages.architecture.models import (
     ArchitectureDecision,
     ArchitectureSpec,
@@ -17,8 +16,9 @@ from sdlc.stages.plan.models import (
     DevTask,
     ImplementationPlan,
 )
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph_catalog import SHIPPED, build_run_input, select_graph
 from sdlc.workflows.models import SeededWork
+from tests.fakes.canned import greenfield_idea
 
 
 def _seeded():
@@ -62,13 +62,14 @@ def test_seeded_work_round_trips_through_json():
     assert SeededWork.model_validate_json(s.model_dump_json()) == s
 
 
-def test_run_accepts_seeded_as_a_third_argument():
-    sig = inspect.signature(FeatureWorkflow.run)
-    params = list(sig.parameters)
-    assert params[1:] == ["idea", "cfg", "seeded"], (
-        "Task 7 starts children with args=[idea, cfg, seeded]; the order and names are the contract"
-    )
-    assert sig.parameters["seeded"].default is None
+def test_seeded_work_selects_the_seeded_graph_and_rides_the_run_input():
+    """020 T026: the third-argument contract became the catalog pin —
+    build_run_input(idea, cfg, seeded) selects SHIPPED['seeded'] and
+    carries the SeededWork through GraphWorkflow's single input."""
+    cfg = PipelineConfig()
+    assert select_graph(cfg, _seeded()) is SHIPPED["seeded"]
+    run_input = build_run_input(greenfield_idea(), cfg, _seeded())
+    assert run_input.seeded == _seeded()
 
 
 def test_seeded_plan_must_carry_at_least_one_task():
@@ -76,84 +77,7 @@ def test_seeded_plan_must_carry_at_least_one_task():
         SeededWork(arch=_seeded().arch, plan=ImplementationPlan(tasks=[]))
 
 
-@pytest.mark.temporal
-@pytest.mark.asyncio
-async def test_seeded_run_skips_clarify_architect_and_planner():
-    """E-44 D1: a seeded run enters at stage 4. The clarifier, architect and
-    planner are never invoked -- proved by registering NONE of their fakes: a
-    call to an unregistered activity fails the workflow. So reaching a PR is
-    sufficient evidence the skip held. Follows test_e2e_greenfield.py's worker
-    setup verbatim, passing the SeededWork as the third run argument."""
-    import asyncio
-    import uuid
-
-    from temporalio.contrib.pydantic import pydantic_data_converter
-    from temporalio.testing import WorkflowEnvironment
-    from temporalio.worker import Worker
-
-    from sdlc.agents.runner import SdlcPydanticAIPlugin
-    from sdlc.core.models import (
-        GateDecision,
-        GateOutcome,
-    )
-    from sdlc.stages.merge.activities import evaluate_gate
-    from tests.fakes.canned import AGENT_SPECS, ARCH, PLAN, e2e_config, greenfield_idea
-    from tests.fakes.fake_activities import GIT_FAKES
-    from tests.fakes.fake_agents import fake_agent_activities
-
-    # Omit the three proposers a seeded run must not call. The remaining fakes
-    # (qa/reviewer/analyst/merge_verdict) cover stages 4-6; GIT_FAKES covers
-    # git/worktree/coding activities exactly as the greenfield e2e.
-    omitted = {"clarify_agent", "architect_agent", "planner_agent"}
-    specs = [s for s in AGENT_SPECS if s[0] not in omitted]
-    activities = [evaluate_gate, *GIT_FAKES, *fake_agent_activities(specs)]
-
-    seeded = SeededWork(arch=ARCH, plan=PLAN)
-    cfg = e2e_config()  # every gate HARD; merge auto-passes clean
-
-    async def _wait_for_status(handle, target, timeout_s=15.0):
-        deadline = asyncio.get_event_loop().time() + timeout_s
-        while asyncio.get_event_loop().time() < deadline:
-            if await handle.query(FeatureWorkflow.pending_gate) == target:
-                return
-            await asyncio.sleep(0.05)
-        raise AssertionError(f"timed out waiting for status {target!r}")
-
-    async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
-    ) as env:
-        with env.auto_time_skipping_disabled():
-            async with Worker(
-                env.client,
-                task_queue="seeded",
-                workflows=[FeatureWorkflow],
-                activities=activities,
-                plugins=[SdlcPydanticAIPlugin()],
-            ):
-                handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, seeded],
-                    id=f"seeded-{uuid.uuid4()}",
-                    task_queue="seeded",
-                )
-
-                # A seeded run skips clarify/architecture/plan; service only
-                # the deploy gate (merge auto-passes against the clean fakes).
-                async def _drive():
-                    await _wait_for_status(handle, "awaiting:deploy")
-                    await handle.signal(
-                        FeatureWorkflow.submit_gate_decision,
-                        GateDecision(
-                            gate="deploy", round=1, outcome=GateOutcome.APPROVE, decided_by="human"
-                        ),
-                    )
-
-                driver = asyncio.create_task(_drive())
-                result = await handle.result()
-                await driver
-
-    # Reaching a PR (deployed: or merged-not-deployed:) is only possible after
-    # the merge gate, which runs in stage 5 -- past every stage a seeded run
-    # skips. That proves clarifier/architect/planner were never invoked, since
-    # none of their activities were even registered.
-    assert result.startswith(("deployed:", "merged-not-deployed:")), result
+# 020 T026: the temporal skip proof (a seeded run skipping clarify/
+# architect/planner, E-44 D1) is deleted: the `seeded` golden replays the
+# same shipped graph with the seeded input — counterpart
+# tests/replay/test_graph_golden.py::test_graph_workflow_reproduces_the_golden_trace[seeded].

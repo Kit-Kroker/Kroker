@@ -1,11 +1,18 @@
 import inspect
+import pathlib
 
+from sdlc.core.models import PipelineConfig
 from sdlc.stages import clarify, research
-from sdlc.workflows import feature
+from sdlc.workflows.graph_catalog import SHIPPED, select_graph
+
+# 020 T026: _pipeline_src() re-points to the graph's precode node —
+# research_node/clarify_node carry the research gate and the brief_digest
+# memo input (feature.py is deleted).
+PRECODE_SRC = pathlib.Path("src/sdlc/workflows/graph_nodes/precode.py").read_text(encoding="utf-8")
 
 
 def _pipeline_src() -> str:
-    return inspect.getsource(feature.FeatureWorkflow._pipeline)
+    return PRECODE_SRC
 
 
 def _step_src() -> str:
@@ -13,9 +20,12 @@ def _step_src() -> str:
 
 
 def test_research_stage_is_guarded_by_research_enabled():
-    src = _pipeline_src()
-    assert "cfg.research_enabled" in src
-    assert "research.step" in src
+    """020 T026: the enable/disable row became the graph-catalog assertion —
+    select_graph routes to the default-research graph iff research_enabled
+    and the research role exists; precode's research_node is its entry."""
+    assert select_graph(PipelineConfig(research_enabled=True), None) is SHIPPED["default-research"]
+    assert select_graph(PipelineConfig(research_enabled=False), None) is SHIPPED["default"]
+    assert "research.step" in _pipeline_src()
 
 
 def test_research_feeds_brief_digest_into_clarify_key():
@@ -58,7 +68,7 @@ def test_research_stage_verifies_grounding_post_run():
 def test_research_stage_degrades_on_model_call_failure():
     """Spec §8 tier 1: a plan/synthesize model-call failure (ActivityError
     after its retries exhaust) must degrade the STAGE to a
-    _degraded_research_brief, never crash the FeatureWorkflow
+    _degraded_research_brief, never crash the pipeline
     (bench-todo-api-greenfield-1785485669: an uncaught UsageLimitExceeded
     once killed the whole run, not just research). The fan-out + synthesis
     sit inside a broad try/except that substitutes the degraded brief;

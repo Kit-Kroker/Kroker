@@ -1,3 +1,4 @@
+# 020 T026: re-pointed from FeatureWorkflow to GraphWorkflow; the historical rationale is kept.
 """FR-021 sandbox-marking guard for src/sdlc/agents/ (T045).
 
 The known trap: a NEW module under src/sdlc/agents/ is imported by a
@@ -25,7 +26,7 @@ from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner
 from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.workflows.crew import CrewTaskWorkflow
 from sdlc.workflows.deployment import DeploymentWorkflow
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
 
 # tests/durability/ -> repo root, two levels up.
 _AGENTS_DIR = Path(__file__).resolve().parents[2] / "src" / "sdlc" / "agents"
@@ -73,7 +74,7 @@ def test_workflow_runner_still_passes_through_pydantic_ai():
     mitigation: roles.py's eager agent construction must not re-execute
     inside a workflow task, TMPRL1101)."""
     config = Replayer(
-        workflows=[FeatureWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
+        workflows=[GraphWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
         data_converter=pydantic_data_converter,
         plugins=[SdlcPydanticAIPlugin()],
     ).config(active_config=True)

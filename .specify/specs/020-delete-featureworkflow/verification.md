@@ -553,3 +553,97 @@ the only `src/` import of `workflows.feature` was worker.py; the three
 other mentions (sc_rollup.py, notify/render.py, plan/validation.py) are
 comments/docstrings only — T033's sweep rewords them. The wider
 `tests/` fallout (delete/migrate classes) is T026's, per the inventory.
+
+## §T026 (T026, plan T070 — the classification executed)
+
+Three commits by class, plus what earlier tasks already executed:
+- **delete (2 rows)** — executed by T021's commit `7b10e5c9`
+  (`test_feature_replay.py`, `test_capture_feature.py`, counterparts
+  named in that commit's body). No files remained for a T026 delete
+  commit.
+- **migrate + repoint (this T026, 54 + 5 files)** — see below.
+- **comment-only (11 files)** — prose reworded where it would mislead
+  post-deletion; historically-accurate mentions kept.
+
+Executor-direct mechanical sweep (PR-1 T004/T005 convention) with
+qa-happy executing nine inventory rows as batch A (report: scratchpad
+`qa-happy-t026a-report.md`); everything else executor-made. Notable
+judgment calls, all verified green in real temporal runs:
+- `test_feature_brownfield_stages.py` became a pure fakes module
+  (SCAN_FAKES/BROWNFIELD_SPECS/fake_resolve_tree verbatim — see the
+  incident note below); its full-run rows cite the brownfield/intake
+  goldens.
+- `test_research_e2e.py` drives GraphWorkflow by NAME (status/
+  answer_question/submit_gate_decision); by-name `run_summary` queries
+  are validated with `RunSummary.model_validate`, `pending_decisions`
+  with `TypeAdapter(PendingDecision)` (by-name queries return raw JSON).
+- `test_gate_timeout_action.py`'s HOLD row registers a quiet notify
+  fake: under GraphWorkflow the HOLD reminder calls the shared gate
+  host's notify activity (module-level imports — `activity.defn`
+  resolves annotations at registration, outside function scope).
+- `wire_dump.py` re-points to GRAPH_STARTER but the frozen
+  `wire_no_override.json` is KEPT per the orchestrator ruling (no
+  re-record of frozen baselines); `test_wire_neutrality` keeps its
+  known failing id.
+- `test_seeded_work.py`: the FW.run third-argument pin became the
+  catalog pin (`select_graph(...) is SHIPPED["seeded"]`,
+  `build_run_input(...).seeded == seeded`); the temporal skip proof is
+  deleted citing the `seeded` golden. Same citation pattern for
+  `test_feature_delta_gate.py`'s exhausted-retries row (delta_failed
+  golden) and the brownfield full-run rows.
+- The `FEATURE_PY` cluster (factory_purity + memoization/memory
+  wiring/purity) moved to GRAPH_MODULES scans; the graph-modules memory
+  sweep flags direct `execute_activity(recall_snapshot|retain)`
+  scheduling only — `ctx.recall/ctx.retain` via the host is sanctioned.
+- `test_analyst_stage_wiring.py`'s ordering row became an edge-
+  reachability assertion on the shipped graph (node lists are
+  normalized alphabetically, so index order would be vacuous).
+- Five by-path readers the T003 grep classes missed were fixed the same
+  way: `test_review_wiring.py`, `test_deep_review_wiring.py` (feature.py
+  dropped from the SRC concat), `test_feature_residual.py` (ceiling row
+  deleted with the file), `test_module_imports.py` (imports graph),
+  `test_role_model_resolution.py` (raw-lookup scan over graph.py +
+  graph_nodes). Plus the orchestrator-flagged `test_merge_gate_wiring.py`
+  (delegation reader → postplan.py) and the inventory's
+  `test_integration_checks_wiring.py` (`merge_node`), `test_adversary_
+  workflow.py` (feature.py term dropped), `test_waste_population_
+  wiring.py`, `test_run_state_query.py` (canonical-name scan over
+  graph_nodes), `test_clarify_stage_wiring.py` (requirements-publish
+  owner → precode).
+
+### §T026 verification
+
+- Fast tier `pytest -q`: **exactly the 8 §Baseline ids** (diffed
+  against the T002 list) — the T021 import window is closed.
+- Temporal tier, chunked per the orchestrator's instruction after the
+  unchunked run wedged (see incident): every directory green
+  (deploy 8, durability 19, graph_workflow 23, replay 56 incl. the
+  18 switch-gated skips, research, retro, crew, triage, model-
+  forwarding, assessment/benchmark e2e, and the 13 re-pointed root
+  e2e files) with exactly the four known priced-usage drift failures:
+  the three §Baseline-addendum ids plus
+  `test_pinned_tuples_match_the_recorded_history` (recorded by test id
+  per the 2026-11-10 ruling). No hangs; `--timeout=180 --timeout-method=thread`
+  stood guard on every chunk.
+- ruff check/format over the tree, mypy (411 files),
+  `scripts/check_file_size.py`: clean.
+
+### §T026 incident: the wedged full-suite run (and the bug it exposed)
+
+The unchunked `pytest -m temporal` wedged at 32% for 82 min (0.8% CPU,
+blocked on temporal-test-server); the orchestrator ordered it killed
+and the tier re-run in chunks. Chunking isolated the wedge to
+`tests/replay/test_graph_golden.py` (2 tests in 600 s; single tests
+5.6 s standalone) → `test_graph_workflow_reproduces_the_golden_trace
+[brownfield_happy-unsandboxed]` hung. **Root cause: executor error in
+T026's first rewrite of `tests/test_feature_brownfield_stages.py`** —
+the hand-rebuilt fakes module invented ScanSignalId values
+(S5/S6/S7/S8/CI1 for QS1–QS4/SS…) and wrote `confidence=` for
+`confidence_contribution=`, silently changing the brownfield scenario's
+fakes that `scenarios.py` imports. Fixed by rebuilding the kept region
+byte-verbatim from HEAD (`git show`), verified IDENTICAL by diff;
+the brownfield golden passes again and the whole file is 32/32 green.
+The four early failures in the wedged run were the four known drift
+ids (positions 16, 17, 18, 25 = priced×2, provider_payload,
+wire_neutrality) — class (a) throughout; nothing was class (b) (no
+main-check needed — no unexplained failure remained).

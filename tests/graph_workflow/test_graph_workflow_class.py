@@ -1,4 +1,8 @@
-"""E-74 §5.7: GraphWorkflow exposes FeatureWorkflow's HITL surface by the same names."""
+"""E-74 §5.7, re-cast 020 T026: GraphWorkflow's HITL surface as a frozen name set.
+
+FeatureWorkflow is deleted (020 T025). The surface is pinned by exact name
+sets, so any addition or removal is a deliberate change to this file.
+"""
 
 from __future__ import annotations
 
@@ -8,19 +12,22 @@ from pathlib import Path
 from temporalio.workflow import _Definition
 
 from sdlc.worker import graph_boot_problems
-from sdlc.workflows.feature import FeatureWorkflow
 from sdlc.workflows.gates import GateHost
 from sdlc.workflows.graph import GraphWorkflow
 from sdlc.workflows.run_host import RunHost
 
 
-def test_graph_workflow_serves_the_same_queries_and_signals():
+def test_graph_workflow_serves_the_frozen_hitl_surface():
     g = _Definition.must_from_class(GraphWorkflow)
-    f = _Definition.must_from_class(FeatureWorkflow)
-    # Parity is a superset (E-75 §4.2): GraphWorkflow serves every HITL
-    # surface FeatureWorkflow does, plus graph-only queries (graph_view).
-    assert set(f.queries) <= set(g.queries)
-    assert set(g.signals) == set(f.signals)
+    assert set(g.queries) == {
+        "graph_view",
+        "pending_decisions",
+        "pending_gate",
+        "run_state",
+        "run_summary",
+        "status",
+    }
+    assert set(g.signals) == {"answer_question", "submit_gate_decision"}
 
 
 def test_run_host_precedes_gate_host():
@@ -36,9 +43,9 @@ def test_boot_checks_are_healthy():
     assert graph_boot_problems() == []
 
 
-def test_worker_registers_both_pipeline_workflows():
+def test_worker_registers_the_graph_pipeline_workflow():
     src = (Path(__file__).resolve().parents[2] / "src" / "sdlc" / "worker.py").read_text(
         encoding="utf-8"
     )
     names = {n.id for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Name)}
-    assert {"FeatureWorkflow", "GraphWorkflow", "graph_boot_problems"} <= names
+    assert {"GraphWorkflow", "graph_boot_problems"} <= names

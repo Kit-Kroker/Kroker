@@ -17,6 +17,7 @@ from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.core.models import (
     GateDecision,
     GateOutcome,
+    RunSummary,
 )
 from sdlc.observability.activities import export_run_artifacts
 from sdlc.pricing import PriceUsageInput
@@ -34,7 +35,8 @@ from tests.fakes.fake_deploy import reset as reset_deploy
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.deployment import DeploymentWorkflow
-    from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
+    from sdlc.workflows.graph_catalog import build_run_input
     from tests.fakes.fake_agents import fake_agent_activities
 
 pytestmark = pytest.mark.temporal
@@ -62,7 +64,7 @@ def _activities():
 async def _wait_for_status(handle, target, timeout_s=10.0):
     deadline = asyncio.get_event_loop().time() + timeout_s
     while asyncio.get_event_loop().time() < deadline:
-        if await handle.query(FeatureWorkflow.pending_gate) == target:
+        if await handle.query("pending_gate") == target:
             return
         await asyncio.sleep(0.05)
     raise AssertionError(f"timed out waiting for {target!r}")
@@ -87,7 +89,7 @@ async def _run_workflow_with_driver(handle, drive_coro):
 
 async def _signal_gate(handle, gate, round, outcome):
     await handle.signal(
-        FeatureWorkflow.submit_gate_decision,
+        "submit_gate_decision",
         GateDecision(gate=gate, round=round, outcome=outcome, decided_by="human"),
     )
 
@@ -111,13 +113,13 @@ async def test_budget_crossings_regate_and_approve_extends(tmp_path, monkeypatch
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow, DeploymentWorkflow],
+                workflows=[GraphWorkflow, DeploymentWorkflow],
                 activities=_activities(),
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"budget-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )
@@ -125,7 +127,7 @@ async def test_budget_crossings_regate_and_approve_extends(tmp_path, monkeypatch
                 async def drive():
                     await _wait_for_status(handle, "awaiting:clarify")
                     for qid in QUESTION_IDS:
-                        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+                        await handle.signal("answer_question", args=[qid, "yes"])
                     await _wait_for_status(handle, "awaiting:architecture")
                     await _signal_gate(handle, "architecture", 1, GateOutcome.APPROVE)
                     for rnd in (1, 2):
@@ -141,7 +143,7 @@ async def test_budget_crossings_regate_and_approve_extends(tmp_path, monkeypatch
                     await _signal_gate(handle, "deploy", 1, GateOutcome.APPROVE)
 
                 result = await _run_workflow_with_driver(handle, drive())
-                summary = await handle.query(FeatureWorkflow.run_summary)
+                summary = RunSummary.model_validate(await handle.query("run_summary"))
     assert result.startswith("deployed:"), result
     budget_gates = [g for g in summary.gates if g.gate == "budget"]
     assert {g.round for g in budget_gates} == {1, 2, 3, 4}
@@ -160,13 +162,13 @@ async def test_budget_reject_terminates_with_retro(tmp_path, monkeypatch):
             async with Worker(
                 env.client,
                 task_queue=TASK_QUEUE,
-                workflows=[FeatureWorkflow],
+                workflows=[GraphWorkflow],
                 activities=_activities(),
                 plugins=[SdlcPydanticAIPlugin()],
             ):
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[greenfield_idea(), cfg, None],
+                    GraphWorkflow.run,
+                    build_run_input(greenfield_idea(), cfg, None),
                     id=f"budget-rej-{uuid.uuid4()}",
                     task_queue=TASK_QUEUE,
                 )
@@ -174,12 +176,12 @@ async def test_budget_reject_terminates_with_retro(tmp_path, monkeypatch):
                 async def drive():
                     await _wait_for_status(handle, "awaiting:clarify")
                     for qid in QUESTION_IDS:
-                        await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+                        await handle.signal("answer_question", args=[qid, "yes"])
                     await _wait_for_status(handle, "awaiting:budget")
                     await _signal_gate(handle, "budget", 1, GateOutcome.REJECT)
 
                 result = await _run_workflow_with_driver(handle, drive())
-                summary = await handle.query(FeatureWorkflow.run_summary)
+                summary = RunSummary.model_validate(await handle.query("run_summary"))
     assert result == "rejected:budget", result
     assert summary is not None  # retro ran on the budget path
     assert summary.outcome == "rejected:budget"

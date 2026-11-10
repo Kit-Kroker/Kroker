@@ -1,6 +1,7 @@
 import pathlib
 
-FEATURE_SRC = pathlib.Path("src/sdlc/workflows/feature.py")
+# 020 T026: feature.py is gone from the concat; task_host + the stage
+# slices carry the wiring.
 TASK_HOST_SRC = pathlib.Path("src/sdlc/workflows/task_host.py")
 REVIEW_SRC = pathlib.Path("src/sdlc/stages/review/step.py")
 MERGE_SRC = pathlib.Path("src/sdlc/stages/merge/step.py")
@@ -10,9 +11,7 @@ CODE_SRC = pathlib.Path("src/sdlc/stages/code/step.py")
 class _Source:
     def read_text(self, encoding="utf-8") -> str:
         return (
-            FEATURE_SRC.read_text(encoding=encoding)
-            + "\n"
-            + TASK_HOST_SRC.read_text(encoding=encoding)
+            TASK_HOST_SRC.read_text(encoding=encoding)
             + "\n"
             + REVIEW_SRC.read_text(encoding=encoding)
             + "\n"

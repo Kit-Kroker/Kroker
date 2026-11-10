@@ -4,7 +4,7 @@ The part no fake can prove for this module is that OperatorDeps' collaborators
 are the real ones -- FleetPoller fanning out over a live client, and _handle
 resolving a real workflow handle. Signal TRANSLATION is pinned by
 tests/test_operator_writes.py and by transport's own suite; driving
-FeatureWorkflow to a pending gate would need the full activity fake set, which
+GraphWorkflow to a pending gate would need the full activity fake set, which
 is test_e2e_greenfield.py's job and not this test's.
 
 Marked temporal: each such test spawns its own dev-server subprocess
@@ -24,7 +24,8 @@ from sdlc.core.models import (
 from sdlc.dashboard.fleet import FleetPoller
 from sdlc.operator import tools
 from sdlc.operator.deps import OperatorDeps
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
+from sdlc.workflows.graph_catalog import build_run_input
 
 pytestmark = pytest.mark.temporal
 
@@ -35,15 +36,15 @@ async def test_verbs_answer_against_a_live_run():
 
     async with await WorkflowEnvironment.start_local(data_converter=pydantic_data_converter) as env:
         async with Worker(
-            env.client, task_queue="chat-e2e", workflows=[FeatureWorkflow], activities=[]
+            env.client, task_queue="chat-e2e", workflows=[GraphWorkflow], activities=[]
         ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run,
-                args=[
+                GraphWorkflow.run,
+                build_run_input(
                     IdeaBrief(title="Add SSO", description="d", mode=ProjectMode.GREENFIELD),
                     PipelineConfig(memory=MemoryConfig(enabled=False)),
                     None,
-                ],
+                ),
                 id="feature-add-sso",
                 task_queue="chat-e2e",
             )

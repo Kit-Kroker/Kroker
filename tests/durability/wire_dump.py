@@ -1,4 +1,5 @@
-"""Wire dump for one no-override FeatureWorkflow run (004 T003, FR-010).
+"""Wire dump for one no-override run (004 T003, FR-010; 020 T026 re-pointed
+to GraphWorkflow).
 
 Records, from a single greenfield_happy capture on the fakes (the replay
 suite's own scenario and starter), exactly what the wire-neutrality contract
@@ -31,7 +32,7 @@ from typing import Any
 
 from temporalio.client import WorkflowHistory
 
-from tests.replay.harness import FEATURE_STARTER, capture
+from tests.replay.harness import GRAPH_STARTER, capture
 from tests.replay.scenarios import SCENARIOS
 
 FIXTURE = Path(__file__).parent / "fixtures" / "wire_no_override.json"
@@ -79,10 +80,13 @@ def dump_wire(history: WorkflowHistory) -> dict[str, Any]:
 
 
 async def capture_no_override_wire(monkeypatch: Any, tmp_path: Path) -> dict[str, Any]:
-    """Run ONE no-override greenfield_happy FeatureWorkflow capture on the
-    fakes and return its wire dump."""
+    """Run ONE no-override greenfield_happy GraphWorkflow capture on the
+    fakes and return its wire dump. The frozen fixture stays Feature-era:
+    020's orchestrator ruling (2026-11-10) forbids re-recording frozen
+    baselines this round, so the neutrality test inherits the known
+    live-vs-frozen drift and keeps failing on its recorded id."""
     scenario = next(s for s in SCENARIOS if s.name == "greenfield_happy")
-    captured = await capture(scenario, FEATURE_STARTER, monkeypatch, tmp_path)
+    captured = await capture(scenario, GRAPH_STARTER, monkeypatch, tmp_path)
     return dump_wire(captured.history)
 
 

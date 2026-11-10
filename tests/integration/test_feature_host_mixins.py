@@ -1,19 +1,20 @@
+# 020 T026: re-pointed from FeatureWorkflow to GraphWorkflow; the historical rationale is kept.
 from sdlc.workflows.benchmark_host import BenchmarkHost
 from sdlc.workflows.board_host import BoardHost
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
 from sdlc.workflows.memory_host import MemoryHost
 from sdlc.workflows.report_host import ReportHost
 from sdlc.workflows.role_host import RoleHost
 
 
-def test_feature_workflow_inherits_the_hosts():
-    assert issubclass(FeatureWorkflow, ReportHost)
-    assert issubclass(FeatureWorkflow, BoardHost)
+def test_graph_workflow_inherits_the_hosts():
+    assert issubclass(GraphWorkflow, ReportHost)
+    assert issubclass(GraphWorkflow, BoardHost)
 
 
 def test_methods_resolve_through_the_mro():
     for name in ("_emit", "_stage", "_track_usage", "_board_publish", "_board_evidence"):
-        assert hasattr(FeatureWorkflow, name), name
+        assert hasattr(GraphWorkflow, name), name
 
 
 def test_hosts_define_no_handlers():
@@ -27,7 +28,7 @@ def test_hosts_define_no_handlers():
 
 
 def test_cooperative_init_initializes_all_owned_attributes():
-    w = FeatureWorkflow()
+    w = GraphWorkflow()
     expected_attributes = (
         # GateHost
         "_gate_decisions",
@@ -50,7 +51,7 @@ def test_cooperative_init_initializes_all_owned_attributes():
         # RoleHost
         "_budget_threshold",
         "_budget_crossings",
-        # FeatureWorkflow
+        # GraphWorkflow
         "_cfg",
         "_idea",
         "_started_at",
@@ -68,10 +69,10 @@ def test_benchmark_and_memory_hosts_are_on_the_mro():
     from sdlc.workflows.benchmark_host import BenchmarkHost
     from sdlc.workflows.memory_host import MemoryHost
 
-    assert issubclass(FeatureWorkflow, BenchmarkHost)
-    assert issubclass(FeatureWorkflow, MemoryHost)
+    assert issubclass(GraphWorkflow, BenchmarkHost)
+    assert issubclass(GraphWorkflow, MemoryHost)
     for name in ("_benchmarking", "_stage_record", "_record", "_judge", "_recall", "_retain"):
-        assert hasattr(FeatureWorkflow, name), name
+        assert hasattr(GraphWorkflow, name), name
 
 
 def test_record_assembles_the_benchmark_record_for_the_stage():
@@ -85,6 +86,6 @@ def test_record_assembles_the_benchmark_record_for_the_stage():
 def test_role_host_is_on_the_mro():
     from sdlc.workflows.role_host import RoleHost
 
-    assert issubclass(FeatureWorkflow, RoleHost)
+    assert issubclass(GraphWorkflow, RoleHost)
     for name in ("_run_role", "_cached_stage", "_revisable_stage", "_check_budget"):
-        assert hasattr(FeatureWorkflow, name), name
+        assert hasattr(GraphWorkflow, name), name

@@ -6,7 +6,7 @@ from sdlc.core.models import (
     BenchmarkConfig,
     PipelineConfig,
 )
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
 
 
 def test_record_helper_is_noop_when_case_id_none():
@@ -17,10 +17,10 @@ def test_record_helper_is_noop_when_case_id_none():
     cfg = PipelineConfig()
     assert cfg.benchmark.case_id is None
     # the predicate the helper uses:
-    assert FeatureWorkflow._benchmarking(cfg) is False
+    assert GraphWorkflow._benchmarking(cfg) is False
 
 
 def test_record_helper_is_active_when_case_id_set():
     cfg = PipelineConfig()
     cfg.benchmark = BenchmarkConfig(case_id="add-login", bench_run_id="b1")
-    assert FeatureWorkflow._benchmarking(cfg) is True
+    assert GraphWorkflow._benchmarking(cfg) is True

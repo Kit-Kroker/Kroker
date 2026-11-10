@@ -2,7 +2,7 @@
 """The feature.py <-> crew seam, EXECUTED (E-88 §3).
 
 Two ship-blocking bugs lived on this seam with the suite all green,
-because no test drove FeatureWorkflow's dev stage through the crew
+because no test drove the dev stage through the crew
 branch -- test_crew_workflow.py exercised CrewTaskWorkflow alone:
 
 * the load site unpacked the single `LoadedCrew` dataclass into two
@@ -11,7 +11,7 @@ branch -- test_crew_workflow.py exercised CrewTaskWorkflow alone:
   result it was about to assign (`UnboundLocalError` on the first
   crew task).
 
-So this module runs the REAL FeatureWorkflow with the dev role
+So this module runs the REAL GraphWorkflow with the dev role
 configured harness=CREW: the REAL load_crew reads the real shipped
 crew/ tree (exercising the real dataclass over the wire), fake crew
 activities stand in for the subprocess side effects, and the test
@@ -64,7 +64,8 @@ from tests.fakes.fake_activities import git_fakes_except
 with workflow.unsafe.imports_passed_through():
     from sdlc.workflows.crew import CrewTaskWorkflow
     from sdlc.workflows.deployment import DeploymentWorkflow
-    from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
+    from sdlc.workflows.graph_catalog import build_run_input
     from sdlc.workflows.task_host import TaskHost  # noqa: F401
     from tests.fakes.fake_agents import fake_agent_activities
 
@@ -195,7 +196,7 @@ async def test_the_crew_dev_task_carries_the_protocol_to_the_round_brief(tmp_pat
         async with Worker(
             env.client,
             task_queue=TASK_QUEUE,
-            workflows=[FeatureWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
+            workflows=[GraphWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
             activities=[
                 evaluate_gate,
                 export_run_artifacts,
@@ -218,8 +219,8 @@ async def test_the_crew_dev_task_carries_the_protocol_to_the_round_brief(tmp_pat
             plugins=[SdlcPydanticAIPlugin()],
         ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run,
-                args=[greenfield_idea(), _cfg(), None],
+                GraphWorkflow.run,
+                build_run_input(greenfield_idea(), _cfg(), None),
                 id=f"{TASK_QUEUE}-{uuid.uuid4()}",
                 task_queue=TASK_QUEUE,
             )
@@ -227,7 +228,7 @@ async def test_the_crew_dev_task_carries_the_protocol_to_the_round_brief(tmp_pat
             # only its one open question answered.
             with env.auto_time_skipping_disabled():
                 for qid in QUESTION_IDS:
-                    await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+                    await handle.signal("answer_question", args=[qid, "yes"])
             result = await _finish(handle)
 
     # Primary regression: the workflow completes at all. Bug B died at the
@@ -266,7 +267,7 @@ async def test_the_code_stage_record_carries_the_attempts_token_counts(tmp_path,
         async with Worker(
             env.client,
             task_queue=TASK_QUEUE,
-            workflows=[FeatureWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
+            workflows=[GraphWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
             activities=[
                 evaluate_gate,
                 export_run_artifacts,
@@ -283,14 +284,14 @@ async def test_the_code_stage_record_carries_the_attempts_token_counts(tmp_path,
             plugins=[SdlcPydanticAIPlugin()],
         ):
             handle = await env.client.start_workflow(
-                FeatureWorkflow.run,
-                args=[greenfield_idea(), _cfg(benchmark=True), None],
+                GraphWorkflow.run,
+                build_run_input(greenfield_idea(), _cfg(benchmark=True), None),
                 id=f"{TASK_QUEUE}-{uuid.uuid4()}",
                 task_queue=TASK_QUEUE,
             )
             with env.auto_time_skipping_disabled():
                 for qid in QUESTION_IDS:
-                    await handle.signal(FeatureWorkflow.answer_question, args=[qid, "yes"])
+                    await handle.signal("answer_question", args=[qid, "yes"])
             result = await _finish(handle)
 
     assert not result.startswith("failed"), result
