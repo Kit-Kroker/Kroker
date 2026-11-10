@@ -1,8 +1,11 @@
-"""Plan stage step execution (spec A §3.3).
+"""Plan stage slice functions (spec A §3.3).
 
-Executes the plan stage: recalls prior memories, runs the planner proposer role with
-memoization caching, obtains human gate approval via revisable_stage, judges and records outcome,
-retains the plan summary in memory, and returns (ImplementationPlan, GateDecision).
+prepare / produce / finish for the plan stage: recalls prior memories,
+runs the planner proposer role with memoization caching, judges and
+records the outcome, and retains the plan summary in memory. The graph's
+planner node composes these directly (020 T027 deleted the
+FeatureWorkflow-era `step` composite; the revisable gate loop lives in
+the node's gate.plan wiring).
 """
 
 from __future__ import annotations
@@ -169,34 +172,3 @@ async def finish(
         text=f"plan: {len(artifact.tasks)} tasks",
         metadata={"stage": "plan", "run_id": _workflow_id()},
     )
-
-
-async def step(
-    ctx: StageContext,
-    *,
-    cfg: PipelineConfig,
-    architecture: ArchitectureSpec,
-    requirements: ClarifiedRequirements | None = None,
-    idea: IdeaBrief | None = None,
-    planner_agent: Any = None,
-    planner_model: str | None = None,
-) -> tuple[ImplementationPlan, GateDecision]:
-    """Execute the plan stage: prepare, the revisable produce loop, finish."""
-    prep = await prepare(ctx, cfg=cfg, idea=idea, planner_model=planner_model)
-
-    async def _run_plan(guidance: str | None) -> ImplementationPlan:
-        return await produce(
-            ctx,
-            prep,
-            cfg=cfg,
-            architecture=architecture,
-            requirements=requirements,
-            planner_agent=planner_agent,
-            guidance=guidance,
-        )
-
-    plan_obj, gate = await ctx.revisable_stage(
-        "plan", cfg, _run_plan, author_model=prep.resolved_model
-    )
-    await finish(ctx, prep, cfg=cfg, artifact=plan_obj, gate=gate)
-    return plan_obj, gate

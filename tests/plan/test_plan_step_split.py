@@ -4,7 +4,7 @@ import asyncio
 from types import SimpleNamespace
 
 from sdlc.core.models import GateDecision, GateOutcome, PipelineConfig
-from sdlc.stages.plan.step import PlanPrep, finish, prepare, produce, step
+from sdlc.stages.plan.step import PlanPrep, finish, prepare, produce
 from tests.fakes.canned import ARCH, PLAN, greenfield_idea
 
 
@@ -57,19 +57,9 @@ EXPECTED = [
 ]
 
 
-def test_step_call_sequence_is_unchanged():
-    ctx = Ctx()
-    asyncio.run(
-        step(
-            ctx,
-            cfg=PipelineConfig(),
-            architecture=ARCH,
-            idea=greenfield_idea(),
-            planner_agent=object(),
-            planner_model="m-plan",
-        )
-    )
-    assert ctx.calls == EXPECTED
+# 020 T028: the step()-based sequence test is deleted with the composite —
+# the composition test below pins the same EXPECTED sequence against
+# prepare/produce/finish directly.
 
 
 def test_prepare_produce_finish_compose_to_the_same_sequence():
@@ -114,16 +104,22 @@ def test_a_judge_error_records_its_reason():
 
     ctx.judge = judge
     ctx.record = record
-    asyncio.run(
-        step(
-            ctx,
-            cfg=PipelineConfig(),
-            architecture=ARCH,
-            idea=greenfield_idea(),
-            planner_agent=object(),
-            planner_model="m-plan",
+
+    async def go():
+        cfg = PipelineConfig()
+        prep = await prepare(ctx, cfg=cfg, idea=greenfield_idea(), planner_model="m-plan")
+        artifact = await produce(
+            ctx, prep, cfg=cfg, architecture=ARCH, planner_agent=object(), guidance=None
         )
-    )
+        await finish(
+            ctx,
+            prep,
+            cfg=cfg,
+            artifact=artifact,
+            gate=GateDecision(gate="plan", outcome=GateOutcome.APPROVE, decided_by="human"),
+        )
+
+    asyncio.run(go())
 
     assert records, "the judged stage must write its record"
     assert records[0].quality.judge == "error"

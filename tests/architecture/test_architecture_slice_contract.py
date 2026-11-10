@@ -1,4 +1,8 @@
-"""Contract tests for the architecture stage vertical slice (spec A §3)."""
+"""Contract tests for the architecture stage vertical slice (spec A §3).
+
+020 T028: rewritten against prepare/produce/finish — the FeatureWorkflow-era
+`step` composite is deleted (T027); the graph's architect_node is the
+composition point, so the slice's contract is the three functions' shapes."""
 
 from __future__ import annotations
 
@@ -9,20 +13,30 @@ from typing import Any
 import pytest
 
 from sdlc.core.context import StageServices
-from sdlc.core.models import GateDecision, IdeaBrief, PipelineConfig, ProjectMode, RoleConfig
+from sdlc.core.models import (
+    GateDecision,
+    GateOutcome,
+    IdeaBrief,
+    PipelineConfig,
+    ProjectMode,
+    RoleConfig,
+)
 from sdlc.stages import architecture
 from sdlc.stages.architecture.models import ArchitectureDecision, ArchitectureSpec
+from sdlc.stages.architecture.step import finish, prepare, produce
 from sdlc.stages.clarify.models import ClarifiedRequirements
 
 
 def test_slice_exports_a_narrow_surface():
-    assert callable(architecture.step)
+    # 020 T027: `step` is gone from the package surface — the submodule
+    # exists, the composite function does not.
+    assert "step" not in architecture.__all__
     assert isinstance(architecture.ACTIVITIES, list)
     assert len(architecture.ACTIVITIES) == 0
 
 
 def test_agents_arrive_in_the_signature_not_from_the_registry():
-    params = inspect.signature(architecture.step).parameters
+    params = inspect.signature(produce).parameters
     assert "architect_agent" in params
     assert params["architect_agent"].kind is inspect.Parameter.KEYWORD_ONLY
 
@@ -31,21 +45,26 @@ def test_agents_arrive_in_the_signature_not_from_the_registry():
 
 
 @pytest.mark.clause("ARCH-1.1")
-def test_step_takes_a_stage_context_and_never_the_workflow():
-    first = list(inspect.signature(architecture.step).parameters)[0]
-    assert first == "ctx"
+def test_the_slice_takes_a_stage_context_and_never_the_workflow():
+    for fn in (prepare, produce, finish):
+        first = list(inspect.signature(fn).parameters)[0]
+        assert first == "ctx", fn.__name__
     assert StageServices
 
 
 @pytest.mark.clause("ARCH-1.2")
-def test_step_returns_architecture_spec_and_gate_decision():
-    ret = inspect.signature(architecture.step).return_annotation
-    assert "tuple" in str(ret).lower() or ret == tuple[ArchitectureSpec, GateDecision]
+def test_produce_returns_an_architecture_spec():
+    ret = inspect.signature(produce).return_annotation
+    assert "ArchitectureSpec" in str(ret)
 
 
 @pytest.mark.clause("ARCH-1.3")
 @pytest.mark.asyncio
-async def test_step_executes_architect_and_revisable_stage():
+async def test_the_composition_executes_the_architect_and_finishes():
+    """prepare → produce → finish runs the architect through the cached
+    stage and lands the judge/record/retain triple — the composite's old
+    sequence, pinned slice-wise (the revisable loop itself is the graph
+    node's gate wiring)."""
     from sdlc.benchmarks.models import QualityScore
 
     class _StubCtx:
@@ -64,20 +83,6 @@ async def test_step_executes_architect_and_revisable_stage():
             from sdlc.memory.models import RecallSnapshot
 
             return RecallSnapshot(query_hash="q", bank="b", watermark="w", items=[])
-
-        async def revisable_stage(
-            self, name: str, cfg: Any, run_fn: Any, *, author_model: str = ""
-        ) -> tuple[ArchitectureSpec, GateDecision]:
-            spec = await run_fn(None)
-            from sdlc.core.models import GateOutcome
-
-            decision = GateDecision(
-                gate="architecture",
-                approved=True,
-                outcome=GateOutcome.APPROVE,
-                decided_by="human",
-            )
-            return spec, decision
 
         async def cached_stage(
             self,
@@ -127,18 +132,19 @@ async def test_step_executes_architect_and_revisable_stage():
         open_questions=[],
     )
 
-    spec, gate = await architecture.step(
+    prep = await prepare(ctx, cfg=cfg, idea=idea, architect_model="m-arch")
+    spec = await produce(ctx, prep, cfg=cfg, requirements=reqs, architect_agent=object())
+    await finish(
         ctx,
+        prep,
         cfg=cfg,
-        idea=idea,
-        requirements=reqs,
-        codebase_map=None,
-        memory_watermark=None,
+        artifact=spec,
+        gate=GateDecision(
+            gate="architecture", approved=True, outcome=GateOutcome.APPROVE, decided_by="human"
+        ),
     )
 
     assert isinstance(spec, ArchitectureSpec)
-    assert isinstance(gate, GateDecision)
     assert spec.overview == "Test arch overview"
-    assert gate.approved is True
     assert ctx.recorded is True
     assert ctx.retained is True

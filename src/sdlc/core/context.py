@@ -76,8 +76,14 @@ class StageContext(Protocol):
 @dataclass(frozen=True, slots=True)
 class StageServices:
     """The Protocol's only production implementation. Constructed once, in
-    FeatureWorkflow.__init__, from bound methods — never lazily inside a step,
-    where a conditional construction could diverge on replay."""
+    the workflow's __init__ (GraphWorkflow since 020 deleted FeatureWorkflow),
+    from bound methods — never lazily inside a step, where a conditional
+    construction could diverge on replay.
+
+    `revisable_stage` (the prepare/produce-loop/finish compositing service)
+    no longer has an in-tree caller: 020 T027 deleted the architecture and
+    plan composites that used it. The method and its wiring stay per 020
+    FR-006 (see .workspace/tasks/2026-11-08-revisable-stage-deletion.md)."""
 
     emit: Callable[..., None]
     stage: Callable[..., None]

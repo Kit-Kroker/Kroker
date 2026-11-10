@@ -1,9 +1,12 @@
-"""Architecture stage step execution (spec A §3.3).
+"""Architecture stage slice functions (spec A §3.3).
 
-Executes the architecture stage: recalls prior memories, prepares codebase map grounding
-and research tools, runs the architect proposer role with memoization caching and brownfield
-delta checks, obtains human gate approval via revisable_stage, judges and records outcome,
-retains the architecture summary in memory, and returns (ArchitectureSpec, GateDecision).
+prepare / produce / finish for the architecture stage: recalls prior
+memories, prepares codebase-map grounding and research tools, runs the
+architect proposer role with memoization caching and brownfield delta
+checks, judges and records the outcome, and retains the architecture
+summary in memory. The graph's architect_node composes these directly
+(020 T027 deleted the FeatureWorkflow-era `step` composite; the revisable
+gate loop lives in the node's gate.architecture wiring).
 """
 
 from __future__ import annotations
@@ -274,41 +277,3 @@ async def finish(
         text=f"architect: {artifact.overview}",
         metadata={"stage": "architect", "run_id": _workflow_id()},
     )
-
-
-async def step(
-    ctx: StageContext,
-    *,
-    cfg: PipelineConfig,
-    requirements: ClarifiedRequirements,
-    codebase_map: CodebaseMap | None = None,
-    memory_watermark: str | None = None,
-    idea: IdeaBrief | None = None,
-    repo_path: str = "/var/sdlc/repo",
-    architect_agent: Any = None,
-    architect_model: str | None = None,
-) -> tuple[ArchitectureSpec, GateDecision]:
-    """Execute the architecture stage: prepare, the revisable produce loop,
-    finish. Returns (ArchitectureSpec, GateDecision)."""
-    prep = await prepare(
-        ctx, cfg=cfg, codebase_map=codebase_map, idea=idea, architect_model=architect_model
-    )
-
-    async def _run_architect(guidance: str | None) -> ArchitectureSpec:
-        return await produce(
-            ctx,
-            prep,
-            cfg=cfg,
-            requirements=requirements,
-            codebase_map=codebase_map,
-            memory_watermark=memory_watermark,
-            repo_path=repo_path,
-            architect_agent=architect_agent,
-            guidance=guidance,
-        )
-
-    arch, gate = await ctx.revisable_stage(
-        "architecture", cfg, _run_architect, author_model=prep.resolved_model
-    )
-    await finish(ctx, prep, cfg=cfg, artifact=arch, gate=gate)
-    return arch, gate

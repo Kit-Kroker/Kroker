@@ -188,18 +188,19 @@ def test_revisable_stage_takes_author_model():
 def test_both_proposer_stages_pass_their_resolved_model():
     """The stage-key trap: resolve_role_model is keyed by STAGE_ROLES
     ('architect', 'plan'), not by the gate names ('architecture', 'plan'), so
-    _revisable_stage must be HANDED the model rather than resolving it from
-    the gate name."""
+    the composition must be HANDED the model rather than resolving it from
+    the gate name. 020 T028: the step() composites are gone; the handoff
+    now lives in the graph's precode nodes (mirroring the T006 pins)."""
     import pathlib
 
-    for path in (
-        "src/sdlc/stages/architecture/step.py",
-        "src/sdlc/stages/plan/step.py",
-    ):
-        src = pathlib.Path(path).read_text(encoding="utf-8")
-        idx = src.find("revisable_stage(")
-        assert idx != -1, path
-        assert "author_model=prep.resolved_model" in src[idx : idx + 200], path
+    precode = pathlib.Path("src/sdlc/workflows/graph_nodes/precode.py").read_text(encoding="utf-8")
+    for stage, fn in (("architect", "architect_node"), ("plan", "plan_node")):
+        idx = precode.find(f"async def {fn}")
+        assert idx != -1, fn
+        node_src = precode[idx : idx + 1600]
+        assert f'resolve_role_model(cfg, "{stage}")' in node_src, (
+            f"{fn} must resolve the {stage} model by its stage key"
+        )
 
 
 def test_precode_hands_the_resolved_model_to_both_producer_results():

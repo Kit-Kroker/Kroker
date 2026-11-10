@@ -1,5 +1,7 @@
-"""E-74 §4.3: architecture.step == prepare + revisable(produce) + finish, with the
-same service-call sequence; once-per-stage work happens once across rounds."""
+"""E-74 §4.3, 020 T028: the architecture slice is prepare + revisable(produce) +
+finish, with a stable service-call sequence; once-per-stage work happens once
+across rounds. The FeatureWorkflow-era `step` composite is deleted (T027); the
+composition below is the graph's architect_node shape."""
 
 from __future__ import annotations
 
@@ -7,10 +9,7 @@ import asyncio
 from types import SimpleNamespace
 
 from sdlc.core.models import GateDecision, GateOutcome, PipelineConfig
-
-# Import names from the SUBMODULE: the package's `step` attribute is the
-# shadow-proofed step FUNCTION (_StageModule), never the module.
-from sdlc.stages.architecture.step import finish, prepare, produce, step
+from sdlc.stages.architecture.step import finish, prepare, produce
 from tests.fakes.canned import ARCH, CLARIFIED, greenfield_idea
 
 
@@ -70,19 +69,9 @@ EXPECTED = [
 ]
 
 
-def test_step_call_sequence_is_unchanged():
-    ctx = Ctx()
-    asyncio.run(
-        step(
-            ctx,
-            cfg=PipelineConfig(),
-            requirements=CLARIFIED,
-            idea=greenfield_idea(),
-            architect_agent=object(),
-            architect_model="m-arch",
-        )
-    )
-    assert ctx.calls == EXPECTED
+# 020 T028: the step()-based sequence test is deleted with the composite —
+# the composition test below pins the same EXPECTED sequence against
+# prepare/produce/finish directly.
 
 
 def test_prepare_produce_finish_compose_to_the_same_sequence():
@@ -129,16 +118,22 @@ def test_a_judge_error_records_its_reason():
 
     ctx.judge = judge
     ctx.record = record
-    asyncio.run(
-        step(
-            ctx,
-            cfg=PipelineConfig(),
-            requirements=CLARIFIED,
-            idea=greenfield_idea(),
-            architect_agent=object(),
-            architect_model="m-arch",
+
+    async def go():
+        cfg = PipelineConfig()
+        prep = await prepare(ctx, cfg=cfg, idea=greenfield_idea(), architect_model="m-arch")
+        artifact = await produce(
+            ctx, prep, cfg=cfg, requirements=CLARIFIED, architect_agent=object(), guidance=None
         )
-    )
+        await finish(
+            ctx,
+            prep,
+            cfg=cfg,
+            artifact=artifact,
+            gate=GateDecision(gate="architecture", outcome=GateOutcome.APPROVE, decided_by="human"),
+        )
+
+    asyncio.run(go())
 
     assert records, "the judged stage must write its record"
     assert records[0].quality.judge == "error"

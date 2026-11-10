@@ -1,4 +1,8 @@
-"""Contract tests for the plan stage vertical slice (spec A §3)."""
+"""Contract tests for the plan stage vertical slice (spec A §3).
+
+020 T028: rewritten against prepare/produce/finish — the FeatureWorkflow-era
+`step` composite is deleted (T027); the graph's planner node is the
+composition point, so the slice's contract is the three functions' shapes."""
 
 from __future__ import annotations
 
@@ -21,16 +25,19 @@ from sdlc.stages import plan
 from sdlc.stages.architecture.models import ArchitectureDecision, ArchitectureSpec
 from sdlc.stages.clarify.models import ClarifiedRequirements
 from sdlc.stages.plan.models import DevTask, ImplementationPlan
+from sdlc.stages.plan.step import finish, prepare, produce
 
 
 def test_slice_exports_a_narrow_surface():
-    assert callable(plan.step)
+    # 020 T027: `step` is gone from the package surface — the submodule
+    # exists, the composite function does not.
+    assert "step" not in plan.__all__
     assert isinstance(plan.ACTIVITIES, list)
     assert len(plan.ACTIVITIES) == 0
 
 
 def test_agents_arrive_in_the_signature_not_from_the_registry():
-    params = inspect.signature(plan.step).parameters
+    params = inspect.signature(produce).parameters
     assert "planner_agent" in params
     assert params["planner_agent"].kind is inspect.Parameter.KEYWORD_ONLY
 
@@ -39,21 +46,26 @@ def test_agents_arrive_in_the_signature_not_from_the_registry():
 
 
 @pytest.mark.clause("PLAN-1.1")
-def test_step_takes_a_stage_context_and_never_the_workflow():
-    first = list(inspect.signature(plan.step).parameters)[0]
-    assert first == "ctx"
+def test_the_slice_takes_a_stage_context_and_never_the_workflow():
+    for fn in (prepare, produce, finish):
+        first = list(inspect.signature(fn).parameters)[0]
+        assert first == "ctx", fn.__name__
     assert StageServices
 
 
 @pytest.mark.clause("PLAN-1.2")
-def test_step_returns_implementation_plan_and_gate_decision():
-    ret = inspect.signature(plan.step).return_annotation
-    assert "tuple" in str(ret).lower() or ret == tuple[ImplementationPlan, GateDecision]
+def test_produce_returns_an_implementation_plan():
+    ret = inspect.signature(produce).return_annotation
+    assert "ImplementationPlan" in str(ret)
 
 
 @pytest.mark.clause("PLAN-1.3")
 @pytest.mark.asyncio
-async def test_step_executes_planner_and_revisable_stage():
+async def test_the_composition_executes_the_planner_and_finishes():
+    """prepare → produce → finish runs the planner through the cached
+    stage and lands the judge/record/retain triple — the composite's old
+    sequence, pinned slice-wise (the revisable loop itself is the graph
+    node's gate wiring)."""
     from sdlc.benchmarks.models import QualityScore
 
     class _StubCtx:
@@ -72,18 +84,6 @@ async def test_step_executes_planner_and_revisable_stage():
             from sdlc.memory.models import RecallSnapshot
 
             return RecallSnapshot(query_hash="q", bank="b", watermark="w", items=[])
-
-        async def revisable_stage(
-            self, name: str, cfg: Any, run_fn: Any, *, author_model: str = ""
-        ) -> tuple[ImplementationPlan, GateDecision]:
-            plan_obj = await run_fn(None)
-            decision = GateDecision(
-                gate="plan",
-                approved=True,
-                outcome=GateOutcome.APPROVE,
-                decided_by="human",
-            )
-            return plan_obj, decision
 
         async def cached_stage(
             self,
@@ -143,17 +143,21 @@ async def test_step_executes_planner_and_revisable_stage():
         ],
     )
 
-    plan_res, gate = await plan.step(
+    prep = await prepare(ctx, cfg=cfg, idea=idea, planner_model="m-plan")
+    plan_res = await produce(
+        ctx, prep, cfg=cfg, architecture=arch, requirements=reqs, planner_agent=object()
+    )
+    await finish(
         ctx,
+        prep,
         cfg=cfg,
-        architecture=arch,
-        requirements=reqs,
-        idea=idea,
+        artifact=plan_res,
+        gate=GateDecision(
+            gate="plan", approved=True, outcome=GateOutcome.APPROVE, decided_by="human"
+        ),
     )
 
     assert isinstance(plan_res, ImplementationPlan)
-    assert isinstance(gate, GateDecision)
     assert len(plan_res.tasks) == 1
-    assert gate.approved is True
     assert ctx.recorded is True
     assert ctx.retained is True

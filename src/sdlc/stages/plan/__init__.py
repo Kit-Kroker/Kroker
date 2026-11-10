@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import sys
-import types
 from typing import TYPE_CHECKING, Any
 
 from .models import (
@@ -18,15 +16,10 @@ from .models import (
 if TYPE_CHECKING:
     from .activities import ACTIVITIES
     from .prompts import prompt_digest
-    from .step import step
 
-# NOTE: `step` stays a lazy re-export here, unlike intake/clarify/code.
-# An eager `from .step import step` lands inside the pre-existing
-# benchmarks.models <-> stages circular import (benchmarks.models:22 imports
-# this package for PlanDrift), which only works today because benchmarks
-# completes before any stage slice loads. Laziness alone is shadowable (the
-# first direct `stages.plan.step` import binds the MODULE over the
-# re-exported FUNCTION) — _StageModule below closes that class.
+# 020 T027 (R-6, C5): the `step` composite is deleted with FeatureWorkflow —
+# the graph's planner node composes prepare/produce/finish directly, and with
+# it the lazy re-export and its shadow-proofing module class are gone.
 
 __all__ = [
     "ACTIVITIES",
@@ -36,18 +29,12 @@ __all__ = [
     "PlanDrift",
     "compute_plan_drift",
     "prompt_digest",
-    "step",
 ]
 
 
 def __getattr__(name: str) -> Any:
     if name == "ACTIVITIES":
         mod = importlib.import_module(".activities", __package__)
-        val = getattr(mod, name)
-        globals()[name] = val
-        return val
-    if name == "step":
-        mod = importlib.import_module(".step", __package__)
         val = getattr(mod, name)
         globals()[name] = val
         return val
@@ -61,25 +48,3 @@ def __getattr__(name: str) -> Any:
 
 def __dir__() -> list[str]:
     return sorted(__all__)
-
-
-class _StageModule(types.ModuleType):
-    """Shadow-proof the lazy `step` re-export (see the NOTE above).
-
-    A data descriptor on the module class outranks any instance-dict write,
-    so the import machinery's `setattr(package, "step", <submodule>)` is
-    absorbed and reads always resolve to the function.
-    """
-
-    @property
-    def step(self):
-        from .step import step as _fn
-
-        return _fn
-
-    @step.setter
-    def step(self, _shadowed):  # absorbs the machinery's module binding
-        pass
-
-
-sys.modules[__name__].__class__ = _StageModule
