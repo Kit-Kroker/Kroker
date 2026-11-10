@@ -4,13 +4,18 @@ from __future__ import annotations
 
 
 def _arch_src() -> str:
-    """020 T026: the FeatureWorkflow half is gone with the workflow; the
-    stage source plus the graph's precode node carry the same wiring."""
+    """020 T026: the FeatureWorkflow half is gone with the workflow. The
+    stage source carries the delta wiring; the graph side is scoped to
+    precode's architect_node (qa-chaos F2: a whole-file concat would let
+    the pins match anywhere in precode.py)."""
+    import inspect as _inspect
     import pathlib
 
-    return pathlib.Path("src/sdlc/stages/architecture/step.py").read_text(
-        encoding="utf-8"
-    ) + pathlib.Path("src/sdlc/workflows/graph_nodes/precode.py").read_text(encoding="utf-8")
+    import sdlc.workflows.graph_nodes.precode as _precode
+
+    step = pathlib.Path("src/sdlc/stages/architecture/step.py").read_text(encoding="utf-8")
+    arch_node = _inspect.getsource(_precode.architect_node)
+    return step + "\n" + arch_node
 
 
 def test_the_architect_prompt_carries_the_rendered_map():

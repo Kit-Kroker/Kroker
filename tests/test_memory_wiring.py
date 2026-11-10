@@ -82,7 +82,7 @@ def test_the_graph_retains_stage_summaries():
         / "graph_nodes"
         / "precode.py"
     ).read_text(encoding="utf-8")
-    assert "ctx.retain(" in precode or "_retain(" in precode
+    assert "ctx.retain(" in precode
 
 
 def test_gate_helper_retains_gate_feedback(run_host_class):

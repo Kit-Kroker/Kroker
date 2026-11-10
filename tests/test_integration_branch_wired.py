@@ -142,3 +142,21 @@ def test_merge_task_helper_calls_merge_activity(task_host_tree, task_host_src):
     assert body is not None and "merge_into_integration" in body, (
         "_merge_task must call the merge_into_integration activity"
     )
+
+
+def test_context_keys_on_the_integration_head():
+    """D4 counterpart (020 T026, qa-chaos F3): the map must describe the
+    tree the work is based on — precode's context_node passes the
+    integration head as the commit sha, never idea.base_branch."""
+    import re
+
+    src = PRECODE.read_text(encoding="utf-8")
+    ctx = re.search(r"async def context_node.*?(?=\nasync def )", src, re.S)
+    assert ctx, "context_node not found in precode.py"
+    body = ctx.group(0)
+    assert "commit_sha=nc.host._integration_head" in body, (
+        "context_node must key the map on the integration head (D4)"
+    )
+    assert "base_branch" not in body, "context_node must not describe the base branch's tip (D4)"
+    setup = re.search(r"nc\.host\._integration_head = integration\.head_sha", src)
+    assert setup, "the setup node must mirror the integration head onto the host"
