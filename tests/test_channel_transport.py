@@ -266,3 +266,101 @@ def test_match_key_raises_no_match_and_lists_what_is_pending():
 def test_match_key_raises_no_match_on_an_empty_pending_list():
     with pytest.raises(NoMatch):
         match_key([], "merge#1")
+
+
+# ---------------------------------------------------------------------------
+# 020 T012 (US5, plan T018, contract §5, R-3): a failed query on a closed
+# FeatureWorkflow run is LegacyRunError, found via describe(). Any other
+# failure re-raises the original. The happy path makes no describe() call.
+# LegacyRunError is imported inside each test so a missing class fails only
+# the tests that need it.
+# ---------------------------------------------------------------------------
+
+LEGACY_MESSAGE = "legacy FeatureWorkflow run; it can no longer be queried"
+
+
+class _Described:
+    def __init__(self, workflow_type):
+        self.workflow_type = workflow_type
+
+
+class _FailingQueryHandle:
+    """query() raises `error`; describe() reports `workflow_type` or raises
+    `describe_error`. Counts describe() calls so the happy path can be pinned."""
+
+    def __init__(self, id, *, error, workflow_type=None, describe_error=None):
+        self.id = id
+        self._error = error
+        self._workflow_type = workflow_type
+        self._describe_error = describe_error
+        self.describe_calls = 0
+
+    async def query(self, name, *a, **kw):
+        raise self._error
+
+    async def describe(self):
+        self.describe_calls += 1
+        if self._describe_error is not None:
+            raise self._describe_error
+        return _Described(self._workflow_type)
+
+
+@pytest.mark.asyncio
+async def test_t012_failed_query_on_a_feature_run_raises_legacy_run_error():
+    from sdlc.channels.transport import LegacyRunError, fetch_pending
+
+    h = _FailingQueryHandle(
+        "feature-old-sso",
+        error=RuntimeError("not registered"),
+        workflow_type="FeatureWorkflow",
+    )
+    with pytest.raises(LegacyRunError) as exc:
+        await fetch_pending(h)
+    assert str(exc.value) == LEGACY_MESSAGE
+    assert exc.value.run_id == "feature-old-sso"
+    assert h.describe_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_t012_other_failure_reraises_the_original_exception():
+    from sdlc.channels.transport import fetch_pending
+
+    h = _FailingQueryHandle(
+        "run-graph",
+        error=RuntimeError("not registered"),
+        workflow_type="GraphWorkflow",
+    )
+    with pytest.raises(RuntimeError, match="not registered"):
+        await fetch_pending(h)
+
+
+@pytest.mark.asyncio
+async def test_t012_describe_failure_reraises_the_original_query_error():
+    from sdlc.channels.transport import fetch_pending
+
+    h = _FailingQueryHandle(
+        "run-gone",
+        error=RuntimeError("not registered"),
+        describe_error=RuntimeError("workflow not found"),
+    )
+    with pytest.raises(RuntimeError, match="not registered"):
+        await fetch_pending(h)
+
+
+@pytest.mark.asyncio
+async def test_t012_happy_path_makes_zero_describe_calls():
+    from sdlc.channels.transport import fetch_pending
+
+    class _CountingStub(StubHandle):
+        def __init__(self, id, responses):
+            super().__init__(id, responses)
+            self.describe_calls = 0
+
+        async def describe(self):
+            self.describe_calls += 1
+            return _Described("FeatureWorkflow")
+
+    h = _CountingStub("run-1", [_raw(ARCH, Q1)])
+    pending = await fetch_pending(h)
+    assert [p.key for p in pending] == [ARCH.key, Q1.key]
+    assert h.describe_calls == 0
