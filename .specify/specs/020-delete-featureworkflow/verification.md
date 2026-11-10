@@ -170,3 +170,36 @@ and T016 (gate run 1). T017 resumes only on a gate PASS.**
 
 
 
+
+## Gate-1 (T016), run by the orchestrator 2026-11-10
+
+Target: compose dev server `kroker-temporal-1` on `127.0.0.1:7233`, namespace
+`default`, **freshly created on this host** (no docker volumes or images
+existed before; volume `kroker_temporal-state` created at 15:33:23Z).
+The `temporal` CLI was run inside the server container. `main` = `0e38a6db`
+(PR-1 fast-forwarded, 2026-11-10).
+
+Verbatim output:
+
+```
+$ date -u
+2026-11-10T15:33:42Z
+$ docker inspect -f ... kroker-temporal-1
+891351c9f8a2a043f38586fcdffe26f33818a5f173597f7c984e018e0dd250b4 2026-11-10T15:33:23.878559431Z
+$ git rev-parse HEAD
+0e38a6dbbb349b2387daab9f7859dfe7c5b906e4
+$ G0 count
+Total: 0
+$ G0 schedule list
+  ScheduleId  Action  Paused  NextRunTime  LastRunTime
+$ G1
+$ G2
+```
+
+**Result: FAIL (pass rule 1).** G1 and G2 are empty, but G0 reports
+`Total: 0` workflows and no schedules, and the runbook says a store with
+zero workflows is the wrong store. No override. Substantively nothing is
+running on this store, but this store has never held a run, so the gate
+says nothing about the store the 2026-10-02 triage queried (it was on the
+earlier Windows host, `D:/own/Kroker/runs`). T017 does not start until the
+user rules on which store the restarted worker will point at.
