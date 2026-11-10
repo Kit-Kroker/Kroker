@@ -27,11 +27,11 @@ from tests.replay.harness import (
     HISTORIES,
     capture,
     load_history,
+    replayer,
     source_commit,
 )
 from tests.replay.projection import command_projection
 from tests.replay.research_retain import NAME, SCENARIO, stage_pages
-from tests.replay.test_feature_replay import replayer
 
 
 @pytest.mark.temporal

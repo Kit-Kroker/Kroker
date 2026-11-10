@@ -15,7 +15,7 @@ from typing import Any
 from temporalio.client import Client, WorkflowHandle, WorkflowHistory
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
-from temporalio.worker import UnsandboxedWorkflowRunner, Worker
+from temporalio.worker import Replayer, UnsandboxedWorkflowRunner, Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
 from tests.replay.projection import TraceRecorder, close_projection, command_projection
@@ -53,6 +53,28 @@ def _feature_workflows() -> tuple[type, ...]:
 
 
 FEATURE_STARTER = Starter("FeatureWorkflow", _feature_workflows(), _start_feature)
+
+
+def _default_replay_workflows() -> tuple[type, ...]:
+    # 020 T004: the default tuple moved here from test_feature_replay.py
+    # unchanged. It is explicit so the set stays reviewable; it loses its
+    # FeatureWorkflow member only when T021 deletes that leg.
+    from sdlc.workflows.crew import CrewTaskWorkflow
+    from sdlc.workflows.deployment import DeploymentWorkflow
+    from sdlc.workflows.feature import FeatureWorkflow
+
+    return (FeatureWorkflow, DeploymentWorkflow, CrewTaskWorkflow)
+
+
+def replayer(*workflows: type) -> Replayer:
+    """The shared Replayer construction (020 T004, moved from
+    test_feature_replay.py): the production worker's data converter, sandbox
+    plugin and failure types, with an explicit default workflow tuple."""
+    return Replayer(
+        workflows=list(workflows) or list(_default_replay_workflows()),
+        data_converter=pydantic_data_converter,
+        plugins=[SdlcPydanticAIPlugin()],
+    )
 
 
 @dataclass(frozen=True)

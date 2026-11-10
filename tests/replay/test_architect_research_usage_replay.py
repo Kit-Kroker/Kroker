@@ -28,9 +28,9 @@ from tests.replay.harness import (
     HISTORIES,
     capture,
     load_history,
+    replayer,
     source_commit,
 )
-from tests.replay.test_feature_replay import replayer
 
 
 def _scheduled(history) -> list[tuple[str, Any]]:

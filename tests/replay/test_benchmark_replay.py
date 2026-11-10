@@ -5,8 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sdlc.benchmarks.workflow import BenchmarkWorkflow
-from tests.replay.harness import load_history
-from tests.replay.test_feature_replay import replayer
+from tests.replay.harness import load_history, replayer
 
 pytestmark = pytest.mark.temporal
 
