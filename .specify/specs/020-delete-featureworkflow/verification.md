@@ -203,3 +203,21 @@ running on this store, but this store has never held a run, so the gate
 says nothing about the store the 2026-10-02 triage queried (it was on the
 earlier Windows host, `D:/own/Kroker/runs`). T017 does not start until the
 user rules on which store the restarted worker will point at.
+
+## Orchestrator rulings (2026-11-10)
+
+1. **Gate-1 store ruling (user, option 1):** this host's compose store
+   (`kroker-temporal-1`, volume `kroker_temporal-state`) is the only store
+   the restarted worker will use. The earlier Windows-host store is out of
+   scope. Pass rule 1 (`Total: 0` = wrong store) is therefore treated as an
+   **accepted exception for this store**: the store is correct and empty,
+   so nothing can be stranded. G1 and G2 were empty. **Gate-1 is cleared;
+   T017 may start.** Gate run 2 (T036) is still required, under 1 hour
+   before the worker restart, and the restart still needs the user's
+   explicit go.
+2. **Durability drift (orchestrator, seat-level):** the three
+   §Baseline-addendum failures are a known failing baseline. This round
+   does not re-record frozen baselines. PR-2 must keep exactly these three
+   failing and add no others. A re-pointed test (T020/T026) that inherits
+   the same drift is recorded by test id against this baseline, not fixed
+   by editing a frozen recording.
