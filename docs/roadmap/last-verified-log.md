@@ -8,6 +8,10 @@ out of date order as inherited; left as-is.
 
 Trailing note carried by the old cell: (docs(benchmarks): the axis in the living docs (T010))
 
+## 2026-11-10
+
+2026-11-10 (round 020, FeatureWorkflow deletion: PR-1 and PR-2 executed end-to-end on `020-delete-featureworkflow-2`; every replay fixture re-captured from GraphWorkflow with a provenance-only golden diff; the replay suite, worker registration, inbox types and slice contracts re-pointed; fast tier back to its 8-id known baseline and the temporal tier chunked green with only the four ruled priced-usage drift failures; gate 1 cleared on the empty-store ruling; awaiting gate 2 + worker restart)
+
 ## 2026-11-03
 
 2026-11-03 (R019 follow-up paid re-prove series closed — both arms rerun on one commit `7a43462c`, 3 valid cycles per case: the `glm-5.3` / `glm-5.3-flash` pairing does **not** separate — cat-cafe 0.829 vs 0.704 (margin 0.125, n=6/arm), geotext 0.667 vs 0.593 (0.074), theatre 0.018 vs 0.018 (0.000), readtime `not_assessed` (flash died at clarify 3/3); tally stays **0 of 8** but now on live same-commit evidence; weak-arm fragility systemic (7 lost weak runs); arm re-selection is the recorded follow-up (flash-strong-no-weak or cross-provider pair under ADR-6); two defects fixed mid-series on main: hindsight recall ceilings 30s→120s/100s (`5d888d38`) and the registry adversary moved to `anthropic:claude-sonnet-5` (`7a43462c`) — its model id collided with the new weak arm and silently killed every weak cell at the ADR-6 boundary; verdicts on main `9a302401`, theatre in the private store `64a96ac`, break marker in BENCHMARK.md)
