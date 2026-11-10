@@ -32,7 +32,8 @@ from temporalio.worker import Replayer, UnsandboxedWorkflowRunner, Worker
 from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.workflows.crew import CrewTaskWorkflow
 from sdlc.workflows.deployment import DeploymentWorkflow
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
+from sdlc.workflows.graph_catalog import build_run_input
 from tests.replay.harness import load_history
 from tests.replay.projection import command_projection
 from tests.replay.scenarios import SCENARIOS
@@ -43,7 +44,7 @@ QUEUE = "003-inflight-resume"
 
 def _replayer() -> Replayer:
     return Replayer(
-        workflows=[FeatureWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
+        workflows=[GraphWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
         data_converter=pydantic_data_converter,
         plugins=[SdlcPydanticAIPlugin()],
     )
@@ -106,15 +107,15 @@ async def test_live_continuation_prefix_matches_and_completes(tmp_path: Path, mo
         async with Worker(
             env.client,
             task_queue=QUEUE,
-            workflows=[FeatureWorkflow, DeploymentWorkflow],
+            workflows=[GraphWorkflow, DeploymentWorkflow],
             activities=scenario.activities(),
             plugins=[SdlcPydanticAIPlugin()],
             workflow_runner=UnsandboxedWorkflowRunner(),
         ):
             with env.auto_time_skipping_disabled():
                 handle = await env.client.start_workflow(
-                    FeatureWorkflow.run,
-                    args=[scenario.idea(), scenario.cfg(), scenario.seeded()],
+                    GraphWorkflow.run,
+                    build_run_input(scenario.idea(), scenario.cfg(), scenario.seeded()),
                     id=f"003-inflight-{uuid.uuid4()}",
                     task_queue=QUEUE,
                 )

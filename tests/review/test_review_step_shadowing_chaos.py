@@ -36,13 +36,13 @@ import sdlc.stages.review as review_pkg
 from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.workflows.crew import CrewTaskWorkflow
 from sdlc.workflows.deployment import DeploymentWorkflow
-from sdlc.workflows.feature import FeatureWorkflow
+from sdlc.workflows.graph import GraphWorkflow
 from tests.replay.harness import load_history
 
 
 def _replay_chain() -> Replayer:
     return Replayer(
-        workflows=[FeatureWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
+        workflows=[GraphWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
         data_converter=pydantic_data_converter,
         plugins=[SdlcPydanticAIPlugin()],
     )
@@ -50,8 +50,9 @@ def _replay_chain() -> Replayer:
 
 async def _replay_greenfield_happy() -> None:
     """The SG-5 trigger: import the code.step module, then replay one full
-    recorded FeatureWorkflow history through the production-shaped (sandboxed)
-    Replayer -- the same recipe tests/replay/test_feature_replay.py uses."""
+    recorded GraphWorkflow history (re-baselined 020 T018) through the
+    production-shaped (sandboxed) Replayer -- the same recipe
+    tests/replay/test_graph_replay.py uses."""
     import sdlc.stages.code.step  # noqa: F401  (the step.py:507 chain)
 
     await _replay_chain().replay_workflow(load_history("greenfield_happy"))

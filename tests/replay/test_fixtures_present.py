@@ -1,4 +1,5 @@
-"""Every scenario has a committed history + golden, captured from FeatureWorkflow."""
+"""Every scenario has a committed history + golden, captured from GraphWorkflow
+(re-baselined 020 T018)."""
 
 from __future__ import annotations
 
@@ -33,9 +34,9 @@ EXPECTED_CLOSES = {
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=[s.name for s in SCENARIOS])
-def test_fixture_is_present_and_from_feature_workflow(scenario):
+def test_fixture_is_present_and_from_graph_workflow(scenario):
     golden = load_golden(scenario.name)
-    assert golden["workflow"] == "FeatureWorkflow"
+    assert golden["workflow"] == "GraphWorkflow"
     assert len(golden["source_commit"]) == 40
     assert golden["close"].startswith(EXPECTED_CLOSES[scenario.name]), golden["close"]
     assert load_history(scenario.name).events

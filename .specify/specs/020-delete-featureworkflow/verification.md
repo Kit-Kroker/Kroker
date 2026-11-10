@@ -362,3 +362,63 @@ vacuous. Findings and dispositions:
   misleading "not in HEAD" message) fail closed and stay. F7 (namespace
   package import) matches the existing `scripts.check_file_size`
   convention.
+
+## §T020 (T020, plan T043 — replay suite re-pointed at GraphWorkflow)
+
+qa-happy authored all edits (report: scratchpad `qa-happy-t020-report.md`),
+executor reviewed the diffs personally. Files:
+
+- **NEW `tests/replay/test_graph_replay.py`** (US4 proof): parametrised
+  over `SCENARIOS`; each history replays through
+  `replayer(GraphWorkflow, DeploymentWorkflow, CrewTaskWorkflow)` with
+  `raise_on_replay_failure=True`. No temporal mark (follows
+  `test_feature_replay.py`). 18 passed. Non-vacuousness: in a scratch
+  copy of HEAD the tuple was changed to drop GraphWorkflow → 18 failed
+  with the registration error (qa-happy, scratch deleted after).
+- `tests/replay/test_fixtures_present.py`: expects
+  `workflow == "GraphWorkflow"`; renamed
+  `test_fixture_is_present_and_from_graph_workflow`; 19 passed.
+- `tests/durability/test_inflight_resume.py`: `_replayer()` and the live
+  worker register GraphWorkflow; the live start uses
+  `GraphWorkflow.run` + `build_run_input(...)` mirroring
+  `harness._start_graph`. `test_old_prefix_replays_on_new_code` green.
+- `tests/durability/test_priced_usage_parity.py`: live leg `GRAPH_STARTER`;
+  the frozen side is the RAW T007 fixture (no map); comparison kept
+  exact; dead `_recorded_price_tuple` removed.
+- `tests/replay/test_graph_golden_chaos.py`: the activity-skew filter
+  (`build_trace_inventory`/`read_dead_attempt_usage`) deleted — after the
+  T018 re-capture the pairs come from one capture and equality holds
+  outright. 36 passed.
+- `tests/review/test_review_step_shadowing_chaos.py`: `_replay_chain`
+  registers GraphWorkflow. 3 passed.
+- `tests/replay/test_architect_research_usage_replay.py`: **untouched**
+  — never imported FeatureWorkflow; already graph-native and green.
+
+**Commanded verification** `pytest -m temporal tests/replay
+tests/durability tests/review -q` (exit 1, exactly four failures, all
+the same known 6th-tuple drift — live/re-captured `(zai:glm-5.3,
+314, 28, 0, 0)` vs frozen anchor `(zai:glm-5.3, 195, 24, 0, 0)`):
+
+```text
+FAILED tests/durability/test_priced_usage_parity.py::test_live_priced_usage_matches_the_frozen_recording   [known baseline 1/3]
+FAILED tests/durability/test_priced_usage_parity.py::test_pinned_tuples_match_the_recorded_history          [inherits the same drift — recorded by test id per the 2026-11-10 ruling]
+FAILED tests/durability/test_provider_payload_parity.py::test_provider_request_messages_match_the_frozen_capture  [known baseline 2/3]
+FAILED tests/durability/test_wire_neutrality.py::test_no_override_wire_equals_the_frozen_baseline           [known baseline 3/3]
+```
+
+Everything else in the three trees is green. No new failure outside the
+ruling's sanctioned set: the 3 §Baseline-addendum ids plus one re-pointed
+anchor test inheriting the identical drift, recorded here by id.
+
+Fast tier after T020 (`pytest -q`, 29 failures = 8 §Baseline ids + the
+21 remaining T018→T021 window members: `test_feature_replay.py` ×18 and
+`test_research_retain_replay.py` ×3, both closed by T021). The T020
+re-points closed the other 22 window failures (fixtures_present ×18,
+inflight_resume ×1, review_step_shadowing_chaos ×3). `ruff check .`,
+`ruff format --check .` (1913 files), `mypy` (412 files) and
+`scripts/check_file_size.py` all clean.
+
+qa-happy also noted the anchor question (refresh 195→314 vs investigate):
+settled by the orchestrator ruling — no re-record; the drift is era drift
+(the live FeatureWorkflow leg at 4f6fc2c3 already produced 314/28, per
+§Baseline addendum), not a graph delta.

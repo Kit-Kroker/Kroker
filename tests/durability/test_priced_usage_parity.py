@@ -1,10 +1,16 @@
 """Priced-usage parity: live migrated run vs the frozen recording (T046).
 
+020 T020: the LIVE leg is now GraphWorkflow (GRAPH_STARTER). The frozen anchor
+is the RAW T007 fixture tests/durability/fixtures/priced_usage_pre_e74.json,
+taken from the pre-E-74 FeatureWorkflow recording and compared exactly, with no
+_RECORDED_MODEL_MAP on that side. The record_benchmark half still reads the
+current recorded history.
+
 FR-014 / SC-006a: the migration must not change any per-run spend figure.
 Record checked: tests/replay/histories/greenfield_happy.json — the
 greenfield_happy Feature scenario, captured live on pre-migration main and
 replay-protected since (SG-2 family). This test runs the SAME scenario LIVE
-under the migrated code (harness.capture: FeatureWorkflow +
+under the migrated code (harness.capture: GraphWorkflow +
 DeploymentWorkflow on a real worker with the scenario's activities and
 SdlcPydanticAIPlugin) and asserts the price_usage activity inputs decode to
 identical (model, tokens) tuples in order — plus the same comparison for
@@ -22,12 +28,15 @@ deliberately — never silently — or this test will (correctly) go red.
 
 from __future__ import annotations
 
+import json
+import pathlib
+
 import pytest
 from temporalio.contrib.pydantic import pydantic_data_converter
 
 from sdlc.benchmarks.models import BenchmarkRecord
 from sdlc.pricing import PriceUsageInput
-from tests.replay.harness import FEATURE_STARTER, capture, load_history
+from tests.replay.harness import GRAPH_STARTER, capture, load_history
 from tests.replay.scenarios import SCENARIOS
 
 pytestmark = [pytest.mark.temporal]
@@ -47,6 +56,11 @@ _RECORDED_MODEL_MAP = {
 
 def _map_recorded_model(model: str) -> str:
     return _RECORDED_MODEL_MAP.get(model, model)
+
+
+# 020 T007/T020: the frozen anchor for the post-deletion gate. The raw FeatureWorkflow
+# price_usage tuples, unmapped; the live GraphWorkflow leg is compared against it exactly.
+FROZEN_FIXTURE = pathlib.Path("tests/durability/fixtures/priced_usage_pre_e74.json")
 
 
 def _scheduled_inputs(events, activity_name: str, model_type: type) -> list:
@@ -75,13 +89,6 @@ def _price_tuple(inp: PriceUsageInput) -> tuple:
     )
 
 
-def _recorded_price_tuple(inp: PriceUsageInput) -> tuple:
-    """A recorded price tuple with its model label mapped to the flipped
-    live equivalent (token fields compared exactly)."""
-    t = _price_tuple(inp)
-    return (_map_recorded_model(t[0]),) + t[1:]
-
-
 def _spend(rec: BenchmarkRecord) -> tuple:
     """Record identity + spend fields only. Volatile fields (run ids,
     timestamps, durations, confidence floats) are deliberately excluded."""
@@ -99,14 +106,11 @@ def _recorded_spend(rec: BenchmarkRecord) -> tuple:
 @pytest.mark.asyncio
 async def test_live_priced_usage_matches_the_frozen_recording(monkeypatch, tmp_path):
     recorded = load_history("greenfield_happy")
-    recorded_prices = [
-        _recorded_price_tuple(p)
-        for p in _scheduled_inputs(recorded.events, "price_usage", PriceUsageInput)
-    ]
-    assert recorded_prices, "frozen history carries no price_usage activities"
+    recorded_prices = [tuple(t) for t in json.loads(FROZEN_FIXTURE.read_text())["tuples"]]
+    assert recorded_prices, "frozen fixture carries no price_usage tuples"
 
     scenario = next(s for s in SCENARIOS if s.name == "greenfield_happy")
-    live = await capture(scenario, FEATURE_STARTER, monkeypatch, tmp_path)
+    live = await capture(scenario, GRAPH_STARTER, monkeypatch, tmp_path)
 
     live_prices = [
         _price_tuple(p)
@@ -137,10 +141,7 @@ def test_pinned_tuples_match_the_recorded_history():
     the live GraphWorkflow leg against this fixture. The raw comparison is
     exact: the map stays a comparison-time concern in the live test above.
     """
-    import json
-    import pathlib
-
-    fixture = pathlib.Path("tests/durability/fixtures/priced_usage_pre_e74.json")
+    fixture = FROZEN_FIXTURE
     pinned = json.loads(fixture.read_text(encoding="utf-8"))
     assert pinned["source_history"] == "tests/replay/histories/greenfield_happy.json"
     assert pinned["activity"] == "price_usage"
