@@ -102,6 +102,9 @@ def _row(run_id: str, src: RunSource, view: Any) -> FleetRunSummaryWire:
 
 
 async def fleet_summary(poller: Any, run_graphs: RunGraphs) -> FleetSummaryWire:
+    # legacy FeatureWorkflow rows are intentionally absent (020 contract §3):
+    # they carry no graph facts, and `unreadable` means "tried and failed" --
+    # they live in the fleet snapshot's closed_legacy instead.
     snapshot = await poller.snapshot()
     ids = [r.run_id for r in snapshot.runs] + [c.run_id for c in snapshot.closed]
     runs: list[FleetRunSummaryWire] = []

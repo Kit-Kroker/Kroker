@@ -144,6 +144,11 @@ def create_router(
         for c in snap.closed:
             if c.run_id == run_id:
                 return c
+        # 020 contract §2: a legacy id resolves to its visibility-only row
+        # (a 200 with run_id/status/start_time/close_time), not a 404.
+        for legacy in snap.closed_legacy:
+            if legacy.run_id == run_id:
+                return legacy
         raise HTTPException(404, f"no run {run_id!r}")
 
     @router.get("/inbox", response_model=FleetSnapshot)

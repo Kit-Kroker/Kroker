@@ -381,3 +381,80 @@ def test_start_rejects_a_bad_budget_before_anything_starts(budget_client, raw, i
     assert budget_client.started == []
     if id_ == "zero":
         assert "omit it to run without a budget" in detail["msg"]
+
+
+# ---------------------------------------------------------------------------
+# 020 T010 (US3, contract §2): GET /runs/{run_id} searches closed_legacy after
+# runs and closed. A legacy hit is HTTP 200 with the LegacyRun JSON body.
+# The router is mounted under /api by the composer, so paths here are /runs/....
+# ---------------------------------------------------------------------------
+
+
+def test_get_run_returns_a_legacy_closed_run_with_200():
+    from sdlc.dashboard.fleet import LegacyRun
+
+    legacy_snap = FleetSnapshot(
+        at=AT,
+        closed_legacy=[
+            LegacyRun(run_id="legacy-1", status="completed", start_time=AT, close_time=AT)
+        ],
+    )
+    app = FastAPI()
+    app.include_router(create_router(_FakePoller(legacy_snap)))
+    r = TestClient(app).get("/runs/legacy-1")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["run_id"] == "legacy-1"
+    assert body["status"] == "completed"
+    assert body["start_time"] is not None
+    assert body["close_time"] is not None
+
+
+def test_get_run_prefers_the_closed_summary_over_a_legacy_row_with_the_same_id():
+    """Contract §2 search order: runs, then closed, then closed_legacy. An id
+    present in both closed and closed_legacy must answer with the RunSummary
+    (its title is the marker), never the LegacyRun shape."""
+    from sdlc.core.models import RunSummary
+    from sdlc.dashboard.fleet import LegacyRun
+
+    summary = RunSummary(
+        run_id="both-1",
+        mode="greenfield",
+        outcome="deployed:ok",
+        terminal_stage="retro",
+        started_at=AT,
+        ended_at=AT,
+        duration_s=1.0,
+        title="Closed summary wins",
+    )
+    both = FleetSnapshot(
+        at=AT,
+        closed=[summary],
+        closed_legacy=[
+            LegacyRun(run_id="both-1", status="completed", start_time=AT, close_time=AT)
+        ],
+    )
+    app = FastAPI()
+    app.include_router(create_router(_FakePoller(both)))
+    r = TestClient(app).get("/runs/both-1")
+    assert r.status_code == 200
+    body = r.json()
+    # RunSummary carries title and outcome; a LegacyRun carries neither.
+    assert body["title"] == "Closed summary wins"
+    assert body["outcome"] == "deployed:ok"
+
+
+def test_get_run_404s_for_an_id_only_a_different_legacy_row_carries():
+    """A legacy row for run-7 must not answer for run-8: the legacy search
+    matches on run_id exactly, and a miss is still a 404 with legacy rows in
+    the snapshot."""
+    from sdlc.dashboard.fleet import LegacyRun
+
+    legacy_snap = FleetSnapshot(
+        at=AT,
+        closed_legacy=[LegacyRun(run_id="run-7", status="failed", start_time=AT, close_time=AT)],
+    )
+    app = FastAPI()
+    app.include_router(create_router(_FakePoller(legacy_snap)))
+    r = TestClient(app).get("/runs/run-8")
+    assert r.status_code == 404
