@@ -8,7 +8,9 @@ output is kept as `.workspace/tmp/009-red.txt`.
 The capture test (bottom) runs ONCE, before any edit under `src/`, behind
 its own switch `SDLC_CAPTURE_RESEARCH_RETAIN`. It never listens to
 `SDLC_CAPTURE_HISTORIES` (which would re-record every existing fixture) and
-never runs again after the source change.
+never runs again after the source change. 020 T018 ran it once more, from
+GraphWorkflow and again from unmodified `src/`, to move the fixture's
+provenance off FeatureWorkflow.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from sdlc.memory.activities import RetainInput
 from sdlc.stages.research import verify
 from tests.replay.harness import (
-    FEATURE_STARTER,
+    GRAPH_STARTER,
     HISTORIES,
     capture,
     load_history,
@@ -41,15 +43,15 @@ from tests.replay.research_retain import NAME, SCENARIO, stage_pages
 )
 @pytest.mark.asyncio
 async def test_capture_research_retain_history(monkeypatch, tmp_path):
-    first = await capture(SCENARIO, FEATURE_STARTER, monkeypatch, tmp_path / "a", sandboxed=True)
-    second = await capture(SCENARIO, FEATURE_STARTER, monkeypatch, tmp_path / "b", sandboxed=True)
+    first = await capture(SCENARIO, GRAPH_STARTER, monkeypatch, tmp_path / "a", sandboxed=True)
+    second = await capture(SCENARIO, GRAPH_STARTER, monkeypatch, tmp_path / "b", sandboxed=True)
     assert first.golden["commands"] == second.golden["commands"], "SG-3: unstable commands"
     HISTORIES.mkdir(exist_ok=True)
     (HISTORIES / f"{NAME}.json").write_text(
         json.dumps(
             {
                 "workflow_id": first.workflow_id,
-                "workflow": FEATURE_STARTER.name,
+                "workflow": GRAPH_STARTER.name,
                 "source_commit": source_commit(),
                 "history": json.loads(first.history.to_json()),
             },
@@ -81,8 +83,9 @@ async def test_retain_decisions_do_not_depend_on_page_files(how, monkeypatch, tm
 def test_fixture_holds_the_grounded_retain_path():
     """PIN (SG-3): the fixture is one research run with the grounded retain
     path — one verify, one sub-question, three retains (a gate feedback then
-    one finding each) — captured from `FeatureWorkflow` at a commit whose
-    `src/` equals main `d51eef5`. Never re-record the fixture to change it."""
+    one finding each) — captured from `GraphWorkflow` (020 T018 re-capture;
+    first captured from `FeatureWorkflow` at a commit whose `src/` equals
+    main `d51eef5`). Never re-record the fixture to change it."""
     history = load_history(NAME)
     commands = command_projection(history)
     assert commands.count("activity:verify_brief_activity") == 1
@@ -103,4 +106,4 @@ def test_fixture_holds_the_grounded_retain_path():
 
     fixture = json.loads((HISTORIES / f"{NAME}.json").read_text(encoding="utf-8"))
     assert len(fixture["source_commit"]) == 40
-    assert fixture["workflow"] == "FeatureWorkflow"
+    assert fixture["workflow"] == "GraphWorkflow"

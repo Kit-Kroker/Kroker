@@ -26,7 +26,7 @@
   "activity:price_usage",
   "activity:check_brownfield_delta"
  ],
- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
+ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
  "trace": [
   [
    "stage",
@@ -49,5 +49,5 @@
    "architecture"
   ]
  ],
- "workflow": "FeatureWorkflow"
+ "workflow": "GraphWorkflow"
 }

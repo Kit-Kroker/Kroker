@@ -1,0 +1,359 @@
+diff --git a/tests/replay/golden/arch_revise_final.json b/tests/replay/golden/arch_revise_final.json
+index 36ce0f41..f8e22cbe 100644
+--- a/tests/replay/golden/arch_revise_final.json
++++ b/tests/replay/golden/arch_revise_final.json
+@@ -57,7 +57,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -123,5 +123,5 @@
+    "deploy"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/arch_timeout_reject.json b/tests/replay/golden/arch_timeout_reject.json
+index 5c83321d..63837332 100644
+--- a/tests/replay/golden/arch_timeout_reject.json
++++ b/tests/replay/golden/arch_timeout_reject.json
+@@ -21,7 +21,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -47,5 +47,5 @@
+    "false"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/architect_research_tool.json b/tests/replay/golden/architect_research_tool.json
+index cf642cdd..1e045900 100644
+--- a/tests/replay/golden/architect_research_tool.json
++++ b/tests/replay/golden/architect_research_tool.json
+@@ -51,7 +51,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -103,5 +103,5 @@
+    "deploy"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/brownfield_happy.json b/tests/replay/golden/brownfield_happy.json
+index 9b549927..0259ad45 100644
+--- a/tests/replay/golden/brownfield_happy.json
++++ b/tests/replay/golden/brownfield_happy.json
+@@ -62,7 +62,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -118,5 +118,5 @@
+    "deploy"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/budget_arch_reject.json b/tests/replay/golden/budget_arch_reject.json
+index c09ef8dd..c831eba5 100644
+--- a/tests/replay/golden/budget_arch_reject.json
++++ b/tests/replay/golden/budget_arch_reject.json
+@@ -18,7 +18,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -51,5 +51,5 @@
+    "true"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/budget_clarify_reject.json b/tests/replay/golden/budget_clarify_reject.json
+index 91112858..a8ffef72 100644
+--- a/tests/replay/golden/budget_clarify_reject.json
++++ b/tests/replay/golden/budget_clarify_reject.json
+@@ -13,7 +13,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -35,5 +35,5 @@
+    "false"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/cancel_during_code.json b/tests/replay/golden/cancel_during_code.json
+index 070fc186..9835e1e9 100644
+--- a/tests/replay/golden/cancel_during_code.json
++++ b/tests/replay/golden/cancel_during_code.json
+@@ -24,7 +24,7 @@
+   "cancel_requested",
+   "activity:set_task_authoritative"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -57,5 +57,5 @@
+    "true"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/clarify_fanout.json b/tests/replay/golden/clarify_fanout.json
+index 46da6a99..d2929b40 100644
+--- a/tests/replay/golden/clarify_fanout.json
++++ b/tests/replay/golden/clarify_fanout.json
+@@ -53,7 +53,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -105,5 +105,5 @@
+    "deploy"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/context_reject.json b/tests/replay/golden/context_reject.json
+index b1048d1a..e78fd998 100644
+--- a/tests/replay/golden/context_reject.json
++++ b/tests/replay/golden/context_reject.json
+@@ -8,7 +8,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -19,5 +19,5 @@
+    "context"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/delta_failed.json b/tests/replay/golden/delta_failed.json
+index 5e81082f..e9eecd94 100644
+--- a/tests/replay/golden/delta_failed.json
++++ b/tests/replay/golden/delta_failed.json
+@@ -26,7 +26,7 @@
+   "activity:price_usage",
+   "activity:check_brownfield_delta"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -49,5 +49,5 @@
+    "architecture"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/greenfield_happy.json b/tests/replay/golden/greenfield_happy.json
+index d83ebe49..1be26015 100644
+--- a/tests/replay/golden/greenfield_happy.json
++++ b/tests/replay/golden/greenfield_happy.json
+@@ -49,7 +49,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -101,5 +101,5 @@
+    "deploy"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/intake_reject.json b/tests/replay/golden/intake_reject.json
+index b16d7fce..3a49708d 100644
+--- a/tests/replay/golden/intake_reject.json
++++ b/tests/replay/golden/intake_reject.json
+@@ -6,12 +6,12 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+    "intake"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/max_gate_rounds_1.json b/tests/replay/golden/max_gate_rounds_1.json
+index 64b86a33..fdc59a96 100644
+--- a/tests/replay/golden/max_gate_rounds_1.json
++++ b/tests/replay/golden/max_gate_rounds_1.json
+@@ -53,7 +53,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -112,5 +112,5 @@
+    "deploy"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/partial_awaiting_architecture.json b/tests/replay/golden/partial_awaiting_architecture.json
+index e02c0ea9..36264722 100644
+--- a/tests/replay/golden/partial_awaiting_architecture.json
++++ b/tests/replay/golden/partial_awaiting_architecture.json
+@@ -12,7 +12,7 @@
+   "activity:notify",
+   "timer"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -31,5 +31,5 @@
+    "architecture"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/plan_revise_approve.json b/tests/replay/golden/plan_revise_approve.json
+index da27d9ce..977e7652 100644
+--- a/tests/replay/golden/plan_revise_approve.json
++++ b/tests/replay/golden/plan_revise_approve.json
+@@ -53,7 +53,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -112,5 +112,5 @@
+    "deploy"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/research_greenfield.json b/tests/replay/golden/research_greenfield.json
+index 36b91877..50fbd5d0 100644
+--- a/tests/replay/golden/research_greenfield.json
++++ b/tests/replay/golden/research_greenfield.json
+@@ -48,7 +48,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -111,5 +111,5 @@
+    "deploy"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/seeded.json b/tests/replay/golden/seeded.json
+index 25e703aa..2118e02c 100644
+--- a/tests/replay/golden/seeded.json
++++ b/tests/replay/golden/seeded.json
+@@ -30,7 +30,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -60,5 +60,5 @@
+    "deploy"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }
+diff --git a/tests/replay/golden/waves.json b/tests/replay/golden/waves.json
+index d924bf14..20ca6fc3 100644
+--- a/tests/replay/golden/waves.json
++++ b/tests/replay/golden/waves.json
+@@ -62,7 +62,7 @@
+   "activity:apply_session_retention",
+   "activity:cleanup_run_worktrees"
+  ],
+- "source_commit": "98dc7a3ed531f94f4a6592df05af8b9b36c394da",
++ "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+  "trace": [
+   [
+    "stage",
+@@ -114,5 +114,5 @@
+    "deploy"
+   ]
+  ],
+- "workflow": "FeatureWorkflow"
++ "workflow": "GraphWorkflow"
+ }

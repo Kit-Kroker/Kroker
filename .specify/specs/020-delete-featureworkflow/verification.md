@@ -221,3 +221,144 @@ user rules on which store the restarted worker will point at.
    failing and add no others. A re-pointed test (T020/T026) that inherits
    the same drift is recorded by test id against this baseline, not fixed
    by editing a frozen recording.
+
+## §T018 (T018, plan T041 — re-capture from GraphWorkflow)
+
+Worktree `../Kroker-020-2`, branch `020-delete-featureworkflow-2`, HEAD
+`481bf756` (T017). `git diff --stat main -- src/` empty before the
+re-capture, as the task requires. No commit of its own: T019 commits the
+re-captured fixtures together with the gate script and the diff.
+
+Commands and results (full outputs under the session scratchpad):
+
+```text
+$ SDLC_CAPTURE_HISTORIES=1 uv run pytest -m temporal tests/replay/test_capture_graph.py -q
+..................                                                       [100%]
+exit=0                                            (/tmp/opencode/t018-recapture-full.txt)
+
+$ SDLC_CAPTURE_RESEARCH_RETAIN=1 uv run pytest -m temporal tests/replay/test_research_retain_replay.py -k capture -q
+.                                                                       [100%]
+exit=0                                            (/tmp/opencode/t018-research-retain.txt)
+
+$ git status --short tests/replay/histories tests/replay/golden
+```
+
+Exactly 19 histories and 18 goldens modified, nothing else.
+`golden/assessment_discover_risk.json` (AssessmentWorkflow) and the three
+non-Feature histories (`architect_research_usage` GraphWorkflow,
+`assessment_discover_risk` AssessmentWorkflow, `benchmark_one_cell`
+BenchmarkWorkflow) untouched. `research_retain_grounded.json` now carries
+`workflow: GraphWorkflow`, `source_commit: 481bf756...` (= HEAD); its pin
+test `test_fixture_holds_the_grounded_retain_path` is green (RED was
+confirmed first: it failed on the `workflow == "GraphWorkflow"` assertion
+while the fixture still said FeatureWorkflow).
+
+Test edit in `tests/replay/test_research_retain_replay.py`: capture test
+switched to `GRAPH_STARTER` (both captures and the `"workflow"` field),
+the fixture pin re-pointed to `"GraphWorkflow"`, and the two docstrings
+that named FeatureWorkflow as the capture source updated to record the
+020 T018 re-capture. Executor-made (mechanical re-capture edit, PR-1
+T004/T005 convention), RED verified personally.
+
+**Known red window T018 → T021 (fast tier, by construction of the plan).**
+The re-captured fixtures are GraphWorkflow histories, but `replayer()`'s
+default tuple keeps FeatureWorkflow until T021 swaps it. Until then these
+legs fail with `Workflow class GraphWorkflow is not registered on this
+worker` — a registration gap, never a command-sequence change (SG-2/SG-3
+intact; §T019's gate is the behavioural proof):
+
+```text
+FAILED tests/replay/test_feature_replay.py::test_feature_workflow_replays_captured_history[<the 18 scenario ids>]
+FAILED tests/replay/test_research_retain_replay.py::test_retain_decisions_do_not_depend_on_page_files[present|absent|overwritten]
+```
+
+`test_feature_replay.py` is deleted by T021 and the default tuple gains
+GraphWorkflow there, closing the window before the next full `pytest -q`
+comparison (T026). The tasks' commanded runs between T018 and T021 are all
+`-m temporal` selections, which do not collect these unmarked tests.
+
+Note on a first capture attempt: one full capture run exited 1 with all 36
+fixture files written and no failed ids in pytest's `lastfailed` cache; a
+`tail -5` pipe had clipped the summary. A clean re-run (above) exited 0
+with 18/18 passed, and the run-1 stash was dropped only after run 2
+succeeded.
+
+### §T018 qa-chaos findings, dispositioned
+
+qa-chaos's adversarial pass (report: scratchpad `qa-chaos-t018-report.md`)
+confirmed all six claims (19/19 histories re-provenanced, 18/18 goldens
+differ only in `workflow`/`source_commit` with zero nested diffs, untouched
+files equal HEAD, no durability change, `src/` clean) and raised two
+findings:
+
+1. **`read_dead_attempt_usage` appears once in the re-captured
+   `research_retain_grounded.json` history; the d51eef5-era fixture did
+   not schedule it.** Control experiment: a scratch tree from
+   `git archive HEAD` (FeatureWorkflow capture path, unmodified by this
+   round) captured the same scenario from **FeatureWorkflow at HEAD** — it
+   schedules `read_dead_attempt_usage` too. The delta is drift since the
+   009-era fixture (the activity post-dates d51eef5 and was never
+   re-recorded), not a Feature-vs-Graph behavioural difference; the
+   Graph-vs-Feature activity-set difference at HEAD is empty. SG-3's
+   substance (retain decisions independent of page files) is unaffected;
+   the 1/1/3 retain-shape pin is green.
+2. **The new histories carry this capture host's identity
+   (`118474@maksim` / `119829@maksim`).** Precedent: every committed
+   history carries its capture host's `uid@hostname` on the
+   workflow-start event (`76557@578983243cbc`, `8@81b9e475e609`,
+   `5208@7eab75073822` — earlier captures ran in containers); the owner's
+   name is already in the git log. Fixtures are written only by the
+   capture tests (020 T032 codifies this), so no hand-scrub. Left as-is.
+
+## §T019 (T019, plan T042, FR-011, SC-003 — golden diff gate)
+
+qa-happy wrote `tests/test_check_golden_rebaseline.py` first (9 cases on
+the pure core, `tests/test_check_file_size.py` convention: no git, no
+tree writes). RED verified personally: collection error
+`ModuleNotFoundError: No module named 'scripts.check_golden_rebaseline'`.
+The executor then implemented `scripts/check_golden_rebaseline.py`
+(no arguments; per golden, `git show HEAD:<path>` vs working tree;
+`ALLOWED_KEYS = {workflow, source_commit}`; exits 1 naming file and key;
+also names goldens deleted from the tree or absent from HEAD).
+
+```text
+$ uv run pytest tests/test_check_golden_rebaseline.py -q
+.........                                                               [100%]
+$ uv run ruff check scripts/check_golden_rebaseline.py tests/test_check_golden_rebaseline.py
+All checks passed!
+$ uv run python scripts/check_golden_rebaseline.py
+golden re-baseline gate: 19 goldens differ only in ['source_commit', 'workflow']
+exit 0
+```
+
+Non-vacuousness (executor-run mutation check): with one golden's `trace`
+mutated, the gate exits 1 with
+`tests/replay/golden/greenfield_happy.json: trace`; after byte-identical
+restore (cmp-verified) it exits 0 again.
+
+`git diff tests/replay/golden/` written to
+`F/golden-rebaseline.diff`: 18 files, 359 lines, and zero +/- content
+lines outside the `workflow`/`source_commit` pairs (grep-verified).
+
+**Exit 0 — not a STOP.** Committed with the re-captured fixtures per the
+task's instruction (one commit: fixtures + script + test + diff).
+
+qa-chaos adversarial pass (report: scratchpad `qa-chaos-t019-report.md`):
+the diff artefact regenerates byte-identical, the script's only
+comparison is the tested core, usage guard exits 2, none of the 9 cases
+vacuous. Findings and dispositions:
+- **F1 type-blind equality (fixed):** Python `1 == True`, `1 == 1.0`,
+  `0 == False`, so a JSON type change passed the gate. qa-happy pinned
+  it RED-first (`test_a_json_type_change_is_reported`,
+  `test_nan_values_are_not_a_diff_when_identical` — both failed against
+  the old core), then the executor switched `golden_diffs` to canonical
+  JSON comparison (`json.dumps(..., sort_keys=True)`), which also makes
+  key order a non-diff and identical NaNs equal (F2). 13/13 green after.
+- **F3 empty corpus (fixed):** `check()` now exits 1 when there are no
+  goldens to gate.
+- F4 (post-commit the gate passes vacuously against the new HEAD) is by
+  design; `F/golden-rebaseline.diff` is the durable record. F5/F6
+  (non-JSON HEAD content or a git failure gives a traceback or a
+  misleading "not in HEAD" message) fail closed and stay. F7 (namespace
+  package import) matches the existing `scripts.check_file_size`
+  convention.
