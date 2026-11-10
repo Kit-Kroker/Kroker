@@ -40,6 +40,7 @@ import asyncio
 import contextlib
 import functools
 import os
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field, TypeAdapter
@@ -58,6 +59,7 @@ CLOSED_LIMIT = 20
 # Newest-first, so the just-finished run is always inside the cap. ORDER BY
 # requires advanced visibility; standard visibility (the dev server this
 # project deploys) rejects the clause, so _closed_run_ids falls back once.
+# never removed: pre-cutover runs stay visible (020 contract §1.4)
 _PIPELINE_TYPES = "(WorkflowType='FeatureWorkflow' OR WorkflowType='GraphWorkflow')"
 _CLOSED_QUERY = f"{_PIPELINE_TYPES} AND ExecutionStatus!='Running' ORDER BY CloseTime DESC"
 _CLOSED_QUERY_UNORDERED = f"{_PIPELINE_TYPES} AND ExecutionStatus!='Running'"
@@ -86,6 +88,10 @@ class FleetSnapshot(BaseModel):
     # run from run_state and adjusted for the close (open rows carry theirs
     # on RunState.stage_marks). Absent key: linear strip fallback.
     closed_marks: dict[str, dict[str, DotState]] = Field(default_factory=dict)
+    # 020 contract §1 (Q1 = A): closed pre-cutover FeatureWorkflow runs,
+    # built from visibility metadata only and never queried. Additive wire
+    # field (FR-015): absent in old payloads, empty when no legacy rows.
+    closed_legacy: list[LegacyRun] = Field(default_factory=list)
 
 
 async def _fetch_open(client, run_id: str):
@@ -113,16 +119,55 @@ async def _fetch_closed(client, run_id: str):
         return e
 
 
-async def _scan_closed(client, query: str, limit: int) -> list[tuple[str, str | None]]:
-    runs: list[tuple[str, str | None]] = []
+class LegacyRun(BaseModel):
+    """A closed pre-cutover FeatureWorkflow run, built from visibility
+    metadata only (020 contract §1, Q1 = A). Never queried: no handle is
+    created for it and no run_summary/run_state is sent."""
+
+    run_id: str
+    status: str = "unknown"  # visibility close status, lower-case
+    start_time: datetime | None = None
+    close_time: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ClosedRef:
+    """One closed-run visibility row (internal, never serialised). The
+    partition input: type decides legacy vs queried (data-model §2)."""
+
+    id: str
+    type: str | None
+    status: str
+    start_time: datetime | None
+    close_time: datetime | None
+
+
+def _closed_ref(wf) -> ClosedRef:
+    """Read a visibility row defensively: fakes and old servers may lack
+    fields (data-model §1: None on fakes)."""
+    raw_status = getattr(wf, "status", None)
+    status_name = getattr(raw_status, "name", None)
+    if status_name is None and raw_status is not None:
+        status_name = str(raw_status)
+    return ClosedRef(
+        id=wf.id,
+        type=getattr(wf, "workflow_type", None),
+        status=status_name.lower() if status_name else "unknown",
+        start_time=getattr(wf, "start_time", None),
+        close_time=getattr(wf, "close_time", None),
+    )
+
+
+async def _scan_closed(client, query: str, limit: int) -> list[ClosedRef]:
+    runs: list[ClosedRef] = []
     async for wf in client.list_workflows(query):
-        runs.append((wf.id, getattr(wf, "workflow_type", None)))
+        runs.append(_closed_ref(wf))
         if len(runs) >= limit:
             break
     return runs
 
 
-async def _closed_runs(client, limit: int) -> list[tuple[str, str | None]]:
+async def _closed_runs(client, limit: int) -> list[ClosedRef]:
     global _ORDER_BY_SUPPORTED
     if _ORDER_BY_SUPPORTED:
         try:
@@ -162,10 +207,20 @@ async def fetch_fleet(
     """Discover open and recently-closed runs and fan out over both."""
     open_ids = await list_open_run_ids(client)
     closed = await _closed_runs(client, closed_limit)
-    closed_ids = [run_id for run_id, _ in closed]
     open_id_set = set(open_ids)
+    # 020 contract §1: partition on type == "FeatureWorkflow" exactly.
+    # Legacy rows are taken out before the gather, so no handle is created
+    # and no query is sent for them; a legacy id that is also in the open
+    # set is dropped (the same dedupe rule `closed` uses). Rows with type
+    # None (fakes, old servers) stay on today's queried path.
+    legacy = [
+        r for r in closed if r.type == "FeatureWorkflow" and r.id not in open_id_set
+    ]
+    closed_ids = [r.id for r in closed if r.type != "FeatureWorkflow"]
     cache = marks_cache if marks_cache is not None else {}
-    graph_closed = [r for r, t in closed if t == "GraphWorkflow" and r not in open_id_set]
+    graph_closed = [
+        r.id for r in closed if r.type == "GraphWorkflow" and r.id not in open_id_set
+    ]
     for stale in [k for k in cache if k not in graph_closed]:
         del cache[stale]  # bounded by closed_limit
     need_marks = [r for r in graph_closed if r not in cache]
@@ -177,6 +232,12 @@ async def fetch_fleet(
     )
 
     snap = FleetSnapshot(at=now, total_open_runs=len(open_ids))
+    snap.closed_legacy = [
+        LegacyRun(
+            run_id=r.id, status=r.status, start_time=r.start_time, close_time=r.close_time
+        )
+        for r in legacy
+    ]
     for run_id, outcome in zip(open_ids, open_results, strict=False):
         if isinstance(outcome, Exception):
             err = InboxError(run_id=run_id, error=str(outcome))
