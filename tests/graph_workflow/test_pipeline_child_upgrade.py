@@ -1,9 +1,15 @@
-"""E-74 §8.2: a parent in flight at cutover replays its started children as
-FeatureWorkflow and starts every later child as GraphWorkflow (per-child ids)."""
+"""020 T022 (US5, R-1, plan T046): a new parent starts GraphWorkflow children,
+and its history replays.
+
+The E-74 §8.2 upgrade test is retired. It pinned an in-flight parent whose
+started children replayed as FeatureWorkflow. FeatureWorkflow is deleted this
+round, so no child starts on that branch. What remains is the replay safety of
+the GraphWorkflow child path: a fresh parent's history replays, and the
+on_graph callback fires once, before the child starts.
+"""
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from typing import Any
 
@@ -16,16 +22,10 @@ from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
 from sdlc.workflows.pipeline_child import execute_pipeline_child
 from tests.fakes.canned import e2e_config, greenfield_idea
+from tests.replay.harness import replayer
 
 pytestmark = pytest.mark.temporal
 TQ = "e74-parent"
-
-
-@workflow.defn(name="FeatureWorkflow", sandboxed=False)
-class StubFeature:
-    @workflow.run
-    async def run(self, idea: Any = None, cfg: Any = None, seeded: Any = None) -> str:
-        return "feature-child"
 
 
 @workflow.defn(name="GraphWorkflow", sandboxed=False)
@@ -36,68 +36,21 @@ class StubGraph:
 
 
 @workflow.defn(name="ParentProbe", sandboxed=False)
-class ParentBeforeCutover:
-    def __init__(self) -> None:
-        self.go = False
-
-    @workflow.signal
-    def proceed(self) -> None:
-        self.go = True
-
+class ParentProbe:
     @workflow.run
     async def run(self) -> list[str]:
         wid = workflow.info().workflow_id
-        out = [
-            await workflow.execute_child_workflow(
-                "FeatureWorkflow",
-                args=[greenfield_idea(), e2e_config(), None],
-                id=f"{wid}-c1",
-                task_queue=TQ,
+        out: list[str] = []
+        for n in (1, 2):
+            out.append(
+                await execute_pipeline_child(
+                    child_id=f"{wid}-c{n}",
+                    idea=greenfield_idea(),
+                    cfg=e2e_config(),
+                    seeded=None,
+                    task_queue=TQ,
+                )
             )
-        ]
-        await workflow.wait_condition(lambda: self.go)
-        out.append(
-            await workflow.execute_child_workflow(
-                "FeatureWorkflow",
-                args=[greenfield_idea(), e2e_config(), None],
-                id=f"{wid}-c2",
-                task_queue=TQ,
-            )
-        )
-        return out
-
-
-@workflow.defn(name="ParentProbe", sandboxed=False)
-class ParentAfterCutover:
-    def __init__(self) -> None:
-        self.go = False
-
-    @workflow.signal
-    def proceed(self) -> None:
-        self.go = True
-
-    @workflow.run
-    async def run(self) -> list[str]:
-        wid = workflow.info().workflow_id
-        out = [
-            await execute_pipeline_child(
-                child_id=f"{wid}-c1",
-                idea=greenfield_idea(),
-                cfg=e2e_config(),
-                seeded=None,
-                task_queue=TQ,
-            )
-        ]
-        await workflow.wait_condition(lambda: self.go)
-        out.append(
-            await execute_pipeline_child(
-                child_id=f"{wid}-c2",
-                idea=greenfield_idea(),
-                cfg=e2e_config(),
-                seeded=None,
-                task_queue=TQ,
-            )
-        )
         return out
 
 
@@ -110,49 +63,28 @@ def _child_types(history) -> list[str]:
 
 
 @pytest.mark.asyncio
-async def test_started_children_replay_as_feature_and_later_children_are_graph():
+async def test_a_new_parent_starts_graph_children_and_its_history_replays():
     async with await WorkflowEnvironment.start_time_skipping(
         data_converter=pydantic_data_converter
     ) as env:
-        with env.auto_time_skipping_disabled():
-            wid = f"parent-{uuid.uuid4()}"
-            async with Worker(
-                env.client,
-                task_queue=TQ,
-                workflows=[ParentBeforeCutover, StubFeature],
-                workflow_runner=UnsandboxedWorkflowRunner(),
-                max_cached_workflows=0,
-            ):
-                handle = await env.client.start_workflow(
-                    "ParentProbe", id=wid, task_queue=TQ, result_type=list
-                )
-                for _ in range(200):
-                    events = (await handle.fetch_history()).events
-                    if any(
-                        e.event_type == EventType.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED
-                        for e in events
-                    ):
-                        break
-                    await asyncio.sleep(0.05)
-            async with Worker(
-                env.client,
-                task_queue=TQ,
-                workflows=[ParentAfterCutover, StubFeature, StubGraph],
-                workflow_runner=UnsandboxedWorkflowRunner(),
-                max_cached_workflows=0,
-            ):
-                await handle.signal("proceed")
-                result = await handle.result()
+        async with Worker(
+            env.client,
+            task_queue=TQ,
+            workflows=[ParentProbe, StubGraph],
+            workflow_runner=UnsandboxedWorkflowRunner(),
+        ):
+            handle = await env.client.start_workflow(
+                "ParentProbe", id=f"parent-{uuid.uuid4()}", task_queue=TQ, result_type=list
+            )
+            result = await handle.result()
             history = await handle.fetch_history()
-    assert result == ["feature-child", "graph-child"]
-    assert _child_types(history) == ["FeatureWorkflow", "GraphWorkflow"]
+    assert result == ["graph-child", "graph-child"]
+    assert _child_types(history) == ["GraphWorkflow", "GraphWorkflow"]
 
-
-# --- E-77 T022 (RED): the on_graph callback (FR-010/SC-003) -----------------
-# Unit level on purpose: workflow.patched() decides the branch, so faking it
-# pins each branch without a Temporal server. These inherit the module's
-# `temporal` mark; run with `pytest -m temporal <this file>` (the default
-# addopts deselect everything in this module).
+    replay = await replayer(ParentProbe, StubGraph).replay_workflow(
+        history, raise_on_replay_failure=True
+    )
+    assert replay.replay_failure is None
 
 
 @pytest.mark.asyncio
@@ -170,7 +102,6 @@ async def test_on_graph_fires_once_with_content_sha_before_the_child_starts(monk
     async def on_graph(sha: str) -> None:
         events.append(("on-graph", sha))
 
-    monkeypatch.setattr("temporalio.workflow.patched", lambda patch_id: True)
     monkeypatch.setattr("temporalio.workflow.execute_child_workflow", fake_child)
     result = await execute_pipeline_child(
         child_id="child-1",
@@ -185,27 +116,3 @@ async def test_on_graph_fires_once_with_content_sha_before_the_child_starts(monk
         greenfield_idea(), e2e_config(), None, registry_roles=REGISTRY, handler_types=HANDLERS
     )
     assert events == [("on-graph", expected.graph.content_sha()), ("child-started", "child-1")]
-
-
-@pytest.mark.asyncio
-async def test_on_graph_is_never_called_on_the_feature_branch(monkeypatch):
-    calls: list[str] = []
-
-    async def fake_child(run, *args, **kw):
-        return "feature-child"
-
-    async def on_graph(sha: str) -> None:
-        calls.append(sha)
-
-    monkeypatch.setattr("temporalio.workflow.patched", lambda patch_id: False)
-    monkeypatch.setattr("temporalio.workflow.execute_child_workflow", fake_child)
-    result = await execute_pipeline_child(
-        child_id="child-1",
-        idea=greenfield_idea(),
-        cfg=e2e_config(),
-        seeded=None,
-        task_queue=TQ,
-        on_graph=on_graph,
-    )
-    assert result == "feature-child"
-    assert calls == []
