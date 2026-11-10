@@ -504,3 +504,26 @@ The on_graph unit test now also pins the R-1 call itself:
 monkeypatches the workflow-only API, as the unit test runs outside a
 workflow). `ruff check`/`format --check` on the three files,
 `scripts/check_file_size.py`, and `mypy` (412 files) all clean.
+
+## §T024 (T024, plan T045, FR-005 — FeatureWorkflow leaves the inbox types)
+
+qa-happy authored the tests first (report: scratchpad
+`qa-happy-t024-report.md`); six tests RED against the then-src, all with
+the same assertion tail (`FeatureWorkflow` still in the visibility
+query). One brief deviation accepted as correct: the Crew assertion
+lives in the fetch_inbox-specific tests, because `list_open_run_ids`'s
+default is Graph-only (the executor's brief had over-specified the
+shared stub). Executor then changed `S/channels/inbox.py`:
+`list_open_run_ids` default `("GraphWorkflow",)`; `fetch_inbox` uses
+`("GraphWorkflow", "CrewTaskWorkflow")`; module and function docstrings
+record the 020 change and point at the fleet's legacy rows for closed
+FeatureWorkflow runs.
+
+```text
+RED:  6 failed, 11 passed   (FeatureWorkflow-in-query on all six)
+GREEN: ......................... [100%]  (17/17 across both files)
+```
+
+Fleet callers unaffected (`dashboard/fleet.py` uses the no-types default
+and lists RUNS; its closed-legacy queries are PR-1's and untouched):
+`tests/test_dashboard_fleet*.py` 52/52 green. ruff/format clean.

@@ -116,10 +116,15 @@ class _StubHandle:
 class _StubClient:
     def __init__(self, handles: dict[str, _StubHandle]):
         self._handles = handles
+        self.queries: list[str] = []
 
     async def list_workflows(self, query):
-        assert "FeatureWorkflow" in query
+        # 020 T024 (plan T045, FR-005): FeatureWorkflow is no longer an open-run
+        # type. Every call asks for GraphWorkflow, never FeatureWorkflow.
+        # CrewTaskWorkflow is asserted only where fetch_inbox asks for it.
+        self.queries.append(query)
         assert "GraphWorkflow" in query
+        assert "FeatureWorkflow" not in query
         assert "Running" in query
         for run_id in self._handles:
             yield SimpleNamespace(id=run_id)
@@ -136,6 +141,13 @@ def _raw(*items):
 async def test_list_open_run_ids_returns_ids_from_the_visibility_query():
     client = _StubClient({"run-a": _StubHandle(), "run-b": _StubHandle()})
     assert await list_open_run_ids(client) == ["run-a", "run-b"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_inbox_asks_for_graph_and_crew_children_only():
+    client = _StubClient({})
+    await fetch_inbox(client)
+    assert "CrewTaskWorkflow" in client.queries[0]
 
 
 @pytest.mark.asyncio
