@@ -236,7 +236,7 @@ async def test_tool_escalations_do_not_burn_question_budget():
 
 async def test_tool_approval_defaults_to_hard_even_under_default_policy_off():
     """Tool approval gates default to HARD unless explicitly overridden, matching
-    FeatureWorkflow behavior and preserving the ADR-17 containment fence."""
+    pipeline behavior and preserving the ADR-17 containment fence."""
     TURNS.clear()
     DEFER["left"] = 1
     wf_id = f"crew-{uuid.uuid4()}"
@@ -315,7 +315,7 @@ async def test_a_human_decision_reaches_the_child_workflow():
 
 async def test_a_question_opens_a_gate_and_the_answer_reaches_the_next_round():
     """The addendum's departure from parent §6: answer_question lives on
-    FeatureWorkflow, not GateHost, so a question opens a GATE and the human's
+    the workflow, not GateHost, so a question opens a GATE and the human's
     answer arrives as decision.comments."""
     TURNS.clear()
     DEFER["left"] = 0

@@ -1,7 +1,7 @@
 # tests/graph_workflow/test_host_attribution.py
 """E-75 spec §4.3: hosts attribute spend and pendings to the running activation.
 
-Memory-only and FeatureWorkflow-neutral: with ACTIVATION unset nothing is
+Memory-only and workflow-neutral: with ACTIVATION unset nothing is
 attributed. `workflow.now` is patched because _emit stamps events with it.
 """
 

@@ -231,7 +231,7 @@ def test_graph_attribution_fail_reentry_domain_is_none_zero_one():
 
 
 def test_benchmark_record_graph_defaults_to_none():
-    """FR-024: `graph` is optional — FeatureWorkflow-shaped records keep None."""
+    """FR-024: `graph` is optional — legacy FeatureWorkflow-era records keep None."""
     assert _record().graph is None
 
 

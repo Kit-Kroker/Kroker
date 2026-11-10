@@ -54,7 +54,7 @@ def test_the_child_makes_no_model_call():
 
 
 def test_the_child_holds_no_gate():
-    """D-6: HITL stays in FeatureWorkflow, where the signals land."""
+    """D-6: HITL stays in the pipeline workflow, where the signals land."""
     src = SRC.read_text(encoding="utf-8")
     assert "_gate" not in src
     assert "signal" not in src

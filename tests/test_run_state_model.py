@@ -96,7 +96,7 @@ def test_run_summary_title_defaults_empty_so_existing_callers_are_unaffected():
 # --- E-77 T005 (RED): RunState.graph_sha (FR-009/FR-024) -------------------
 # Core envelopes keep pydantic's default extra='ignore' (project memory —
 # only graph/ models use forbid); graph_sha is optional and None for
-# FeatureWorkflow runs.
+# legacy FeatureWorkflow runs (deleted 020; historical rows keep the shape).
 
 
 def test_run_state_graph_sha_defaults_to_none():

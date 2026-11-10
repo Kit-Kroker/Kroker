@@ -2,7 +2,7 @@
 the real adapter mechanics are proven by the docker-marked integration test.
 
 Behaviour is driven by module-level state so a test can script a run without
-threading config through FeatureWorkflow's whole call chain."""
+threading config through the pipeline's whole call chain."""
 
 from __future__ import annotations
 

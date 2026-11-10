@@ -4,7 +4,7 @@ caught inside research_subquestion and turned into a gap; a plan or synthesis
 ActivityError (after its retries exhaust) is caught at the stage call site
 and substitutes a _degraded_research_brief (spec §8 tier 1;
 bench-todo-api-greenfield-1785485669: an uncaught UsageLimitExceeded once
-killed the whole FeatureWorkflow, taking every other stage's records with
+killed the whole pipeline, taking every other stage's records with
 it). _degraded_research_brief is the shape both paths land on -- these tests
 pin it: no findings, the shortfall recorded as a gap, empty grounded_findings
 so verify_brief passes it through the ordinary success path."""

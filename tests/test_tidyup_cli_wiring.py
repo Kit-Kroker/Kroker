@@ -44,7 +44,7 @@ def test_worker_registers_the_workflow_and_the_activity():
 
 def test_approve_reaches_a_tidyup_workflow_unchanged():
     """channels/transport.py resolves and submits BY NAME and imports nothing
-    from FeatureWorkflow -- so the existing approve verb already works against
+    from the pipeline workflow -- so the existing approve verb already works against
     TidyUpWorkflow. This test exists so a future refactor cannot quietly
     break that. 020: transport legitimately NAMES FeatureWorkflow again (the
     LegacyRunError describe-check, contract §5, allowed by SC-002), so the

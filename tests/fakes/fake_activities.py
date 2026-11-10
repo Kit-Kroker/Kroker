@@ -1,4 +1,4 @@
-"""Same-named fakes for every git/subprocess activity the FeatureWorkflow
+"""Same-named fakes for every git/subprocess activity the pipeline
 calls. Registered on the e2e worker INSTEAD of the production activities, so
 the run touches no real git, subprocess, or network. Names must match the
 production activity names for Temporal dispatch."""
@@ -144,7 +144,7 @@ async def fake_run_integration_checks(inp: IntegrationChecksInput) -> Integratio
 
 @activity.defn(name="publish_artifact_version")
 async def fake_publish_artifact_version(inp: PublishArtifactInput) -> PublishArtifactResult:
-    # version_id must be a non-None int so FeatureWorkflow._plan_version is
+    # version_id must be a non-None int so the plan-version counter is
     # set (the task-loop board writes early-return when it is None). The
     # value itself is irrelevant — the fakes never touch a real DB.
     return PublishArtifactResult(

@@ -51,7 +51,7 @@ def test_fix_cfg_disables_the_deploy_gate():
 )
 def test_reached_a_pr(outcome, expected):
     """D6 step 6: 'produced a branch worth merging' is read off the return
-    string, which is the only thing FeatureWorkflow gives a caller."""
+    string, which is the only thing the workflow gives a caller."""
     assert reached_a_pr(outcome) is expected
 
 

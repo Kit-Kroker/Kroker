@@ -2,7 +2,8 @@
 
 Drivers talk to the workflow by query/signal NAME ("pending_gate",
 "answer_question", "submit_gate_decision"), never by a class attribute, so one
-scenario drives FeatureWorkflow (captured) and GraphWorkflow (asserted).
+scenario drove FeatureWorkflow (captured, pre-020) and GraphWorkflow (asserted;
+re-baselined 020 T018 -- every fixture is GraphWorkflow now).
 """
 
 from __future__ import annotations
@@ -868,7 +869,7 @@ def _failing_delta() -> Any:
 #
 # The assessment workflow is a different starter (see harness.ASSESSMENT_STARTER),
 # so its scenario lives in its own tuple and is captured by
-# test_capture_assessment.py, not the FeatureWorkflow capture test. The
+# test_capture_assessment.py, not the graph capture test. The
 # deterministic repo + fake triage + real scan/discover/risk activities + canned
 # proposer agents mirror tests/test_assessment_workflow_e2e_proposer_hang_chaos.py.
 
