@@ -458,3 +458,29 @@ def test_get_run_404s_for_an_id_only_a_different_legacy_row_carries():
     app.include_router(create_router(_FakePoller(legacy_snap)))
     r = TestClient(app).get("/runs/run-8")
     assert r.status_code == 404
+
+
+# 020 T013 (US5, contract §5): a query failure on a closed FeatureWorkflow run
+# surfaces as HTTP 410 with the contract's message, not a 500.
+LEGACY_MESSAGE = "legacy FeatureWorkflow run; it can no longer be queried"
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/runs/legacy-x/answer", {"key": "Q1", "text": "hi"}),
+        ("/runs/legacy-x/decide", {"key": "architecture#1", "outcome": "approve"}),
+    ],
+    ids=["answer", "decide"],
+)
+def test_a_legacy_run_reply_is_410_with_the_contract_message(client, monkeypatch, path, body):
+    import sdlc.dashboard.api as mod
+    from sdlc.channels.transport import LegacyRunError
+
+    async def legacy(handle, key):
+        raise LegacyRunError("legacy-x")
+
+    monkeypatch.setattr(mod, "resolve_key", legacy)
+    r = client.post(path, json=body)
+    assert r.status_code == 410
+    assert r.json()["detail"] == LEGACY_MESSAGE

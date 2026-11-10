@@ -60,3 +60,13 @@ async def test_guard_passes_tool_errors_through_unchanged():
     with pytest.raises(ToolError) as e:
         await boom()
     assert e.value.message == "already typed"
+
+
+def test_a_legacy_run_error_is_a_tool_error_with_the_contract_message():
+    """020 T013 (contract §5): the operator surface maps LegacyRunError to a
+    typed tool error carrying the same message as the CLI and HTTP surfaces."""
+    from sdlc.channels.transport import LegacyRunError
+
+    err = translate(LegacyRunError("legacy-x"))
+    assert isinstance(err, ToolError)
+    assert "legacy FeatureWorkflow run; it can no longer be queried" in err.message

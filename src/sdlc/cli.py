@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import sys
 from datetime import UTC, datetime
 
 from dotenv import load_dotenv
@@ -859,7 +860,13 @@ async def main() -> None:
     handle = client.get_workflow_handle_for(GraphWorkflow.run, args.id)
 
     if args.cmd in DECISION_CMDS:
-        from .channels.transport import Ambiguous, NoMatch, resolve, submit
+        from .channels.transport import (
+            Ambiguous,
+            LegacyRunError,
+            NoMatch,
+            resolve,
+            submit,
+        )
 
         selector, reply = selector_for(args)
         try:
@@ -870,11 +877,31 @@ async def main() -> None:
                 flag = "--q" if args.cmd == "answer" else "--gate"
                 print(f"re-run with {flag} <name>")
             raise SystemExit(1) from None
+        except LegacyRunError as e:
+            # 020 contract §5: a legacy id fails cleanly, no traceback.
+            print(str(e), file=sys.stderr)
+            raise SystemExit(1) from None
         print((await submit(handle, pending, reply)).message)
         return
 
     if args.cmd == "status":
-        print(await handle.query(GraphWorkflow.status))
+        from .channels.transport import LegacyRunError, fail_legacy_if_closed_feature
+
+        try:
+            print(await handle.query(GraphWorkflow.status))
+        except LegacyRunError as e:
+            print(str(e), file=sys.stderr)
+            raise SystemExit(1) from None
+        except Exception as e:  # noqa: BLE001 -- classified by the helper
+            # The same describe-on-failure check the reply path uses: a
+            # closed FeatureWorkflow run answers with the message and exit
+            # 1, anything else propagates as it always did.
+            try:
+                await fail_legacy_if_closed_feature(handle, e)
+            except LegacyRunError as le:
+                print(str(le), file=sys.stderr)
+                raise SystemExit(1) from None
+            raise
 
 
 if __name__ == "__main__":

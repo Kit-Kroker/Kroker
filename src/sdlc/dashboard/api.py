@@ -26,7 +26,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 
 from ..channels.contract import Reply, default_render
-from ..channels.transport import NoMatch, resolve_key, submit
+from ..channels.transport import LegacyRunError, NoMatch, resolve_key, submit
 from ..cli import slug
 from ..core.models import (
     GateOutcome,
@@ -119,6 +119,10 @@ def create_router(
             pending = await resolve_key(handle, key)
         except NoMatch as e:
             raise HTTPException(404, e.message) from e
+        except LegacyRunError as e:
+            # 020 contract §5: a stale tab reaching a closed
+            # FeatureWorkflow run is a 410, not a 500.
+            raise HTTPException(410, str(e)) from e
         # match_key drops match()'s reply-kind narrowing (the operator
         # addressed an exact key), so the route enforces the kind itself:
         # /answer is for questions, /decide for gates. Mismatch is a 404,

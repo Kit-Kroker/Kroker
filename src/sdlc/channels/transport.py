@@ -138,6 +138,37 @@ def _name_of(d: PendingDecision) -> str:
 
 _PENDING_LIST = TypeAdapter(list[PendingDecision])
 
+
+class LegacyRunError(Exception):
+    """A query reached a closed FeatureWorkflow run (020 R-3, contract §5).
+
+    Raised only after a failed query AND a describe() reporting
+    ``workflow_type == "FeatureWorkflow"``. Surfaces map it to HTTP 410
+    (dashboard), an stderr message + exit 1 (CLI) or a tool error
+    (operator). Any other query failure propagates unchanged."""
+
+    def __init__(self, run_id: str) -> None:
+        super().__init__("legacy FeatureWorkflow run; it can no longer be queried")
+        self.run_id = run_id
+
+
+async def fail_legacy_if_closed_feature(handle, exc: Exception) -> None:
+    """After a query failure: describe the run and raise LegacyRunError when
+    it is a closed FeatureWorkflow; otherwise re-raise ``exc`` (020 T013).
+
+    The happy path never reaches this helper -- it costs one describe() RPC
+    only on a failure that would have been a 500 or a traceback anyway. A
+    describe() that fails too keeps the ORIGINAL query error as the story.
+    """
+    try:
+        described = await handle.describe()
+    except Exception:  # noqa: BLE001 -- the original failure is the story
+        raise exc from None
+    if getattr(described, "workflow_type", None) == "FeatureWorkflow":
+        raise LegacyRunError(handle.id) from exc
+    raise exc from None
+
+
 _PAST = {
     GateOutcome.APPROVE: "approved",
     GateOutcome.REJECT: "rejected",
@@ -163,7 +194,11 @@ async def fetch_pending(handle) -> list[PendingDecision]:
     Public (not `_fetch`): E-8's cross-run inbox reuses this exact
     query/validate path across many handles instead of one.
     """
-    raw = await handle.query(PENDING_QUERY)
+    try:
+        raw = await handle.query(PENDING_QUERY)
+    except Exception as e:  # noqa: BLE001 -- classified by the legacy check
+        await fail_legacy_if_closed_feature(handle, e)
+        raise  # unreachable: the helper always re-raises
     return _PENDING_LIST.validate_python(raw)
 
 

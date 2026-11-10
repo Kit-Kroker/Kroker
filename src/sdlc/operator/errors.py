@@ -11,7 +11,7 @@ from __future__ import annotations
 import functools
 
 from ..board.store import ConflictError, InvalidTransition, NotFoundError
-from ..channels.transport import Ambiguous, NoMatch
+from ..channels.transport import Ambiguous, LegacyRunError, NoMatch
 from ..dashboard.fleet import FleetCapacityExceeded
 
 
@@ -49,6 +49,10 @@ def translate(exc: Exception, *, hint: str = "") -> ToolError:
             f"retry; tell the operator to clear some pending decisions "
             f"first (the inbox lists them)."
         )
+    elif isinstance(exc, LegacyRunError):
+        # 020 contract §5: the run id is a closed FeatureWorkflow run; the
+        # message itself is the actionable content (verbatim, not scrubbed).
+        msg = str(exc)
     else:
         # Deliberately type-only: the message may carry paths or credentials.
         msg = f"the factory raised {type(exc).__name__}; the operator should check the server log"
