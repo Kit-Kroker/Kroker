@@ -140,4 +140,16 @@ describe('fleetRows (v5, 018 T048 RED)', () => {
     const rows = fleetRows([mkRun()], { 'run-1': summaryRow({ traversals: [] }) } as never, null) as Record<string, string>[]
     expect(rows[0]['traversals']).toBe('—')
   })
+
+  // 020 T011 (contract §4): a legacy row's cost cell is hidden. Not 'unpriced'
+  // (that reads as "priced nothing") and not a placeholder amount.
+  it('a legacy run maps to an empty cost cell; a non-legacy run keeps its money cost', () => {
+    const rows = fleetRows(
+      [mkRun({ id: 'legacy', legacy: true, cost: null }), mkRun({ id: 'paid', legacy: false, cost: 3.1 })],
+      {} as never,
+      null,
+    ) as Record<string, string>[]
+    expect(rows.find((r) => r['runId'] === 'legacy')!['cost']).toBe('')
+    expect(rows.find((r) => r['runId'] === 'paid')!['cost']).toBe('$3.10')
+  })
 })

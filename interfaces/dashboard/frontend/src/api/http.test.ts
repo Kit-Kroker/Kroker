@@ -377,3 +377,97 @@ describe('decideTaskGate and mapClosed (018 T036)', () => {
     expect(mapSnapshot(empty as never, NOW).runs.find((r) => r.id === 'r-bare')!.decisions).toEqual([])
   })
 })
+
+// 020 T011 (US3, contract §4): the legacy closed rows served by the snapshot
+// as closed_legacy. A legacy row has no summary, no marks and no cost, and it
+// merges into the closed list. Run.legacy is set on every row.
+describe('020 closed_legacy mapping (T011)', () => {
+  const legacy = (over: Record<string, unknown> = {}) => ({
+    run_id: 'legacy-1',
+    status: 'completed',
+    start_time: '2026-08-18T09:00:00Z',
+    close_time: '2026-08-18T09:30:00Z',
+    ...over,
+  })
+
+  const closedRow = (over: Record<string, unknown> = {}) => ({
+    run_id: 'feature-dark-mode',
+    title: 'Dark mode for settings pages',
+    mode: 'greenfield',
+    repo_url: '',
+    outcome: 'deployed:ok',
+    started_at: '2026-08-18T08:00:00Z',
+    ended_at: '2026-08-18T08:30:00Z',
+    gates: [],
+    roles: [],
+    cost_usd_total: null,
+    budget_usd: null,
+    project_key: null,
+    ...over,
+  })
+
+  const snapWith = (closed: unknown[], closed_legacy: unknown[]) => ({
+    runs: [],
+    inbox: [],
+    errors: [],
+    closed,
+    closed_legacy,
+  })
+
+  it('maps a completed legacy row to the fixed legacy Run shape', () => {
+    const { runs } = mapSnapshot(snapWith([], [legacy()]) as never, NOW)
+    const run = runs.find((r) => r.id === 'legacy-1')!
+    expect(run).toBeDefined()
+    expect(run.title).toBe('legacy run, summary unavailable')
+    expect(run.status).toBe('done')
+    expect(run.stageMarks).toBeNull()
+    expect(run.cost).toBeNull()
+    expect(run.budget).toBeNull()
+    expect(run.roles).toEqual([])
+    expect(run.decisions).toEqual([])
+    expect(run.repo).toBe('')
+    expect(run.projectKey).toBeNull()
+    expect(run.age).toBe('2h 00m')
+    expect(run).toHaveProperty('legacy', true)
+  })
+
+  it('maps a failed or terminated legacy row to failed, never done', () => {
+    const { runs } = mapSnapshot(
+      snapWith([], [
+        legacy({ run_id: 'legacy-failed', status: 'failed' }),
+        legacy({ run_id: 'legacy-term', status: 'terminated' }),
+      ]) as never,
+      NOW,
+    )
+    expect(runs.find((r) => r.id === 'legacy-failed')!.status).toBe('failed')
+    expect(runs.find((r) => r.id === 'legacy-term')!.status).toBe('failed')
+  })
+
+  it('merges legacy rows into the closed list, ordered by close time newest first', () => {
+    // closed rows close at 08:30 (A) and 07:00 (B); legacy at 09:30 (L) and
+    // 08:00 (M). Newest first, across both kinds: L, A, M, B.
+    const snap = snapWith(
+      [
+        closedRow({ run_id: 'closed-a', ended_at: '2026-08-18T08:30:00Z' }),
+        closedRow({ run_id: 'closed-b', ended_at: '2026-08-18T07:00:00Z' }),
+      ],
+      [
+        legacy({ run_id: 'legacy-l', close_time: '2026-08-18T09:30:00Z' }),
+        legacy({ run_id: 'legacy-m', close_time: '2026-08-18T08:00:00Z' }),
+      ],
+    )
+    const { runs } = mapSnapshot(snap as never, NOW)
+    expect(runs.map((r) => r.id)).toEqual(['legacy-l', 'closed-a', 'legacy-m', 'closed-b'])
+  })
+
+  it('every open and closed non-legacy row carries legacy false', () => {
+    const { runs } = mapSnapshot(snapshot as never, NOW)
+    expect(runs.length).toBeGreaterThan(0)
+    for (const run of runs) expect(run).toHaveProperty('legacy', false)
+  })
+
+  it('a payload without closed_legacy (old backend) parses, with no legacy rows', () => {
+    const { runs } = mapSnapshot(snapshot as never, NOW)
+    expect(runs.filter((r) => (r as { legacy?: boolean }).legacy === true)).toEqual([])
+  })
+})

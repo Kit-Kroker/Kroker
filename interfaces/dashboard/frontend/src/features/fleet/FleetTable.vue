@@ -35,7 +35,10 @@ defineProps<{ rows: FleetRowV5[]; runInContext?: string | null }>()
       <span class="col col-outcome" :class="{ 'is-final': r.outcome !== 'running' && r.outcome !== '—' }">{{ r.outcome }}</span>
       <span class="col col-where">{{ r.where }}</span>
       <span class="col col-traversals">{{ r.traversals }}</span>
-      <span class="col col-cost">{{ r.cost }}</span>
+      <!-- 020 contract §4: a legacy row (closed_legacy) hides its cost cell;
+           the v5 table has no mode badge to hide (retired 018), and no
+           placeholder mode is ever displayed for a legacy row. -->
+      <span class="col col-cost">{{ r.legacy ? '' : r.cost }}</span>
       <span class="col col-elapsed">{{ r.elapsed }}</span>
       <span class="col col-open">
         <RouterLink class="open" data-testid="fleet-open" :to="`/runs/${r.runId}`">{{ r.openLabel }}</RouterLink>

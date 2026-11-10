@@ -27,6 +27,7 @@ const mk = (over: Partial<Run> = {}): Run => ({
   age: '1m',
   decisions: [],
   projectKey: null,
+  legacy: false,
   ...over,
 })
 

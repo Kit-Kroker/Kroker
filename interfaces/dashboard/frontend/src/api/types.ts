@@ -63,6 +63,19 @@ export interface Run {
   // 002 G4/FR-020a: the run's board project, from the wire's project_key.
   // Null = unknown/unset -- the Board tab shows its banner, never a guess.
   projectKey: string | null
+  // 020 contract §4: true only on closed_legacy rows. A legacy row has no
+  // summary -- the mode badge and the cost cell are hidden (FleetTable),
+  // never rendered from placeholders.
+  legacy: boolean
+}
+
+// 020 contract §1 (Q1 = A): a closed pre-cutover FeatureWorkflow row,
+// built from visibility metadata only. Never queried by the backend.
+export interface LegacyRun {
+  run_id: string
+  status: string // lower-case close status (completed|failed|...|unknown)
+  start_time: string | null
+  close_time: string | null
 }
 
 export interface ClarifyItem {

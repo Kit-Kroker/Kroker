@@ -28,6 +28,10 @@ export interface FleetRowV5 {
   cost: string
   elapsed: string
   openLabel: 'Decide' | 'Open run' | 'Open'
+  // 020 contract §4: a closed_legacy row hides its cost cell and never
+  // displays a placeholder mode (the v5 table has no mode badge — retired
+  // 018 CONSOLE-3).
+  legacy: boolean
 }
 
 const STATUS_LABEL: Record<Run['status'], string> = {
@@ -80,9 +84,12 @@ export function fleetRows(
       outcome,
       where,
       traversals,
-      cost: run.cost === null ? 'unpriced' : money(run.cost),
+      // 020 contract §4: a legacy row's cost is hidden (empty), not
+      // 'unpriced' — it was never priced through this pipeline.
+      cost: run.legacy ? '' : run.cost === null ? 'unpriced' : money(run.cost),
       elapsed: run.age,
       openLabel,
+      legacy: run.legacy,
     }
   })
 }

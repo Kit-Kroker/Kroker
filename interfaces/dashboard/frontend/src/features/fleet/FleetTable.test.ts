@@ -4,6 +4,8 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import FleetTable from './FleetTable.vue'
+import { fleetRows } from './fleet.adapter'
+import type { Run } from '../../api/types'
 
 const RouterLinkStub = {
   props: ['to'],
@@ -71,5 +73,41 @@ describe('FleetTable (v5, 018 T048 RED)', () => {
     const w = mountTable([])
     expect(w.find('[data-testid="fleet-empty"]').exists()).toBe(true)
     expect(w.findAll('[data-testid="fleet-row"]')).toHaveLength(0)
+  })
+})
+
+// 020 T011 (contract §4): a legacy run's cost cell is hidden, never rendered
+// from a placeholder. Rows go through fleetRows, so the RED is the adapter's
+// (the component only echoes the cost string it is handed).
+const runOf = (over: Partial<Run>): Run =>
+  ({
+    id: 'run-1',
+    title: 'legacy run, summary unavailable',
+    mode: 'greenfield',
+    repo: '',
+    activeStages: [],
+    stageMarks: null,
+    status: 'done',
+    blocker: null,
+    cost: null,
+    budget: null,
+    age: '3d',
+    decisions: [],
+    legacy: false,
+    ...over,
+  }) as Run
+
+describe('FleetTable legacy rows (020 T011, contract §4)', () => {
+  it('a legacy row hides its cost cell: empty text, no unpriced, no dollar amount', () => {
+    const w = mountTable(fleetRows([runOf({ id: 'legacy-1', legacy: true })], {} as never, null))
+    const r = w.find('[data-testid="fleet-row"]')
+    expect(r.find('.col-cost').text()).toBe('')
+    expect(r.text()).not.toContain('unpriced')
+    expect(r.text()).not.toMatch(/\$\d/)
+  })
+
+  it('a non-legacy row still renders its cost', () => {
+    const w = mountTable(fleetRows([runOf({ id: 'paid', legacy: false, cost: 3.1 })], {} as never, null))
+    expect(w.find('[data-testid="fleet-row"] .col-cost').text()).toBe('$3.10')
   })
 })

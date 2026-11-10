@@ -83,6 +83,7 @@ function seedRuns(): Run[] {
       // 002 G5: the run whose board the Board tab renders (mock fixtures in
       // features/board/__fixtures__).
       projectKey: 'kroker',
+      legacy: false,
     },
     // 018 T033/T044: the Observe outcome fixtures live in mock/decisions.ts.
     HALTED_RUN,
@@ -107,6 +108,7 @@ function seedRuns(): Run[] {
         { ts: '09:12', gate: 'clarify r1 (partial)', outcome: 'approve', comment: '4 questions auto-answered, confidence ≥ 0.95', decider: 'policy (soft)' },
       ],
       projectKey: null, // 002: no board project -- the banner case
+      legacy: false,
     },
     {
       id: 'feature-billing-webhooks',
@@ -127,6 +129,7 @@ function seedRuns(): Run[] {
         { ts: '08:44', gate: 'task T-04 repair', outcome: 'approve', comment: 'review fix loop 1/2 green', decider: 'policy' },
       ],
       projectKey: null,
+      legacy: false,
     },
     {
       id: 'feature-onboarding-v2',
@@ -155,6 +158,7 @@ function seedRuns(): Run[] {
         { ts: '12:31', gate: 'plan r1', outcome: 'approve', comment: 'confidence 0.97', decider: 'policy (soft)' },
       ],
       projectKey: null,
+      legacy: false,
     },
     {
       id: 'fix-rate-limit-retry',
@@ -171,6 +175,7 @@ function seedRuns(): Run[] {
       age: '6h 27m',
       decisions: [{ ts: '13:15', gate: 'plan r1', outcome: 'approve', comment: '', decider: 'policy (soft)' }],
       projectKey: null,
+      legacy: false,
     },
     {
       id: 'feature-usage-metering',
@@ -187,6 +192,7 @@ function seedRuns(): Run[] {
       age: '1h 02m',
       decisions: [{ ts: '14:30', gate: 'clarify r1', outcome: 'approve', comment: 'auto, confidence 0.96', decider: 'policy (soft)' }],
       projectKey: null,
+      legacy: false,
     },
     {
       id: 'feature-audit-export',
@@ -208,6 +214,7 @@ function seedRuns(): Run[] {
         { ts: '06:01', gate: 'deploy r1', outcome: 'approve', comment: 'PR #482 merged, staging deploy', decider: 'human · mika' },
       ],
       projectKey: null,
+      legacy: false,
     },
     {
       // 002 G4 mock scenarios: a run whose project answers 404 on the mock
@@ -227,6 +234,7 @@ function seedRuns(): Run[] {
       age: '22m',
       decisions: [{ ts: '09:40', gate: 'plan r1', outcome: 'approve', comment: '', decider: 'policy (soft)' }],
       projectKey: 'ghost-project',
+      legacy: false,
     },
     {
       id: 'feature-empty-board',
@@ -243,6 +251,7 @@ function seedRuns(): Run[] {
       age: '5m',
       decisions: [],
       projectKey: 'kroker-empty',
+      legacy: false,
     },
     {
       id: 'feature-dark-mode',
@@ -268,9 +277,30 @@ function seedRuns(): Run[] {
         { ts: 'yday', gate: 'deploy r1', outcome: 'approve', comment: '', decider: 'human · sam' },
       ],
       projectKey: 'kroker',
+      legacy: false,
     },
     // 018 T044 (R-4): the closed run carrying a non-approval gate row.
     CLOSED_GATES_RUN,
+    {
+      // 020 T011 (contract §4): one closed_legacy row — a pre-cutover run
+      // with no summary: fixed title, no cost, no marks; the fleet hides
+      // its cost cell and never shows a mode for it.
+      id: 'feature-legacy-sso',
+      title: 'legacy run, summary unavailable',
+      mode: 'greenfield', // placeholder, never displayed (legacy row)
+      repo: '',
+      activeStages: [],
+      stageMarks: null,
+      status: 'done',
+      blocker: '',
+      cost: null,
+      budget: null,
+      roles: [], budgetThreshold: null, budgetCounted: null, budgetCrossings: 0, budgetNotice: null,
+      age: '3d',
+      decisions: [],
+      projectKey: null,
+      legacy: true,
+    },
   ]
 }
 
@@ -529,6 +559,7 @@ export function createMockApi(opts: MockOptions = {}): DashboardApi & { dispose(
         age: 'just now',
         decisions: [],
         projectKey: null,
+        legacy: false,
       }
       runs = [run, ...runs]
       return clone(run)

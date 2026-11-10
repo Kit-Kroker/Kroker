@@ -27,11 +27,11 @@ describe('mock api decision flows', () => {
     api = createMockApi({ simulateLive: false })
   })
 
-  it('seeds 16 runs and 8 inbox items, including the graph demo run', async () => {
+  it('seeds 17 runs and 8 inbox items, including the graph demo run', async () => {
     // 018 T033/T044 triage: the four Observe outcome fixtures plus the
-    // closed-gates run (15 runs), and the always-on tool-approval and
+    // closed-gates run (15 runs), the 020 legacy row, and the always-on tool-approval and
     // budget card seeds (8 items).
-    expect(await api.listRuns()).toHaveLength(16)
+    expect(await api.listRuns()).toHaveLength(17)
     expect(await api.listInbox()).toHaveLength(8)
   })
 

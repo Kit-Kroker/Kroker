@@ -62,6 +62,7 @@ const RUN: Run = {
   budgetCrossings: 0,
   budgetNotice: null,
   projectKey: null,
+  legacy: false,
 }
 
 // GraphCanvas mounts whenever a graph is present; vue-flow needs these in jsdom.

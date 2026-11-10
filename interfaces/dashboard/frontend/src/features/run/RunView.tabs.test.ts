@@ -55,6 +55,7 @@ const RUN: Run = {
   decisions: [],
   stageMarks: null,
   projectKey: 'kroker',
+  legacy: false,
 }
 
 const catalogWithRunGraph = () => {

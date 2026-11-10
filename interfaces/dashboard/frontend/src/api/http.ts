@@ -100,6 +100,7 @@ function mapRun(s: any, pendingCount: number, now: Date): Run {
     // 002 G4: the wire's project_key; ?? null so absent and null are both
     // an explicit absent value -- the SPA never guesses 'default'.
     projectKey: s.project_key ?? null,
+    legacy: false,
   }
 }
 
@@ -136,6 +137,34 @@ function mapClosed(s: any, marks: Record<string, DotState> | null | undefined, n
     })),
     // 002 G4: same rule on closed rows (run_summary replay or old payload).
     projectKey: s.project_key ?? null,
+    legacy: false,
+  }
+}
+
+// 020 contract §4: a closed_legacy row has no summary, no marks, no cost.
+// mode is required on Run but a legacy row has none -- 'greenfield' is a
+// placeholder that is never displayed (FleetTable hides the badge).
+function mapLegacy(l: any, now: Date): Run {
+  return {
+    id: l.run_id,
+    title: 'legacy run, summary unavailable',
+    mode: 'greenfield',
+    repo: '',
+    activeStages: [],
+    stageMarks: null,
+    status: l.status === 'completed' ? 'done' : 'failed',
+    blocker: '',
+    cost: null,
+    budget: null,
+    roles: [],
+    budgetThreshold: null,
+    budgetCounted: null,
+    budgetCrossings: 0,
+    budgetNotice: null,
+    age: age(l.start_time, now),
+    decisions: [],
+    projectKey: null,
+    legacy: true,
   }
 }
 
@@ -180,10 +209,29 @@ export function mapSnapshot(snap: any, now: Date = new Date()): FleetState {
   for (const r of snap.inbox ?? []) pendingByRun.set(r.run_id, r.pending)
 
   const closedMarks: Record<string, Record<string, DotState>> = snap.closed_marks ?? {}
+  // 020 contract §4: legacy rows merge into the same closed list, sorted
+  // with the other rows by close time (newest first; rows without a close
+  // time keep wire order at the end). ISO strings compare lexicographically.
+  const closedRows: { run: Run; closedAt: string | null }[] = [
+    ...(snap.closed ?? []).map((s: any) => ({
+      run: mapClosed(s, closedMarks[s.run_id], now),
+      closedAt: s.ended_at ?? null,
+    })),
+    ...(snap.closed_legacy ?? []).map((l: any) => ({
+      run: mapLegacy(l, now),
+      closedAt: l.close_time ?? null,
+    })),
+  ]
+  closedRows.sort((a, b) => {
+    if (a.closedAt === null && b.closedAt === null) return 0
+    if (a.closedAt === null) return 1
+    if (b.closedAt === null) return -1
+    return b.closedAt.localeCompare(a.closedAt)
+  })
   const runs = [
     ...(snap.runs ?? []).map((s: any) =>
       mapRun(s, (pendingByRun.get(s.run_id) ?? []).length, now)),
-    ...(snap.closed ?? []).map((s: any) => mapClosed(s, closedMarks[s.run_id], now)),
+    ...closedRows.map((r) => r.run),
   ]
   const inbox: InboxItem[] = []
   for (const r of snap.inbox ?? []) {
@@ -287,6 +335,7 @@ export function createHttpApi(baseUrl = '/api'): DashboardApi {
         budgetNotice: budget_notice ?? null,
         age: age(nowIso, new Date(nowIso)),
         decisions: [], projectKey: null,
+        legacy: false,
       }
     },
 

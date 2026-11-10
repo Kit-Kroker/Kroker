@@ -55,6 +55,7 @@ export const CLOSED_GATES_RUN: Run = {
     { ts: '09:55', gate: 'merge r1', outcome: 'reject', comment: 'not approved', decider: 'policy (auto)' },
   ],
   projectKey: null,
+  legacy: false,
 }
 
 // 018 T033 (moved here by T044): the Observe outcome-fixture runs. Their
@@ -79,6 +80,7 @@ export const HALTED_RUN: Run = {
   age: '1h 05m',
   decisions: [],
   projectKey: null,
+  legacy: false,
 }
 
 export const ESCALATED_RUN: Run = {
@@ -100,6 +102,7 @@ export const ESCALATED_RUN: Run = {
   age: '3h 40m',
   decisions: [],
   projectKey: null,
+  legacy: false,
 }
 
 export const MULTISINK_RUN: Run = {
@@ -121,6 +124,7 @@ export const MULTISINK_RUN: Run = {
   age: '2h 30m',
   decisions: [],
   projectKey: null,
+  legacy: false,
 }
 
 export const RETIRED_RUN: Run = {
@@ -142,6 +146,7 @@ export const RETIRED_RUN: Run = {
   age: '5d',
   decisions: [],
   projectKey: null,
+  legacy: false,
 }
 
 // 018 T050 (quickstart 2): the budget fixture — a run the budget gate
@@ -165,4 +170,5 @@ export const BUDGET_RUN: Run = {
   age: '4h 10m',
   decisions: [],
   projectKey: null,
+  legacy: false,
 }
