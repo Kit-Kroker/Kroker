@@ -213,14 +213,10 @@ async def fetch_fleet(
     # and no query is sent for them; a legacy id that is also in the open
     # set is dropped (the same dedupe rule `closed` uses). Rows with type
     # None (fakes, old servers) stay on today's queried path.
-    legacy = [
-        r for r in closed if r.type == "FeatureWorkflow" and r.id not in open_id_set
-    ]
+    legacy = [r for r in closed if r.type == "FeatureWorkflow" and r.id not in open_id_set]
     closed_ids = [r.id for r in closed if r.type != "FeatureWorkflow"]
     cache = marks_cache if marks_cache is not None else {}
-    graph_closed = [
-        r.id for r in closed if r.type == "GraphWorkflow" and r.id not in open_id_set
-    ]
+    graph_closed = [r.id for r in closed if r.type == "GraphWorkflow" and r.id not in open_id_set]
     for stale in [k for k in cache if k not in graph_closed]:
         del cache[stale]  # bounded by closed_limit
     need_marks = [r for r in graph_closed if r not in cache]
@@ -233,9 +229,7 @@ async def fetch_fleet(
 
     snap = FleetSnapshot(at=now, total_open_runs=len(open_ids))
     snap.closed_legacy = [
-        LegacyRun(
-            run_id=r.id, status=r.status, start_time=r.start_time, close_time=r.close_time
-        )
+        LegacyRun(run_id=r.id, status=r.status, start_time=r.start_time, close_time=r.close_time)
         for r in legacy
     ]
     for run_id, outcome in zip(open_ids, open_results, strict=False):
