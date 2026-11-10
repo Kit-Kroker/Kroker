@@ -67,19 +67,60 @@ def _renumber(events: list[dict]) -> None:
         fix(event)
 
 
-def _history_without_e74_markers() -> tuple[WorkflowHistory, int, int]:
-    """(history, removed, surviving core_patch markers) for benchmark_one_cell
-    with every e74-graph-child marker stripped, the remaining events renumbered
-    consecutively, and the other core_patch markers left in place."""
+def _strip_change_versions(events: list[dict]) -> int:
+    """Drop the e74-graph-child: patch from the TemporalChangeVersion stream.
+
+    A patched() first-encounter issues TWO commands -- the core_patch marker
+    and a change-version upsert -- and the strip removes both sides of the
+    pair: an upsert event is DROPPED when, with the e74 entries removed, it
+    carries no version the run did not already have (that upsert existed only
+    to record e74); otherwise the event stays with the e74 entries deleted
+    from its list (a later patch's upsert legitimately lists the versions
+    known at that point -- in the counterfactual run it never knew e74).
+    Returns the number of upsert events dropped."""
+    dropped = 0
+    running: set[str] = set()
+    kept_events: list[dict] = []
+    for event in events:
+        if event.get("eventType") != "EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES":
+            kept_events.append(event)
+            continue
+        fields = event["upsertWorkflowSearchAttributesEventAttributes"]["searchAttributes"][
+            "indexedFields"
+        ]
+        payload = fields.get("TemporalChangeVersion")
+        if payload is None:
+            kept_events.append(event)
+            continue
+        ids = json.loads(base64.b64decode(payload["data"]))
+        without_e74 = [i for i in ids if not i.startswith(E74_PREFIX)]
+        if set(without_e74) <= running:
+            dropped += 1  # the upsert existed only to record the e74 patch
+            continue
+        payload["data"] = base64.b64encode(json.dumps(without_e74).encode()).decode()
+        running = set(without_e74)
+        kept_events.append(event)
+    events[:] = kept_events
+    return dropped
+
+
+def _history_without_e74_markers() -> tuple[WorkflowHistory, int, int, int]:
+    """(history, markers removed, upserts dropped, surviving core_patch
+    markers) for benchmark_one_cell with every e74-graph-child patch marker
+    stripped AND its change-version side dropped, the remaining events
+    renumbered consecutively, and the other core_patch markers left in place.
+    This is the store that never knew the e74 patch: the replay must succeed
+    purely through deprecate_patch semantics (020 T023, R-1)."""
     data = json.loads((HISTORIES / "benchmark_one_cell.json").read_text(encoding="utf-8"))
     events = data["history"]["events"]
     kept = [e for e in events if not (_patch_id(e) or "").startswith(E74_PREFIX)]
     removed = len(events) - len(kept)
+    upserts = _strip_change_versions(kept)
     survivors = sum(1 for e in kept if _patch_id(e) is not None)
     _renumber(kept)
     data["history"]["events"] = kept
     history = WorkflowHistory.from_json(data["workflow_id"], json.dumps(data["history"]))
-    return history, removed, survivors
+    return history, removed, upserts, survivors
 
 
 @pytest.mark.asyncio
@@ -93,9 +134,11 @@ async def test_benchmark_workflow_replays_one_cell_history():
 @pytest.mark.asyncio
 async def test_replays_with_the_e74_marker_stripped():
     """Replay-safe restart (020 R-1): the one-cell history carries a graph-child
-    patch marker. With that marker stripped, the replay must still succeed."""
-    stripped, removed, survivors = _history_without_e74_markers()
+    patch marker. With the marker AND its change-version upsert stripped, the
+    replay must still succeed."""
+    stripped, removed, upserts, survivors = _history_without_e74_markers()
     assert removed >= 1, "the strip removed no e74-graph-child marker"
+    assert upserts >= 1, "the strip dropped no e74 change-version upsert"
     assert survivors == 2, "the 012 and 015 core_patch markers must survive the strip"
     result = await replayer(BenchmarkWorkflow).replay_workflow(
         stripped, raise_on_replay_failure=True

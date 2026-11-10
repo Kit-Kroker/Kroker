@@ -465,3 +465,42 @@ import). Both are `migrate`-class in the T003 inventory and are
 re-pointed by T026's migrate commit, by design. No test executes while
 they are broken, so T026's per-commit `pytest -q` comparison is
 meaningful only from its migrate commit onward (recorded there).
+
+## §T022/§T023 (plans T046 — replay-safe restart, R-1)
+
+T022 (qa-happy authored, RED verified personally): the stripped-marker
+replay test in `tests/replay/test_benchmark_replay.py` and the rewritten
+`tests/graph_workflow/test_pipeline_child_upgrade.py`. qa-happy
+corrected two of the brief's assumptions: on fresh (non-replay)
+executions `workflow.patched()` returns True, so the new-parent
+integration test is a regression guard (passes today), not a RED test;
+and the on_graph unit test's RED is the patched()-outside-workflow call.
+
+T023 (executor implemented): `S/workflows/pipeline_child.py` replaces
+`if workflow.patched(...)` with `workflow.deprecate_patch(...)`, starts
+GraphWorkflow unconditionally, deletes the else branch and the
+FeatureWorkflow import; docstring records the deprecation and the
+standing item.
+
+TDD evidence (the strip needed two executor corrections before the RED
+reason was the task's predicted one — a patched() first-encounter
+issues BOTH a marker and a TemporalChangeVersion upsert, so the strip
+must drop the marker AND the no-new-information upserts, rewriting the
+lists of later upserts that legitimately re-list the patch):
+
+```text
+RED (src stashed, pre-T023, final test shape):
+  TMPRL1100: child workflow type of scheduled event 'GraphWorkflow'
+  does not match child workflow type of command 'FeatureWorkflow'
+GREEN (T023 src): .... [100%] exit 0
+  (test_benchmark_workflow_replays_one_cell_history,
+   test_replays_with_the_e74_marker_stripped,
+   test_a_new_parent_starts_graph_children_and_its_history_replays,
+   test_on_graph_fires_once_with_content_sha_before_the_child_starts)
+```
+
+The on_graph unit test now also pins the R-1 call itself:
+`deprecate_patch("e74-graph-child:child-1")` exactly once (it
+monkeypatches the workflow-only API, as the unit test runs outside a
+workflow). `ruff check`/`format --check` on the three files,
+`scripts/check_file_size.py`, and `mypy` (412 files) all clean.

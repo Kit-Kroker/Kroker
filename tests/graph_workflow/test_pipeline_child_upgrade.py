@@ -94,6 +94,7 @@ async def test_on_graph_fires_once_with_content_sha_before_the_child_starts(monk
     from sdlc.workflows.graph_nodes import HANDLERS
 
     events: list[tuple[str, str]] = []
+    deprecated: list[str] = []
 
     async def fake_child(run, *args, **kw):
         events.append(("child-started", kw["id"]))
@@ -102,6 +103,13 @@ async def test_on_graph_fires_once_with_content_sha_before_the_child_starts(monk
     async def on_graph(sha: str) -> None:
         events.append(("on-graph", sha))
 
+    # deprecate_patch is a workflow-only API; this unit test runs outside a
+    # workflow, so it stands in — and doubles as the R-1 pin: the per-child
+    # e74 marker is deprecated exactly once, before anything else happens.
+    monkeypatch.setattr(
+        "temporalio.workflow.deprecate_patch",
+        lambda patch_id: deprecated.append(patch_id),
+    )
     monkeypatch.setattr("temporalio.workflow.execute_child_workflow", fake_child)
     result = await execute_pipeline_child(
         child_id="child-1",
@@ -115,4 +123,5 @@ async def test_on_graph_fires_once_with_content_sha_before_the_child_starts(monk
     expected = build_run_input(
         greenfield_idea(), e2e_config(), None, registry_roles=REGISTRY, handler_types=HANDLERS
     )
+    assert deprecated == ["e74-graph-child:child-1"]
     assert events == [("on-graph", expected.graph.content_sha()), ("child-started", "child-1")]
