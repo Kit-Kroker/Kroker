@@ -422,3 +422,46 @@ qa-happy also noted the anchor question (refresh 195→314 vs investigate):
 settled by the orchestrator ruling — no re-record; the drift is era drift
 (the live FeatureWorkflow leg at 4f6fc2c3 already produced 314/28, per
 §Baseline addendum), not a graph delta.
+
+## §T021 (T021, plan T044 — Feature replay retired)
+
+Mechanical deletion task (pure-deletion convention, PR-1 T004/T005
+precedent; executor-direct, verified by the suites):
+
+- deleted `tests/replay/test_feature_replay.py` and
+  `tests/replay/test_capture_feature.py` (`git rm`). Collateral noted:
+  the file also carried `test_replayer_matches_the_production_worker_effect`
+  (the sandbox/passthrough pin is independently held by
+  `tests/durability/test_sandbox_module_marking.py`) and the assessment
+  replay leg (assessment histories remain replay-covered by the capture
+  twin's round trip; T003's reviewer-approved classification ruled the
+  file delete with `test_graph_replay.py` as counterpart).
+- `tests/replay/harness.py`: `_start_feature`, `_feature_workflows` and
+  `FEATURE_STARTER` deleted; `_default_replay_workflows()` swaps its
+  FeatureWorkflow member for GraphWorkflow (per the T004 comment's own
+  schedule), closing the research-retain replay legs.
+- `tests/replay/test_graph_golden.py`: the memo-parity test drops its
+  FeatureWorkflow leg (renamed
+  `test_memo_key_inputs_match_the_pinned_keys`) and asserts the live
+  GraphWorkflow keys `== MEMO_PARITY_KEYS` outright, plus the watermark
+  check; module docstring re-anchored to the re-baselined goldens.
+  (Process note: the executor's first harness edit mangled the file —
+  it briefly deleted `replayer()` with the Feature block — caught
+  immediately by an `ast.parse` + symbol grep and repaired before any
+  test run; the committed state is the repaired one.)
+
+```text
+$ uv run pytest -m temporal tests/replay -q
+exit=0, no FAILED, no ERROR                          (/tmp/opencode/t021-verify.txt)
+$ uv run ruff check / format --check (harness.py, test_graph_golden.py)
+clean
+```
+
+**Known fast-tier state after T021 until T026's migrate commit:**
+`pytest -q` is interrupted by exactly two collection errors —
+`tests/test_model_forwarding.py` (imports `FEATURE_STARTER`) and
+`tests/durability/test_wire_neutrality.py` (via `wire_dump.py`, same
+import). Both are `migrate`-class in the T003 inventory and are
+re-pointed by T026's migrate commit, by design. No test executes while
+they are broken, so T026's per-commit `pytest -q` comparison is
+meaningful only from its migrate commit onward (recorded there).

@@ -1,4 +1,5 @@
-"""E-74 §7.3: GraphWorkflow reproduces FeatureWorkflow's golden traces EXACTLY.
+"""E-74 §7.3 / 020: GraphWorkflow's golden traces, re-baselined from itself
+(T018; provenance-only diff, T019 gate).
 
 Stop-guard SG-3: any difference is a STOP. Never edit a golden file.
 """
@@ -13,16 +14,17 @@ from temporalio import activity
 from sdlc.core.models import MemoryConfig
 from sdlc.memoization.activities import CacheGetInput, CachePutInput
 from tests.fakes.canned import e2e_config
-from tests.replay.harness import FEATURE_STARTER, GRAPH_STARTER, capture, load_golden
+from tests.replay.harness import GRAPH_STARTER, capture, load_golden
 from tests.replay.scenarios import GOLDEN_SCENARIOS, SCENARIOS, A, answer_clarify, decide, wait_for
 
 pytestmark = pytest.mark.temporal
 GREENFIELD = next(s for s in SCENARIOS if s.name == "greenfield_happy")
 
-# 020 T007 (plan T014, R-5): the FeatureWorkflow memo-parity keys, frozen
-# verbatim from one run of test_memo_key_inputs_match_feature_workflow before
-# FeatureWorkflow is deleted. Each tuple is one content_key call:
-# (stage, input_json, digest, model, watermark), in call order.
+# 020 T007 (plan T014, R-5): the memo-parity keys, frozen verbatim from one
+# run of the FeatureWorkflow leg (renamed test_memo_key_inputs_match_the_
+# pinned_keys by 020 T021) before FeatureWorkflow was deleted. Each tuple is
+# one content_key call: (stage, input_json, digest, model, watermark), in
+# call order.
 MEMO_PARITY_KEYS: list[tuple] = [
     (
         "clarify",
@@ -101,18 +103,19 @@ async def fake_reflect(*args: object) -> None:
 
 
 @pytest.mark.asyncio
-async def test_memo_key_inputs_match_feature_workflow(monkeypatch, tmp_path):
+async def test_memo_key_inputs_match_the_pinned_keys(monkeypatch, tmp_path):
     """§5.3 host mirrors: with memoization and memory ON, every content_key
-    input (incl. the watermark) is identical across the two workflows."""
+    input (incl. the watermark) still equals the keys frozen at T007, when
+    both workflows were alive. FeatureWorkflow is gone (020 T021); the pin
+    is the survivor and GraphWorkflow must keep matching it."""
     import sdlc.workflows.role_host as role_host
     from sdlc.memory.activities import recall_snapshot, retain
 
-    seen: dict[str, list[tuple]] = {"FeatureWorkflow": [], "GraphWorkflow": []}
-    current = {"name": ""}
+    seen: list[tuple] = []
     original = role_host.content_key
 
     def recording(*args):
-        seen[current["name"]].append(args)
+        seen.append(args)
         return original(*args)
 
     monkeypatch.setattr(role_host, "content_key", recording)
@@ -137,13 +140,9 @@ async def test_memo_key_inputs_match_feature_workflow(monkeypatch, tmp_path):
             retain,
         ],
     )
-    for starter in (FEATURE_STARTER, GRAPH_STARTER):
-        current["name"] = starter.name
-        await capture(scenario, starter, monkeypatch, tmp_path / starter.name)
-    assert seen["FeatureWorkflow"], "memoization must have computed keys"
-    assert seen["GraphWorkflow"] == seen["FeatureWorkflow"]
-    # 020 T007: both live legs equal the frozen FeatureWorkflow keys, so the
-    # pin still holds after FeatureWorkflow is gone.
-    assert seen["FeatureWorkflow"] == MEMO_PARITY_KEYS
-    assert seen["GraphWorkflow"] == MEMO_PARITY_KEYS
-    assert all(args[-1] == "wm-e74" for args in seen["GraphWorkflow"])
+    await capture(scenario, GRAPH_STARTER, monkeypatch, tmp_path / "graph")
+    assert seen, "memoization must have computed keys"
+    # 020 T007 pinned these from the FeatureWorkflow leg before deletion;
+    # the GraphWorkflow leg must keep producing them, byte for byte.
+    assert seen == MEMO_PARITY_KEYS
+    assert all(args[-1] == "wm-e74" for args in seen)

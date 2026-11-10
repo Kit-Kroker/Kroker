@@ -34,36 +34,15 @@ class Starter:
     start: Callable[[Client, Scenario, str], Awaitable[WorkflowHandle]]
 
 
-async def _start_feature(client: Client, scenario: Scenario, wf_id: str) -> WorkflowHandle:
-    from sdlc.workflows.feature import FeatureWorkflow
-
-    return await client.start_workflow(
-        FeatureWorkflow.run,
-        args=[scenario.idea(), scenario.cfg(), scenario.seeded()],
-        id=wf_id,
-        task_queue=TASK_QUEUE,
-    )
-
-
-def _feature_workflows() -> tuple[type, ...]:
-    from sdlc.workflows.deployment import DeploymentWorkflow
-    from sdlc.workflows.feature import FeatureWorkflow
-
-    return (FeatureWorkflow, DeploymentWorkflow)
-
-
-FEATURE_STARTER = Starter("FeatureWorkflow", _feature_workflows(), _start_feature)
-
-
 def _default_replay_workflows() -> tuple[type, ...]:
-    # 020 T004: the default tuple moved here from test_feature_replay.py
-    # unchanged. It is explicit so the set stays reviewable; it loses its
-    # FeatureWorkflow member only when T021 deletes that leg.
+    # 020 T004: the default tuple moved here from test_feature_replay.py.
+    # It is explicit so the set stays reviewable. 020 T021: FeatureWorkflow's
+    # member is gone with the workflow itself; GraphWorkflow takes its place.
     from sdlc.workflows.crew import CrewTaskWorkflow
     from sdlc.workflows.deployment import DeploymentWorkflow
-    from sdlc.workflows.feature import FeatureWorkflow
+    from sdlc.workflows.graph import GraphWorkflow
 
-    return (FeatureWorkflow, DeploymentWorkflow, CrewTaskWorkflow)
+    return (GraphWorkflow, DeploymentWorkflow, CrewTaskWorkflow)
 
 
 def replayer(*workflows: type) -> Replayer:
