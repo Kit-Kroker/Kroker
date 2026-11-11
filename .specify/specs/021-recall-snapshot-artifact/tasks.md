@@ -97,7 +97,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
 
   (plan T043, T014)
 - [x] T012 [US1] Add the plain function `read_recall_snapshot(ref: ArtifactRef) -> RecallSnapshot` to `S/artifacts/read.py`. It is not an `@activity.defn`. It checks the kind, verifies `hashlib.sha256(bytes).hexdigest() == ref.sha256`, then rebuilds the snapshot from the canonical array, per contract §2. T011 must pass. (plan T014)
-- [ ] T013 [P] [US1] Write failing tests in new file `T/test_recall_snapshot_event.py` for `MemoryHost._recall` (`S/workflows/memory_host.py:47`):
+- [x] T013 [P] [US1] Write failing tests in new file `T/test_recall_snapshot_event.py` for `MemoryHost._recall` (`S/workflows/memory_host.py:47`):
   - monkeypatch `workflow.execute_activity` to capture the `RecallInput` and return a fixed healthy `RecallSnapshot` with a `ref`;
   - monkeypatch `workflow.info` to return an object with `workflow_id="run-1"`;
   - give the host a stub `_emit` that records calls;
