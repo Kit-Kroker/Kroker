@@ -18,6 +18,9 @@ The architecture stage runs the architect agent with memoization and revisable r
 ### ARCH-1.4
 The stage is composed of `prepare` (the once-per-stage prefix: stage event, start time, role usage, memory recall, map grounding, prompt salt), `produce` (one architect round including delta retries, keyed by the unchanged memo input) and `finish` (judge, benchmark record, memory retain). The graph's `architect` node calls `prepare` once and `produce` per round; the `gate.architecture` node carries the revisable loop. [E-74 spec §4.3, §6.1, 020 FR-006]
 
+### ARCH-1.5
+The memo key's recall slot is the run's memory watermark, extended with the stage's recall snapshot hash when memory is on. [FR-402, 021]
+
 ## Failure modes
 
 - **Delta grounding mismatch**: Proposed file changes do not match repository layout; retries with delta guidance or raises ApplicationError.

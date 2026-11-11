@@ -18,6 +18,9 @@ The plan stage runs the planner agent with memoization and revisable review loop
 ### PLAN-1.4
 The stage is composed of `prepare` (start time, role usage, memory recall, prompt salt), `produce` (one planner round keyed by the unchanged memo input) and `finish` (judge, benchmark record, memory retain). The graph's `plan` node calls `prepare` once and `produce` per round; the `gate.plan` node carries the revisable loop. [E-74 spec §4.3, §6.1, 020 FR-006]
 
+### PLAN-1.5
+The memo key's recall slot is the run's memory watermark, extended with the stage's recall snapshot hash when memory is on. [FR-402, 021]
+
 ## Failure modes
 
 - **Invalid task graph**: Cyclic or missing task dependencies detected during orchestrator validation; fails early before scheduling work.

@@ -41,6 +41,9 @@ The memoization key incorporates `prompt_digest(cfg)` salt and extra probe/map t
 probes are enabled, ensuring cache invalidation on prompt or map changes while maintaining
 strict flag-off byte-identity. [E-85]
 
+### CLARIFY-1.6
+The memo key's recall slot is the run's memory watermark, extended with the stage's recall snapshot hash when memory is on. [FR-402, 021]
+
 ## Failure modes
 
 - **Model failure or timeout in single mode**: Handled by bounded retry policy or surfaces as workflow failure.
