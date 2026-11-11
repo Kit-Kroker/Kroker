@@ -202,7 +202,16 @@ async def produce(
             + (delta_guidance or "")
         )
         arch, _ = await ctx.cached_stage(
-            cfg, "architect", cache_key, ArchitectureSpec, _produce, prompt_digest=prep.salt
+            cfg,
+            "architect",
+            cache_key,
+            ArchitectureSpec,
+            _produce,
+            prompt_digest=prep.salt,
+            # 021 FR-004: the recall snapshot the prompt consumed is a
+            # declared input. The delta-retry loop reuses prep.snapshot, so
+            # every round declares the same hash — no re-recall.
+            recall_ref=prep.snapshot.snapshot_hash,
         )
 
         if codebase_map is None:
