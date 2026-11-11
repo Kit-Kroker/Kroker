@@ -89,7 +89,7 @@ ROWS: dict[ProblemCode, Callable[[], tuple]] = {
         NODE_TYPES,
         roles(),
     ),
-    C.ADR6_VIOLATION: lambda: (_g(_builder("b", "anthropic:x")), GENERIC, roles()),
+    C.ADR6_VIOLATION: lambda: (_g(_builder("b", "anthropic:glm-5.2-flash")), GENERIC, roles()),
     C.ADR6_COMBINATIONS_EXCEEDED: lambda: (
         _g(*(_builder(f"b{i}", f"f{i}:m") for i in range(300))),
         GENERIC,

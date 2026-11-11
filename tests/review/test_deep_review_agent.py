@@ -35,7 +35,9 @@ def test_shipped_deep_review_family_differs_from_dev():
 
 
 def test_same_family_deep_review_and_dev_rejected():
-    roles_ = _complete_registry(deep_review=RoleConfig(kind="proposer", model="zai-coding-plan/x"))
+    roles_ = _complete_registry(
+        deep_review=RoleConfig(kind="proposer", model="zai-coding-plan/glm-5.3")
+    )
     with pytest.raises(RegistryError, match="deep_review"):
         validate_registry(roles_)
 

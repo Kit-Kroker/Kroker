@@ -121,8 +121,9 @@ def _cell_config(
         "dev": resolved.get("dev", base_dev),
         "reviewer": resolved.get("reviewer", STAGE_MODELS["review"]),
     }
-    if "deep_review" in STAGE_MODELS:
-        adr6["deep_review"] = resolved.get("deep_review", STAGE_MODELS["deep_review"])
+    for judge in ("deep_review", "qa", "merge_verdict"):
+        if judge in STAGE_MODELS:
+            adr6[judge] = resolved.get(judge, STAGE_MODELS[judge])
     validate_run_roles(adr6)
 
     # research provider is a property of the RUN, not the repo (registry keeps

@@ -71,7 +71,7 @@ def graph(nodes: list[GraphNode], edges: list[GraphEdge]) -> PipelineGraph:
 
 def roles(**overrides: RoleConfig | None) -> dict[str, RoleConfig]:
     """A minimal load_registry()-shaped mapping that passes ADR-6: dev and
-    reviewer in different model families. `name=None` removes a role."""
+    reviewer on different model ids. `name=None` removes a role."""
     base: dict[str, RoleConfig] = {
         "architect": RoleConfig(kind="proposer", model="anthropic:glm-5.2"),
         "clarify": RoleConfig(kind="proposer", model="anthropic:glm-5.2"),
@@ -80,7 +80,7 @@ def roles(**overrides: RoleConfig | None) -> dict[str, RoleConfig]:
         ),
         "planner": RoleConfig(kind="proposer", model="anthropic:glm-5.2"),
         "research": RoleConfig(kind="research", model="anthropic:glm-5.2", provider="fake"),
-        "reviewer": RoleConfig(kind="proposer", model="anthropic:glm-5.2"),
+        "reviewer": RoleConfig(kind="proposer", model="anthropic:glm-5.2-flash"),
     }
     for name, cfg in overrides.items():
         if cfg is None:

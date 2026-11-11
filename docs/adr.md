@@ -79,6 +79,11 @@ per `docs/documentation-rules.md`). ADR-22 was amended again on
   critic. (c) "The judge has no tools" becomes "the judge has no write
   tool and no view of the developer's session"; read-only repo access is
   allowed.
+  *Landed 2026-11-11 (AP-1.0):* (a) is built. `check_adr6_families` compares
+  model ids, and every judge (`reviewer`, `deep_review`, `qa`, `merge_verdict`)
+  must differ from `dev`. The judges ship on `zai:glm-5.3-flash`, so the
+  weights are decorrelated but the vendor is not; a true second family
+  stays a separate, one-variable change if judge quality demands it.
 - **ADR-7 Repairs execute through the factory.** MaintenanceWorkflow starts
   brownfield children for code fixes; autonomy never bypasses gates.
 - **ADR-8 Interfaces are stateless signal/query shells.** No interface DB;

@@ -169,7 +169,7 @@ def test_validate_loads_only_the_agents_loader_at_call_time():
             "    'dev': RoleConfig(kind='harness', harness='opencode', model='zai-coding-plan/m'),",
             "    'planner': RoleConfig(kind='proposer', model='anthropic:m'),",
             "    'research': RoleConfig(kind='research', model='anthropic:m', provider='fake'),",
-            "    'reviewer': RoleConfig(kind='proposer', model='anthropic:m'),",
+            "    'reviewer': RoleConfig(kind='proposer', model='anthropic:m-flash'),",
             "}",
             f"g = from_yaml(Path({fixture.as_posix()!r}).read_text(encoding='utf-8'))",
             "from_graph(g, roles=roles).start()",

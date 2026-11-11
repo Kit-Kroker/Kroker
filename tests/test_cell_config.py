@@ -41,12 +41,12 @@ def test_cell_config_overrides_proposer_and_harness_roles():
 
 
 def test_cell_config_rejects_adr6_violating_arm():
-    # dev opus + reviewer opus (same family) → ADR-6 breach at the boundary
+    # dev and reviewer on the same model id → ADR-6 breach at the boundary
     cell = BenchmarkCell(
         case_id="c1",
         harness=HarnessKind.OPENCODE,
         arm_name="bad",
-        role_models={"dev": "anthropic:claude-opus-4-8", "reviewer": "anthropic:claude-haiku-4-5"},
+        role_models={"dev": "anthropic:claude-opus-4-8", "reviewer": "openai:claude-opus-4-8"},
     )
     with pytest.raises(RegistryError, match="ADR-6"):
         _cell_config(PipelineConfig(), _idea(), _spec(), cell, bench_run_id="b1", rubrics={})

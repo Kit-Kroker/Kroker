@@ -216,29 +216,29 @@ def load_registry(path: str | os.PathLike | None = None) -> dict[str, RoleConfig
     return roles
 
 
+# Roles whose verdict gates a run; each must run different weights than `dev`.
+JUDGE_ROLES: tuple[str, ...] = ("reviewer", "deep_review", "qa", "merge_verdict")
+
+
 def check_adr6_families(role_models: dict[str, str]) -> None:
-    """The ADR-6 model-family inequality invariant, over a resolved
-    role->model map. `dev` and `reviewer` must differ in family; if
-    `deep_review` is present it must differ from `dev`. This is the single
-    implementation reused at boot (validate_registry) and per run
-    (validate_run_roles)."""
+    """The ADR-6 anti-collusion invariant over a resolved role->model map
+    (amended 2026-11-11): every judge present (JUDGE_ROLES) must run a
+    different MODEL ID than `dev`. Compared by id, not provider prefix --
+    the shipped registry once ran glm-5.3 behind `zai-coding-plan/` for `dev`
+    and `zai:` for the reviewer, which a prefix check passes. This
+    decorrelates weights, not vendor. `dev` and `reviewer` are required;
+    the other judges are checked when present. Single implementation reused
+    at boot (validate_registry) and per run (validate_run_roles)."""
     dev = role_models.get("dev")
-    rev = role_models.get("reviewer")
-    if dev is None or rev is None:
+    if dev is None or role_models.get("reviewer") is None:
         raise RegistryError("ADR-6 check requires both 'dev' and 'reviewer' models")
-    if model_family(dev) == model_family(rev):
-        raise RegistryError(
-            f"ADR-6 violation: reviewer family '{model_family(rev)}' "
-            f"equals the family of 'dev' — anti-collusion review requires a "
-            f"different model family than the developer's authoring model"
-        )
-    dr = role_models.get("deep_review")
-    if dr is not None and model_family(dr) == model_family(dev):
-        raise RegistryError(
-            f"ADR-6 violation: deep_review family '{model_family(dr)}' "
-            f"equals the family of 'dev' — the transcript lens must not "
-            f"correlate with the authoring model"
-        )
+    for judge in JUDGE_ROLES:
+        model = role_models.get(judge)
+        if model is not None and model_id(model) == model_id(dev):
+            raise RegistryError(
+                f"ADR-6 violation: {judge} model '{model}' is the same model as "
+                f"'dev' ('{dev}') -- a judge must not run the weights it judges"
+            )
 
 
 def check_adversary_model(role_models: dict[str, str]) -> None:
@@ -250,9 +250,9 @@ def check_adversary_model(role_models: dict[str, str]) -> None:
     it is glm-5.2 behind `zai-coding-plan/` and glm-5.3 behind `zai:` --
     ids differ by string, families differ by prefix), so a family check
     here would wave through a second copy of the reviewer in the shapes
-    where the two coincide. (That dev/reviewer pairing is spec OQ-A4 and is
-    NOT changed here -- check_adr6_families keeps its existing semantics so
-    no benchmark baseline shifts.) No-op when the optional role is absent.
+    where the two coincide. (The dev/reviewer pairing, spec OQ-A4, is now id-based too: see
+    check_adr6_families, amended 2026-11-11.) No-op when the optional role
+    is absent.
     """
     adv = role_models.get("adversary")
     if adv is None:
@@ -296,10 +296,12 @@ def validate_registry(roles: dict[str, RoleConfig]) -> None:
     dev, rev = roles["dev"], roles["reviewer"]
     assert dev.model is not None and rev.model is not None
     role_models: dict[str, str] = {"dev": dev.model, "reviewer": rev.model}
-    if "deep_review" in roles:
-        if roles["deep_review"].model is None:
-            raise RegistryError("role 'deep_review' must declare a model")
-        role_models["deep_review"] = roles["deep_review"].model
+    for judge in JUDGE_ROLES[1:]:
+        if judge in roles:
+            judge_model = roles[judge].model
+            if judge_model is None:
+                raise RegistryError(f"role '{judge}' must declare a model")
+            role_models[judge] = judge_model
     check_adr6_families(role_models)
     check_adversary_model({n: c.model for n, c in roles.items() if c.model is not None})
     if rev.kind == "harness" and rev.harness is not None and rev.harness == dev.harness:

@@ -24,7 +24,7 @@
   "cancel_requested",
   "activity:set_task_authoritative"
  ],
- "source_commit": "481bf756a31371175ba2809ddcbd69a3a832116f",
+ "source_commit": "986da8566703005deedda9d8374fd0426aff21fe",
  "trace": [
   [
    "stage",

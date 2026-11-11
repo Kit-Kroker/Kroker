@@ -91,7 +91,7 @@ def test_validate_run_roles_passes_on_the_live_registry(setup):
     assert check["state"] == "pass"
 
 
-def test_validate_run_roles_fails_when_dev_and_reviewer_share_a_family(setup, monkeypatch):
+def test_validate_run_roles_fails_when_dev_and_reviewer_share_a_model(setup, monkeypatch):
     client, _, _ = setup
     registry = dict(roles.REGISTRY)
     same = "zai-coding-plan/glm-5.3"
@@ -100,7 +100,7 @@ def test_validate_run_roles_fails_when_dev_and_reviewer_share_a_family(setup, mo
     monkeypatch.setattr(roles, "REGISTRY", registry)
     check = next(c for c in _body(client)["checks"] if c["name"] == "validate_run_roles")
     assert check["state"] == "fail"
-    assert "family" in check["text"]
+    assert "same model" in check["text"]
 
 
 def test_the_same_weights_note_when_model_ids_are_equal_v8(setup, monkeypatch):

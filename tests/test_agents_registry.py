@@ -78,19 +78,18 @@ def test_shipped_registry_models_are_the_005_targets():
         "analyst",
         "architect",
         "clarify",
-        "deep_review",
         "devops_planner",
         "handoff",
-        "merge_verdict",
         "planner",
-        "qa",
         "research",
-        "reviewer",
     ):
         assert roles[name].model == _FLIPPED_PROPOSER_MODEL, (
             f"{name} ships {roles[name].model!r}; the 005 flip puts the 11 "
             f"glm proposer roles on '{_FLIPPED_PROPOSER_MODEL}' (data-model.md)"
         )
+    # ADR-6 (amended 2026-11-11): every judge runs different weights than dev.
+    for name in ("deep_review", "merge_verdict", "qa", "reviewer"):
+        assert roles[name].model == "zai:glm-5.3-flash", name
     for name in ("dev", "test", "devops"):
         assert roles[name].model == _HARNESS_MODELS[name], (
             f"{name} ships {roles[name].model!r}; the harness default is "
@@ -111,8 +110,8 @@ def test_each_required_role_is_required(missing):
 
 
 def test_same_family_dev_and_reviewer_rejected():
-    roles = _complete_registry(reviewer=RoleConfig(kind="proposer", model="zai-coding-plan/other"))
-    with pytest.raises(RegistryError, match="family"):
+    roles = _complete_registry(reviewer=RoleConfig(kind="proposer", model="zai:glm-5.3"))
+    with pytest.raises(RegistryError, match="ADR-6"):
         validate_registry(roles)
 
 
@@ -123,10 +122,10 @@ def test_adr6_checks_dev_not_a_bystander_role():
     now fail."""
     roles = _complete_registry(
         dev=RoleConfig(
-            kind="harness", harness=HarnessKind.OPENCODE, model="anthropic:some-coder"
-        ),  # same family as reviewer
+            kind="harness", harness=HarnessKind.OPENCODE, model=_PROPOSER_MODEL
+        ),  # same model id as reviewer
     )
-    with pytest.raises(RegistryError, match="family"):
+    with pytest.raises(RegistryError, match="ADR-6"):
         validate_registry(roles)
 
 
@@ -203,7 +202,7 @@ def test_adr6_still_bites_through_the_directory_loader(tmp_path):
     is what proves 'strict refactor' rather than aspiration."""
     root = _write_registry_dir(tmp_path / "agents")
     (root / "reviewer" / "agent.yaml").write_bytes(
-        b"kind: proposer\nmodel: zai-coding-plan/other\n"
-    )  # dev's family
-    with pytest.raises(RegistryError, match="family"):
+        b"kind: proposer\nmodel: zai-coding-plan/glm-5.3\n"
+    )  # dev's model id
+    with pytest.raises(RegistryError, match="ADR-6"):
         load_registry(root)

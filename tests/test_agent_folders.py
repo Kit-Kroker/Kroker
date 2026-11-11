@@ -80,11 +80,11 @@ def test_validation_precedes_import(tmp_path):
     inside load_registry, this is what catches it."""
     root = write_registry_dir(tmp_path / "agents")
     (root / "reviewer" / "agent.yaml").write_bytes(
-        b"kind: proposer\nmodel: zai-coding-plan/other\n"
-    )  # dev's family
+        b"kind: proposer\nmodel: zai-coding-plan/glm-5.3\n"
+    )  # dev's model id
     for role in ("clarify", "architect"):
         (root / role / "agent.py").write_bytes(
             b"raise RuntimeError('this module must never be imported')\n"
         )
-    with pytest.raises(RegistryError, match="family"):
+    with pytest.raises(RegistryError, match="ADR-6"):
         load_registry(root)

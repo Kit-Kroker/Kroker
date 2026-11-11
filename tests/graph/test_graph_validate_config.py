@@ -146,14 +146,16 @@ def _critic(id_: str, model: str):
 
 
 def test_adr6_same_family_override_is_a_violation():
-    report = _generic(_builder("b", "anthropic:claude-x"))  # registry reviewer is anthropic
+    report = _generic(
+        _builder("b", "anthropic:glm-5.2-flash")
+    )  # same model id as the registry reviewer
     [(_, message)] = _problems(report, C.ADR6_VIOLATION)
     assert "ADR-6 violation" in message
 
 
 def test_adr6_cross_product_catches_one_divergent_dev_model():
     report = _generic(
-        _builder("b1", "zai-coding-plan/glm-5.2"), _builder("b2", "anthropic:claude-x")
+        _builder("b1", "zai-coding-plan/glm-5.2"), _builder("b2", "anthropic:glm-5.2-flash")
     )
     assert len(_problems(report, C.ADR6_VIOLATION)) == 1
 
@@ -161,9 +163,9 @@ def test_adr6_cross_product_catches_one_divergent_dev_model():
 def test_adr6_reports_each_distinct_breach_once():
     report = _generic(
         _builder("b1", "zai-coding-plan/glm-5.2"),
-        _builder("b2", "anthropic:claude-x"),
-        _critic("c1", "zai-coding-plan/other"),
-        _critic("c2", "anthropic:other"),
+        _builder("b2", "anthropic:glm-5.2-flash"),
+        _critic("c1", "zai-coding-plan/glm-5.2"),
+        _critic("c2", "anthropic:glm-5.2-flash"),
     )
     messages = [m for _, m in _problems(report, C.ADR6_VIOLATION)]
     assert len(messages) == 2
@@ -194,7 +196,7 @@ def test_adr6_missing_reviewer_is_a_problem_not_a_crash():
 def test_adr6_unused_roles_keep_their_registry_model():
     """A graph with no builder still checks the registry dev against a
     critic override (mirrors cli_roles)."""
-    report = _generic(_critic("c", "zai-coding-plan/other"))
+    report = _generic(_critic("c", "zai-coding-plan/glm-5.2"))
     assert len(_problems(report, C.ADR6_VIOLATION)) == 1
 
 
