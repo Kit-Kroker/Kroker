@@ -45,6 +45,13 @@ tooling is package-shaped, not file-shaped.
   "clean". A pre-existing failing Go test must never be attributed to the
   change (false absolute block), and an introduced one must never be excused
   as pre-existing (false pass).
+- Known limitation, recorded honestly rather than excused (final-review
+  finding I1): a pre-existing failing SUBTEST (`TestX/sub`) or example
+  (`ExampleFoo`) can misread as introduced — the collect gate is id-level
+  and `go test -list` cannot enumerate subtests, so such an id dies at the
+  membership gate. The failure direction is safe (it blocks, never falsely
+  passes), but the anti-goal above is falsified for that id class. The
+  package-level collect-gate seam ruling is filed as E-30b/c-era follow-up.
 
 ## Approaches considered
 
@@ -67,7 +74,9 @@ tooling is package-shaped, not file-shaped.
 ## Decisions (how it gets made)
 
 - **Node ids:** `<import-path>::<TestName>` everywhere (head JUnit classname,
-  collected ids, selected re-runs).
+  collected ids, selected re-runs). Examples (`Example*`) and subtests
+  (`TestX/sub`) are outside this id grammar today: `parse_collected_ids`
+  matches only top-level `^Test\w*$` (see the Anti-goals limitation).
 - **Commands:**
   - `test_cmd(coverage=False)` → `go test ./...`; with coverage →
     `go test ./... -coverprofile=cover.out -covermode=atomic` piped through
@@ -103,12 +112,19 @@ tooling is package-shaped, not file-shaped.
   `go test -v -run '^(A|B)$' <pkgs> | go-junit-report > out` per chunk,
   `shell_safe`-checked like the Python adapter.
 
-## The one seam extension: `base_locator_exists`
+## The two seam extensions: `base_locator_exists` and `node_id`
 
-DS6 attribution (`scoping.py:208-237`) pre-filters a failed head id by
-checking its part before `::` with `os.path.isfile` at the base worktree —
-a Python-shaped assumption. Import-path ids would fail it and every failing
-Go test would misread as introduced (false absolute block).
+Both are per-language *interpretation* members on the adapter — the
+`classify_test_exit` precedent, not per-language branching in the seam — and
+both are default-preserving: Python's behavior stays bit-identical through
+them. (Amended in-branch: this section originally said "the one seam
+extension"; the second member arrived mid-execution, recorded below.)
+
+**`base_locator_exists`** — DS6 attribution (`scoping.py:208-237`)
+pre-filters a failed head id by checking its part before `::` with
+`os.path.isfile` at the base worktree — a Python-shaped assumption.
+Import-path ids would fail it and every failing Go test would misread as
+introduced (false absolute block).
 
 - `ToolchainAdapter.base_locator_exists(root, locator) -> bool`, **default:
   exactly today's `os.path.isfile(os.path.join(root, locator))`** —
@@ -117,12 +133,27 @@ Go test would misread as introduced (false absolute block).
   from the locator, `os.path.isdir` the remainder. Unparseable `go.mod` →
   `False` (the id goes to the collect step's authoritative judgment anyway —
   the pre-filter is an optimization, collect/re-run is the mechanism).
-- `scoping.py:217` calls the hook instead of the bare `isfile`. This is the
-  `classify_test_exit` precedent — a per-language *interpretation* member on
-  the adapter, not per-language branching in the seam.
+- `scoping.py:217` calls the hook instead of the bare `isfile`.
 
-This is the only shared-code change; `gate.py` and workflow code are
-untouched, per FR-108 and the approved non-goals.
+**`node_id`** — added mid-execution by controller ruling (plan Task 5.5,
+commit `922cd451`): Task 5's review proved `junit._node_id`'s pytest
+dotted-module mangling is lossy for import-path classnames — a Go classname
+rebuilt as a `.py` path is an id `parse_collected_ids` can never emit, so
+DS6 base corroboration could never match, and lossy means unfixable
+downstream (the import path is gone once mangled).
+
+- `ToolchainAdapter.node_id(file_attr, classname, name) -> str`, **default:
+  `junit._node_id` transcribed verbatim** — Python's ids are bit-identical.
+- `GoToolchain` overrides it: the classname (the import path) passes through
+  unmangled; a `file` attribute still wins, matching the default's
+  precedence.
+- `junit.testcase_outcomes(xml, node_id=None)` takes the builder as an
+  optional parameter; `scoping._read_report` routes the adapter's member in.
+
+E-30b/c adapters will likely need the same `node_id` override — vitest/jest
+classnames are not dotted modules either. Shared code still never branches
+per language, and `gate.py` and workflow code remain untouched, per FR-108
+and the approved non-goals.
 
 ## Coverage degradation (recorded behavior)
 

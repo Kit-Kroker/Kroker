@@ -143,6 +143,21 @@ def test_seam_routes_through_the_hook():
 - [ ] **Step 4: Run, expect PASS** — and `uv run pytest tests/test_scoped_tests.py -q` (seam consumers unaffected).
 - [ ] **Step 5: Commit** — `git commit -m "feat(toolchain): Go test-id collect and selected re-run round-trip"`
 
+### Task 5.5 (added by controller ruling during execution)
+
+Task 5's own review proved the report side of the round-trip broken: reading
+a go-junit-report report through `junit._node_id` mangles the import-path
+classname into a dotted `.py` path no collected id can ever match — lossy,
+so unfixable downstream — and DS6 base corroboration would fail closed for
+every Go failure. The ruling added a second default-preserving
+interpretation member, mirroring Task 1's `base_locator_exists`:
+`ToolchainAdapter.node_id` (default transcribes `junit._node_id` verbatim,
+Python bit-identical; Go passes the classname through unmangled), an
+optional `node_id` builder parameter on `junit.testcase_outcomes`, and
+`scoping._read_report` routing the adapter's member in. Landed as commit
+`922cd451` with its own review round (see this directory's
+`review-048db75c..922cd451.diff`).
+
 ### Task 6: `GoToolchain.base_locator_exists` override
 
 **Files:**
