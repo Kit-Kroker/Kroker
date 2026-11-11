@@ -46,7 +46,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
 
   (plan T043, T010)
 - [x] T003 Implement `recall_snapshot_canonical(bank, watermark, query_hash, items, degraded) -> bytes` and `recall_snapshot_hash(...) -> str` in `S/memory/query_hash.py`, per data-model.md "Canonical content". Leave `recall_query_hash` byte-for-byte unchanged (FR-003). T002 must pass. (plan T010)
-- [ ] T004 Write failing tests in `T/test_recall_snapshot_artifact.py` (section "model") and extend `T/test_memory_models.py:12` (`test_recall_snapshot_defaults_not_degraded`):
+- [x] T004 Write failing tests in `T/test_recall_snapshot_artifact.py` (section "model") and extend `T/test_memory_models.py:12` (`test_recall_snapshot_defaults_not_degraded`):
   - `RecallSnapshot(query_hash="q", bank="b", watermark="w")` gets a non-empty `snapshot_hash` equal to `recall_snapshot_hash("b","w","q",[],False)`, with `ref is None` and `persist_failed is False`;
   - the disabled shape `RecallSnapshot(query_hash="", bank="b", watermark="unknown")` keeps `snapshot_hash == ""`;
   - `RecallSnapshot(query_hash="", ..., degraded=True)` gets a hash;

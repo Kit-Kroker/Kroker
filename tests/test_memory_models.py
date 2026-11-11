@@ -13,6 +13,12 @@ def test_recall_snapshot_defaults_not_degraded():
     snap = RecallSnapshot(query_hash="abc", bank="project:x", watermark="3")
     assert snap.items == []
     assert snap.degraded is False
+    # 021 (plan T042): the new fields default, so pre-021 constructors and
+    # replayed histories keep validating; the model validator fills the
+    # content hash whenever query_hash or degraded is set.
+    assert snap.snapshot_hash  # non-empty: derived from the other fields
+    assert snap.ref is None
+    assert snap.persist_failed is False
 
 
 def test_retain_item_requires_kind_bank_text():
