@@ -28,6 +28,11 @@ from sdlc.stages.clarify.models import (
     ClarifiedRequirements,
     OpenQuestion,
 )
+from sdlc.stages.constitution.models import (
+    Constitution,
+    Principle,
+    constitution_digest,
+)
 from sdlc.stages.merge.models import MergeVerdict
 from sdlc.stages.plan.models import (
     DevTask,
@@ -37,6 +42,33 @@ from sdlc.stages.qa.models import QAReport
 from sdlc.stages.review.models import ReviewReport
 
 QUESTION_IDS = ["q1"]
+
+# FR-112: the constitution the graph's constitution node hands downstream
+# in tests. Two principles (one normative of each kind, one with a
+# source_ref and one without) so render tests can pin both line shapes.
+_CONSTITUTION_PRINCIPLES = [
+    Principle(
+        id="CP-1",
+        statement="Flag-off runs stay byte-identical to today.",
+        normative="MUST",
+        rationale="FR-010",
+        source_ref="AGENTS.md",
+    ),
+    Principle(
+        id="CP-2",
+        statement="Models propose; code disposes.",
+        normative="SHOULD",
+        rationale="separation of powers",
+        source_ref=None,
+    ),
+]
+
+CONSTITUTION = Constitution(
+    principles=_CONSTITUTION_PRINCIPLES,
+    digest=constitution_digest(_CONSTITUTION_PRINCIPLES),
+    drafted_by="agent",
+)
+
 
 CLARIFIED = ClarifiedRequirements(
     summary="Add a greeting endpoint.",

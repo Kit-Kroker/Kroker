@@ -334,5 +334,14 @@ def _memory_block(items: Sequence[str]) -> str:
     return "\nRelevant memory:\n- " + "\n- ".join(items)
 
 
-def clarify_prompt(idea_json: str, memory: Sequence[str]) -> str:
-    return idea_json + _memory_block(memory)
+def clarify_prompt(idea_json: str, memory: Sequence[str], constitution_block: str = "") -> str:
+    """The block is the bounded constitution render ("" when absent; see
+    stages/constitution/prompts.py). It sits between the idea and recall
+    per the spec hierarchy: idea -> constitution -> codebase map -> recall.
+    At the default the output is byte-identical to the two-arg form
+    (FR-010)."""
+    return (
+        idea_json
+        + (f"\n\n{constitution_block}" if constitution_block else "")
+        + _memory_block(memory)
+    )

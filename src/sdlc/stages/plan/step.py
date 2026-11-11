@@ -30,6 +30,8 @@ with workflow.unsafe.imports_passed_through():
     )
     from ...memory.models import MemoryKind
     from ...prompts import planner_prompt
+    from ..constitution.models import Constitution
+    from ..constitution.prompts import render_constitution
     from .models import ImplementationPlan
     from .prompts import prompt_digest
 
@@ -100,12 +102,21 @@ async def produce(
     *,
     cfg: PipelineConfig,
     architecture: ArchitectureSpec,
+    constitution_digest: str = "",
+    constitution: Constitution | None = None,
     requirements: ClarifiedRequirements | None = None,
     planner_agent: Any = None,
     guidance: str | None = None,
 ) -> ImplementationPlan:
     """One planner round. Verbatim body of the former `_run_plan(guidance)`."""
-    prompt = planner_prompt(architecture.model_dump_json(), prep.snapshot.items, guidance)
+    # FR-112: the bounded constitution block ("" when absent), inserted
+    # between the architecture and recall per the spec hierarchy (the
+    # planner prompt has no map slot). Byte-identical to today when there
+    # is no constitution (FR-010).
+    constitution_block = render_constitution(constitution) if constitution is not None else ""
+    prompt = planner_prompt(
+        architecture.model_dump_json(), prep.snapshot.items, guidance, constitution_block
+    )
 
     async def _produce() -> ImplementationPlan:
         res = await ctx.run_role(
@@ -118,7 +129,12 @@ async def produce(
         )
         return res.output
 
-    cache_key = architecture.model_dump_json() + (guidance or "")
+    # FR-112: constitution_digest joins the memo inputs. Omitted-while-""
+    # is the string seam's form of ResearchDeps.research_model's
+    # omit-when-default serializer: an empty digest concatenates to the
+    # identity, so a run that never saw a constitution keys byte-identically
+    # to today (FR-010).
+    cache_key = architecture.model_dump_json() + constitution_digest + (guidance or "")
     plan_obj, _ = await ctx.cached_stage(
         cfg,
         "plan",

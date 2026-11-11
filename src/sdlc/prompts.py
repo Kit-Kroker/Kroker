@@ -31,10 +31,20 @@ def _frozen_contract_block(assertions: Sequence[str]) -> str:
     return "Frozen contract assertions:\n- " + "\n- ".join(assertions)
 
 
-def planner_prompt(arch_json: str, memory: Sequence[str], guidance: str | None) -> str:
-    """feature.py:2040-2044."""
+def planner_prompt(
+    arch_json: str,
+    memory: Sequence[str],
+    guidance: str | None,
+    constitution_block: str = "",
+) -> str:
+    """feature.py:2040-2044. `constitution_block` (FR-112) is the bounded
+    constitution render ("" when absent — see stages/constitution/
+    prompts.py), inserted between the architecture and recall per the spec
+    hierarchy; at the default the output is byte-identical to the three-arg
+    form."""
     return (
         arch_json
+        + (f"\n\n{constitution_block}" if constitution_block else "")
         + _memory_block(memory)
         + (f"\nRevision guidance from reviewer:\n{guidance}" if guidance else "")
     )
