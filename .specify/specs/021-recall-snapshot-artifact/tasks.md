@@ -112,7 +112,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
   - leave the disabled branch (`:50-51`) untouched.
 
   T013 must pass. (plan T021)
-- [ ] T015 [US1] Run `pytest -q T/test_recall_snapshot_artifact.py T/test_recall_snapshot_event.py T/test_memory_activities.py`, which must be green. (quickstart Q1, Q2, Q4)
+- [x] T015 [US1] Run `pytest -q T/test_recall_snapshot_artifact.py T/test_recall_snapshot_event.py T/test_memory_activities.py`, which must be green. (quickstart Q1, Q2, Q4)
 
 **Checkpoint**: US1 is independently demonstrable. The stage memo key is not yet changed.
 
