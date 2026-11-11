@@ -53,13 +53,16 @@ def _inp(
 
 class _Recorder:
     """Stands in for the registry agent (research's _Boom pattern, recording
-    instead of raising): captures the run kwargs so the 004 D7a forwarding
-    branch can be asserted without a real model call."""
+    instead of raising): captures the prompt and run kwargs so the 004 D7a
+    forwarding branch and the prompt's mode line can be asserted without a
+    real model call."""
 
     def __init__(self) -> None:
+        self.prompt: str | None = None
         self.kwargs: dict | None = None
 
     async def run(self, prompt: str, **kw):
+        self.prompt = prompt
         self.kwargs = kw
 
         class _Result:
@@ -165,6 +168,27 @@ async def test_zero_request_bound_reports_zero_spend():
     out = await draft_constitution(_inp(max_requests=0), _model=_EMPTY_DRAFT)
     assert out.draft.principles == []
     assert out.usage == RoleUsage(role="constitution", model="test-model")
+
+
+@pytest.mark.asyncio
+async def test_brownfield_mode_without_repo_never_prompts_for_source_refs(tmp_path):
+    """The prompt's mode line derives from the RESOLVED WORKSPACE, not
+    deps.mode: a brownfield mode over a missing repo_path must not instruct
+    the model to cite files it cannot read (hallucinated refs pass the
+    path-only shape)."""
+    rec = _Recorder()
+    # Non-directory repo_path: same as missing -- the scratch branch runs.
+    await draft_constitution(_inp(mode="brownfield", repo_path=str(tmp_path / "nope")), _agent=rec)
+    assert "Mode: greenfield" in (rec.prompt or "")
+    assert "cite one repo-relative file path" not in (rec.prompt or "")
+
+    # Positive control: the same brownfield mode WITH an existing repo dir
+    # keeps the repo-grounded instruction.
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    await draft_constitution(_inp(mode="brownfield", repo_path=str(repo)), _agent=rec)
+    assert "Mode: brownfield" in (rec.prompt or "")
+    assert "cite one repo-relative file path" in (rec.prompt or "")
 
 
 @pytest.mark.asyncio

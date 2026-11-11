@@ -30,8 +30,10 @@ class DraftInput(BaseModel):
     """One drafting run's whole input (crosses the activity boundary as data).
 
     `repo_path` is the brownfield checkout; None (or a path that is not a
-    directory) means greenfield -- the activity drafts from the idea alone
-    over an empty scratch tree.
+    directory) means the run gets an empty scratch workspace AND a
+    greenfield prompt -- the workspace branch is the one source of truth
+    for both, so the prompt can never instruct repo citation over a tree
+    the agent cannot read (`deps.mode` remains the freeze contract).
     """
 
     idea_json: str
@@ -77,20 +79,31 @@ def _scratch_workspace(run_id: str) -> LocalWorkspaceBackend:
     return LocalWorkspaceBackend(scratch)
 
 
-def _resolve_workspace(inp: DraftInput) -> LocalWorkspaceBackend:
-    """The repo checkout when there is one; otherwise the empty scratch
-    dir. One workspace per run, attached at run start."""
+def _repo_workspace(inp: DraftInput) -> LocalWorkspaceBackend | None:
+    """The brownfield workspace: the repo checkout, when repo_path names an
+    existing directory; None otherwise. This one predicate is the single
+    source of truth BOTH the workspace fallback and the prompt's mode line
+    derive from, so mode and readability can never diverge."""
     if inp.repo_path and Path(inp.repo_path).is_dir():
         return LocalWorkspaceBackend(inp.repo_path)
-    return _scratch_workspace(inp.deps.run_id)
+    return None
 
 
-def _draft_prompt(inp: DraftInput) -> str:
+def _draft_prompt(inp: DraftInput, *, repo_attached: bool) -> str:
     """The user prompt. The system prompt (agents/constitution/
     instructions.md) already fixes the method and the source_ref rules
     (repo-relative path, no line numbers, never quote contents); this only
-    carries the run's particulars: the idea, the mode, the two caps."""
-    if inp.deps.mode == "brownfield":
+    carries the run's particulars: the idea, the mode, the two caps.
+
+    The mode line derives from the RESOLVED WORKSPACE, not deps.mode: the
+    brownfield instruction ("read the repo... cite source_ref") is only
+    truthful when the repo branch was actually taken. Keying it off
+    deps.mode instead would let a brownfield mode over a missing repo_path
+    instruct the model to cite files it cannot read -- inviting
+    hallucinated refs that pass the path-only shape. deps.mode remains the
+    FREEZE contract (verify.py, Task 7); the prompt speaks only to what
+    this run can actually read."""
+    if repo_attached:
         mode_line = (
             "Mode: brownfield — the repo at the workspace root is the source "
             "of truth. Read it with your tools; every principle must cite one "
@@ -138,10 +151,13 @@ async def _draft_constitution_impl(inp: DraftInput, _model=None, _agent=None) ->
     else:
         agent = _agent
 
-    workspace = _resolve_workspace(inp)
+    # One predicate decides both facts: which workspace the run gets, and
+    # whether the prompt may instruct repo citation at all.
+    repo = _repo_workspace(inp)
+    workspace = repo if repo is not None else _scratch_workspace(inp.deps.run_id)
     run_usage = RunUsage()
     usage_limits = UsageLimits(request_limit=inp.deps.max_requests)
-    prompt = _draft_prompt(inp)
+    prompt = _draft_prompt(inp, repo_attached=repo is not None)
     try:
         if _model is not None:
             result = await agent.run(
