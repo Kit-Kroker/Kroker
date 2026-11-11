@@ -260,7 +260,7 @@ still green.
 
   Record the results in `F/verification.md` §PR-1.
   **Executor STOP: hand back to the orchestrator here.**
-- [ ] T015 **Orchestrator-only.** The orchestrator verifies branch
+- [x] T015 **Orchestrator-only.** The orchestrator verifies branch
   `020-delete-featureworkflow` (T014 record) and fast-forwards `main` to it.
   The crew does not push, and no pull request is opened. The integration
   note in `F/verification.md` §PR-1 states that closed FeatureWorkflow rows
@@ -268,7 +268,7 @@ still green.
 
 ## Phase 5: User Story 1, gate run 1 (P1, BLOCKING)
 
-- [ ] T016 [US1] **Orchestrator-only** (it needs live Temporal). Gate run 1
+- [x] T016 [US1] **Orchestrator-only** (it needs live Temporal). Gate run 1
   (plan T030, FR-001): with `main` fast-forwarded to the PR-1 branch, run every command in `F/contracts/gate-runbook.md`
   §Commands verbatim. Paste the commands and their full output into
   `F/verification.md` §Gate-1, then apply §Pass rule.
@@ -285,14 +285,14 @@ empty behavioural diff.
 
 **Independent test**: T019 and T020.
 
-- [ ] T017 [US4] (executor resumes here, only after T016 PASSED) Create
+- [x] T017 [US4] (executor resumes here, only after T016 PASSED) Create
   the worktree `../Kroker-020-2` on branch `020-delete-featureworkflow-2`
   from `main` at or after the T016 commit.
   Add `T/replay/test_capture_graph.py` (plan T040), a twin of
   `T/replay/test_capture_feature.py`: the same `SDLC_CAPTURE_HISTORIES=1`
   switch, the same capture-twice asserts, and `GRAPH_STARTER` with
   `write_fixtures(scenario.name, first, GRAPH_STARTER.name)`.
-- [ ] T018 [US4] Re-capture (plan T041). First check that
+- [x] T018 [US4] Re-capture (plan T041). First check that
   `git diff --stat main -- src/` is empty.
   1. Run
      `SDLC_CAPTURE_HISTORIES=1 pytest -m temporal T/replay/test_capture_graph.py`
@@ -306,7 +306,7 @@ empty behavioural diff.
      `golden/assessment_discover_risk.json` and the three non-Feature
      histories are untouched:
      `git status --short T/replay/histories T/replay/golden`.
-- [ ] T019 [US4] Golden diff gate (plan T042, FR-011, SC-003):
+- [x] T019 [US4] Golden diff gate (plan T042, FR-011, SC-003):
   - write `scripts/check_golden_rebaseline.py`. It takes no arguments. For
     each `T/replay/golden/*.json` it compares the `git show HEAD:<path>`
     JSON with the working-tree JSON, and exits 1 naming the file and key
@@ -316,7 +316,7 @@ empty behavioural diff.
 
   **A non-zero exit is a STOP.** Commit the re-captured fixtures, the
   script and the diff together.
-- [ ] T020 [US4] Add `T/replay/test_graph_replay.py` (plan T043). It
+- [x] T020 [US4] Add `T/replay/test_graph_replay.py` (plan T043). It
   replays each of the 18 scenario histories with
   `replayer(GraphWorkflow, DeploymentWorkflow, CrewTaskWorkflow)` and
   `raise_on_replay_failure=True`, parametrised over `SCENARIOS`. Re-point:
@@ -331,7 +331,7 @@ empty behavioural diff.
     `workflow == "GraphWorkflow"` for `SCENARIOS`).
 
   Run `pytest -m temporal T/replay T/durability T/review -q`.
-- [ ] T021 [US4] Retire the Feature replay (plan T044):
+- [x] T021 [US4] Retire the Feature replay (plan T044):
   - delete `T/replay/test_feature_replay.py` and
     `T/replay/test_capture_feature.py`;
   - delete `FEATURE_STARTER`, `_start_feature` and `_feature_workflows`
@@ -343,7 +343,7 @@ empty behavioural diff.
 
 ## Phase 7: User Story 5, replay-safe restart (P1, PR-2)
 
-- [ ] T022 [P] [US5] Tests first (plan T046):
+- [x] T022 [P] [US5] Tests first (plan T046):
   - in `T/replay/test_benchmark_replay.py`, add
     `test_replays_with_the_e74_marker_stripped`, which loads
     `benchmark_one_cell`, drops every `MARKER_RECORDED` event whose
@@ -354,7 +354,7 @@ empty behavioural diff.
 
   Confirm the stripped-marker test fails on the current
   `workflow.patched` code: it takes the FeatureWorkflow branch.
-- [ ] T023 [US5] In `S/workflows/pipeline_child.py`, replace
+- [x] T023 [US5] In `S/workflows/pipeline_child.py`, replace
   `if workflow.patched(f"e74-graph-child:{child_id}"):` with
   `workflow.deprecate_patch(f"e74-graph-child:{child_id}")`, then start
   GraphWorkflow unconditionally (R-1). Delete the else branch and the
@@ -362,7 +362,7 @@ empty behavioural diff.
   docstring: the marker is deprecated in 020 and its removal is a standing
   item.
   T022 and `test_benchmark_replay_one_cell` must be green.
-- [ ] T024 [US5] Remove FeatureWorkflow from the inbox open-run types (plan
+- [x] T024 [US5] Remove FeatureWorkflow from the inbox open-run types (plan
   T045, FR-005) in `S/channels/inbox.py`:
   - the `list_open_run_ids` default becomes `("GraphWorkflow",)`;
   - `fetch_inbox` uses `"GraphWorkflow", "CrewTaskWorkflow"`;
@@ -375,7 +375,7 @@ empty behavioural diff.
 
 **Independent test**: SC-002 and SC-007; quickstart §3.
 
-- [ ] T025 [US2] Delete FeatureWorkflow (plan T050, FR-003):
+- [x] T025 [US2] Delete FeatureWorkflow (plan T050, FR-003):
   - update `T/test_worker_registration.py` first to the registered set
     without FeatureWorkflow, and see it fail;
   - delete `S/workflows/feature.py`;
@@ -383,7 +383,7 @@ empty behavioural diff.
     (`:286`), and update the module docstring (`:3`).
 
   Run `pytest T/test_worker_registration.py T/graph_workflow/test_cold_import.py T/graph_workflow/test_store_import_pin.py -q`.
-- [ ] T026 [US2] Execute the T003 classification (plan T070), one commit per
+- [x] T026 [US2] Execute the T003 classification (plan T070), one commit per
   class:
   - `delete`: the commit body lists each file with its counterpart;
   - `migrate`;
@@ -393,7 +393,7 @@ empty behavioural diff.
   `T/review/test_adversary_workflow.py:151` (plan T051), which T003
   classifies. After each commit, run `pytest -q` and compare against the
   T002 list.
-- [ ] T027 [US2] Delete the architecture and plan composites (plan T052,
+- [x] T027 [US2] Delete the architecture and plan composites (plan T052,
   R-6, C5):
   - remove `step()` at `S/stages/architecture/step.py:279` and
     `S/stages/plan/step.py:174`;
@@ -404,7 +404,7 @@ empty behavioural diff.
   - update the `revisable_stage` mentions in the docstrings of
     `S/stages/architecture/step.py` and `S/stages/plan/step.py`, and the
     `S/core/context.py` and `S/prompts.py` docstrings.
-- [ ] T028 [US2] Rewrite the slice tests against
+- [x] T028 [US2] Rewrite the slice tests against
   `prepare`/`produce`/`finish`, keeping every `@pytest.mark.clause`:
   - `T/architecture/test_architecture_slice_contract.py`;
   - `T/plan/test_plan_slice_contract.py`;
@@ -413,7 +413,7 @@ empty behavioural diff.
   - `T/plan/test_plan_step_split.py` (`:101-130`);
   - `T/calibration/test_calibration_plumbing.py:188-202`, which now
     targets the T006 graph pins.
-- [ ] T029 [US2] (plan T053) In the **primary checkout**, rewrite ARCH-1.x in
+- [x] T029 [US2] (plan T053) In the **primary checkout**, rewrite ARCH-1.x in
   `S/stages/architecture/architecture.md` and PLAN-1.x in
   `S/stages/plan/plan.md`. They are restated as `prepare`/`produce`/`finish`
   plus the `architect` and `gate.architecture` nodes (and the `plan` and
@@ -427,10 +427,10 @@ empty behavioural diff.
     behaviour change).
   - Run `python scripts/check_clauses.py`, then revert the primary
     checkout's copies with `git checkout -- <the two paths>`.
-- [ ] T030 [US2] Add the comment "no graph node calls this; kept per 020
+- [x] T030 [US2] Add the comment "no graph node calls this; kept per 020
   FR-006; see .workspace/tasks/2026-11-08-revisable-stage-deletion.md" above
   `_revisable_stage` at `S/workflows/role_host.py:327` (plan T054).
-- [ ] T031 [US2] PR-2 code verification (plan T059):
+- [x] T031 [US2] PR-2 code verification (plan T059):
   - `pytest -q`, compared against the T002 list;
   - `pytest -m temporal T/replay T/durability T/graph_workflow -q`;
   - `python scripts/check_clauses.py`;
@@ -442,7 +442,7 @@ empty behavioural diff.
 
 ## Phase 9: Polish (PR-2): docs, AGENTS.md, bookkeeping
 
-- [ ] T032 [P] Rewrite `S/workflows/AGENTS.md` (plan T080, FR-013):
+- [x] T032 [P] Rewrite `S/workflows/AGENTS.md` (plan T080, FR-013):
   - delete the section "Grace edits while FeatureWorkflow is registered
     (E-74 U6)";
   - remove the FeatureWorkflow readers and writers from every
@@ -456,7 +456,7 @@ empty behavioural diff.
   - intentional golden changes re-baseline from GraphWorkflow with the
     projection diff attached;
   - SG-2 and SG-3 still apply.
-- [ ] T033 [P] Docs and comments (plan T081, FR-014):
+- [x] T033 [P] Docs and comments (plan T081, FR-014):
   - update every non-historical `FeatureWorkflow` mention listed by
     `grep -rn FeatureWorkflow src/ docs/ ROADMAP.md PRD.md ARCHITECTURE.md AGENTS.md`;
   - ROADMAP FR-1203 and the E-74 follow-up line in
@@ -468,7 +468,7 @@ empty behavioural diff.
   `S/channels/transport.py`, the `S/workflows/pipeline_child.py`
   docstring, and the `S/core/models.py` field comments. Paste the grep
   output into `F/verification.md` §SC-002.
-- [ ] T034 Bookkeeping (plan T082, FR-016):
+- [x] T034 Bookkeeping (plan T082, FR-016):
   - mark `.workspace/tasks/2026-09-17-featureworkflow-deletion-followup.md`
     closed, with a link to this round;
   - create `.workspace/tasks/2026-11-08-revisable-stage-deletion.md`
@@ -482,7 +482,7 @@ empty behavioural diff.
   card for the header table). No `temporal` command runs in this task.
   **Executor STOP: hand back to the orchestrator here. Do not start T035,
   T036 or T037.**
-- [ ] T035 **Orchestrator-only** (plan T089). With quickstart §3 green, the
+- [x] T035 **Orchestrator-only** (plan T089). With quickstart §3 green, the
   orchestrator verifies branch `020-delete-featureworkflow-2` against
   `F/golden-rebaseline.diff` and `F/verification.md` §Gate-1, then
   fast-forwards `main` to it. The crew does not push, and no pull request
@@ -493,18 +493,18 @@ empty behavioural diff.
 
 The executor never runs T036 or T037. It stopped after T034.
 
-- [ ] T036 [US1] **Orchestrator-only.** Gate run 2 (plan T090, FR-002): rerun the
+- [x] T036 [US1] **Orchestrator-only.** Gate run 2 (plan T090, FR-002): rerun the
   `F/contracts/gate-runbook.md` §Commands verbatim, under 1 hour before
   T037. Paste the output into `F/verification.md` §Gate-2 and apply
   §Pass rule. **FAIL is a STOP**: no deploy, and no `v*` tag.
-- [ ] T037 [US1] **Orchestrator-only.** Restart the worker (plan T091):
+- [x] T037 [US1] **Orchestrator-only.** Restart the worker (plan T091):
   `docker compose pull worker && docker compose up -d worker` (or
   `docker compose up -d --build worker` for a local build of `main`
   after T035's fast-forward). Run the quickstart §4 checks:
   - `docker compose logs worker` shows `worker running on task queue`;
   - the dashboard fleet shows the legacy rows and `errors` is empty
     (SC-005).
-- [ ] T038 Close-out (plan T092), done by whoever the orchestrator assigns
+- [x] T038 Close-out (plan T092), done by whoever the orchestrator assigns
   after T037: record SC-001 to SC-007 with their
   evidence in `F/verification.md` §Close-out, and commit it on `main` with
   the subject `docs(020): close-out`.
