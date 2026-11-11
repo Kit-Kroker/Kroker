@@ -189,3 +189,107 @@ def test_go_parse_lint_trailing_garbage_fails_closed():
     go = TOOLCHAINS[ToolchainKind.GO]
     stream = _vet_package("example.com/m/a", "printf", "/x/a.go", 1) + "\ntrailing{garbage"
     assert go.parse_lint(1, stream, "/x") is None
+
+
+def test_go_parse_lint_objects_glued_without_separator(tmp_path):
+    # Task-4 review follow-up, pinning the documented shape: go vet -json
+    # emits one object per package concatenated with NOTHING between them --
+    # never a JSON array, and the separator is incidental, not part of the
+    # contract. The same fixtures glued with "" must yield the same rows as
+    # the newline-joined variant above.
+    a, b, c = tmp_path / "a.go", tmp_path / "b.go", tmp_path / "c.go"
+    stream = "".join(
+        (
+            _vet_package("example.com/m/a", "printf", str(a), 42),
+            _vet_package("example.com/m/b", "", str(b), 7),
+            _vet_package("example.com/m/c", None, str(c), 10),
+        )
+    )
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert go.parse_lint(1, stream, str(tmp_path)) == [
+        ("printf", "a.go", 42),
+        ("vet", "b.go", 7),
+        ("vet", "c.go", 10),
+    ]
+
+
+def test_go_parse_lint_exit_one_whitespace_only_stdout_fails_closed():
+    # Task-4 review follow-up, committed: exit 1 with a whitespace-only stream
+    # decodes to zero objects, so the code-1-with-empty-stdout rule must catch
+    # it too, not only the exactly-empty case.
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert go.parse_lint(1, "  \n\t ", "/x") is None
+
+
+# --- E-30a test-id round-trip: collect / parse / selected ---------------------
+
+
+def test_go_collect_ids_cmd_exact_string():
+    # Go locators are import paths (Go tooling cannot attribute a test to a
+    # file), and `go test` accepts import paths directly as package
+    # arguments -- collect needs no path mapping at all.
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert go.collect_ids_cmd(["example.com/m/a", "example.com/m/b"]) == (
+        'go test -list ".*" "example.com/m/a" "example.com/m/b"'
+    )
+
+
+def test_go_collect_ids_cmd_refuses_unsafe_paths():
+    go = TOOLCHAINS[ToolchainKind.GO]
+    with pytest.raises(ValueError, match="example.com/m;a"):
+        go.collect_ids_cmd(["example.com/m;a"])
+
+
+def test_go_parse_collected_ids_interleaved_ok_and_no_test_files():
+    # Real `go test -list '.*' <pkgs>` shape: test names one per line, then
+    # one tab-separated status line per package. Names accumulate since the
+    # last status line; `ok\\t<pkg>` emits them keyed by import path,
+    # `?\\t<pkg>` discards them (a package with no test files contributes
+    # nothing). TestGamma under the ?-line must vanish while the names after
+    # it accrue to the next ok line -- that interleaving is the point.
+    out = "\n".join(
+        (
+            "TestAlpha",
+            "TestBeta",
+            "ok  \texample.com/m/a\t0.012s",
+            "TestGamma",
+            "?   \texample.com/m/b\t[no test files]",
+            "TestDelta",
+            "TestEpsilon",
+            "ok  \texample.com/m/c\t0.003s",
+            "?   \texample.com/m/d\t[no test files]",
+        )
+    )
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert go.parse_collected_ids(out) == {
+        "example.com/m/a::TestAlpha",
+        "example.com/m/a::TestBeta",
+        "example.com/m/c::TestDelta",
+        "example.com/m/c::TestEpsilon",
+    }
+
+
+def test_go_selected_tests_cmd_exact_string():
+    # DS6 chunk re-run: ids group by the part before `::`; one -run regex
+    # applies to every listed package, so names dedupe across packages into
+    # one sorted alternation and packages dedupe into a sorted list. The
+    # sorting is for determinism: the same chunk must produce a
+    # byte-identical command on every run.
+    go = TOOLCHAINS[ToolchainKind.GO]
+    ids = [
+        "example.com/m/b::TestGamma",
+        "example.com/m/a::TestBeta",
+        "example.com/m/a::TestAlpha",
+        "example.com/m/a::TestBeta",  # duplicate id: alternation dedupes
+    ]
+    assert go.selected_tests_cmd(ids, ".sdlc-junit-base.xml") == (
+        'go test -v -run "^(TestAlpha|TestBeta|TestGamma)$"'
+        ' "example.com/m/a" "example.com/m/b"'
+        " | go-junit-report > .sdlc-junit-base.xml"
+    )
+
+
+def test_go_selected_tests_cmd_refuses_unsafe_ids():
+    go = TOOLCHAINS[ToolchainKind.GO]
+    with pytest.raises(ValueError, match="TestA;rm"):
+        go.selected_tests_cmd(["example.com/m/a::TestA;rm"], "j.xml")

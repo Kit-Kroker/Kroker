@@ -421,18 +421,60 @@ class GoToolchain(ToolchainAdapter):
             )
         return f"go test -v ./... | go-junit-report > {junit_out}"
 
+    # A `go test -list` test name line: `^Test\w*$`, one name per line. (The
+    # same shape the JUnit classname carries, per the design doc's test-id
+    # ruling.)
+    _TEST_NAME = re.compile(r"^Test\w*$")
+
     def collect_ids_cmd(self, paths: Sequence[str]) -> str:
-        raise NotImplementedError("GoToolchain.collect_ids_cmd lands with E-30a's test-id members")
+        # Locators are import paths (Go tooling cannot attribute a test to a
+        # file -- the design doc's ruling), and `go test` accepts import paths
+        # directly as package arguments, so collect needs no path mapping.
+        unsafe = [p for p in paths if not shell_safe(p)]
+        if unsafe:
+            raise ValueError(f"refusing to shell-interpolate unsafe test ids: {unsafe[:3]}")
+        quoted = " ".join(f'"{p}"' for p in paths)
+        return f'go test -list ".*" {quoted}'
 
     def parse_collected_ids(self, out: str) -> set[str]:
-        raise NotImplementedError(
-            "GoToolchain.parse_collected_ids lands with E-30a's test-id members"
-        )
+        # Ids are import-path-keyed (`<pkg>::<TestName>`): Go tooling cannot
+        # attribute a test to a file, so the tab-separated package status line
+        # -- not a path -- is the only attribution `go test -list` offers.
+        # Names accumulate since the last status line; `ok\\t<pkg>` emits them
+        # under that package, `?\\t<pkg>` discards them (a package with no
+        # test files contributes nothing).
+        ids: set[str] = set()
+        names: list[str] = []
+        for ln in out.splitlines():
+            if self._TEST_NAME.fullmatch(ln):
+                names.append(ln)
+                continue
+            fields = ln.split("\t")
+            if len(fields) < 2:
+                continue  # blank / `# pkg` / compile-error lines carry no package
+            pkg = fields[1]
+            if fields[0].strip() == "ok":  # status keyword is space-padded
+                ids.update(f"{pkg}::{n}" for n in names)
+            # Every status line resets, `?` and FAIL alike: stale names must
+            # never leak into the next ok package's ids.
+            names = []
+        return ids
 
     def selected_tests_cmd(self, node_ids: Sequence[str], junit_out: str) -> str:
-        raise NotImplementedError(
-            "GoToolchain.selected_tests_cmd lands with E-30a's test-id members"
-        )
+        unsafe = [p for p in node_ids if not shell_safe(p)]
+        if unsafe:
+            raise ValueError(f"refusing to shell-interpolate unsafe test ids: {unsafe[:3]}")
+        # Group by the part before `::`. One -run regex applies to every
+        # listed package, so names dedupe across packages into one sorted
+        # alternation and packages dedupe into a sorted list -- sorted for
+        # determinism, so the same chunk yields a byte-identical command.
+        by_pkg: dict[str, set[str]] = {}
+        for nid in node_ids:
+            pkg, _, name = nid.partition("::")
+            by_pkg.setdefault(pkg, set()).add(name)
+        alternation = "|".join(sorted(re.escape(n) for ns in by_pkg.values() for n in ns))
+        pkgs = " ".join(f'"{p}"' for p in sorted(by_pkg))
+        return f'go test -v -run "^({alternation})$" {pkgs} | go-junit-report > {junit_out}'
 
     def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
         # Same pipe exit semantics as integration_test_cmd: the shell reports
