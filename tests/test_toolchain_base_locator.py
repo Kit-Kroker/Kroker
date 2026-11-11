@@ -1,6 +1,9 @@
 """base_locator_exists: per-language base locator judgment (DS6 pre-filter)."""
 
 import inspect
+import sys
+
+import pytest
 
 from sdlc.toolchain.adapters import GoToolchain, PythonToolchain
 
@@ -104,6 +107,11 @@ def test_go_absolute_form_is_contained(tmp_path):
     assert go.base_locator_exists(str(base), "example.com/foo\\..\\escape") is False
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="fixture mkdirs a literal 'C:' dir to prove the unguarded POSIX "
+    "answer -- ntpath resolves it to the current drive and cannot create it",
+)
 def test_go_drive_letter_is_contained(tmp_path):
     # On a Windows worker os.path IS ntpath, and a drive-prefixed component
     # resets join exactly like a leading `/` resets it on POSIX:
@@ -122,6 +130,11 @@ def test_go_drive_letter_is_contained(tmp_path):
     assert go.base_locator_exists(str(base), "example.com/foo/C:\\Windows") is False
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="fixture mkdirs a literal 'x\\\\y' name to prove the unguarded POSIX "
+    "answer -- on nt the backslash splits a dirname and mkdir breaks at setup",
+)
 def test_go_backslash_disjunct_rejects_directly(tmp_path):
     # Minor pin: a forward-slash locator with an embedded backslash passes
     # the prefix check and every other guard disjunct -- only the

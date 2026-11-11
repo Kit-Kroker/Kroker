@@ -69,6 +69,16 @@ def test_go_classify_test_exit_has_no_no_tests():
         assert go.classify_test_exit(code) == "failed_to_run"
 
 
+def test_go_honest_empties_are_pinned():
+    # `go vet` has no inline-suppression syntax and no policy config files
+    # Go-side (the spec's lint ruling): both members are honestly empty, and
+    # a future silent addition -- which would change scoped-lint semantics --
+    # fails this pin instead of landing quietly.
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert go.lint_policy_globs == ()
+    assert go.suppression_pattern == ""
+
+
 # --- E-30a command members ---------------------------------------------------
 
 
@@ -311,6 +321,12 @@ def test_go_node_id_passes_import_paths_through_unmangled():
     assert go.node_id(None, "example.com/m/a", "TestAlpha") == "example.com/m/a::TestAlpha"
     assert go.node_id(None, "", "TestAlpha") == "TestAlpha"
     assert go.node_id("a/alpha_test.go", "example.com/m/a", "TestAlpha") == (
+        "a/alpha_test.go::TestAlpha"
+    )
+    # The file attribute is normalized to POSIX exactly as the ABC default
+    # treats it: a future tool emitting `file` keeps winning cross-platform
+    # (a Windows-shaped backslash path must not fork the id grammar).
+    assert go.node_id("a\\alpha_test.go", "example.com/m/a", "TestAlpha") == (
         "a/alpha_test.go::TestAlpha"
     )
 

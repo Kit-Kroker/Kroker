@@ -116,6 +116,15 @@ BASE_JUNIT = ".sdlc-junit-base.xml"
 BASE_ATTEMPTS = 4  # DS6: one base run plus up to three corroborating re-runs
 ID_CHUNK = 50  # node ids per command: cmd.exe caps a command line at 8191 chars
 _PYTEST_USAGE_ERROR = 4
+# Language-neutral "coverage tooling unavailable": the shell's
+# command-not-found exits (POSIX sh: 127, cmd.exe: 9009). Any adapter whose
+# coverage converter binary is missing (Go: gocover-cobertura) dies here
+# AFTER the test run and its JUnit pipe already landed, so the honest move
+# is the same as pytest's usage error: re-run without coverage. FR-915's
+# fail-closed discipline survives: if the RUNNER itself is missing (not just
+# the converter), the retry exits this set again, no JUnit lands, and the
+# gate reads NOT_COLLECTED -- the safe direction is never traded away.
+_COVERAGE_TOOLING_UNAVAILABLE = frozenset({127, 9009})
 
 Provision = Callable[[], Awaitable[tuple[dict[str, str] | None, str | None]]]
 
@@ -145,7 +154,8 @@ async def _head_run(adapter, head_wt, env, timeout_s) -> tuple[dict[str, bool], 
     code, out = await _bounded_shell(
         adapter.integration_test_cmd(JUNIT, True), head_wt, timeout_s, env=env
     )
-    if code == _PYTEST_USAGE_ERROR:  # coverage tooling unavailable: honest run without it
+    if code == _PYTEST_USAGE_ERROR or code in _COVERAGE_TOOLING_UNAVAILABLE:
+        # coverage tooling unavailable: honest run without it
         _clear(head_wt, JUNIT)
         code, out = await _bounded_shell(
             adapter.integration_test_cmd(JUNIT, False), head_wt, timeout_s, env=env

@@ -324,10 +324,12 @@ class GoToolchain(ToolchainAdapter):
     cannot parse is not a language with no long functions, and a fake zero
     would be a vacuous pass.
 
-    The command members land later in the E-30a increment; until each lands,
-    its stub raises rather than guess a command string -- the same fail-closed
-    rule as a missing external tool downstream (a collection failure, never a
-    vacuous pass).
+    The full post-2026-09-11 contract is implemented: scoped lint over the
+    `go vet -json` stream, the no-early-stop whole-suite JUnit run, the
+    import-path-keyed collect/selected round-trip, and the oracle pipe. The
+    external converters (`go-junit-report`, `gocover-cobertura`) are invoked
+    by command string only; when one is absent the run fails closed
+    downstream (a collection failure, never a vacuous pass).
     """
 
     kind = ToolchainKind.GO
@@ -428,9 +430,14 @@ class GoToolchain(ToolchainAdapter):
         package even after another package failed, so the no-early-stop rule
         is the language's natural behavior, not a flag.
 
-        The pipe's exit is `go-junit-report`'s (0), never `go test`'s -- the
-        exit says nothing about test outcomes. Outcomes come from the JUnit
-        file at junit_out, which `_head_run` already treats as ground truth.
+        Exit semantics, per branch. Without coverage the pipe's exit is
+        `go-junit-report`'s (0), never `go test`'s -- it says nothing about
+        test outcomes, which come from the JUnit file at junit_out (ground
+        truth for `_head_run`). With coverage the `&& gocover-cobertura`
+        tail owns the exit instead: a missing converter exits 127 (9009 on
+        cmd.exe) AFTER the JUnit pipe has landed, and `_head_run` reads that
+        as "coverage tooling unavailable" and retries with coverage=False --
+        only the coverage degrades, never the test grading.
         """
         unsafe = [p for p in (junit_out,) if not shell_safe(p)]
         if unsafe:
@@ -553,10 +560,11 @@ class GoToolchain(ToolchainAdapter):
         # inherited default would rebuild it as a `.py` path no collected id
         # can ever match, and DS6 base corroboration would fail closed for
         # every Go failure -- this override is the round-trip's missing half.
-        # A future tool that does emit `file` still wins, matching the
-        # default's precedence.
+        # A `file` attribute still wins, matching the default's precedence,
+        # and is normalized to POSIX exactly as the default treats it: a
+        # future tool that emits `file` keeps winning cross-platform.
         if file_attr:
-            return f"{file_attr}::{name}"
+            return f"{normalize_path(file_attr)}::{name}"
         return f"{classname}::{name}" if classname else name
 
     def selected_tests_cmd(self, node_ids: Sequence[str], junit_out: str) -> str:
