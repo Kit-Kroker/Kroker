@@ -1,7 +1,6 @@
 """Contract & happy-path tests for the RecallSnapshot artifact (round 021, FR-402).
 
-Sections: hash (T002), model (T004), persist (T009), reader (T011).
-Failure-path cases (persist failure, backend failure) are covered elsewhere.
+Sections: hash (T002), model (T004), persist (T009), reader (T011), failure (T024).
 Tests import their targets inside the test body so each one fails on its
 own, for the expected reason, until the implementation lands.
 """
@@ -320,3 +319,87 @@ async def test_read_rejects_a_foreign_kind(monkeypatch, artifact_root):
     foreign = ArtifactRef(kind="harness_session", uri=snap.ref.uri, sha256=snap.ref.sha256)
     with pytest.raises(ValueError):
         read_mod.read_recall_snapshot(foreign)
+
+
+# ------------------------------------------------------------ failure (T024)
+
+
+@pytest.mark.asyncio
+async def test_put_failure_degrades_and_marks_persist_failed(monkeypatch, artifact_root):
+    import sdlc.memory.activities as activities
+    from sdlc.artifacts.store import LocalFileStore
+    from sdlc.memory.activities import RecallInput, recall_snapshot
+    from sdlc.memory.query_hash import recall_snapshot_hash
+
+    fm = FakeMemory()
+    monkeypatch.setattr(activities, "_fake_singleton", fm)
+    await fm.retain(RetainItem(kind=MemoryKind.GOTCHA, bank="project:f", text="alpha", metadata={}))
+
+    def _disk_full(self, *a, **kw):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(LocalFileStore, "put", _disk_full)
+
+    snap = await recall_snapshot(
+        RecallInput(bank="project:f", query="q", backend="fake", watermark="1", run_id="run-f")
+    )
+
+    assert snap.degraded is True
+    assert snap.persist_failed is True
+    assert snap.items == []
+    assert snap.ref is None
+    expected = recall_snapshot_hash("project:f", snap.watermark, snap.query_hash, [], True)
+    assert snap.snapshot_hash == expected
+    healthy = recall_snapshot_hash("project:f", snap.watermark, snap.query_hash, ["alpha"], False)
+    assert snap.snapshot_hash != healthy
+
+
+@pytest.mark.asyncio
+async def test_backend_and_put_both_failing_still_returns_degraded(monkeypatch, artifact_root):
+    import sdlc.memory.activities as activities
+    from sdlc.artifacts.store import LocalFileStore
+    from sdlc.memory.activities import RecallInput, recall_snapshot
+
+    class _Boom:
+        async def recall(self, *a, **kw):
+            raise ConnectionError("hindsight unreachable")
+
+    monkeypatch.setattr(activities, "_backend", lambda base_url, backend: _Boom())
+
+    def _disk_full(self, *a, **kw):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(LocalFileStore, "put", _disk_full)
+
+    # Must return, not raise (FR-008 double fault).
+    snap = await recall_snapshot(
+        RecallInput(bank="project:b", query="q", backend="fake", watermark="1", run_id="run-b")
+    )
+
+    assert snap.degraded is True
+    assert snap.persist_failed is True
+
+
+@pytest.mark.asyncio
+async def test_backend_failure_with_working_put_persists_the_degraded_snapshot(
+    monkeypatch, artifact_root
+):
+    import sdlc.memory.activities as activities
+    from sdlc.memory.activities import RecallInput, recall_snapshot
+
+    class _Boom:
+        async def recall(self, *a, **kw):
+            raise ConnectionError("hindsight unreachable")
+
+    monkeypatch.setattr(activities, "_backend", lambda base_url, backend: _Boom())
+
+    snap = await recall_snapshot(
+        RecallInput(bank="project:c", query="q", backend="fake", watermark="1", run_id="run-c")
+    )
+
+    assert snap.degraded is True
+    assert snap.persist_failed is False
+    assert snap.ref is not None
+    path = artifact_root / "run-c" / "recall" / f"{snap.snapshot_hash}.json"
+    assert path.is_file()
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == snap.snapshot_hash

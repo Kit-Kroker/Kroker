@@ -168,7 +168,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
 
 **Independent test**: `pytest -q T/test_recall_snapshot_artifact.py -k "fail or degraded"`.
 
-- [ ] T024 [P] [US3] Write failing tests in `T/test_recall_snapshot_artifact.py` (section "failure"):
+- [x] T024 [P] [US3] Write failing tests in `T/test_recall_snapshot_artifact.py` (section "failure"):
   - (a) monkeypatch `LocalFileStore.put` to raise `OSError`, with a healthy seeded `FakeMemory`. The result has `degraded is True`, `persist_failed is True`, `items == []`, `ref is None`, and `snapshot_hash == recall_snapshot_hash(bank, wm, qh, [], True)`, which differs from the healthy hash.
   - (b) make the backend raise and `put` raise. `recall_snapshot` returns (does not raise) a degraded, `persist_failed` snapshot.
   - (c) make the backend raise while `put` works. The degraded snapshot is persisted, with `ref` set and `persist_failed is False`.
