@@ -25,6 +25,7 @@ with workflow.unsafe.imports_passed_through():
         RecallSnapshot,
         RetainItem,
     )
+    from ..observability.trace import RunEventKind
 
 # 120s, not 30s: a live recall measured 42.3s end-to-end (2026-10-28, bank
 # project-default; the Hindsight LLM leg averages ~30s/call), and StartToClose
@@ -49,7 +50,7 @@ class MemoryHost:
     ) -> RecallSnapshot:
         if not cfg.memory.enabled:
             return RecallSnapshot(query_hash="", bank=bank, watermark="unknown", items=[])
-        return await workflow.execute_activity(
+        snap = await workflow.execute_activity(
             recall_snapshot,
             RecallInput(
                 bank=bank,
@@ -58,9 +59,26 @@ class MemoryHost:
                 watermark=self._memory_watermark,
                 backend=cfg.memory.backend,
                 base_url=cfg.memory.base_url,
+                run_id=workflow.info().workflow_id,
             ),
             **MEM_ACT,
         )
+        # 021 FR-011/R-6: record what memory this stage saw — hash, uri and
+        # flags, never items. Emitted from the host (not the activity) so a
+        # cache-hit stage still has its event. _emit is owned by ReportHost;
+        # the getattr guard keeps MemoryHost-only hosts (crew, triage, ...)
+        # working. Pure state mutation: no command change, replay-safe.
+        emit = getattr(self, "_emit", None)
+        if emit is not None:
+            emit(
+                RunEventKind.MEMORY_RECALLED,
+                stage=filters.get("stage"),
+                snapshot_hash=snap.snapshot_hash,
+                snapshot_uri=snap.ref.uri if snap.ref else "",
+                degraded="true" if snap.degraded else "false",
+                persist_failed="true" if snap.persist_failed else "false",
+            )
+        return snap
 
     async def _retain(
         self, cfg: PipelineConfig, kind: MemoryKind, bank: str, text: str, metadata: dict[str, str]

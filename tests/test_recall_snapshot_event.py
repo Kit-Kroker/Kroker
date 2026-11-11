@@ -47,15 +47,17 @@ def _snap(**overrides):
 @pytest.fixture
 def activity_calls(monkeypatch):
     calls: list[tuple] = []
+    # The namespace is the box: the stub reads ns.result on every call, so a
+    # test reassigning activity_calls.result changes what the stub returns.
+    ns = SimpleNamespace(calls=calls, result=_snap())
 
     async def fake_execute(act, inp, **kwargs):
         calls.append((act, inp))
-        return fake_execute.result
+        return ns.result
 
-    fake_execute.result = _snap()
     monkeypatch.setattr(temporal_workflow, "execute_activity", fake_execute)
     monkeypatch.setattr(temporal_workflow, "info", lambda: SimpleNamespace(workflow_id="run-1"))
-    return SimpleNamespace(calls=calls, result=fake_execute)
+    return ns
 
 
 def _cfg(enabled: bool) -> PipelineConfig:

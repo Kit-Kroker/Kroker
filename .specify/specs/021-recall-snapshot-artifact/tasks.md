@@ -106,7 +106,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
   - a host without `_emit` does not raise.
 
   (plan T045, T021)
-- [ ] T014 [US1] In `S/workflows/memory_host.py:47`:
+- [x] T014 [US1] In `S/workflows/memory_host.py:47`:
   - pass `run_id=workflow.info().workflow_id` in `RecallInput`;
   - after `execute_activity` returns, call `emit = getattr(self, "_emit", None)`, and if `emit` is set, emit `RunEventKind.MEMORY_RECALLED` with `stage=filters.get("stage")`, `snapshot_hash=snap.snapshot_hash`, `snapshot_uri=snap.ref.uri if snap.ref else ""`, and `degraded` and `persist_failed` as `"true"`/`"false"`;
   - leave the disabled branch (`:50-51`) untouched.
