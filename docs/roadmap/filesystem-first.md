@@ -192,10 +192,18 @@ is marked **(new scope)** and needs a PRD line before it is real.
   `docs/superpowers/specs/2026-07-22-toolchain-adapter-coverage-seam-design.md`,
   plan `docs/superpowers/plans/2026-07-22-toolchain-adapter-coverage-seam.md`.
   Go/TS/Rust adapters (E-30a/b/c) remain open; the held-out oracle (E-31) is landed.
-- [ ] **E-30a** Go `ToolchainAdapter` — the second adapter (`go test -cover` →
+- [x] **E-30a** Go `ToolchainAdapter` — the second adapter (`go test -cover` →
   Cobertura via gocover-cobertura; `go vet`/golangci-lint; semgrep). Incremental,
   same shape as the Python reference; validates the abstraction on a
   non-Python language.
+  *Landed:* 2026-11-11 `GoToolchain` in `src/sdlc/toolchain/adapters.py` plus
+  the two seam interpretation members (`base_locator_exists`, `node_id` —
+  both default-preserving, Python bit-identical); fixture-tested, no Go
+  toolchain in CI; first real `build_cmd`; scope-graded lint via
+  `go vet -json` (code 0 clean / 1 findings / other tool-failure); ids
+  import-path-keyed `pkg::TestName`; containment guard lexical (`..`,
+  absolute-form, backslash, drive-letter) after review. Spec
+  `docs/superpowers/specs/2026-11-11-e30a-go-toolchain-adapter-design.md`.
 - [ ] **E-30b** TypeScript/JS `ToolchainAdapter` — vitest/jest + c8/nyc →
   Cobertura; eslint; semgrep.
 - [ ] **E-30c** Rust `ToolchainAdapter` — cargo-llvm-cov → Cobertura; clippy;

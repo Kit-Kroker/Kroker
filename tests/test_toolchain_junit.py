@@ -34,3 +34,30 @@ def test_crafted_ids_never_reach_a_shell():
         PythonToolchain().selected_tests_cmd([evil], "o.xml")
     with pytest.raises(ValueError):
         PythonToolchain().collect_ids_cmd([evil])
+
+
+# --- node_id interpretation seam (Task 5.5) -----------------------------------
+
+# go-junit-report's shape: classname = import path, no `file` attribute.
+GO_SHAPED_XML = """<?xml version="1.0"?><testsuite tests="2">
+<testcase classname="example.com/m/a" name="TestAlpha" time="0.01"/>
+<testcase classname="example.com/m/a" name="TestBeta" time="0.02"><failure/></testcase>
+</testsuite>"""
+
+
+def test_default_still_mangles_go_shaped_classnames():
+    # Without a builder callable, testcase_outcomes keeps today's pytest
+    # mangling verbatim -- the lossy behavior the adapter `node_id` member
+    # exists to override per language. Pinned so the default cannot drift.
+    assert testcase_outcomes(GO_SHAPED_XML) == {
+        "example/com/m/a.py::TestAlpha": True,
+        "example/com/m/a.py::TestBeta": False,
+    }
+
+
+def test_python_adapter_default_matches_internal_default():
+    # The ABC default is a verbatim transcription of junit._node_id: on the
+    # full legacy fixture above -- empty classname (collection error), a
+    # class-level testcase, a parametrized id, backslash `file` attrs -- the
+    # member and the internal default must produce byte-identical maps.
+    assert testcase_outcomes(XML, PythonToolchain().node_id) == testcase_outcomes(XML)

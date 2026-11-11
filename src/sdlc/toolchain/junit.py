@@ -12,6 +12,7 @@ fails closed instead of reading "no failures".
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 import defusedxml.ElementTree as DET
 from defusedxml.common import DefusedXmlException
@@ -43,7 +44,13 @@ def _node_id(tc) -> str:
     return "::".join(parts)
 
 
-def testcase_outcomes(xml_text: str) -> dict[str, bool] | None:
+def testcase_outcomes(
+    xml_text: str, node_id: Callable[[str | None, str, str], str] | None = None
+) -> dict[str, bool] | None:
+    """`node_id` optionally overrides the pytest-shaped `_node_id` default
+    with a per-language builder (an adapter's `ToolchainAdapter.node_id`
+    interpretation, for languages whose classname is not a dotted module);
+    None keeps that default verbatim."""
     if not xml_text.strip():
         return None
     try:
@@ -56,7 +63,10 @@ def testcase_outcomes(xml_text: str) -> dict[str, bool] | None:
         for tc in suite.iter("testcase"):
             if tc.find("skipped") is not None:
                 continue
-            node = _node_id(tc)
+            if node_id is None:
+                node = _node_id(tc)
+            else:
+                node = node_id(tc.get("file"), tc.get("classname", ""), tc.get("name", ""))
             failed = tc.find("failure") is not None or tc.find("error") is not None
             out[node] = out.get(node, True) and not failed
     return out

@@ -28,7 +28,8 @@ from .junit import shell_safe
 
 class ToolchainKind(StrEnum):
     PYTHON = "python"
-    # GO / TS / RUST are added by E-30a/b/c — each is the N-th adapter,
+    GO = "go"
+    # TS / RUST are added by E-30b/c — each is the N-th adapter,
     # identical in shape, added on demand as the case corpus needs it.
 
 
@@ -87,6 +88,45 @@ class ToolchainAdapter(ABC):
         facts, and the exit-code mapping is per-language. The default is the
         conservative one for a language whose runner has not been mapped."""
         return "ran" if code == 0 else "failed_to_run"
+
+    def base_locator_exists(self, root: str, locator: str) -> bool:
+        """Whether a diff-scoped test locator's file exists at the base, as a
+        per-language judgment. The Python-shaped default is a plain file
+        check; a language whose test ids are not file paths (Go overrides
+        this for import-path-keyed ids) redefines what "exists" means.
+
+        The pre-filter is an optimization only: a locator judged absent
+        short-circuits base corroboration for that failure, but the
+        collect/re-run steps in the scoping pipeline remain the authoritative
+        attribution (DS6) -- a wrong "exists" cannot mislabel a failure, only
+        spend a base run on it.
+        """
+        return os.path.isfile(os.path.join(root, locator))
+
+    def node_id(self, file_attr: str | None, classname: str, name: str) -> str:
+        """A JUnit testcase's report id, as a per-language interpretation.
+        The pytest-shaped default transcribes junit.py::_node_id verbatim --
+        including the empty-classname edge (a collection error keys on its
+        module file) -- because pytest's classname is a dotted module path:
+        the id is rebuilt as a file path, with the `file` attribute winning
+        when the report carries one.
+
+        Load-bearing for DS6 base corroboration: ids re-read from the report
+        must equal `parse_collected_ids`' ids, or every introduced failure
+        reads unattributable. A language whose classname is NOT a dotted
+        module overrides -- Go's is an import path, and mangling it into a
+        `.py` path is lossy and unfixable downstream.
+        """
+        file_attr = normalize_path(file_attr or "")
+        if not classname:
+            return file_attr or name.replace(".", "/") + ".py"
+        module = file_attr[:-3].replace("/", ".") if file_attr.endswith(".py") else ""
+        head = file_attr or classname.replace(".", "/") + ".py"
+        parts = [head]
+        if module and classname.startswith(module + "."):
+            parts.extend(classname[len(module) + 1 :].split("."))
+        parts.append(name)
+        return "::".join(parts)
 
     @abstractmethod
     def test_cmd(self, coverage: bool = True) -> str:
@@ -272,8 +312,297 @@ class PythonToolchain(ToolchainAdapter):
         )
 
 
+class GoToolchain(ToolchainAdapter):
+    """The second adapter (E-30a) and the first real test of the abstraction
+    on a non-Python language: the gate must grade a go.mod repo with zero
+    gate/workflow changes (FR-108). Go is also package-shaped where Python is
+    file-shaped -- its test ids are import paths, not file paths -- which is
+    exactly the assumption the base_locator_exists hook exists to relax.
+
+    `function_spans` is deliberately the inherited None: there is no Go
+    parser here, so `oversized_function` reads not_collected -- a language we
+    cannot parse is not a language with no long functions, and a fake zero
+    would be a vacuous pass.
+
+    The full post-2026-09-11 contract is implemented: scoped lint over the
+    `go vet -json` stream, the no-early-stop whole-suite JUnit run, the
+    import-path-keyed collect/selected round-trip, and the oracle pipe. The
+    external converters (`go-junit-report`, `gocover-cobertura`) are invoked
+    by command string only; when one is absent the run fails closed
+    downstream (a collection failure, never a vacuous pass).
+    """
+
+    kind = ToolchainKind.GO
+    markers = ("go.mod",)
+
+    test_globs = ("*_test.go",)
+    lockfiles = ("go.sum",)
+
+    manifests = ("go.mod",)
+    ecosystem = "Go"
+    source_extensions = (".go",)
+    # Same ceilings as the Python reference (spec D14): the numbers are
+    # policy, not language facts, and stay comparable across repositories.
+    max_file_loc = 800
+    max_function_loc = 100
+
+    def install_cmd(self, marker: str) -> str | None:
+        # `go mod download` fills the module cache from go.mod's pinned
+        # requires and does not mutate the tree under audit (go get would).
+        return "go mod download"
+
+    def classify_test_exit(self, code: int) -> Literal["ran", "failed_to_run", "no_tests"]:
+        # `go test`: 0 ok, 1 tests failed. Unlike pytest there is NO no-tests
+        # exit -- a package without tests reports "no test files" and exits 0.
+        return "ran" if code in (0, 1) else "failed_to_run"
+
+    # Shared by both coverage branches: one constant so the converter
+    # invocation cannot drift between them.
+    _GOCOVER = "gocover-cobertura < cover.out > coverage.xml"
+
+    def test_cmd(self, coverage: bool = True) -> str:
+        # -covermode=atomic: `go test` runs packages (and t.Parallel tests)
+        # concurrently, and the default `set` mode's counter updates race and
+        # undercount -- atomic keeps the profile honest under that default.
+        base = "go test ./..."
+        if coverage:
+            return f"{base} -coverprofile=cover.out -covermode=atomic && {self._GOCOVER}"
+        return base
+
+    def lint_cmd(self) -> str:
+        return "go vet ./..."
+
+    def lint_json_cmd(self) -> str:
+        # Unlike ruff there is no --exit-zero: `go vet -json` exits 1 when it
+        # finds anything and streams one JSON object per package on stdout.
+        # That nonzero exit is findings, not tool failure -- interpreting it
+        # is parse_lint's contract, which owns this stream.
+        return "go vet -json ./..."
+
+    def parse_lint(self, code: int, out: str, root: str) -> list[tuple[str, str, int]] | None:
+        # Only 0 (clean) and 1 (findings found) are interpreted; any other
+        # exit is a tool failure before finding interpretation even starts.
+        if code not in (0, 1):
+            return None
+        # vet streams one top-level JSON object per package, in completion
+        # order and concatenated with no separator -- never a JSON array --
+        # so the stream must be decoded incrementally with raw_decode;
+        # json.loads would see a single invalid document.
+        decoder = json.JSONDecoder()
+        pos = 0
+        packages: list[dict] = []
+        try:
+            while True:
+                while pos < len(out) and out[pos].isspace():
+                    pos += 1
+                if pos >= len(out):
+                    break
+                obj, pos = decoder.raw_decode(out, pos)
+                packages.append(obj)
+        except ValueError:
+            # Garbage anywhere in the stream means it was truncated or
+            # corrupted mid-run: the objects decoded so far cannot be proven
+            # to be the complete set, so fail closed (None = tool failure)
+            # rather than grade a partial read.
+            return None
+        if code == 1 and not packages:
+            # Exit 1 claims findings; an empty stdout says nothing. A claim
+            # contradicted by its evidence is ambiguity -- None (NOT_COLLECTED
+            # downstream), never a vacuous clean pass.
+            return None
+        found: list[tuple[str, str, int]] = []
+        for pkg in packages:
+            for report in pkg.values():
+                for d in report.get("diagnostics", []):
+                    loc = d["location"]
+                    rule = d.get("category") or "vet"
+                    # vet reports absolute filenames; the gate speaks in
+                    # repo-relative POSIX paths, so relativize against the
+                    # worktree root and normalize.
+                    path = normalize_path(os.path.relpath(loc["file"]["filename"], root))
+                    found.append((rule, path, int(loc["line"])))
+        return sorted(found)
+
+    def integration_test_cmd(self, junit_out: str, coverage: bool = True) -> str:
+        """The merge gate's whole-suite run, Go-shaped.
+
+        No early stop exists in `go test` to disable: it runs every matched
+        package even after another package failed, so the no-early-stop rule
+        is the language's natural behavior, not a flag.
+
+        Exit semantics, per branch. Without coverage the pipe's exit is
+        `go-junit-report`'s (0), never `go test`'s -- it says nothing about
+        test outcomes, which come from the JUnit file at junit_out (ground
+        truth for `_head_run`). With coverage the `&& gocover-cobertura`
+        tail owns the exit instead: a missing converter exits 127 (9009 on
+        cmd.exe) AFTER the JUnit pipe has landed, and `_head_run` reads that
+        as "coverage tooling unavailable" and retries with coverage=False --
+        only the coverage degrades, never the test grading.
+        """
+        unsafe = [p for p in (junit_out,) if not shell_safe(p)]
+        if unsafe:
+            raise ValueError(f"refusing to shell-interpolate unsafe test ids: {unsafe[:3]}")
+        # Pipes, &&, <, > are the only shell syntax here -- all cmd.exe-valid,
+        # since workers run on Windows. Nothing needs quoting: guarded paths
+        # interpolate verbatim (where this adapter does quote args, the rule
+        # is double quotes only -- cmd.exe- and POSIX-compatible).
+        if coverage:
+            return (
+                "go test -v ./... -coverprofile=cover.out -covermode=atomic"
+                f" | go-junit-report > {junit_out} && {self._GOCOVER}"
+            )
+        return f"go test -v ./... | go-junit-report > {junit_out}"
+
+    # A `go test -list` test name line: `^Test\w*$`, one name per line. (The
+    # same shape the JUnit classname carries, per the design doc's test-id
+    # ruling.)
+    _TEST_NAME = re.compile(r"^Test\w*$")
+
+    def collect_ids_cmd(self, paths: Sequence[str]) -> str:
+        # Locators are import paths (Go tooling cannot attribute a test to a
+        # file -- the design doc's ruling), and `go test` accepts import paths
+        # directly as package arguments, so collect needs no path mapping.
+        unsafe = [p for p in paths if not shell_safe(p)]
+        if unsafe:
+            raise ValueError(f"refusing to shell-interpolate unsafe test ids: {unsafe[:3]}")
+        quoted = " ".join(f'"{p}"' for p in paths)
+        return f'go test -list ".*" {quoted}'
+
+    def parse_collected_ids(self, out: str) -> set[str]:
+        # Ids are import-path-keyed (`<pkg>::<TestName>`): Go tooling cannot
+        # attribute a test to a file, so the tab-separated package status line
+        # -- not a path -- is the only attribution `go test -list` offers.
+        # Names accumulate since the last status line; `ok\\t<pkg>` emits them
+        # under that package, `?\\t<pkg>` discards them (a package with no
+        # test files contributes nothing).
+        ids: set[str] = set()
+        names: list[str] = []
+        for ln in out.splitlines():
+            if self._TEST_NAME.fullmatch(ln):
+                names.append(ln)
+                continue
+            fields = ln.split("\t")
+            if len(fields) < 2:
+                continue  # blank / `# pkg` / compile-error lines carry no package
+            pkg = fields[1]
+            if fields[0].strip() == "ok":  # status keyword is space-padded
+                ids.update(f"{pkg}::{n}" for n in names)
+            # Every status line resets, `?` and FAIL alike: stale names must
+            # never leak into the next ok package's ids.
+            names = []
+        return ids
+
+    # go.mod's module directive: optional leading whitespace, the `module`
+    # keyword, then the path (optionally double-quoted), an optional
+    # trailing `//` comment, end of line. Non-greedy path + `(?://.*)?$`
+    # cuts the comment; `modulechain` cannot match (`\s+` after keyword).
+    _MODULE_DIRECTIVE = re.compile(r"^module\s+(.+?)\s*(?://.*)?$")
+
+    def base_locator_exists(self, root: str, locator: str) -> bool:
+        # The locator is an IMPORT PATH (`example.com/foo/internal/store`),
+        # never a file path, so the inherited isfile default answers False
+        # for every real Go locator. go.mod's module directive is the only
+        # import-path -> tree mapping there is, and it is read per call:
+        # the adapter stays pure and the BASE worktree's go.mod (not the
+        # head tree's) keys the check. Like every answer here it is the
+        # DS6 pre-filter only: a wrong False defers to the authoritative
+        # collect step, a wrong True cannot mislabel -- it only spends a
+        # base run.
+        try:
+            with open(os.path.join(root, "go.mod"), encoding="utf-8") as f:
+                go_mod = f.read()
+        except (OSError, UnicodeDecodeError):
+            return False  # unreadable/missing go.mod: nothing maps the path
+        for line in go_mod.splitlines():
+            m = self._MODULE_DIRECTIVE.match(line.lstrip())
+            if m is None:
+                continue
+            # First directive is authoritative -- a garbage one is
+            # unparseable (False), never a reason to hunt later lines.
+            # Module paths are whitespace-free; the quotes are optional.
+            path = m.group(1).strip()
+            if len(path) >= 2 and path[0] == '"' and path[-1] == '"':
+                path = path[1:-1]
+            # Bare module root or anything under it maps onto the tree;
+            # anything else (a sibling/nested module's import path) is
+            # absent -- no nested go.mod scanning.
+            if locator != path and not locator.startswith(path + "/"):
+                return False
+            # The bare module root maps onto the worktree root itself.
+            rel = "" if locator == path else locator.removeprefix(path + "/")
+            # Containment guard: the prefix check above is LEXICAL, so
+            # malformed locators pass it while isdir would stat outside the
+            # base worktree -- and locators are report-derived classnames,
+            # i.e. arbitrary strings. "A locator outside the module -> False"
+            # must hold in effect, not just lexically. Four shapes, none of
+            # which can occur in a Go import path element: `..` components
+            # traverse upward; a leading `/` makes os.path.join DISCARD root
+            # entirely (join(root, "/etc") is "/etc" on posixpath); a
+            # backslash is Windows' path separator (the workers run there)
+            # and splits nothing on POSIX; a drive prefix (`C:...`) resets
+            # ntpath.join exactly like a leading `/` resets posixpath.join.
+            # Lexical rejection, not realpath: no symlink surprises, no
+            # extra syscalls, deterministic; a rejected locator defers to
+            # the authoritative collect step (DS6).
+            if (
+                ".." in rel.split("/")
+                or rel.startswith("/")
+                or "\\" in rel
+                or (len(rel) >= 2 and rel[1] == ":" and rel[0].isalpha())
+            ):
+                return False
+            return os.path.isdir(os.path.join(root, rel))
+        return False  # no module directive at all
+
+    def node_id(self, file_attr: str | None, classname: str, name: str) -> str:
+        # go-junit-report emits no `file` attribute and sets classname to the
+        # package's import path, so classname passes through UNMANGLED: the
+        # inherited default would rebuild it as a `.py` path no collected id
+        # can ever match, and DS6 base corroboration would fail closed for
+        # every Go failure -- this override is the round-trip's missing half.
+        # A `file` attribute still wins, matching the default's precedence,
+        # and is normalized to POSIX exactly as the default treats it: a
+        # future tool that emits `file` keeps winning cross-platform.
+        if file_attr:
+            return f"{normalize_path(file_attr)}::{name}"
+        return f"{classname}::{name}" if classname else name
+
+    def selected_tests_cmd(self, node_ids: Sequence[str], junit_out: str) -> str:
+        unsafe = [p for p in node_ids if not shell_safe(p)]
+        if unsafe:
+            raise ValueError(f"refusing to shell-interpolate unsafe test ids: {unsafe[:3]}")
+        # Group by the part before `::`. One -run regex applies to every
+        # listed package, so names dedupe across packages into one sorted
+        # alternation and packages dedupe into a sorted list -- sorted for
+        # determinism, so the same chunk yields a byte-identical command.
+        by_pkg: dict[str, set[str]] = {}
+        for nid in node_ids:
+            pkg, _, name = nid.partition("::")
+            by_pkg.setdefault(pkg, set()).add(name)
+        alternation = "|".join(sorted(re.escape(n) for ns in by_pkg.values() for n in ns))
+        pkgs = " ".join(f'"{p}"' for p in sorted(by_pkg))
+        return f'go test -v -run "^({alternation})$" {pkgs} | go-junit-report > {junit_out}'
+
+    def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
+        # Same pipe exit semantics as integration_test_cmd: the shell reports
+        # go-junit-report's 0; the oracle grader reads outcomes from the JUnit
+        # report, never from the exit code. -v is the per-test verbosity
+        # go-junit-report parses into that report.
+        unsafe = [p for p in (oracle_path, report_out) if not shell_safe(p)]
+        if unsafe:
+            raise ValueError(f"refusing to shell-interpolate unsafe test ids: {unsafe[:3]}")
+        return f"go test -v ./{oracle_path}/... | go-junit-report > {report_out}"
+
+    def build_cmd(self) -> str:
+        # The first non-None build command: Go has no interpreter stage, so
+        # `go build ./...` compiling every package is the gate's first
+        # does-this-even-build fact (the triage consumer already handles it).
+        return "go build ./..."
+
+
 TOOLCHAINS: dict[ToolchainKind, ToolchainAdapter] = {
     ToolchainKind.PYTHON: PythonToolchain(),
+    ToolchainKind.GO: GoToolchain(),
 }
 
 
