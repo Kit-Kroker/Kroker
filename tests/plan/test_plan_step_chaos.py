@@ -60,7 +60,7 @@ class RecordingCtx:
     async def recall(self, cfg, bank, query, filters):
         self.calls.append("recall")
         self.recalls.append({"bank": bank, "query": query, "filters": filters})
-        return SimpleNamespace(items=[])
+        return SimpleNamespace(items=[], snapshot_hash="")
 
     async def run_role(self, cfg, role, model, agent, prompt, **kw):
         self.calls.append("run_role")
@@ -69,7 +69,9 @@ class RecordingCtx:
         )
         return SimpleNamespace(output=PLAN)
 
-    async def cached_stage(self, cfg, stage, input_json, output_type, run_fn, *, prompt_digest=""):
+    async def cached_stage(
+        self, cfg, stage, input_json, output_type, run_fn, *, prompt_digest="", recall_ref=""
+    ):
         self.calls.append(f"cached:{stage}")
         self.cache_keys.append(input_json)
         return await run_fn(), False

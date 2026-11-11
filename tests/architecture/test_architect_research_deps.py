@@ -54,7 +54,9 @@ class _RecordingCtx:
 
         return _Result()
 
-    async def cached_stage(self, cfg, stage, key, output_type, fn, *, prompt_digest=""):
+    async def cached_stage(
+        self, cfg, stage, key, output_type, fn, *, prompt_digest="", recall_ref=""
+    ):
         return await fn(), False
 
 
@@ -64,7 +66,7 @@ def _prep() -> ArchitecturePrep:
         resolved_model="claude-3-5-sonnet",
         spend=RoleUsage(role="architect", model="claude-3-5-sonnet"),
         mode_val="greenfield",
-        snapshot=SimpleNamespace(items=[]),
+        snapshot=SimpleNamespace(items=[], snapshot_hash=""),
         map_block="",
         map_key="",
         salt="digest",

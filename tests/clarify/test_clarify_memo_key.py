@@ -157,6 +157,7 @@ class _StubContext:
         run_fn: Any,
         *,
         prompt_digest: str = "",
+        recall_ref: str = "",
     ) -> tuple[ClarifiedRequirements, bool]:
         self.cached_stage_calls.append(
             {

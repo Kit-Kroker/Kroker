@@ -94,6 +94,7 @@ async def test_the_composition_executes_the_planner_and_finishes():
             run_fn: Any,
             *,
             prompt_digest: str = "",
+            recall_ref: str = "",
         ) -> tuple[Any, bool]:
             out = await run_fn()
             return out, False

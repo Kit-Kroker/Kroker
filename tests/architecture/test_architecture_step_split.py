@@ -26,13 +26,15 @@ class Ctx:
 
     async def recall(self, cfg, bank, query, filters):
         self.calls.append("recall")
-        return SimpleNamespace(items=[])
+        return SimpleNamespace(items=[], snapshot_hash="")
 
     async def run_role(self, cfg, role, model, agent, prompt, **kw):
         self.calls.append(f"run_role:{'guided' if 'Revision guidance' in prompt else 'plain'}")
         return SimpleNamespace(output=ARCH)
 
-    async def cached_stage(self, cfg, stage, input_json, output_type, run_fn, *, prompt_digest=""):
+    async def cached_stage(
+        self, cfg, stage, input_json, output_type, run_fn, *, prompt_digest="", recall_ref=""
+    ):
         self.calls.append(f"cached:{stage}")
         return await run_fn(), False
 
