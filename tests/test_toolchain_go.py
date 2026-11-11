@@ -6,9 +6,11 @@ import pytest
 
 from sdlc.toolchain.adapters import (
     TOOLCHAINS,
+    PythonToolchain,
     ToolchainKind,
     detect,
 )
+from sdlc.toolchain.junit import testcase_outcomes
 
 
 def test_detect_go_by_go_mod(tmp_path):
@@ -293,3 +295,63 @@ def test_go_selected_tests_cmd_refuses_unsafe_ids():
     go = TOOLCHAINS[ToolchainKind.GO]
     with pytest.raises(ValueError, match="TestA;rm"):
         go.selected_tests_cmd(["example.com/m/a::TestA;rm"], "j.xml")
+
+
+# --- node_id interpretation: report ids round-trip with collected ids --------
+
+
+def test_go_node_id_passes_import_paths_through_unmangled():
+    # go-junit-report's classname IS the package's import path; mangling it
+    # into a dotted-module path (the pytest-shaped ABC default) would build
+    # ids parse_collected_ids can never emit, so DS6 base corroboration
+    # would fail closed for every Go failure. The import path passes through
+    # verbatim; a `file` attribute (no Go tool emits one today) still wins,
+    # matching the default's precedence.
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert go.node_id(None, "example.com/m/a", "TestAlpha") == "example.com/m/a::TestAlpha"
+    assert go.node_id(None, "", "TestAlpha") == "TestAlpha"
+    assert go.node_id("a/alpha_test.go", "example.com/m/a", "TestAlpha") == (
+        "a/alpha_test.go::TestAlpha"
+    )
+
+
+def test_python_node_id_default_keeps_pytest_mangling():
+    # The ABC default is pytest's dotted-module mangling verbatim: a dotted
+    # classname without a `file` attribute rebuilds as a .py path.
+    assert PythonToolchain().node_id(None, "tests.test_a", "test_b") == "tests/test_a.py::test_b"
+
+
+GO_JUNIT_XML = """<?xml version="1.0" encoding="UTF-8"?><testsuites>
+<testsuite name="example.com/m/a" tests="2" failures="1" errors="0" skipped="0">
+<testcase classname="example.com/m/a" name="TestAlpha" time="0.01"/>
+<testcase classname="example.com/m/a" name="TestBeta" time="0.02"><failure/></testcase>
+</testsuite>
+<testsuite name="example.com/m/c" tests="1" failures="0" errors="0" skipped="0">
+<testcase classname="example.com/m/c" name="TestDelta" time="0.003"/>
+</testsuite>
+</testsuites>"""
+
+# The same two packages as GO_JUNIT_XML, as `go test -list ".*"` prints them.
+GO_LIST_OUT = "\n".join(
+    (
+        "TestAlpha",
+        "TestBeta",
+        "ok  \texample.com/m/a\t0.012s",
+        "TestDelta",
+        "ok  \texample.com/m/c\t0.003s",
+    )
+)
+
+
+def test_go_report_ids_round_trip_with_collected_ids():
+    # THE property Task 5's review proved broken: ids parsed from a
+    # go-junit-report report via GoToolchain.node_id must equal the ids
+    # parse_collected_ids emits for the same suite -- DS6 base corroboration
+    # collects with the one and re-reads with the other, so any skew fails
+    # closed for every Go failure. (Skipped testcases are the one deliberate
+    # exception: the parser filters them by design -- neither run nor
+    # re-run -- so the fixture carries none.)
+    go = TOOLCHAINS[ToolchainKind.GO]
+    outcomes = testcase_outcomes(GO_JUNIT_XML, go.node_id)
+    assert outcomes is not None
+    assert set(outcomes) == go.parse_collected_ids(GO_LIST_OUT)

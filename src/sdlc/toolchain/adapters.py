@@ -103,6 +103,31 @@ class ToolchainAdapter(ABC):
         """
         return os.path.isfile(os.path.join(root, locator))
 
+    def node_id(self, file_attr: str | None, classname: str, name: str) -> str:
+        """A JUnit testcase's report id, as a per-language interpretation.
+        The pytest-shaped default transcribes junit.py::_node_id verbatim --
+        including the empty-classname edge (a collection error keys on its
+        module file) -- because pytest's classname is a dotted module path:
+        the id is rebuilt as a file path, with the `file` attribute winning
+        when the report carries one.
+
+        Load-bearing for DS6 base corroboration: ids re-read from the report
+        must equal `parse_collected_ids`' ids, or every introduced failure
+        reads unattributable. A language whose classname is NOT a dotted
+        module overrides -- Go's is an import path, and mangling it into a
+        `.py` path is lossy and unfixable downstream.
+        """
+        file_attr = normalize_path(file_attr or "")
+        if not classname:
+            return file_attr or name.replace(".", "/") + ".py"
+        module = file_attr[:-3].replace("/", ".") if file_attr.endswith(".py") else ""
+        head = file_attr or classname.replace(".", "/") + ".py"
+        parts = [head]
+        if module and classname.startswith(module + "."):
+            parts.extend(classname[len(module) + 1 :].split("."))
+        parts.append(name)
+        return "::".join(parts)
+
     @abstractmethod
     def test_cmd(self, coverage: bool = True) -> str:
         """Test command. With coverage=True it MUST emit a Cobertura
@@ -459,6 +484,18 @@ class GoToolchain(ToolchainAdapter):
             # never leak into the next ok package's ids.
             names = []
         return ids
+
+    def node_id(self, file_attr: str | None, classname: str, name: str) -> str:
+        # go-junit-report emits no `file` attribute and sets classname to the
+        # package's import path, so classname passes through UNMANGLED: the
+        # inherited default would rebuild it as a `.py` path no collected id
+        # can ever match, and DS6 base corroboration would fail closed for
+        # every Go failure -- this override is the round-trip's missing half.
+        # A future tool that does emit `file` still wins, matching the
+        # default's precedence.
+        if file_attr:
+            return f"{file_attr}::{name}"
+        return f"{classname}::{name}" if classname else name
 
     def selected_tests_cmd(self, node_ids: Sequence[str], junit_out: str) -> str:
         unsafe = [p for p in node_ids if not shell_safe(p)]

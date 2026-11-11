@@ -124,9 +124,11 @@ def _test_nc(reason: str) -> ScopedTestReport:
     return ScopedTestReport(state=CollectionState.NOT_COLLECTED, reason=reason)
 
 
-def _read_report(wt: str, name: str) -> dict[str, bool] | None:
+def _read_report(wt: str, name: str, adapter: ToolchainAdapter) -> dict[str, bool] | None:
     try:
-        return testcase_outcomes(pathlib.Path(wt, name).read_text(encoding="utf-8"))
+        return testcase_outcomes(
+            pathlib.Path(wt, name).read_text(encoding="utf-8"), adapter.node_id
+        )
     except OSError:
         return None
 
@@ -155,7 +157,7 @@ async def _head_run(adapter, head_wt, env, timeout_s) -> tuple[dict[str, bool], 
     kind = adapter.classify_test_exit(code)
     if kind == "no_tests":
         return "head test run collected no tests"
-    outcomes = _read_report(head_wt, JUNIT)
+    outcomes = _read_report(head_wt, JUNIT, adapter)
     if outcomes is None:
         return f"head test run (exit {code}) wrote no parseable JUnit report"
     if kind == "failed_to_run" and all(outcomes.values()):
@@ -175,7 +177,7 @@ async def _base_outcomes(adapter, base_wt, ids, env, timeout_s) -> dict[str, boo
             timeout_s,
             env=env,
         )
-        got = _read_report(base_wt, BASE_JUNIT)
+        got = _read_report(base_wt, BASE_JUNIT, adapter)
         if got is None:
             return "base re-run wrote no parseable JUnit report"
         merged.update(got)
