@@ -303,7 +303,7 @@ def test_executable_with_empty_handler_types_flags_every_node():
 def test_executable_flags_not_executable_types():
     from sdlc.workflows.graph_catalog import NOT_EXECUTABLE, SHIPPED, executable
 
-    assert set(NOT_EXECUTABLE) == {"gate.research"}
+    assert set(NOT_EXECUTABLE) == {"constitution", "gate.research"}
     with_research_gate = PipelineGraph(
         schema_version=1,
         nodes=[*SHIPPED["default"].nodes, node("research", "gate.research")],

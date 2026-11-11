@@ -116,6 +116,20 @@ _CATALOG: tuple[NodeTypeSpec, ...] = (
         canonical_stage="context",
         ports=(_in("trigger", None), _out("map", "CodebaseMap"), _reject(), _fail()),
     ),
+    # FR-112 partial freeze: the constitution stage never REJECTS (a partial
+    # constitution still flows downstream), so this type has no reject port.
+    NodeTypeSpec(
+        type="constitution",
+        kind="stage",
+        role="constitution",
+        canonical_stage="constitution",
+        budget_after="continuing",
+        ports=(
+            _in("trigger", None, required=False),
+            _out("constitution", "Constitution"),
+            _fail(),
+        ),
+    ),
     NodeTypeSpec(
         type="research",
         kind="stage",
@@ -142,6 +156,7 @@ _CATALOG: tuple[NodeTypeSpec, ...] = (
             _in("trigger", None, required=False),
             _in("codebase_map", "CodebaseMap", required=False),
             _in("research", "ResearchBrief", required=False),
+            _in("constitution", "Constitution", required=False),
             _out("requirements", "ClarifiedRequirements"),
             _fail(),
         ),
@@ -155,6 +170,7 @@ _CATALOG: tuple[NodeTypeSpec, ...] = (
             _in("requirements", "ClarifiedRequirements"),
             _in("codebase_map", "CodebaseMap", required=False),
             _in("guidance", "GateDecision", required=False),
+            _in("constitution", "Constitution", required=False),
             _out("spec", "ArchitectureSpec"),
             _fail(),
         ),
@@ -168,6 +184,7 @@ _CATALOG: tuple[NodeTypeSpec, ...] = (
             _in("spec", "ArchitectureSpec"),
             _in("requirements", "ClarifiedRequirements", required=False),
             _in("guidance", "GateDecision", required=False),
+            _in("constitution", "Constitution", required=False),
             _out("plan", "ImplementationPlan"),
             _fail(),
         ),

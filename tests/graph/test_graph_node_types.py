@@ -51,6 +51,7 @@ def test_payload_allowlist_seed():
         "BuildResult": "sdlc.workflows.models:BuildResult",
         "ClarifiedRequirements": "sdlc.stages.clarify.models:ClarifiedRequirements",
         "CodebaseMap": "sdlc.context.models:CodebaseMap",
+        "Constitution": "sdlc.stages.constitution.models:Constitution",
         "GateDecision": "sdlc.core.models:GateDecision",
         "ImplementationPlan": "sdlc.stages.plan.models:ImplementationPlan",
         "NodeFailure": "sdlc.core.models:NodeFailure",
@@ -248,8 +249,8 @@ def test_unknown_stage_is_the_literal_and_not_canonical():
     assert UNKNOWN_STAGE not in CANONICAL_STAGES
 
 
-def test_shipped_registry_declares_a_stage_for_all_sixteen_types():
-    assert len(NODE_TYPES) == 16
+def test_shipped_registry_declares_a_stage_for_all_seventeen_types():
+    assert len(NODE_TYPES) == 17
 
 
 @pytest.mark.parametrize("type_", sorted(NODE_TYPES))

@@ -75,6 +75,13 @@
           "multiplicity": "one"
         },
         {
+          "name": "constitution",
+          "direction": "in",
+          "payload": "Constitution",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
           "name": "spec",
           "direction": "out",
           "payload": "ArchitectureSpec",
@@ -132,6 +139,13 @@
           "name": "research",
           "direction": "in",
           "payload": "ResearchBrief",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "constitution",
+          "direction": "in",
+          "payload": "Constitution",
           "required": false,
           "multiplicity": "one"
         },
@@ -217,6 +231,10 @@
             "port": "trigger"
           },
           {
+            "type": "constitution",
+            "port": "trigger"
+          },
+          {
             "type": "context",
             "port": "trigger"
           },
@@ -231,6 +249,53 @@
           {
             "type": "seed.spec",
             "port": "trigger"
+          }
+        ],
+        "fail": []
+      }
+    },
+    {
+      "type": "constitution",
+      "kind": "stage",
+      "role": "constitution",
+      "canonical_stage": "constitution",
+      "default_id": "constitution",
+      "ports": [
+        {
+          "name": "trigger",
+          "direction": "in",
+          "payload": null,
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "constitution",
+          "direction": "out",
+          "payload": "Constitution",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "constitution": [
+          {
+            "type": "architect",
+            "port": "constitution"
+          },
+          {
+            "type": "clarify",
+            "port": "constitution"
+          },
+          {
+            "type": "plan",
+            "port": "constitution"
           }
         ],
         "fail": []
@@ -293,6 +358,10 @@
             "port": "trigger"
           },
           {
+            "type": "constitution",
+            "port": "trigger"
+          },
+          {
             "type": "context",
             "port": "trigger"
           },
@@ -345,6 +414,10 @@
         "done": [
           {
             "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "constitution",
             "port": "trigger"
           },
           {
@@ -435,6 +508,10 @@
         "reject": [
           {
             "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "constitution",
             "port": "trigger"
           },
           {
@@ -535,6 +612,10 @@
             "port": "trigger"
           },
           {
+            "type": "constitution",
+            "port": "trigger"
+          },
+          {
             "type": "context",
             "port": "trigger"
           },
@@ -620,6 +701,10 @@
             "port": "trigger"
           },
           {
+            "type": "constitution",
+            "port": "trigger"
+          },
+          {
             "type": "context",
             "port": "trigger"
           },
@@ -681,6 +766,10 @@
             "port": "trigger"
           },
           {
+            "type": "constitution",
+            "port": "trigger"
+          },
+          {
             "type": "context",
             "port": "trigger"
           },
@@ -703,6 +792,10 @@
             "port": "trigger"
           },
           {
+            "type": "constitution",
+            "port": "trigger"
+          },
+          {
             "type": "context",
             "port": "trigger"
           },
@@ -722,6 +815,10 @@
         "reject": [
           {
             "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "constitution",
             "port": "trigger"
           },
           {
@@ -814,6 +911,10 @@
             "port": "trigger"
           },
           {
+            "type": "constitution",
+            "port": "trigger"
+          },
+          {
             "type": "context",
             "port": "trigger"
           },
@@ -858,6 +959,13 @@
           "name": "guidance",
           "direction": "in",
           "payload": "GateDecision",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "constitution",
+          "direction": "in",
+          "payload": "Constitution",
           "required": false,
           "multiplicity": "one"
         },
@@ -967,6 +1075,10 @@
             "port": "trigger"
           },
           {
+            "type": "constitution",
+            "port": "trigger"
+          },
+          {
             "type": "context",
             "port": "trigger"
           },
@@ -1050,6 +1162,10 @@
         "reject": [
           {
             "type": "clarify",
+            "port": "trigger"
+          },
+          {
+            "type": "constitution",
             "port": "trigger"
           },
           {
