@@ -156,7 +156,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
   - `S/stages/architecture/architecture.md` (after `:19`).
 
   (plan T035)
-- [ ] T023 [US2] Run `pytest -q T/test_recall_memo_key.py T/clarify T/plan T/architecture`, which must be green. (quickstart Q3)
+- [x] T023 [US2] Run `pytest -q T/test_recall_memo_key.py T/clarify T/plan T/architecture`, which must be green. (quickstart Q3)
 
 **Checkpoint**: US1 and US2 together deliver FR-402.
 
