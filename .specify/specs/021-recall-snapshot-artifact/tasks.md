@@ -195,7 +195,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
   - remove the print and add a comment citing 021 R-4 and that card.
 
   Do not compute the hashes by hand.
-- [ ] T029 [US4] Run `pytest -m temporal -q T/replay`. All goldens must pass with `git diff --exit-code T/replay/golden T/replay/histories`, and `T/replay/test_graph_golden.py` is the only edited replay test file. (quickstart Q6)
+- [x] T029 [US4] Run `pytest -m temporal -q T/replay`. All goldens must pass with `git diff --exit-code T/replay/golden T/replay/histories`, and `T/replay/test_graph_golden.py` is the only edited replay test file. (quickstart Q6)
 
 ---
 
