@@ -353,7 +353,48 @@ class GoToolchain(ToolchainAdapter):
         return "go vet -json ./..."
 
     def parse_lint(self, code: int, out: str, root: str) -> list[tuple[str, str, int]] | None:
-        raise NotImplementedError("GoToolchain.parse_lint lands with E-30a's parsers")
+        # Only 0 (clean) and 1 (findings found) are interpreted; any other
+        # exit is a tool failure before finding interpretation even starts.
+        if code not in (0, 1):
+            return None
+        # vet streams one top-level JSON object per package, in completion
+        # order and concatenated with no separator -- never a JSON array --
+        # so the stream must be decoded incrementally with raw_decode;
+        # json.loads would see a single invalid document.
+        decoder = json.JSONDecoder()
+        pos = 0
+        packages: list[dict] = []
+        try:
+            while True:
+                while pos < len(out) and out[pos].isspace():
+                    pos += 1
+                if pos >= len(out):
+                    break
+                obj, pos = decoder.raw_decode(out, pos)
+                packages.append(obj)
+        except ValueError:
+            # Garbage anywhere in the stream means it was truncated or
+            # corrupted mid-run: the objects decoded so far cannot be proven
+            # to be the complete set, so fail closed (None = tool failure)
+            # rather than grade a partial read.
+            return None
+        if code == 1 and not packages:
+            # Exit 1 claims findings; an empty stdout says nothing. A claim
+            # contradicted by its evidence is ambiguity -- None (NOT_COLLECTED
+            # downstream), never a vacuous clean pass.
+            return None
+        found: list[tuple[str, str, int]] = []
+        for pkg in packages:
+            for report in pkg.values():
+                for d in report.get("diagnostics", []):
+                    loc = d["location"]
+                    rule = d.get("category") or "vet"
+                    # vet reports absolute filenames; the gate speaks in
+                    # repo-relative POSIX paths, so relativize against the
+                    # worktree root and normalize.
+                    path = normalize_path(os.path.relpath(loc["file"]["filename"], root))
+                    found.append((rule, path, int(loc["line"])))
+        return sorted(found)
 
     def integration_test_cmd(self, junit_out: str, coverage: bool = True) -> str:
         """The merge gate's whole-suite run, Go-shaped.

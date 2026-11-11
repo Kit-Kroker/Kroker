@@ -1,5 +1,7 @@
 """GoToolchain: identity, triage fields, install/build, exit classification (E-30a)."""
 
+import json
+
 import pytest
 
 from sdlc.toolchain.adapters import (
@@ -118,3 +120,72 @@ def test_go_cmd_members_refuse_unsafe_interpolation():
 
 def test_registry_lists_python_first():
     assert list(TOOLCHAINS)[0] is ToolchainKind.PYTHON
+
+
+# --- E-30a parse_lint: the `go vet -json` stream ------------------------------
+
+
+def _vet_package(pkg: str, category: str | None, filename: str, line: int) -> str:
+    # One top-level vet JSON object: keyed by import path, diagnostics carry
+    # absolute file locations. category=None omits the key entirely -- vet
+    # emits "" or omits it depending on the analyzer.
+    d: dict = {
+        "message": "m",
+        "location": {"file": {"filename": filename}, "line": line, "column": 1},
+    }
+    if category is not None:
+        d["category"] = category
+    return json.dumps({pkg: {"diagnostics": [d]}})
+
+
+def test_go_parse_lint_decodes_concatenated_package_objects(tmp_path):
+    # `go vet -json` streams one object per package, glued together with no
+    # separator -- never a JSON array. Exit 1 means findings, not tool
+    # failure, so code 1 with a decodable stream must parse to rows: empty
+    # and missing categories both fall back to "vet", absolute filenames
+    # come back repo-relative POSIX, and rows are sorted.
+    a, b, c = tmp_path / "a.go", tmp_path / "b.go", tmp_path / "c.go"
+    stream = "\n".join(
+        (
+            _vet_package("example.com/m/a", "printf", str(a), 42),
+            _vet_package("example.com/m/b", "", str(b), 7),
+            _vet_package("example.com/m/c", None, str(c), 10),
+        )
+    )
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert go.parse_lint(1, stream, str(tmp_path)) == [
+        ("printf", "a.go", 42),
+        ("vet", "b.go", 7),
+        ("vet", "c.go", 10),
+    ]
+
+
+def test_go_parse_lint_clean_exit_is_empty_measured_list():
+    # Code 0 with empty stdout: vet ran and found nothing -- a measured
+    # clean pass ([]), not a collection failure (None).
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert go.parse_lint(0, "", "/x") == []
+
+
+def test_go_parse_lint_exit_one_with_empty_stdout_fails_closed():
+    # Exit 1 claims findings; an empty stdout says nothing. A claim
+    # contradicted by its evidence is ambiguity -- None (NOT_COLLECTED
+    # downstream), never a vacuous clean pass.
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert go.parse_lint(1, "", "/x") is None
+
+
+def test_go_parse_lint_exit_two_is_tool_failure():
+    # Only 0 and 1 are interpreted; anything else is vet failing before any
+    # finding interpretation is possible.
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert go.parse_lint(2, "vet: bad flag", "/x") is None
+
+
+def test_go_parse_lint_trailing_garbage_fails_closed():
+    # Garbage after valid objects means the stream was truncated or
+    # corrupted: the set decoded so far cannot be proven complete, so the
+    # whole read is discarded (None) rather than graded partial.
+    go = TOOLCHAINS[ToolchainKind.GO]
+    stream = _vet_package("example.com/m/a", "printf", "/x/a.go", 1) + "\ntrailing{garbage"
+    assert go.parse_lint(1, stream, "/x") is None
