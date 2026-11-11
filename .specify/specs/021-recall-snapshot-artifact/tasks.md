@@ -124,7 +124,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
 
 **Independent test**: `pytest -q T/test_recall_memo_key.py T/clarify T/plan T/architecture`.
 
-- [ ] T016 [P] [US2] Write failing tests in new file `T/test_recall_memo_key.py` for `RoleHost._cached_stage` (`S/workflows/role_host.py:88`). Follow the monkeypatched `content_key` pattern of `T/replay/test_graph_golden.py:121`, and stub `cache_get`/`cache_put` via `workflow.execute_activity`. Assert:
+- [x] T016 [P] [US2] Write failing tests in new file `T/test_recall_memo_key.py` for `RoleHost._cached_stage` (`S/workflows/role_host.py:88`). Follow the monkeypatched `content_key` pattern of `T/replay/test_graph_golden.py:121`, and stub `cache_get`/`cache_put` via `workflow.execute_activity`. Assert:
   - with `recall_ref=""` and `_memory_watermark=None`, the fifth `content_key` arg is exactly `"none"`;
   - with `recall_ref=""` and `_memory_watermark="5"`, it is exactly `"5"`;
   - with `recall_ref="abc"` and `_memory_watermark="5"`, it is `"5|abc"`;
