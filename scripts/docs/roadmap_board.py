@@ -20,9 +20,10 @@ from typing import Literal
 Status = Literal["done", "partial", "notstarted", "notmeasurable"]
 
 _LIST_RE = re.compile(r"^\s*[-*]\s+(?P<tok>\[[^]\n]*\]|—)\s*(?P<rest>.*)$")
-_DECO_RE = re.compile("^(?:[⚠️✅❌–—-]\s*)*")
+_DECO_RE = re.compile(r"^(?:[⚠️✅❌–—-]\s*)*")
 _ID_RE = re.compile(r"^\*\*(?P<id>[^*]+?)\*\*(?P<tail>.*)$")
 _HEADING_RE = re.compile(r"^##\s+(?P<title>.+?)\s*$")
+_MD_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 
 
 @dataclass(frozen=True)
@@ -128,6 +129,13 @@ def board_sources(repo_root: Path) -> dict[str, str]:
     return {p: (repo_root / p).read_text(encoding="utf-8") for p in paths}
 
 
+def _flatten_links(text: str) -> str:
+    """Keep a heading's link text, drop the link. ROADMAP headings link
+    repo-root-relative paths, but the board page lives under generated/, so
+    the link hook would resolve them to dead paths and fail the strict build."""
+    return _MD_LINK_RE.sub(r"\1", text)
+
+
 def render_board(sections: list[Section]) -> str:
     counts: dict[str, int] = {}
     lines = [
@@ -139,14 +147,14 @@ def render_board(sections: list[Section]) -> str:
     ]
     for section in sections:
         lines += [
-            f"## {section.title}",
+            f"## {_flatten_links(section.title)}",
             "",
             "| Id | Status | Title | Source |",
             "| --- | --- | --- | --- |",
         ]
         for it in section.items:
             counts[it.status] = counts.get(it.status, 0) + 1
-            title = it.title.replace("|", "\|")[:80]
+            title = it.title.replace("|", "\\|")[:80]
             lines.append(
                 f"| **{it.id}** | {it.status} | {title} "
                 f"| [{it.source}:{it.line}]({BLOB_BASE}{it.source}#L{it.line}) |"

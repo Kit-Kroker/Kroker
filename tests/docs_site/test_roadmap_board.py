@@ -86,6 +86,20 @@ def test_render_board_tables_and_totals():
     assert "| notmeasurable | 2 |" in md.split("## Totals")[1]
 
 
+def test_section_heading_links_are_flattened_to_text():
+    """A ROADMAP heading link is relative to the repo root, but the board page
+    lives under generated/: the link hook would resolve it to a dead path and
+    fail the strict build. The heading keeps its text and drops the link."""
+    from scripts.docs.roadmap_board import render_board
+
+    md = (
+        "## 6. ADRs ([docs/adr.md](docs/adr.md), see [site](https://x.y/z))\n\n- [x] **ADR-1** a.\n"
+    )
+    out = render_board(parse_board({"ROADMAP.md": md}))
+    assert "## 6. ADRs (docs/adr.md, see site)" in out
+    assert "](docs/adr.md)" not in out
+
+
 def test_board_parity_against_real_sources():
     """Spec §9.4: board totals equal an independent recount of the sources."""
     import re
