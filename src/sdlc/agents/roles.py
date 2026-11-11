@@ -132,6 +132,10 @@ discover_agent = AGENTS.get("discover")
 # Optional risk proposer (E-49 RD7). Present iff agents/risk/ ships.
 risk_agent = AGENTS.get("risk")
 
+# Optional constitution drafter (FR-112). Present iff agents/constitution/
+# ships; the STAGE runs only when the run enables the flag (feature.py).
+constitution_agent = AGENTS.get("constitution")
+
 # E-85: two extra agents for the clarify fan-out. NOT new registry roles --
 # they reuse the clarify role's model, so agents/ stays at 15 roles and the
 # loader is untouched.
@@ -284,6 +288,8 @@ t_discover = discover_agent
 
 t_risk = risk_agent
 
+t_constitution = constitution_agent
+
 ALL_TEMPORAL_AGENTS = [
     t_clarify,
     t_clarify_route,
@@ -308,3 +314,5 @@ if t_discover is not None:
     ALL_TEMPORAL_AGENTS.append(t_discover)
 if t_risk is not None:
     ALL_TEMPORAL_AGENTS.append(t_risk)
+if t_constitution is not None:
+    ALL_TEMPORAL_AGENTS.append(t_constitution)

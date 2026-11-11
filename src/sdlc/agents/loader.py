@@ -70,8 +70,11 @@ REQUIRED_ROLES = HARNESS_ROLES | PROPOSER_ROLES
 # reason at a different tier (E-48 DD7): it is an ASSESSMENT-only role, and
 # making it required would fail boot on a feature-only deployment. 'risk'
 # joins it for the identical reason at the next phase (E-49 RD7).
+# 'constitution' joins as an opt-in-flag stage (FR-112): the drafter runs
+# only when the run enables it, but its folder is KNOWN so the graph node
+# type's role cross-check resolves.
 OPTIONAL_ROLES: frozenset[str] = frozenset(
-    {"research", "deep_review", "handoff", "adversary", "discover", "risk"}
+    {"research", "deep_review", "handoff", "adversary", "discover", "risk", "constitution"}
 )
 
 # REQUIRED_ROLES gates PRESENCE (a missing one fails boot).

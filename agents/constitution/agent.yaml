@@ -1,0 +1,7 @@
+# FR-112: drafts the run's governing principles from the repo's own
+# instruction files. A proposer — FR-204/ADR-6 constrains judge-vs-dev pairs,
+# not proposer-proposer, so it shares research's capable tier (a grounded,
+# repo-reading proposer). Editing the model here is configuration, not a
+# code change.
+kind: proposer
+model: zai:glm-5.3
