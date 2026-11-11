@@ -399,6 +399,10 @@ class PipelineConfig(BaseModel):
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     memoization_enabled: bool = False
     research: ResearchConfig = Field(default_factory=ResearchConfig)
+    # FR-112: the constitution bounds. No omit-when-default serializer —
+    # `research` sits here plainly and the graph presence flag
+    # (constitution_enabled) is the only gate that matters.
+    constitution: ConstitutionConfig = Field(default_factory=ConstitutionConfig)
     deploy: DeployConfig = Field(default_factory=DeployConfig)
     research_enabled: bool = False  # FR-107: off by default; the
     # default pipeline is unchanged

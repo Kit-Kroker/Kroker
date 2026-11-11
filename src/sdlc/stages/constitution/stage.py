@@ -225,3 +225,8 @@ async def draft_constitution(inp: DraftInput) -> _DraftResult:
     signature's param count, so a seam param would silently turn `inp`
     back into a plain dict)."""
     return await _draft_constitution_impl(inp)
+
+
+# The slice's worker registration (the research activities.py role): the
+# activity and its registration list live together.
+ACTIVITIES: list = [draft_constitution]

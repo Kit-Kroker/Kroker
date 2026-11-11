@@ -20,6 +20,7 @@ from .postplan import (
 from .precode import (
     architect_node,
     clarify_node,
+    constitution_node,
     context_node,
     intake_node,
     plan_node,
@@ -32,6 +33,7 @@ HANDLERS: Mapping[str, Handler] = MappingProxyType(
         "architect": architect_node,
         "clarify": clarify_node,
         "code": code_node,
+        "constitution": constitution_node,
         "context": context_node,
         "deploy": deploy_node,
         "gate.architecture": gate_node,

@@ -140,10 +140,8 @@ def project_cfg(
 ) -> PipelineConfig:
     """The per-activation cfg (spec §5.2): a node role fills an unoverridden
     role (U5), a node gate overlays cfg.gates[node.id], research_enabled
-    follows the graph, and so does constitution_enabled (FR-112).
-    constitution_in_graph defaults False until the dispatcher wires FR-112
-    presence, so today's callers are unchanged. Equal to `cfg` for every
-    shipped graph (pinned in Task 14)."""
+    follows the graph, and so does constitution_enabled (FR-112). Equal to
+    `cfg` for every shipped graph (pinned in Task 14)."""
     roles = dict(cfg.roles)
     if node.role is not None and spec.role is not None and spec.role not in cfg.roles:
         roles[spec.role] = node.role

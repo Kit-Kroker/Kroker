@@ -220,6 +220,7 @@ STAGE_ROLES: dict[str, str] = {
     "adversary": "adversary",  # optional; present iff the folder ships
     "discover": "discover",  # optional; present iff the folder ships
     "risk": "risk",  # optional; present iff the folder ships
+    "constitution": "constitution",  # optional; present iff the folder ships
 }
 
 # Both maps are keyed by stage and looked up together in _cached_stage. Keep
