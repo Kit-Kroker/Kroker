@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-11-11 (FR-402 closed by round 021: stage-level recalls persisted, scrubbed, content-addressed and keyed into the memo key; full history in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
+| Last verified | 2026-11-12 (FR-107 closed: the research stage re-verified clause-by-clause against code and ticked — 13 of 15 stages live; full history in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -275,14 +275,19 @@
 
 ## 1. Pipeline — 15-stage DAG (SDLC-spec v2 §1)
 
-**12 of 15 stages live.**
+**13 of 15 stages live.**
 
 - [x] **0 · intake** — routing greenfield/brownfield/repair. Verified by `classify_repo` activity against git tree (E-84 D3); fails closed when brownfield has nothing to map.
 - [ ] **1 · constitution** — no `Constitution` model, no stage.
 - [x] **2 · context (Cartographer)** — `CodebaseMap` projected from scan tree, bounded prompt rendering (`render_for_prompt`), and `check_brownfield_delta` grounding check with 1 retry before failing closed (E-84).
 - [ ] **3 · requirements (Product)** — conflated into clarify; no standalone Product proposer / `Requirements` artifact.
-- [ ] **4 · research** (FR-107) — grounded brief before clarify. The DAG is now 15
-  stages; **12 of 15 stages live** (research is scaffolded, off by default).
+- [x] ✅ **4 · research** (FR-107) — grounded brief before clarify, off by
+  default (`research_enabled`): fan-out (`plan_research` → parallel
+  `research_subquestion` → `synthesize_brief`), quotes byte-verified against
+  pages fetched that run (`verify_brief_activity`), explicit per-run budgets,
+  verified findings retained as leads. **Re-verified 2026-11-12** (see
+  FR-107). *Residual: never run against a live provider — every test uses
+  fakes.*
 - [x] **5 · clarify** — Clarifier + gate; open-question wait on `answer_question`; recall/retain/memoization wired.
 - [x] **6 · architecture** — Architect + gate, with REVISE loop (`_revisable_stage`).
 - [x] **7 · planning** — Planner + gate, with REVISE loop.
@@ -299,13 +304,13 @@
 ## 2. Functional requirements (PRD §6)
 
 ### Pipeline (FR-100)
-- [ ] ⚠️ **FR-101** 15-stage durable DAG — 12/15 stages (see §1).
+- [ ] ⚠️ **FR-101** 15-stage durable DAG — 13/15 stages (see §1).
 - [x] **FR-102** greenfield/brownfield classify + `CodebaseMap` + delta. **Landed 2026-08-15 (E-84)**: `classify()` pure rule + `classify_repo` activity; `CodebaseMap` projection from 13 Tier 2 scan signals; bounded prompt rendering; typed `BrownfieldDelta` (added/modified/removed) with activity-side git grounding check in architecture stage.
 - [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`) — each stage's memo key now carries *its own* role's model (`STAGE_MODELS`), so a per-role model change invalidates exactly that stage. `brief_digest` keeps memoization alive once a non-memoized stage (research) feeds memoized ones: the brief contributes only a canonical (source_url, claim) digest to `content_key`, so identical facts hit and new facts invalidate clarify/architect/planner. ⚠️ **Amendment pending (E-47a, 2026-08-08):** E-46's `(tree hash, signal version)` key gains a third term, `identity_registry_version` — the `CapabilityMap` is a function of the tree *and* the identity registry, so re-assessing an unchanged tree is no longer unconditionally a cache hit. Deliberately coarse (any identity write invalidates the whole map for that project); the map is a single artifact with no per-capability memoization to preserve. **Clarified (E-46 D10, 2026-08-12):** E-47a's `identity_registry_version` term applies to the `CapabilityMap`, not to E-46's signal keys — E-46 is a pure function of the tree, keyed on `(tree_hash, signal_version, rules_sha)`.
 - [x] **FR-104** integration branch, per-task worktree, own-branch-point diff (ADR-14 fully wired).
 - [x] **FR-105** fix loops — one bounded fix loop per dev task folds every failure signal of the attempt (deterministic tests, clean-context QA, review/adversary blocking findings) into one repair prompt executed by the task's harness role (`_fix_loop_issues`, `code/step.py:896`); session resume conditional on stack match / context ceiling / FR-802 cap (`code/step.py:161-166`); test-drift backstop escalates directly (`:898-905`); exhaustion escalates to `task:{id}` with revise bounded by `max_gate_rounds` (`:916-966`, CODE-1.5). **PRD FR-105 amended 2026-11-11** (single merged fix loop, default `max_fix_attempts=2`; analyze findings gate at merge per FR-106 — supersedes the two-loop "Developer 2 / Resolver 3" design, ADR-25). The number stays 2 deliberately: no benchmark evidence justifies 3, and the knob is also a calibration input (`fix_attempt_label`); the per-task `fix_attempts` records (BENCHMARK.md §4.3) are the instrument for revisiting it. **Re-verified 2026-11-11** against `stages/code/step.py`, `stages/qa/step.py`, `stages/analyze/` (no repair re-entry — analysis runs once post-integration, untraced criteria advisory at merge).
 - [x] **FR-106** deterministic absolute/advisory gate — classification ✅ and load-bearing: 9 required checks with absence-synthesizes-failure (C3), security absolute floor ✅ (`security_no_critical` + `security_scan_collected`, FR-915), traceability enforced ✅ (Analyst proposes the mapping, the workflow enforces it via `untraced_criteria` — the LLM never holds the verdict), coverage wired as a deterministic diff-scoped seam ✅ (Python via E-30; Go/TS/Rust via E-30a/b/c — additive, off the critical path by FR-108's own precedent). Absolute checks judge the change against the run's pinned base (PRD FR-106 amended 2026-09-11, diff-scoped gates); pre-existing findings reported, not gated. `MergeVerdict` is advisory input under SOFT policy only. **Re-verified 2026-11-11** against `src/sdlc/gate.py`, `stages/merge/` (`step.py`, `scoping.py`, `activities.py`), `stages/analyze/`: 158 tests green (`test_quality_gate`, `test_security_floor`, `test_security_collection_gate`, `merge/test_scoped_absolute_checks`, `test_untraced_criteria`, `test_measure_coverage`, `test_scoped_lint`/`test_scoped_tests`/`test_scoped_security_scan`, `test_integration_checks`, `tests/merge/`, `tests/analyze/`). Residuals belong elsewhere: coverage is advisory and vacuous until `coverage_threshold` is set (`core/models.py` default 0.0 — config, not a gate defect); per-criterion outcome recording is the E-51/E-52 data gap; metric traceability is FR-1103/E-66.
-- [ ] **FR-107 (new scope)** grounded research stage — `ResearchBrief`, quote-verified against bytes fetched this run, off by default (`research_enabled`). Landed behind the PRD amendment adding FR-107; `2026-07-17-research-agent-grounded-briefs`.
+- [x] **FR-107 (new scope)** grounded research stage — `ResearchBrief`, quote-verified against bytes fetched this run, off by default (`research_enabled`). Landed 2026-07-17 behind the PRD amendment; `2026-07-17-research-agent-grounded-briefs`. **Re-verified 2026-11-12** against `stages/research/` and its wiring: off by default, routed only under the flag with the research role registered (`core/models.py:391`, `graph_catalog.py:139-141` → `graphs/default-research.graph.yaml` — research before clarify); the brief grounds downstream stages through `brief_digest` into clarify's memo key (`verify.py:87-93`, `precode.py:103-118`, `clarify/step.py:202`); every grounded finding byte-checked against the sha256-keyed page fetched that run, `EXTRACTED_TEXT` profile, `source_unavailable` on never-fetched URLs, verifier non-fail-soft (`research/verify.py:28-84,123-136`); unverifiable claims are `inferred_findings` or dropped, and only `grounded_findings` are ever verified (`research/models.py:24-72`); retention is verified-only leads and recall never restores grounded status (`retain.py`, `memory/models.py:24`, `research/models.py:36-37`, FR-402 GATE 2 ruling 2); explicit per-run limits enforced before the charge (`ResearchConfig` — `core/models.py:274-315`; `budget_store.py:118` `charge_scoped`); human gate via `ctx.gate("research")` (`research/step.py:382`). Evidence: 205 tests green in `tests/research/`; temporal e2e green (4 passed, 1 xfail, 1 deliberate skip — the CodeMode spike, documented reason); 29 wiring tests green (`test_graph_catalog`, `test_research_stage_wiring`, `test_golden_case_loads`); full fast tier at the recorded 8-id known baseline. *Residuals: never run against a live provider (all tests use fakes; the stage is off by default); the `recall_leads` tool bypasses 021 snapshot persistence/scrub/degrade (open card `2026-11-11-recall-leads-snapshot-and-degrade.md` — leads are never grounded inputs by design, so no FR-107 clause is broken).*
 - [x] **FR-108 (new scope; ADR-15)** language-agnostic toolchain adapter — `ToolchainAdapter`/`TOOLCHAINS` resolved by marker file, canonical Cobertura + SARIF, Python reference end-to-end; `run_integration_checks` closes the FR-106 coverage-crossing gap. Go/TS/Rust = E-30a/b/c. **2026-09-11:** the adapter contract gains scoped lint (parser, policy globs, suppression pattern) and scoped tests (no-early-stop gate command, selected-id re-runs with JUnit); E-30a implemented them (2026-11-11); E-30b/c must implement them.
 
 ### Agents (FR-200)
