@@ -42,6 +42,7 @@ class StageContext(Protocol):
         run_fn: Callable[[], Awaitable[Any]],
         *,
         prompt_digest: str = "",
+        recall_ref: str = "",
     ) -> Awaitable[tuple[Any, bool]]: ...
     def revisable_stage(
         self,

@@ -131,7 +131,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
   - two `RecallSnapshot`s with the same bank, watermark and query_hash but different items, passed as `recall_ref=snap.snapshot_hash`, give different keys, and identical items give identical keys.
 
   (plan T044, T022)
-- [ ] T017 [US2] Add the keyword-only `recall_ref: str = ""` to `RoleHost._cached_stage` in `S/workflows/role_host.py:88`. Compute `wm = getattr(self, "_memory_watermark", None) or "none"` and pass `f"{wm}|{recall_ref}" if recall_ref else wm` as the fifth `content_key` argument (`:114-120`). Add `recall_ref: str = ""` after `prompt_digest` in the `StageContext.cached_stage` Protocol (`S/core/context.py:36-45`). Update the `_cached_stage` docstring. T016 must pass. (plan T022, T023)
+- [x] T017 [US2] Add the keyword-only `recall_ref: str = ""` to `RoleHost._cached_stage` in `S/workflows/role_host.py:88`. Compute `wm = getattr(self, "_memory_watermark", None) or "none"` and pass `f"{wm}|{recall_ref}" if recall_ref else wm` as the fifth `content_key` argument (`:114-120`). Add `recall_ref: str = ""` after `prompt_digest` in the `StageContext.cached_stage` Protocol (`S/core/context.py:36-45`). Update the `_cached_stage` docstring. T016 must pass. (plan T022, T023)
 - [ ] T018 [US2] Adapt the existing stubs (signature and attribute only; assertions unchanged) so the stage edits in T019-T021 do not break them (plan T040).
 
   Add `recall_ref: str = ""` to each stub `cached_stage` signature:

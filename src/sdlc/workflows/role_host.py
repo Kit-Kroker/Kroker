@@ -94,15 +94,24 @@ class RoleHost:
         run_fn: Callable[[], Awaitable[StageT]],
         *,
         prompt_digest: str = "",
+        recall_ref: str = "",
     ) -> tuple[StageT, bool]:
         """Skips `run_fn()` (a no-arg async callable invoking the proposer
         agent) when an identical (stage, input, prompt, model,
-        upstream-recall-watermark) combination was already computed — the
-        ADR-5 dev-loop cache. Returns (output, was_cache_hit).
+        upstream-recall) combination was already computed — the ADR-5
+        dev-loop cache. Returns (output, was_cache_hit).
 
         The stage's model is resolved per-run (resolve_role_model): a per-role
         override MUST move the key, or a stale result computed by a different
-        model would be served."""
+        model would be served.
+
+        021 FR-010: the fifth slot is the run's memory watermark joined —
+        never replaced — with the stage's recall snapshot hash
+        (`recall_ref`): a changed recall answer is an explicit, hashed input
+        change instead of a silent stale hit under one watermark. The "|"
+        join is escaped in both halves so a free-form watermark cannot forge
+        another (wm, ref) pair's slot. An empty `recall_ref` (memory off, or
+        a snapshot without one) keeps the pre-021 key byte-for-byte (FR-007)."""
         if not cfg.memoization_enabled:
             return await run_fn(), False
         resolved = resolve_role_model(cfg, stage)
@@ -111,12 +120,23 @@ class RoleHost:
         # slot makes them unreachable without touching any no-override key.
         # content_key's five positional arguments are unchanged.
         fwd = forwarded_model(cfg, STAGE_ROLES[stage])
+        wm = getattr(self, "_memory_watermark", None) or "none"
+        if recall_ref:
+            # A backend watermark is a free-form string, so the "|" join is
+            # escaped in both halves: ("5|x", "y") and ("5", "x|y") must never
+            # forge the same slot. Separator-free inputs (every real watermark
+            # and every hex snapshot hash) encode exactly as "wm|ref".
+            slot = f"{wm.replace('|', '||')}|{recall_ref.replace('|', '||')}"
+        else:
+            # Memory off (or a snapshot without a hash): the slot is the
+            # watermark VERBATIM — pre-021 keys stay byte-identical (FR-007).
+            slot = wm
         key = content_key(
             stage,
             input_json,
             PROMPT_SHAS[stage] + prompt_digest,
             f"fwd1:{resolved}" if fwd is not None else resolved,
-            getattr(self, "_memory_watermark", None) or "none",
+            slot,
         )
         cached = await workflow.execute_activity(cache_get, CacheGetInput(key=key), **MEM_ACT)
         if cached is not None:
