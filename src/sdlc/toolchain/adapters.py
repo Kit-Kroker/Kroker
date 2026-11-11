@@ -485,6 +485,47 @@ class GoToolchain(ToolchainAdapter):
             names = []
         return ids
 
+    # go.mod's module directive: optional leading whitespace, the `module`
+    # keyword, then the path (optionally double-quoted), an optional
+    # trailing `//` comment, end of line. Non-greedy path + `(?://.*)?$`
+    # cuts the comment; `modulechain` cannot match (`\s+` after keyword).
+    _MODULE_DIRECTIVE = re.compile(r"^module\s+(.+?)\s*(?://.*)?$")
+
+    def base_locator_exists(self, root: str, locator: str) -> bool:
+        # The locator is an IMPORT PATH (`example.com/foo/internal/store`),
+        # never a file path, so the inherited isfile default answers False
+        # for every real Go locator. go.mod's module directive is the only
+        # import-path -> tree mapping there is, and it is read per call:
+        # the adapter stays pure and the BASE worktree's go.mod (not the
+        # head tree's) keys the check. Like every answer here it is the
+        # DS6 pre-filter only: a wrong False defers to the authoritative
+        # collect step, a wrong True cannot mislabel -- it only spends a
+        # base run.
+        try:
+            with open(os.path.join(root, "go.mod"), encoding="utf-8") as f:
+                go_mod = f.read()
+        except (OSError, UnicodeDecodeError):
+            return False  # unreadable/missing go.mod: nothing maps the path
+        for line in go_mod.splitlines():
+            m = self._MODULE_DIRECTIVE.match(line.lstrip())
+            if m is None:
+                continue
+            # First directive is authoritative -- a garbage one is
+            # unparseable (False), never a reason to hunt later lines.
+            # Module paths are whitespace-free; the quotes are optional.
+            path = m.group(1).strip()
+            if len(path) >= 2 and path[0] == '"' and path[-1] == '"':
+                path = path[1:-1]
+            # Bare module root or anything under it maps onto the tree;
+            # anything else (a sibling/nested module's import path) is
+            # absent -- no nested go.mod scanning.
+            if locator != path and not locator.startswith(path + "/"):
+                return False
+            # The bare module root maps onto the worktree root itself.
+            rel = "" if locator == path else locator.removeprefix(path + "/")
+            return os.path.isdir(os.path.join(root, rel))
+        return False  # no module directive at all
+
     def node_id(self, file_attr: str | None, classname: str, name: str) -> str:
         # go-junit-report emits no `file` attribute and sets classname to the
         # package's import path, so classname passes through UNMANGLED: the
