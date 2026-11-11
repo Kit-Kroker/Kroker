@@ -28,7 +28,8 @@ from .junit import shell_safe
 
 class ToolchainKind(StrEnum):
     PYTHON = "python"
-    # GO / TS / RUST are added by E-30a/b/c — each is the N-th adapter,
+    GO = "go"
+    # TS / RUST are added by E-30b/c — each is the N-th adapter,
     # identical in shape, added on demand as the case corpus needs it.
 
 
@@ -96,9 +97,9 @@ class ToolchainAdapter(ABC):
 
         The pre-filter is an optimization only: a locator judged absent
         short-circuits base corroboration for that failure, but the
-        collect/re-run steps below remain the authoritative attribution
-        (DS6) -- a wrong "exists" cannot mislabel a failure, only spend a
-        base run on it.
+        collect/re-run steps in the scoping pipeline remain the authoritative
+        attribution (DS6) -- a wrong "exists" cannot mislabel a failure, only
+        spend a base run on it.
         """
         return os.path.isfile(os.path.join(root, locator))
 
@@ -286,8 +287,91 @@ class PythonToolchain(ToolchainAdapter):
         )
 
 
+class GoToolchain(ToolchainAdapter):
+    """The second adapter (E-30a) and the first real test of the abstraction
+    on a non-Python language: the gate must grade a go.mod repo with zero
+    gate/workflow changes (FR-108). Go is also package-shaped where Python is
+    file-shaped -- its test ids are import paths, not file paths -- which is
+    exactly the assumption the base_locator_exists hook exists to relax.
+
+    `function_spans` is deliberately the inherited None: there is no Go
+    parser here, so `oversized_function` reads not_collected -- a language we
+    cannot parse is not a language with no long functions, and a fake zero
+    would be a vacuous pass.
+
+    The command members land later in the E-30a increment; until each lands,
+    its stub raises rather than guess a command string -- the same fail-closed
+    rule as a missing external tool downstream (a collection failure, never a
+    vacuous pass).
+    """
+
+    kind = ToolchainKind.GO
+    markers = ("go.mod",)
+
+    test_globs = ("*_test.go",)
+    lockfiles = ("go.sum",)
+
+    manifests = ("go.mod",)
+    ecosystem = "Go"
+    source_extensions = (".go",)
+    # Same ceilings as the Python reference (spec D14): the numbers are
+    # policy, not language facts, and stay comparable across repositories.
+    max_file_loc = 800
+    max_function_loc = 100
+
+    def install_cmd(self, marker: str) -> str | None:
+        # `go mod download` fills the module cache from go.mod's pinned
+        # requires and does not mutate the tree under audit (go get would).
+        return "go mod download"
+
+    def classify_test_exit(self, code: int) -> Literal["ran", "failed_to_run", "no_tests"]:
+        # `go test`: 0 ok, 1 tests failed. Unlike pytest there is NO no-tests
+        # exit -- a package without tests reports "no test files" and exits 0.
+        return "ran" if code in (0, 1) else "failed_to_run"
+
+    def test_cmd(self, coverage: bool = True) -> str:
+        raise NotImplementedError("GoToolchain.test_cmd lands with E-30a's command members")
+
+    def lint_cmd(self) -> str:
+        raise NotImplementedError("GoToolchain.lint_cmd lands with E-30a's command members")
+
+    def lint_json_cmd(self) -> str:
+        raise NotImplementedError("GoToolchain.lint_json_cmd lands with E-30a's command members")
+
+    def parse_lint(self, code: int, out: str, root: str) -> list[tuple[str, str, int]] | None:
+        raise NotImplementedError("GoToolchain.parse_lint lands with E-30a's parsers")
+
+    def integration_test_cmd(self, junit_out: str, coverage: bool = True) -> str:
+        raise NotImplementedError(
+            "GoToolchain.integration_test_cmd lands with E-30a's command members"
+        )
+
+    def collect_ids_cmd(self, paths: Sequence[str]) -> str:
+        raise NotImplementedError("GoToolchain.collect_ids_cmd lands with E-30a's test-id members")
+
+    def parse_collected_ids(self, out: str) -> set[str]:
+        raise NotImplementedError(
+            "GoToolchain.parse_collected_ids lands with E-30a's test-id members"
+        )
+
+    def selected_tests_cmd(self, node_ids: Sequence[str], junit_out: str) -> str:
+        raise NotImplementedError(
+            "GoToolchain.selected_tests_cmd lands with E-30a's test-id members"
+        )
+
+    def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
+        raise NotImplementedError("GoToolchain.oracle_test_cmd lands with E-30a's command members")
+
+    def build_cmd(self) -> str:
+        # The first non-None build command: Go has no interpreter stage, so
+        # `go build ./...` compiling every package is the gate's first
+        # does-this-even-build fact (the triage consumer already handles it).
+        return "go build ./..."
+
+
 TOOLCHAINS: dict[ToolchainKind, ToolchainAdapter] = {
     ToolchainKind.PYTHON: PythonToolchain(),
+    ToolchainKind.GO: GoToolchain(),
 }
 
 
