@@ -155,7 +155,7 @@ interpretation member, mirroring Task 1's `base_locator_exists`:
 Python bit-identical; Go passes the classname through unmangled), an
 optional `node_id` builder parameter on `junit.testcase_outcomes`, and
 `scoping._read_report` routing the adapter's member in. Landed as commit
-`922cd451` with its own review round (see this directory's
+`2e767005` with its own review round (see this directory's
 `review-048db75c..922cd451.diff`).
 
 ### Task 6: `GoToolchain.base_locator_exists` override
