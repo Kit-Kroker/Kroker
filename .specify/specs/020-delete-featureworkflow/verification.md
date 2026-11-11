@@ -748,3 +748,7 @@ $ G2
 ```
 
 **Result:** G1 and G2 empty, no schedules. G0 count is 0, so pass rule 1 is a literal FAIL (same container as run 1, started 2026-11-10T15:33:23Z). Accepted, not overridden silently: the user ruled in gate 1 that this host store is the only store, and explicitly said go for T036 and the restart. Worker built locally from `main` (`docker compose build worker`) before the gate; restart follows immediately.
+
+### Gate-2 rerun, 2026-11-11T14:59:51Z (first run went stale)
+
+Same container. `workflow count` Total: 0, `schedule list` empty, `workflow list --query "ExecutionStatus='Running'"` empty (covers G1 and G2). Same accepted empty-store exception as above. Worker started immediately after.
