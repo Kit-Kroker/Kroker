@@ -216,12 +216,18 @@ is bounded: the expensive code stage is usually downstream of the edit and
 re-runs anyway). Temporal gives none of this for free, so a `memoization`
 module owns a content-addressed activity cache keyed on
 `hash(activity + inputs + prompt file + model id + upstream recall snapshot ref)`,
-backed by the artifact store (hash-named keys, no new infra). Recall is
-itself a cached activity keyed with a **per-run memory watermark**: reusing
-the persisted RecallSnapshot *is* the freeze, so nightly `reflect` churn no
-longer busts caches. Default re-run reuses the watermark (reproducible,
-cache-warm); an explicit "refresh memory" advances it. This also removes any
-need for Hindsight point-in-time reads.
+backed by the artifact store (hash-named keys, no new infra). Each run pins
+a **per-run memory watermark**, and a re-run reuses it by default; an
+explicit "refresh memory" advances it. Recall itself is **not** a cached
+activity: every run re-queries memory, filtered to the watermark. Under
+FR-402 (round 021), each stage-level recall is persisted as a
+content-addressed RecallSnapshot, and its hash joins the watermark in the
+memo key. A backend whose answers vary under a fixed watermark (live
+Hindsight: an LLM ranking leg, nightly consolidation) therefore yields an
+explicit, hashed cache miss rather than a freeze. Reusing the persisted
+snapshot on a pinned watermark, which would make the snapshot the freeze
+and remove the need for Hindsight point-in-time reads, is follow-up work
+(`.workspace/tasks/2026-11-11-recall-snapshot-pinned-reuse.md`).
 
 ## 4. Agent architecture
 
