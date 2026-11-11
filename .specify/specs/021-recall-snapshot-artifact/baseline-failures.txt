@@ -1,0 +1,25 @@
+# T001 baseline — fast tier (`pytest -q`) on main @ 950a17eb, 2026-11-11.
+#
+# Deviation from tasks.md: it says "expect the 8 pre-existing fast-tier
+# failures on main". 11 were observed. Verified NOT a regression of this
+# working tree: the identical 11-id set fails at the plan's own reference
+# commit 067e1408 (checked in a throwaway worktree, /tmp/opencode/kroker-067e).
+# All 11 are pre-existing main failures; the plan's count of 8 was stale when
+# written. Recorded here as the T036 gate's baseline set.
+#
+# Excluded from this list by construction: the three RED-first QA test files
+# for this round (tests/test_recall_snapshot_artifact.py,
+# tests/test_recall_snapshot_event.py, tests/test_recall_memo_key.py), which
+# are untracked at T001 and land per task.
+
+tests/qa/test_qa_task_venv_provisioning.py::test_run_test_suite_skips_provisioning_without_a_python_adapter
+tests/test_benchmark_acceptance_stalled.py::test_sc003_recompute_stored_acceptance
+tests/test_deveval_corpus.py::test_imported_cases_state_role_and_visibility[deveval-hone]
+tests/test_deveval_corpus.py::test_imported_cases_state_role_and_visibility[deveval-particle-swarm-optimization]
+tests/test_deveval_corpus.py::test_imported_cases_state_role_and_visibility[deveval-stocktrends]
+tests/test_grade_oracle.py::test_grade_oracle_malformed_tasks_yaml_never_fails_case_grade
+tests/test_grade_oracle.py::test_grade_oracle_populates_oracle_mapped_task_grades
+tests/test_prompt_migration.py::test_prompt_shas_did_not_move
+tests/test_read_fixtures_fresh.py::test_committed_recordings_equal_a_fresh_build
+tests/test_read_fixtures_fresh.py::test_pristine_copy_passes_the_record_check
+tests/test_todo_api_case_loads.py::test_todo_api_case_file_exists_and_loads
