@@ -202,16 +202,16 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
 ## Phase 7: Polish and cross-cutting
 
 - [x] T030 [P] In `S/workflows/AGENTS.md`, add a cross-host row for `MemoryHost._recall` → `ReportHost._emit` (`getattr`-guarded) to the ownership table. Add a "Recall snapshots (021)" paragraph covering three points: persistence lives inside `recall_snapshot`, so there is no new command and no patch marker; why the defaulted fields are replay-safe; and that `recall_snapshot/v1` is a wire tag never changed in place. (plan T060)
-- [ ] T031 [P] Check that the ADR-5 paragraph in `ARCHITECTURE.md:210-229` already carries the GATE 2 ruling 1 correction ("Recall itself is **not** a cached activity …", citing `.workspace/tasks/2026-11-11-recall-snapshot-pinned-reuse.md`). It was applied and committed with the planning artifacts. Edit it only if the shipped behaviour differs from that text. (plan T061; GATE 2 ruling 1)
-- [ ] T032 [P] In `ROADMAP.md:327`, change `- [ ] ⚠️ **FR-402**` to `- [x] **FR-402**` and replace its note with the text given in plan T062. (plan T062; GATE 2 ruling 2)
-- [ ] T033 [P] Check that the four GATE 2 cards exist in `.workspace/tasks/`:
+- [x] T031 [P] Check that the ADR-5 paragraph in `ARCHITECTURE.md:210-229` already carries the GATE 2 ruling 1 correction ("Recall itself is **not** a cached activity …", citing `.workspace/tasks/2026-11-11-recall-snapshot-pinned-reuse.md`). It was applied and committed with the planning artifacts. Edit it only if the shipped behaviour differs from that text. (plan T061; GATE 2 ruling 1)
+- [x] T032 [P] In `ROADMAP.md:327`, change `- [ ] ⚠️ **FR-402**` to `- [x] **FR-402**` and replace its note with the text given in plan T062. (plan T062; GATE 2 ruling 2)
+- [x] T033 [P] Check that the four GATE 2 cards exist in `.workspace/tasks/`:
   - `2026-11-11-recall-snapshot-pinned-reuse.md`
   - `2026-11-11-recall-leads-snapshot-and-degrade.md`
   - `2026-11-11-memo-cache-tenant-scope.md`
   - `2026-11-11-fakememory-nonnumeric-watermark.md`
 
   If any is missing, STOP. (plan T064)
-- [ ] T034 Check that `CLAUDE.md`'s `<!-- SPECKIT START -->` block points at `.specify/specs/021-recall-snapshot-artifact/plan.md` (already applied during planning). (plan T063)
+- [x] T034 Check that `CLAUDE.md`'s `<!-- SPECKIT START -->` block points at `.specify/specs/021-recall-snapshot-artifact/plan.md` (already applied during planning). (plan T063)
 - [ ] T035 Run `ruff check . && ruff format --check . && mypy && python scripts/check_clauses.py && python scripts/check_file_size.py`, which must be clean. (plan T070; quickstart Q8)
 - [ ] T036 Final gate (blocking):
   - `pytest -q` must show no failures beyond `baseline-failures.txt` from T001;

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-11-11 (FR-105 closed by amendment: one merged fix loop per dev task, default 2, analyze gates at merge — PRD + ADR-25 updated, no code change; full history in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
+| Last verified | 2026-11-11 (FR-402 closed by round 021: stage-level recalls persisted, scrubbed, content-addressed and keyed into the memo key; full history in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -324,7 +324,7 @@
 
 ### Memory (FR-400)
 - [x] **FR-401** retain stage summaries / fix-loop gotchas / gate decisions (no "incidents" — needs maintenance loop).
-- [ ] ⚠️ **FR-402** `RecallSnapshot` persisted/hashed/declared input — `query_hash` exists; snapshots not a separately content-addressed artifact; watermark is the working piece.
+- [x] **FR-402** stage-level `ctx.recall` snapshots persisted, content-addressed and keyed (021); `recall_leads` excluded (GATE 2 ruling 2, card `2026-11-11-recall-leads-snapshot-and-degrade.md`); live-Hindsight re-runs miss the cache by design (card `2026-11-11-recall-snapshot-pinned-reuse.md`).
 - [x] **FR-403** non-blocking retain, fire-and-forget with retries, PII/secret scrub hook (`memory/scrub.py`).
 - [ ] ⚠️ **FR-404** nightly reflect — **project half live**: `schedules/nightly-reflect.yaml` → `ReflectWorkflow` → `reflect()`, applied via `sdlc schedules apply` (E-12/E-13); the retro stage (E-32) now also calls `reflect(project_bank)` per run (best-effort, gated on `memory.enabled`). **Org half unmet**: nothing retains to `org_bank`, so `reflect(org)` would consolidate an empty bank (E-25). Not `[x]` until org has writers.
 
