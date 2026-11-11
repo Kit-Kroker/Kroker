@@ -10,13 +10,14 @@ from dataclasses import dataclass, field
 
 from temporalio import activity
 
+from ..artifacts.store import LocalFileStore
 from .fake import FakeMemory
 from .models import (
     RecallSnapshot,
     RetainItem,
 )
 from .protocol import Memory
-from .query_hash import recall_query_hash
+from .query_hash import recall_query_hash, recall_snapshot_canonical
 from .scrub import scrub
 
 logger = logging.getLogger(__name__)
@@ -55,15 +56,45 @@ class RecallInput:
     watermark: str | None = None
     backend: str = "fake"
     base_url: str = "http://localhost:8888"
+    # 021 FR-001: an input field (not a new activity), so recorded histories
+    # replay unchanged; empty means "not running inside a run" (direct calls,
+    # tests) and persistence is skipped.
+    run_id: str = ""
+
+
+def _persisted(snap: RecallSnapshot, run_id: str) -> RecallSnapshot:
+    """Write the snapshot's canonical bytes to the artifact store as a
+    hash-named recall_snapshot and return the snapshot with its ref set.
+    No-op without a run id (direct calls never touch disk)."""
+    if run_id == "":
+        return snap
+    data = recall_snapshot_canonical(
+        snap.bank, snap.watermark, snap.query_hash, snap.items, snap.degraded
+    )
+    ref = LocalFileStore().put("recall_snapshot", run_id, f"{snap.snapshot_hash}.json", data)
+    return snap.model_copy(update={"ref": ref})
 
 
 @activity.defn
 async def recall_snapshot(inp: RecallInput) -> RecallSnapshot:
     """Never raises: an unreachable backend degrades to an empty snapshot
-    (logged) rather than blocking the pipeline on memory."""
+    (logged) rather than blocking the pipeline on memory. The healthy
+    answer is scrubbed item-by-item (FR-012), re-hashed over the scrubbed
+    content, and persisted as a content-addressed recall_snapshot artifact
+    (021 FR-001/FR-005): the file bytes are the hashed bytes."""
     try:
         memory = _backend(inp.base_url, inp.backend)
-        return await memory.recall(inp.bank, inp.query, inp.filters, inp.watermark)
+        snap = await memory.recall(inp.bank, inp.query, inp.filters, inp.watermark)
+        # Rebuild (not model_copy) so the validator re-hashes the SCRUBBED
+        # content: hash, persisted bytes and what the stage saw all agree.
+        scrubbed = RecallSnapshot(
+            query_hash=snap.query_hash,
+            bank=snap.bank,
+            watermark=snap.watermark,
+            items=[scrub(i) for i in snap.items],
+            degraded=snap.degraded,
+        )
+        return _persisted(scrubbed, inp.run_id)
     except Exception:
         logger.warning("recall degraded to empty snapshot", exc_info=True)
         query_hash = recall_query_hash(inp.bank, inp.query, inp.filters, inp.watermark)

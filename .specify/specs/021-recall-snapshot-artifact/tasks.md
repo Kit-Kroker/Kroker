@@ -82,7 +82,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
   - a seeded item containing `sk-` plus 20+ chars comes back scrubbed, and the persisted bytes contain the scrubbed text, not the secret (FR-012).
 
   (plan T043, T013)
-- [ ] T010 [US1] In `S/memory/activities.py`:
+- [x] T010 [US1] In `S/memory/activities.py`:
   - add `run_id: str = ""` to `RecallInput` (`:51`);
   - in `recall_snapshot` (`:61`), map `scrub()` (`S/memory/scrub.py:18`) over the backend snapshot's items and rebuild it with `snapshot_hash=""`, so the validator re-hashes the scrubbed content;
   - add a module-level `_persisted(snap: RecallSnapshot, run_id: str) -> RecallSnapshot` that writes `recall_snapshot_canonical(...)` with `LocalFileStore().put("recall_snapshot", run_id, f"{snap.snapshot_hash}.json", data)` and returns `snap.model_copy(update={"ref": ref})`;
