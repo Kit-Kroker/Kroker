@@ -104,6 +104,38 @@ def test_go_absolute_form_is_contained(tmp_path):
     assert go.base_locator_exists(str(base), "example.com/foo\\..\\escape") is False
 
 
+def test_go_drive_letter_is_contained(tmp_path):
+    # On a Windows worker os.path IS ntpath, and a drive-prefixed component
+    # resets join exactly like a leading `/` resets it on POSIX:
+    # ntpath.join(r'C:\work\base', 'C:/Windows') -> 'C:/Windows'. The guard
+    # disjunct is lexical, so the rejection is identical on every platform;
+    # the fixture below only exists to make the UNGUARDED posix answer
+    # provably True (RED): "C:" is a literal (legal-on-POSIX) dir name that
+    # posixpath.join lands in. A real Go import path element never carries
+    # a colon, so this is malformed -> absent in the true direction too.
+    base = tmp_path / "base"
+    base.mkdir()
+    (base / "go.mod").write_text("module example.com/foo\n", encoding="utf-8")
+    (base / "C:" / "Windows").mkdir(parents=True)
+    go = GoToolchain()
+    assert go.base_locator_exists(str(base), "example.com/foo/C:/Windows") is False
+    assert go.base_locator_exists(str(base), "example.com/foo/C:\\Windows") is False
+
+
+def test_go_backslash_disjunct_rejects_directly(tmp_path):
+    # Minor pin: a forward-slash locator with an embedded backslash passes
+    # the prefix check and every other guard disjunct -- only the
+    # `"\\" in rel` disjunct rejects it. The literal-name fixture
+    # (base/x\y, legal on POSIX) makes the unguarded answer True (RED);
+    # on ntpath the backslash would split and escape the root.
+    base = tmp_path / "base"
+    base.mkdir()
+    (base / "go.mod").write_text("module example.com/foo\n", encoding="utf-8")
+    (base / "x\\y").mkdir()
+    go = GoToolchain()
+    assert go.base_locator_exists(str(base), "example.com/foo/x\\y") is False
+
+
 def test_go_unparseable_module_line_is_absent(tmp_path):
     # No path (`module` alone) or a whitespace-bearing path: nothing maps
     # the locator onto the tree, so the answer is absent, not a guess.
