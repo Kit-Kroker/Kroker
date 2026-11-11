@@ -186,7 +186,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
 
 **Independent test**: `pytest -m temporal -q T/replay/test_graph_golden.py`.
 
-- [ ] T027 [P] [US4] Extend `T/test_recall_snapshot_event.py`: with `cfg.memory.enabled=False`, `MemoryHost._recall` emits no event, schedules no activity, and returns `snapshot_hash == ""`. Extend `T/test_recall_memo_key.py`: feeding that snapshot's `snapshot_hash` as `recall_ref` yields the exact pre-021 slot `"none"`. These tests pass on arrival (they pin T014 and T017), so record that in the commit message instead of a red run. (plan T044, T045)
+- [x] T027 [P] [US4] Extend `T/test_recall_snapshot_event.py`: with `cfg.memory.enabled=False`, `MemoryHost._recall` emits no event, schedules no activity, and returns `snapshot_hash == ""`. Extend `T/test_recall_memo_key.py`: feeding that snapshot's `snapshot_hash` as `recall_ref` yields the exact pre-021 slot `"none"`. These tests pass on arrival (they pin T014 and T017), so record that in the commit message instead of a red run. (plan T044, T045)
 - [ ] T028 [US4] Re-pin `MEMO_PARITY_KEYS` in `T/replay/test_graph_golden.py:28-50` (plan T041; spec E-2; research R-4):
   - add a temporary `print(seen)` in `test_memo_key_inputs_match_the_pinned_keys`;
   - run `pytest -m temporal -q -s T/replay/test_graph_golden.py -k memo_key_inputs`;

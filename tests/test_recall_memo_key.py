@@ -68,6 +68,18 @@ async def test_empty_recall_ref_with_no_watermark_keeps_none_slot(keys):
 
 
 @pytest.mark.asyncio
+async def test_disabled_snapshot_hash_feeds_the_exact_pre_021_slot(keys):
+    # T027 / FR-007: the memory-disabled snapshot MemoryHost._recall returns has no hash,
+    # and feeding that hash as recall_ref must leave the pre-021 slot untouched.
+    from sdlc.memory.models import RecallSnapshot
+
+    snap = RecallSnapshot(query_hash="", bank="b", watermark="unknown")
+    assert snap.snapshot_hash == ""
+    host = _Host()  # no watermark: the pre-021 slot is "none"
+    assert await _recorded_last_arg(keys, host, recall_ref=snap.snapshot_hash) == "none"
+
+
+@pytest.mark.asyncio
 async def test_non_empty_recall_ref_extends_the_watermark_slot(keys):
     host = _Host()
     host._memory_watermark = "5"
