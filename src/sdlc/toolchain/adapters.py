@@ -88,6 +88,20 @@ class ToolchainAdapter(ABC):
         conservative one for a language whose runner has not been mapped."""
         return "ran" if code == 0 else "failed_to_run"
 
+    def base_locator_exists(self, root: str, locator: str) -> bool:
+        """Whether a diff-scoped test locator's file exists at the base, as a
+        per-language judgment. The Python-shaped default is a plain file
+        check; a language whose test ids are not file paths (Go overrides
+        this for import-path-keyed ids) redefines what "exists" means.
+
+        The pre-filter is an optimization only: a locator judged absent
+        short-circuits base corroboration for that failure, but the
+        collect/re-run steps below remain the authoritative attribution
+        (DS6) -- a wrong "exists" cannot mislabel a failure, only spend a
+        base run on it.
+        """
+        return os.path.isfile(os.path.join(root, locator))
+
     @abstractmethod
     def test_cmd(self, coverage: bool = True) -> str:
         """Test command. With coverage=True it MUST emit a Cobertura

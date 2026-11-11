@@ -214,7 +214,7 @@ async def scoped_tests(
     for n in failed:
         b = to_base(n)
         file = b.partition("::")[0]
-        if not shell_safe(b) or not os.path.isfile(os.path.join(base_wt, file)):
+        if not shell_safe(b) or not adapter.base_locator_exists(base_wt, file):
             introduced.append(n)
         else:
             present[b] = n
