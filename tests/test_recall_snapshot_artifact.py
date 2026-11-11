@@ -232,6 +232,7 @@ async def test_persisted_items_are_scrubbed_not_the_raw_secret(monkeypatch, arti
     data = (artifact_root / "run-s" / "recall" / f"{snap.snapshot_hash}.json").read_bytes()
     assert b"sk-abcdefghijklmnopqrstuvwx" not in data
     assert "[REDACTED_API_KEY]" in data.decode("utf-8")
+    assert snap.items == ["used [REDACTED_API_KEY] to auth"]
 
 
 # ------------------------------------------------------------- reader (T011)
