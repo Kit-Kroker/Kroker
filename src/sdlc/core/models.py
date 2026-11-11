@@ -315,6 +315,18 @@ class ResearchConfig(BaseModel):
     catch and degrade, not an uncaught crash."""
 
 
+class ConstitutionConfig(BaseModel):
+    """FR-112 bounds for the constitution stage: at most `max_principles`
+    principles in at most `max_requests` model requests. The stage runs only
+    when `PipelineConfig.constitution_enabled` is on, and that flag is set
+    by graph presence -- never by project config alone (mirrors
+    research_enabled)."""
+
+    enabled: bool = False
+    max_principles: int = 12
+    max_requests: int = 6
+
+
 class DeployConfig(BaseModel):
     """FR-1105: the hosting target is an adapter resolved from configuration,
     not a choice an agent makes. Off by default (D-9)."""
@@ -391,6 +403,9 @@ class PipelineConfig(BaseModel):
     research_enabled: bool = False  # FR-107: off by default; the
     # default pipeline is unchanged
     # until a project opts in
+    constitution_enabled: bool = False  # FR-112: off by default; the
+    # run's graph opts in by
+    # carrying a constitution node
     containment_enabled: bool = False  # FR-703: off by default; the
     # policy is a fence, not a
     # sandbox — see ADR-17

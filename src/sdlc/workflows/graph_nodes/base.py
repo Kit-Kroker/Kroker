@@ -126,12 +126,24 @@ def graph_has_research(graph: PipelineGraph) -> bool:
     return any(n.type == "research" for n in graph.nodes)
 
 
+def graph_has_constitution(graph: PipelineGraph) -> bool:
+    return any(n.type == "constitution" for n in graph.nodes)
+
+
 def project_cfg(
-    cfg: PipelineConfig, node: GraphNode, spec: NodeTypeSpec, *, research_in_graph: bool
+    cfg: PipelineConfig,
+    node: GraphNode,
+    spec: NodeTypeSpec,
+    *,
+    research_in_graph: bool,
+    constitution_in_graph: bool = False,
 ) -> PipelineConfig:
     """The per-activation cfg (spec §5.2): a node role fills an unoverridden
     role (U5), a node gate overlays cfg.gates[node.id], research_enabled
-    follows the graph. Equal to `cfg` for every shipped graph (pinned in Task 14)."""
+    follows the graph, and so does constitution_enabled (FR-112).
+    constitution_in_graph defaults False until the dispatcher wires FR-112
+    presence, so today's callers are unchanged. Equal to `cfg` for every
+    shipped graph (pinned in Task 14)."""
     roles = dict(cfg.roles)
     if node.role is not None and spec.role is not None and spec.role not in cfg.roles:
         roles[spec.role] = node.role
@@ -139,5 +151,10 @@ def project_cfg(
     if node.gate is not None:
         gates[node.id] = node.gate
     return cfg.model_copy(
-        update={"roles": roles, "gates": gates, "research_enabled": research_in_graph}
+        update={
+            "roles": roles,
+            "gates": gates,
+            "research_enabled": research_in_graph,
+            "constitution_enabled": constitution_in_graph,
+        }
     )
