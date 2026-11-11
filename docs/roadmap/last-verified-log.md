@@ -8,6 +8,10 @@ out of date order as inherited; left as-is.
 
 Trailing note carried by the old cell: (docs(benchmarks): the axis in the living docs (T010))
 
+## 2026-11-12
+
+2026-11-12 (constitution stage FR-112 landed and re-verified against code — the optional `constitution` proposer (`constitution_agent`, read-only FileSystem with exactly `read_file`/`search_files`/`find_files`/`list_directory` + RepoContext, no walk-up) drafts governing principles in one bounded run (`max_principles=12`, `max_requests=6`); `freeze` applies the deterministic partial-freeze rules workflow-side (CP-n ids in surviving order, brownfield drops empty `source_ref`, exact-duplicate collapse, empty/whitespace statements dropped, zero survivors degrade to the empty artifact with `outcome=fail` STAGE_ENDED and nothing retained — no gate, so the flag can never kill a run); completion is a STAGE_ENDED emitted directly via `ctx.emit` with cost carried on MODEL_USAGE (no benchmark row, no `duration_s`); the `""` digest sentinel keeps flag-off runs byte-identical through clarify/architect/plan (memo key and prompt order idea → constitution → map → recall); `constitution_enabled` is overlaid from graph presence at the single `project_cfg` call site; `default-constitution.graph.yaml` = default ⊕ node ⊕ 5 edges with the default graph's pinned sha untouched; slice contract `src/sdlc/stages/constitution/constitution.md` + slice AGENTS.md written, FR-112 row added to PRD §6 and ROADMAP §2, SDLC-spec §1 row 1 annotated `(deterministic + optional drafter)`, stage count 11→12 of 15 with research still counting unbuilt; spec `docs/superpowers/specs/2026-11-11-constitution-stage-design.md`)
+
 ## 2026-11-10
 
 2026-11-10 (round 020, FeatureWorkflow deletion: PR-1 and PR-2 executed end-to-end on `020-delete-featureworkflow-2`; every replay fixture re-captured from GraphWorkflow with a provenance-only golden diff; the replay suite, worker registration, inbox types and slice contracts re-pointed; fast tier back to its 8-id known baseline and the temporal tier chunked green with only the four ruled priced-usage drift failures; gate 1 cleared on the empty-store ruling; awaiting gate 2 + worker restart)

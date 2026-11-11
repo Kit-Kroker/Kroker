@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-11-03 (R019 follow-up re-prove series closed: `glm-5.3`/`glm-5.3-flash` does not separate, tally stays 0 of 8; full history in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
+| Last verified | 2026-11-12 (constitution stage FR-112 landed: optional drafter + deterministic partial freeze + downstream seams live, off by default, 12/15 stages; full history in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -275,14 +275,14 @@
 
 ## 1. Pipeline — 15-stage DAG (SDLC-spec v2 §1)
 
-**11 of 15 stages live.**
+**12 of 15 stages live.**
 
 - [x] **0 · intake** — routing greenfield/brownfield/repair. Verified by `classify_repo` activity against git tree (E-84 D3); fails closed when brownfield has nothing to map.
-- [ ] **1 · constitution** — no `Constitution` model, no stage.
+- [x] **1 · constitution (FR-112)** — `Constitution` drafter live: registry proposer (`constitution_agent`) over read-only FileSystem+RepoContext, deterministic partial freeze workflow-side (`CP-n` ids, `""` digest sentinel, empty/whitespace and ungrounded drops), the artifact and its digest feeding clarify/architect/plan prompts and memo keys. Off by default — `constitution_enabled` is overlaid from graph presence; `default-constitution.graph.yaml` ships as the reference opt-in graph. `2026-11-11-constitution-stage`.
 - [x] **2 · context (Cartographer)** — `CodebaseMap` projected from scan tree, bounded prompt rendering (`render_for_prompt`), and `check_brownfield_delta` grounding check with 1 retry before failing closed (E-84).
 - [ ] **3 · requirements (Product)** — conflated into clarify; no standalone Product proposer / `Requirements` artifact.
 - [ ] **4 · research** (FR-107) — grounded brief before clarify. The DAG is now 15
-  stages; **11 of 15 stages live** (research is scaffolded, off by default).
+  stages; **12 of 15 stages live** (research is scaffolded, off by default).
 - [x] **5 · clarify** — Clarifier + gate; open-question wait on `answer_question`; recall/retain/memoization wired.
 - [x] **6 · architecture** — Architect + gate, with REVISE loop (`_revisable_stage`).
 - [x] **7 · planning** — Planner + gate, with REVISE loop.
@@ -299,7 +299,7 @@
 ## 2. Functional requirements (PRD §6)
 
 ### Pipeline (FR-100)
-- [ ] ⚠️ **FR-101** 15-stage durable DAG — 11/15 stages (see §1).
+- [ ] ⚠️ **FR-101** 15-stage durable DAG — 12/15 stages, constitution live (see §1).
 - [x] **FR-102** greenfield/brownfield classify + `CodebaseMap` + delta. **Landed 2026-08-15 (E-84)**: `classify()` pure rule + `classify_repo` activity; `CodebaseMap` projection from 13 Tier 2 scan signals; bounded prompt rendering; typed `BrownfieldDelta` (added/modified/removed) with activity-side git grounding check in architecture stage.
 - [x] **FR-103** memoization, per-run watermark, audit-record-always-kept (`memoization/cache.py`, `content_key`, `_cached_stage`) — each stage's memo key now carries *its own* role's model (`STAGE_MODELS`), so a per-role model change invalidates exactly that stage. `brief_digest` keeps memoization alive once a non-memoized stage (research) feeds memoized ones: the brief contributes only a canonical (source_url, claim) digest to `content_key`, so identical facts hit and new facts invalidate clarify/architect/planner. ⚠️ **Amendment pending (E-47a, 2026-08-08):** E-46's `(tree hash, signal version)` key gains a third term, `identity_registry_version` — the `CapabilityMap` is a function of the tree *and* the identity registry, so re-assessing an unchanged tree is no longer unconditionally a cache hit. Deliberately coarse (any identity write invalidates the whole map for that project); the map is a single artifact with no per-capability memoization to preserve. **Clarified (E-46 D10, 2026-08-12):** E-47a's `identity_registry_version` term applies to the `CapabilityMap`, not to E-46's signal keys — E-46 is a pure function of the tree, keyed on `(tree_hash, signal_version, rules_sha)`.
 - [x] **FR-104** integration branch, per-task worktree, own-branch-point diff (ADR-14 fully wired).
@@ -307,6 +307,7 @@
 - [ ] ⚠️ **FR-106** deterministic absolute/advisory gate — classification ✅ and load-bearing; security absolute-floor check now wired ✅ (`security_no_critical`); traceability enforced ✅; coverage wired as a deterministic diff-scoped seam ✅ (Python instrumentation landed via E-30; Go/TS/Rust via E-30a/b/c). Absolute checks judge the change against the run's pinned base (PRD FR-106 amended 2026-09-11, diff-scoped gates).
 - [ ] **FR-107 (new scope)** grounded research stage — `ResearchBrief`, quote-verified against bytes fetched this run, off by default (`research_enabled`). Landed behind the PRD amendment adding FR-107; `2026-07-17-research-agent-grounded-briefs`.
 - [x] **FR-108 (new scope; ADR-15)** language-agnostic toolchain adapter — `ToolchainAdapter`/`TOOLCHAINS` resolved by marker file, canonical Cobertura + SARIF, Python reference end-to-end; `run_integration_checks` closes the FR-106 coverage-crossing gap. Go/TS/Rust = E-30a/b/c. **2026-09-11:** the adapter contract gains scoped lint (parser, policy globs, suppression pattern) and scoped tests (no-early-stop gate command, selected-id re-runs with JUnit); E-30a/b/c must implement them.
+- [x] **FR-112 (new scope)** constitution drafter — `Constitution` drafted from the repo's instruction files by an optional proposer (read-only FileSystem + RepoContext), frozen deterministically and partially workflow-side (`CP-n` ids code-assigned, `""` digest sentinel, ungrounded/empty/whitespace/duplicate drops; no gate — the flag can never kill a run), feeding clarify/architect/plan prompts and memo keys; off by default (`constitution_enabled`, overlaid from graph presence; `default-constitution.graph.yaml`). `docs/superpowers/specs/2026-11-11-constitution-stage-design.md`.
 
 ### Agents (FR-200)
 - [x] **FR-201** versioned `config/agents.yaml` registry (role/kind/model) — governs all eleven roles (3 harness + 8 proposer); `PipelineConfig.roles` is a purity-mandated mirror asserted at boot.

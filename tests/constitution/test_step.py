@@ -12,6 +12,8 @@ verify module's own outputs, not re-implemented here.
 from __future__ import annotations
 
 import importlib
+import pathlib
+import re
 
 import pytest
 import temporalio.workflow
@@ -31,6 +33,7 @@ from sdlc.stages.constitution.models import (
     constitution_digest,
 )
 from sdlc.stages.constitution.stage import DraftInput, _DraftResult
+from sdlc.stages.constitution.verify import freeze
 
 # The package __init__ re-exports the step FUNCTION as `constitution.step`,
 # so bind the module itself (the research suite's reason).
@@ -269,3 +272,79 @@ async def test_degraded_emits_fail(monkeypatch):
     assert _ended(ctx)["warning"] == "no principle survived freeze"
     assert ctx.retained == []
     assert ctx.gate_calls == 0
+
+
+def _clause_text(clause_id: str) -> str:
+    """The named clause's text from the slice contract, constitution.md —
+    from its `### <id>` heading to the next heading. The contract is a
+    shipped doc, so citing it is part of the assertion: a clause that was
+    deleted or renumbered fails here, not silently in review."""
+    contract = pathlib.Path("src/sdlc/stages/constitution/constitution.md").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(
+        rf"^### {re.escape(clause_id)}\n(.*?)(?=^### |^## |\Z)",
+        contract,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    assert match is not None, f"{clause_id} not found in constitution.md"
+    return match.group(1)
+
+
+@pytest.mark.clause("CONSTITUTION-1.4")
+def test_freeze_rules_are_the_contract_clause():
+    """CONSTITUTION-1.4 states the shipped partial-freeze rules, and
+    freeze() enforces each one. Ruling (g) is pinned on both sides: the
+    empty/whitespace-statement drop is IN the clause list and IN the
+    behavior."""
+    clause = _clause_text("CONSTITUTION-1.4")
+    # the clause names every rule the code applies
+    assert "CP-1" in clause and "surviving order" in clause  # code-assigned ids
+    assert "source_ref" in clause  # brownfield grounding drop
+    assert "duplicate" in clause  # exact-duplicate collapse
+    assert "whitespace-only" in clause  # ruling (g): noise drop is listed
+    assert "degrade" in clause  # zero survivors
+
+    draft = DraftOutput(
+        principles=[
+            DraftPrinciple(statement="   ", normative="MUST", rationale="noise"),
+            DraftPrinciple(statement="", normative="SHOULD", rationale="noise"),
+            DraftPrinciple(
+                statement="Cite the repo.", normative="MUST", rationale="ground"
+            ),  # brownfield: no source_ref
+            DraftPrinciple(
+                statement="One source of truth.",
+                normative="MUST",
+                rationale="dup",
+                source_ref="AGENTS.md",
+            ),
+            DraftPrinciple(
+                statement="One source of truth.",
+                normative="SHOULD",
+                rationale="dup",
+                source_ref="pyproject.toml",
+            ),  # exact-duplicate statement: collapsed
+            DraftPrinciple(
+                statement="Survivor.",
+                normative="MUST",
+                rationale="kept",
+                source_ref="README.md",
+            ),
+        ]
+    )
+    res = freeze(draft, mode="brownfield")
+
+    # survivors renumber densely from CP-1 in surviving order
+    assert [(p.id, p.statement) for p in res.frozen.principles] == [
+        ("CP-1", "One source of truth."),
+        ("CP-2", "Survivor."),
+    ]
+    assert res.frozen.digest == constitution_digest(res.frozen.principles)
+    # every offender is listed as dropped, in draft order
+    assert res.dropped == ["   ", "", "Cite the repo.", "One source of truth."]
+    assert res.degraded is False
+
+    # zero survivors degrade — verify never raises (the flag can't kill a run)
+    empty = freeze(DraftOutput(principles=[]), mode="brownfield")
+    assert empty.frozen == Constitution(drafted_by="empty", principles=[], digest="")
+    assert empty.degraded is True

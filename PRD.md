@@ -219,6 +219,9 @@ Teams adopting coding agents today face four gaps:
   Scrub is fail-closed before storage; retention downgrades clean-green
   non-benchmark runs to digest-only (full-transcript TTL remains open,
   OQ-B7).
+- **FR-112 (new scope)** constitution drafter — off by default; read-only
+  FileSystem+RepoContext; deterministic partial freeze; Constitution
+  artifact feeds clarify/architect/plan.
 
 ### Agents (FR-200)
 - FR-201: Agents SHALL be declared in a versioned registry (`agents.yaml`):
