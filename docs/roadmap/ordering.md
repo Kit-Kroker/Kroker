@@ -1,5 +1,12 @@
 # Suggested ordering across §§10–14
 
+> **2026-11-11 — swarm mode precedes this list.** The owner's intent
+> (`docs/intent/2026-11-11-swarm-mode-and-poc-finish.md`) puts swarm mode
+> and its chain-vs-swarm benchmark ahead of everything below, then the
+> platform shell (item 5). Tier 2 audit depth (item 6, E-50…E-56), the
+> outcome loop (P8) and the maintenance loop (P4) are out of scope for now.
+> See `ROADMAP.md` §8 item 5.
+
 Not a commitment. Ranked by what each item unblocks and by which invariants get
 harder to install later:
 
@@ -27,7 +34,11 @@ harder to install later:
    three.
 4. **E-67** — `DeployPlan`/`DeployReport`. Closes stage 13 for ordinary feature
    runs; the outcome loop needs it, but so does P1's own deploy stage.
-5. **E-57 + E-58** — the moment an external, self-serve tenant is on the table
+5. **E-57 + E-58** — *re-ordered 2026-11-11:* inside the PoC finish line even
+   with no tenant named (owner intent), but **last** within it: after swarm
+   mode and its same-commit benchmark against the chain, since multi-tenancy
+   says nothing about whether the factory works. Before that, the moment an
+   external, self-serve tenant is on the table
    these stop being optional. Not required for operator-run delivery, so their
    position depends entirely on whether P7 is the near-term goal.
 6. Then audit depth (**E-48 → E-49 → E-50 → E-51 → E-52 → E-53 → E-54 → E-55 →

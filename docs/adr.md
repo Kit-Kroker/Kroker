@@ -8,7 +8,8 @@ pointer; the catalogue itself lives here. ADR-22, ADR-23 and ADR-24
 and the 2026-10-11 amendments to ADR-2, ADR-6, ADR-9 and ADR-12 carry
 the agent architecture plan's decisions (see
 `docs/roadmap/agent-architecture-plan.md`; targets there are marked
-per `docs/documentation-rules.md`).
+per `docs/documentation-rules.md`). ADR-22 was amended again on
+2026-11-11 to admit swarm mode as a second mode.
 
 ## 12. Architecture decision records
 
@@ -303,6 +304,23 @@ per `docs/documentation-rules.md`).
   harder to measure, and the workflow, gates and prompt-gate already give
   the skeleton. *Trade-off:* predictability over flexibility; more tool
   calls, tokens and latency per role, held by per-role budgets.
+  *Amended 2026-11-11 (owner intent, `docs/intent/2026-11-11-swarm-mode-and-poc-finish.md`; not built):*
+  the exclusion of coordinator and swarm holds **inside the chain** and is
+  lifted for a **second mode** that sits beside it. In swarm mode
+  goal-driven agents pull work from a shared board and no workflow fixes
+  the order; it is its own mode, not a node type in the pipeline graph.
+  Both modes share one trust layer: deterministic checks decide, a human
+  decides risky things, and judges stay independent of the roles they
+  judge (AP-1.0 applies to swarm too). Every model and tool call stays a
+  Temporal activity (ADR-23). The mode is admitted to be *measured*, as
+  ADR-21's note on the orchestrator anticipated: swarm and chain run on
+  one commit and the same cases, about 6-7 runs per arm, before either
+  wins by assertion. *Still open (settled in the swarm spec, not here):*
+  stop or raise a gate when checks cannot decide; which actions are risky
+  and where that is enforced on a harness with no hook layer; whether the
+  agent board (E-78, ADR-21) is the coordination surface. *Trade-off:*
+  flexibility the chain gave up for predictability, bought back in one
+  place and kept out of the chain's replay and benchmark signal.
 - **ADR-23 Kroker owns the role contract; the AI SDK is an adapter**
   *(decided 2026-10-11 from the plan; not built)*. A `RoleRunner` port sits
   between roles and the SDK, as `CodingHarness` already sits between tasks
