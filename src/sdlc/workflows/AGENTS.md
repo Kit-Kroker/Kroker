@@ -46,6 +46,7 @@ re-homed to `GraphWorkflow`.)
 | `_attrib` (on `GraphDispatcher`) | `GraphDispatcher` | `GraphWorkflow._stamp` | `GraphDispatcher._start` (the only write site, pinned by test) | E-77: per-activation attribution facts — node_id, round, node_stage, fail_reentry; memory only, no commands (FR-025) |
 | `BenchmarkHost._record` override | `GraphWorkflow` (override) | — | `GraphWorkflow._record` (stamps via `_stamp`, then `super()._record`) | E-77 R-4: every record carries `GraphAttribution` before emit/schedule; base host behaviour unchanged |
 | `_graph_sha` (new cross-host reader) | `GraphWorkflow` | `RunHost._retro` (cross-host, via `getattr(self, "_graph_sha", "") or None` → `build_run_summary`) | `GraphWorkflow.run` (unchanged) | E-77 R-3: summary content only — no command change (U6) |
+| `_emit` (new cross-host reader) | `ReportHost` | `MemoryHost._recall` (cross-host, via `getattr(self, "_emit", None)` — a no-op when absent, so MemoryHost-only hosts: crew, triage, assessment, tidyup) | `ReportHost._emit` (unchanged) | 021 FR-011: after each stage-level recall it emits `MEMORY_RECALLED` — hash, uri, degraded/persist_failed flags, never items; pure state, no command |
 
 ## Single model egress: forwarding and the label guard (004)
 
@@ -89,3 +90,28 @@ always did and stays replay-identical; `GUARD_PATCH_ID` is a wire name
 (recorded in histories) and is never renamed. Two things it does not
 cover: the combined size of parallel requests in one workflow task, and
 agents run inside activities.
+
+## Recall snapshots (021)
+
+FR-402 persists every stage-level recall as a content-addressed
+`recall_snapshot` artifact. Persistence lives INSIDE the existing
+`recall_snapshot` activity (`memory/activities.py::_persisted`), next to
+the scrub and the hash: no activity is added or removed and no workflow
+command changes, which is why there is no `workflow.patched` marker
+anywhere in this round — the workflow side only reads `snapshot_hash` and
+`ref` off the recorded result and passes the hash into `_cached_stage`'s
+`recall_ref`.
+
+The new `RecallSnapshot` fields (`snapshot_hash`, `ref`,
+`persist_failed`) are defaulted, and a `model_validator` fills
+`snapshot_hash` from the other fields: a pre-021 recorded activity
+result therefore deserializes unchanged (E-1 — defaulted payload fields
+do not alter the command sequence), replay takes the recorded result and
+never re-queries memory, and `RecallInput.run_id` is an input field,
+which Temporal does not compare on replay. The memo key's fifth slot
+moving from `wm` to `wm|<hash>` changes a cache INPUT, not a command:
+one-time cache misses on in-flight replays are the accepted ADR-5 cost.
+
+`recall_snapshot/v1` (memory/query_hash.py `SNAPSHOT_TAG`) is a wire
+tag recorded in persisted artifacts: it is never changed in place — any
+change to the canonical form bumps the tag (contract §4).
