@@ -523,6 +523,16 @@ class GoToolchain(ToolchainAdapter):
                 return False
             # The bare module root maps onto the worktree root itself.
             rel = "" if locator == path else locator.removeprefix(path + "/")
+            # Containment guard: the prefix check above is LEXICAL, so a
+            # locator like `module/../outside` passes it while isdir would
+            # stat outside the base worktree -- and locators are report-
+            # derived classnames, i.e. arbitrary strings. "A locator outside
+            # the module -> False" must hold in effect, not just lexically.
+            # Lexical rejection of `..` components, not realpath: no symlink
+            # surprises, no extra syscalls, deterministic; a rejected
+            # traversal defers to the authoritative collect step (DS6).
+            if ".." in rel.split("/"):
+                return False
             return os.path.isdir(os.path.join(root, rel))
         return False  # no module directive at all
 

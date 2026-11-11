@@ -74,6 +74,21 @@ def test_go_no_go_mod_is_absent(tmp_path):
     assert go.base_locator_exists(str(tmp_path), "example.com/foo/internal/store") is False
 
 
+def test_go_dotdot_component_is_contained(tmp_path):
+    # Report-derived classnames are arbitrary strings, and a `..` component
+    # satisfies the module prefix LEXICALLY while isdir stats outside the
+    # base worktree -- containment guard must reject it. The escape target
+    # is a real dir outside `base` (tmp_path/escape/etc = base/../escape/etc),
+    # so without the guard this isdir provably answers True (RED).
+    base = tmp_path / "base"
+    base.mkdir()
+    (base / "go.mod").write_text("module example.com/foo\n", encoding="utf-8")
+    (tmp_path / "escape" / "etc").mkdir(parents=True)
+    go = GoToolchain()
+    assert go.base_locator_exists(str(base), "example.com/foo/../escape/etc") is False
+    assert go.base_locator_exists(str(base), "example.com/foo/../../etc") is False
+
+
 def test_go_unparseable_module_line_is_absent(tmp_path):
     # No path (`module` alone) or a whitespace-bearing path: nothing maps
     # the locator onto the tree, so the answer is absent, not a guess.
