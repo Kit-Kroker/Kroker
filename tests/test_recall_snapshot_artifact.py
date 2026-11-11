@@ -275,3 +275,48 @@ def test_read_returns_a_degraded_snapshot_written_in_canonical_form(artifact_roo
     assert got.watermark == "4"
     assert got.query_hash == "q9"
     assert got.snapshot_hash == h
+
+
+@pytest.mark.asyncio
+async def test_read_rejects_a_tampered_file(monkeypatch, artifact_root):
+    import sdlc.memory.activities as activities
+    from sdlc.memory.activities import RecallInput, recall_snapshot
+
+    fm = FakeMemory()
+    monkeypatch.setattr(activities, "_fake_singleton", fm)
+    await fm.retain(RetainItem(kind=MemoryKind.GOTCHA, bank="project:t", text="alpha", metadata={}))
+    snap = await recall_snapshot(
+        RecallInput(bank="project:t", query="q", backend="fake", watermark="1", run_id="run-t")
+    )
+
+    import sdlc.artifacts.read as read_mod
+
+    path = artifact_root / "run-t" / "recall" / f"{snap.snapshot_hash}.json"
+    original = path.read_bytes()
+    tampered = original.replace(b"alpha", b"alphA", 1)
+    assert tampered != original and len(tampered) == len(original)  # exactly one byte flipped
+    path.write_bytes(tampered)
+
+    with pytest.raises(ValueError, match="hash"):
+        read_mod.read_recall_snapshot(snap.ref)
+
+
+@pytest.mark.asyncio
+async def test_read_rejects_a_foreign_kind(monkeypatch, artifact_root):
+    import sdlc.memory.activities as activities
+    from sdlc.core.models import ArtifactRef
+    from sdlc.memory.activities import RecallInput, recall_snapshot
+
+    fm = FakeMemory()
+    monkeypatch.setattr(activities, "_fake_singleton", fm)
+    await fm.retain(RetainItem(kind=MemoryKind.GOTCHA, bank="project:k", text="alpha", metadata={}))
+    snap = await recall_snapshot(
+        RecallInput(bank="project:k", query="q", backend="fake", watermark="1", run_id="run-k")
+    )
+
+    import sdlc.artifacts.read as read_mod
+
+    # Only the kind is wrong: uri and sha256 are the real ones for this file.
+    foreign = ArtifactRef(kind="harness_session", uri=snap.ref.uri, sha256=snap.ref.sha256)
+    with pytest.raises(ValueError):
+        read_mod.read_recall_snapshot(foreign)

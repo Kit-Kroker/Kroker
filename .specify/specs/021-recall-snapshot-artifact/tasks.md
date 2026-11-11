@@ -90,7 +90,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
   - route the healthy return through `_persisted`.
 
   Failure handling is done in T025 (US3). T009 must pass. (plan T013)
-- [ ] T011 [US1] Write failing tests in `T/test_recall_snapshot_artifact.py` (section "reader") for `read_recall_snapshot` in `S/artifacts/read.py`:
+- [x] T011 [US1] Write failing tests in `T/test_recall_snapshot_artifact.py` (section "reader") for `read_recall_snapshot` in `S/artifacts/read.py`:
   - it round-trips a snapshot persisted by T010 to an equal `RecallSnapshot` (same items, hash and flags);
   - it raises `ValueError` when one byte of the file is altered;
   - it raises `ValueError` for a ref with `kind="harness_session"`.
