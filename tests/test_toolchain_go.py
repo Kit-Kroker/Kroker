@@ -1,5 +1,7 @@
 """GoToolchain: identity, triage fields, install/build, exit classification (E-30a)."""
 
+import pytest
+
 from sdlc.toolchain.adapters import (
     TOOLCHAINS,
     ToolchainKind,
@@ -61,3 +63,58 @@ def test_go_classify_test_exit_has_no_no_tests():
     assert go.classify_test_exit(1) == "ran"
     for code in (2, 5):
         assert go.classify_test_exit(code) == "failed_to_run"
+
+
+# --- E-30a command members ---------------------------------------------------
+
+
+def test_go_test_cmd_exact_strings():
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert go.test_cmd(True) == (
+        "go test ./... -coverprofile=cover.out -covermode=atomic"
+        " && gocover-cobertura < cover.out > coverage.xml"
+    )
+    assert go.test_cmd(False) == "go test ./..."
+
+
+def test_go_lint_cmds_exact_strings():
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert go.lint_cmd() == "go vet ./..."
+    assert go.lint_json_cmd() == "go vet -json ./..."
+
+
+def test_go_integration_test_cmd_exact_strings():
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert (
+        go.integration_test_cmd("junit.xml", True)
+        == "go test -v ./... -coverprofile=cover.out -covermode=atomic"
+        " | go-junit-report > junit.xml"
+        " && gocover-cobertura < cover.out > coverage.xml"
+    )
+    assert go.integration_test_cmd("junit.xml", False) == (
+        "go test -v ./... | go-junit-report > junit.xml"
+    )
+
+
+def test_go_oracle_test_cmd_exact_string():
+    go = TOOLCHAINS[ToolchainKind.GO]
+    assert go.oracle_test_cmd("internal/foo", "report.xml") == (
+        "go test -v ./internal/foo/... | go-junit-report > report.xml"
+    )
+
+
+def test_go_cmd_members_refuse_unsafe_interpolation():
+    # junit_out / oracle_path / report_out are interpolated into shell
+    # commands, so anything the shell_safe allowlist rejects is a ValueError
+    # refusal -- never an escaped guess at what the caller meant.
+    go = TOOLCHAINS[ToolchainKind.GO]
+    with pytest.raises(ValueError):
+        go.oracle_test_cmd("a;rm", "r.xml")
+    with pytest.raises(ValueError):
+        go.oracle_test_cmd("internal/foo", "r;xml")
+    with pytest.raises(ValueError):
+        go.integration_test_cmd("j;xml", True)
+
+
+def test_registry_lists_python_first():
+    assert list(TOOLCHAINS)[0] is ToolchainKind.PYTHON

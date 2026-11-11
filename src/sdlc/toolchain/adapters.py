@@ -329,22 +329,56 @@ class GoToolchain(ToolchainAdapter):
         # exit -- a package without tests reports "no test files" and exits 0.
         return "ran" if code in (0, 1) else "failed_to_run"
 
+    # Shared by both coverage branches: one constant so the converter
+    # invocation cannot drift between them.
+    _GOCOVER = "gocover-cobertura < cover.out > coverage.xml"
+
     def test_cmd(self, coverage: bool = True) -> str:
-        raise NotImplementedError("GoToolchain.test_cmd lands with E-30a's command members")
+        # -covermode=atomic: `go test` runs packages (and t.Parallel tests)
+        # concurrently, and the default `set` mode's counter updates race and
+        # undercount -- atomic keeps the profile honest under that default.
+        base = "go test ./..."
+        if coverage:
+            return f"{base} -coverprofile=cover.out -covermode=atomic && {self._GOCOVER}"
+        return base
 
     def lint_cmd(self) -> str:
-        raise NotImplementedError("GoToolchain.lint_cmd lands with E-30a's command members")
+        return "go vet ./..."
 
     def lint_json_cmd(self) -> str:
-        raise NotImplementedError("GoToolchain.lint_json_cmd lands with E-30a's command members")
+        # Unlike ruff there is no --exit-zero: `go vet -json` exits 1 when it
+        # finds anything and streams one JSON object per package on stdout.
+        # That nonzero exit is findings, not tool failure -- interpreting it
+        # is parse_lint's contract, which owns this stream.
+        return "go vet -json ./..."
 
     def parse_lint(self, code: int, out: str, root: str) -> list[tuple[str, str, int]] | None:
         raise NotImplementedError("GoToolchain.parse_lint lands with E-30a's parsers")
 
     def integration_test_cmd(self, junit_out: str, coverage: bool = True) -> str:
-        raise NotImplementedError(
-            "GoToolchain.integration_test_cmd lands with E-30a's command members"
-        )
+        """The merge gate's whole-suite run, Go-shaped.
+
+        No early stop exists in `go test` to disable: it runs every matched
+        package even after another package failed, so the no-early-stop rule
+        is the language's natural behavior, not a flag.
+
+        The pipe's exit is `go-junit-report`'s (0), never `go test`'s -- the
+        exit says nothing about test outcomes. Outcomes come from the JUnit
+        file at junit_out, which `_head_run` already treats as ground truth.
+        """
+        unsafe = [p for p in (junit_out,) if not shell_safe(p)]
+        if unsafe:
+            raise ValueError(f"refusing to shell-interpolate unsafe test ids: {unsafe[:3]}")
+        # Pipes, &&, <, > are the only shell syntax here -- all cmd.exe-valid,
+        # since workers run on Windows. Nothing needs quoting: guarded paths
+        # interpolate verbatim (where this adapter does quote args, the rule
+        # is double quotes only -- cmd.exe- and POSIX-compatible).
+        if coverage:
+            return (
+                "go test -v ./... -coverprofile=cover.out -covermode=atomic"
+                f" | go-junit-report > {junit_out} && {self._GOCOVER}"
+            )
+        return f"go test -v ./... | go-junit-report > {junit_out}"
 
     def collect_ids_cmd(self, paths: Sequence[str]) -> str:
         raise NotImplementedError("GoToolchain.collect_ids_cmd lands with E-30a's test-id members")
@@ -360,7 +394,14 @@ class GoToolchain(ToolchainAdapter):
         )
 
     def oracle_test_cmd(self, oracle_path: str, report_out: str) -> str:
-        raise NotImplementedError("GoToolchain.oracle_test_cmd lands with E-30a's command members")
+        # Same pipe exit semantics as integration_test_cmd: the shell reports
+        # go-junit-report's 0; the oracle grader reads outcomes from the JUnit
+        # report, never from the exit code. -v is the per-test verbosity
+        # go-junit-report parses into that report.
+        unsafe = [p for p in (oracle_path, report_out) if not shell_safe(p)]
+        if unsafe:
+            raise ValueError(f"refusing to shell-interpolate unsafe test ids: {unsafe[:3]}")
+        return f"go test -v ./{oracle_path}/... | go-junit-report > {report_out}"
 
     def build_cmd(self) -> str:
         # The first non-None build command: Go has no interpreter stage, so
