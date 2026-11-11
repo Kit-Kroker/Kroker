@@ -29,7 +29,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
 
 ## Phase 1: Setup
 
-- [ ] T001 Record the baseline: run `pytest -q` from the repo root and save the list of failing test ids to `.specify/specs/021-recall-snapshot-artifact/baseline-failures.txt`. Expect the 8 pre-existing fast-tier failures on `main`; any other failure is a STOP. (plan T070 baseline)
+- [x] T001 Record the baseline: run `pytest -q` from the repo root and save the list of failing test ids to `.specify/specs/021-recall-snapshot-artifact/baseline-failures.txt`. Expect the 8 pre-existing fast-tier failures on `main`; any other failure is a STOP. (plan T070 baseline)
 
 ---
 
