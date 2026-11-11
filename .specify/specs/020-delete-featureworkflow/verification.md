@@ -756,3 +756,19 @@ Same container. `workflow count` Total: 0, `schedule list` empty, `workflow list
 ## Worker restart (T037), 2026-11-11
 
 `docker compose build worker` from main `e6b82d4a`, then `docker compose up -d worker`. Container `kroker-worker-1` Up; `temporal task-queue describe --task-queue ai-sdlc` shows workflow and activity pollers (`1@5bd1c64557eb`). `docker logs` printed nothing (the "worker running on task queue" line did not appear; pollers are the evidence instead). Dashboard fleet / SC-005 check not yet run.
+
+## Close-out (T038), 2026-11-11
+
+Evidence on `main` after the PR-2 fast-forward and worker restart.
+
+| SC | Result | Evidence |
+|----|--------|----------|
+| SC-001 | Pass with caveat | Gate 1 (T016, before any deletion commit; first deleting commit is T025 `41c95893`), gate 2 (2026-11-10T23:26Z) and its rerun (2026-11-11T14:59Z, minutes before the worker start). Both gates show G1/G2 empty. G0 count was 0 on both: a literal pass-rule-1 FAIL, accepted by the user's "this host is the only store" ruling. |
+| SC-002 | Pass | `grep -rn FeatureWorkflow src/` returns only `dashboard/fleet.py` (closed-run filter, 020 contract §1), `channels/transport.py` (`LegacyRunError`), `workflows/pipeline_child.py` (patch comment) and `core/models.py` comments. `import sdlc.worker` exposes 8 workflow classes (Assessment, Benchmark, CrewTask, Deployment, Graph, Reflect, TidyUp, Triage); no FeatureWorkflow. |
+| SC-003 | Pass | §T019: `scripts/check_golden_rebaseline.py` gate plus `golden-rebaseline.diff`. |
+| SC-004 | Pass | `pytest -m temporal tests/replay`: 35 passed, 21 skipped (all skips are capture-on-demand tests), 0 failed. |
+| SC-005 | Pass (fake client) | `tests/test_dashboard_fleet.py`, `test_cli_legacy_run.py`, `test_operator_errors.py`, `test_worker_registration.py`: 57 passed. Not exercised live: the compose store holds 0 workflows, so there are no legacy rows to render. |
+| SC-006 | Pass | ruff, ruff format, mypy and `check_file_size.py` clean; fast tier shows exactly the 8 known failures and no new ones. |
+| SC-007 | Pass | §T032: `workflows/AGENTS.md` rewritten and `tests/replay/AGENTS.md` added; no test enforces the grace-edit rule. |
+
+Open items: the "worker running on task queue" log line did not appear (pollers on `ai-sdlc` confirmed instead); the 3 durability and 8 fast-tier failures remain the known baseline.
