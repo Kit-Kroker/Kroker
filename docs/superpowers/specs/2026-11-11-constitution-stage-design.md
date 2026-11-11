@@ -122,7 +122,7 @@ class Principle(BaseModel):
 
 class Constitution(BaseModel):
     principles: list[Principle]  # ≥1, unique ids, enforced by verify
-    digest: str                  # sha256 over sorted (id, statement) pairs — memo seam
+    digest: str                  # sha256 over sorted (statement, normative) pairs — memo seam; "" when empty (ids are code-assigned and excluded, so the digest is drop-order-stable)
     drafted_by: Literal["agent", "empty"]  # "empty" = flag-off / greenfield-empty skip
 ```
 
