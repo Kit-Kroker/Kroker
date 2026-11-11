@@ -212,8 +212,8 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
 
   If any is missing, STOP. (plan T064)
 - [x] T034 Check that `CLAUDE.md`'s `<!-- SPECKIT START -->` block points at `.specify/specs/021-recall-snapshot-artifact/plan.md` (already applied during planning). (plan T063)
-- [ ] T035 Run `ruff check . && ruff format --check . && mypy && python scripts/check_clauses.py && python scripts/check_file_size.py`, which must be clean. (plan T070; quickstart Q8)
-- [ ] T036 Final gate (blocking):
+- [x] T035 Run `ruff check . && ruff format --check . && mypy && python scripts/check_clauses.py && python scripts/check_file_size.py`, which must be clean. (plan T070; quickstart Q8)
+- [x] T036 Final gate (blocking):
   - `pytest -q` must show no failures beyond `baseline-failures.txt` from T001;
   - `pytest -m temporal -q T/replay` must be green.
 
