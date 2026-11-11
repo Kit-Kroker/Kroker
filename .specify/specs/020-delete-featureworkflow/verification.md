@@ -752,3 +752,7 @@ $ G2
 ### Gate-2 rerun, 2026-11-11T14:59:51Z (first run went stale)
 
 Same container. `workflow count` Total: 0, `schedule list` empty, `workflow list --query "ExecutionStatus='Running'"` empty (covers G1 and G2). Same accepted empty-store exception as above. Worker started immediately after.
+
+## Worker restart (T037), 2026-11-11
+
+`docker compose build worker` from main `e6b82d4a`, then `docker compose up -d worker`. Container `kroker-worker-1` Up; `temporal task-queue describe --task-queue ai-sdlc` shows workflow and activity pollers (`1@5bd1c64557eb`). `docker logs` printed nothing (the "worker running on task queue" line did not appear; pollers are the evidence instead). Dashboard fleet / SC-005 check not yet run.
