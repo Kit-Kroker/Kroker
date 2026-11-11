@@ -203,6 +203,9 @@ async def step(
         ClarifiedRequirements,
         _run_clarify_fanout if cfg.clarify_probes_enabled else _run_clarify_single,
         prompt_digest=_salt,
+        # 021 FR-004: the recall snapshot the prompt consumed is a declared
+        # input — its content hash joins the memo key's recall slot.
+        recall_ref=snapshot.snapshot_hash,
     )
 
     if reqs.open_questions:

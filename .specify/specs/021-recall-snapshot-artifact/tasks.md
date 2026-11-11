@@ -147,7 +147,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
   - `T/plan/test_plan_step_split.py:20`
   - `T/architecture/test_architecture_step_split.py:29`
   - `T/architecture/test_architect_research_deps.py:67`
-- [ ] T019 [P] [US2] Pass `recall_ref=snapshot.snapshot_hash` to `ctx.cached_stage` in `S/stages/clarify/step.py:199`. (plan T030)
+- [x] T019 [P] [US2] Pass `recall_ref=snapshot.snapshot_hash` to `ctx.cached_stage` in `S/stages/clarify/step.py:199`. (plan T030)
 - [ ] T020 [P] [US2] Pass `recall_ref=prep.snapshot.snapshot_hash` to `ctx.cached_stage` in `S/stages/plan/step.py:122`. (plan T031)
 - [ ] T021 [P] [US2] Pass `recall_ref=prep.snapshot.snapshot_hash` to `ctx.cached_stage` in `S/stages/architecture/step.py:204`. The delta-retry loop reuses the same `prep.snapshot`, so do not re-recall. (plan T032)
 - [ ] T022 [US2] In the primary checkout, add one clause to each stage contract, worded: "The memo key's recall slot is the run's memory watermark, extended with the stage's recall snapshot hash when memory is on. [FR-402, 021]". Locations:
