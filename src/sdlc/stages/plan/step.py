@@ -126,6 +126,9 @@ async def produce(
         ImplementationPlan,
         _produce,
         prompt_digest=prep.salt,
+        # 021 FR-004: the recall snapshot the prompt consumed is a declared
+        # input — its content hash joins the memo key's recall slot.
+        recall_ref=prep.snapshot.snapshot_hash,
     )
     return plan_obj
 
