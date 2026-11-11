@@ -503,7 +503,7 @@ Hindsight, self-hosted (Postgres). Banks: `org` (cross-project) and
 
 | Moment | Op | Content |
 |---|---|---|
-| before each agent stage | recall → `RecallSnapshot` | per agent's configured banks/filters; persisted, hashed, prompt-injected |
+| before each agent stage | recall → `RecallSnapshot` | per agent's configured banks/filters; scrubbed, hashed (`memory/query_hash.py`), persisted to `<run_id>/recall/<hash>.json` (`sdlc.artifacts.read.read_recall_snapshot` reads it back verified), prompt-injected |
 | stage success | retain | artifact summary (store holds the artifact) |
 | fix-loop end | retain `kind=gotcha` | what failed, what fixed it |
 | every gate decision | retain `kind=gate_feedback` | human approve/reject + comments |
@@ -748,7 +748,7 @@ resumes from its last checkpoint instead of starting over (§11).
 | Fix loops exhausted | escalation gate (accept/retry-with-guidance/quarantine) |
 | Quarantined task | dependents blocked, run fails cleanly with state preserved |
 | Payload > limits | claim-check refs for artifacts; proposer model requests over 1 MiB fail non-retryably before they are scheduled (`agents/payload_guard.py`) |
-| Hindsight down | recalls degrade to empty snapshot (logged); retains retry in background — pipeline never blocks on memory |
+| Hindsight down, or snapshot persistence fails | recall never raises: it degrades to an item-free, distinctly hashed snapshot (`degraded` / `persist_failed` flagged on the `memory_recalled` trace event, FR-006/008); retains retry in background — pipeline never blocks on memory |
 | History growth (maintenance/long runs) | continue-as-new |
 | Prompt edited mid-fleet | memoization hash invalidates only affected stages |
 | Role step budget spent *(target)* | tools removed; the role must return structured output; a missing or invalid output fails the step like any validator exhaustion |
