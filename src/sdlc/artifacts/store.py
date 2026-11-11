@@ -24,6 +24,9 @@ _SUBDIRS = {
     "harness_session_digest": "sessions",
     "board_artifact": "artifacts",
     "board_evidence": "evidence",
+    # 021 FR-402: content-addressed recall snapshots, one hash-named file
+    # per stage-level recall under <root>/<run_id>/recall/.
+    "recall_snapshot": "recall",
 }
 
 
