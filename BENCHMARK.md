@@ -480,10 +480,10 @@ The factory runs a serial DAG, not a 1,000-commit/sec swarm, so Cursor's
 merge-conflict and megafile metrics don't port directly. The *principle* does:
 measure work that didn't advance the goal.
 
-- **Fix-loop attempts** per run — QA loop (`MAX_REPAIR_ATTEMPTS`, spec says 3)
-  and review-fix loop (`MAX_REVIEW_FIX_ATTEMPTS = 2`). Note the numeric drift
-  the roadmap flags (FR-105: default 2 vs spec 3) — the benchmark should record
-  the *actual* cap in force, not assume.
+- **Fix-loop attempts** per run — one merged loop per dev task, capped by
+  `max_fix_attempts` (default 2). FR-105 was amended 2026-11-11 (ADR-25) to
+  ratify the merged loop, closing the old 2-vs-3 spec-drift note; records
+  still carry the *actual* attempts made, never assume the cap in force.
 - **Gate rounds** per gate — REVISE re-entries (`MAX_GATE_ROUNDS`, default 2,
   FR-301). Repeated revisions at one stage localise where the pipeline
   struggles.

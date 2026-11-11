@@ -346,3 +346,30 @@ per `docs/documentation-rules.md`). ADR-22 was amended again on
   metric becomes reviewer–oracle agreement beside task pass rate. Every
   prompt or model change ships with a before/after on prompt-gate or the
   benchmark, one variable at a time, behind a per-role flag.
+- **ADR-25 One merged fix loop per dev task** *(decided 2026-11-11,
+  ratifying shipped behaviour; amends FR-105 and supersedes the two-loop
+  design of SDLC-spec v2 §1)*. Spec v2 prescribed two repair loops — a
+  Developer loop (default 2) for review/analyze failures resuming the same
+  harness session, and a dedicated Test-Error-Resolver loop (default 3) for
+  QA failures. Shipped reality is one loop inside the code stage: every
+  failure signal of an attempt (deterministic test results, clean-context
+  QA findings, review/adversary blocking findings) folds into one `issues`
+  list that the task's own harness role repairs — a single doer already
+  holds the worktree and the session context a second role would have to
+  rebuild; the "Resolver" was never a separate role. Session resume is
+  conditional (stack match, context ceiling, the FR-802 resume cap), not
+  unconditional: a wrong-stack or near-ceiling session resumed is cost
+  without benefit. The test-drift backstop escalates directly, spending no
+  attempts — a fenced session cannot honestly restore what it broke. One
+  knob (`max_fix_attempts`, default 2) and one escalation path (`task:{id}`
+  human gate, revise bounded by `max_gate_rounds`) instead of two of each.
+  Analyze findings never re-enter repair: analysis runs once over the
+  integrated diff, and its untraced criteria surface as the advisory
+  traceability check at merge (FR-106), where a human overrides or the run
+  ends `rejected:merge:advisory` — a post-integration repair wave would
+  re-open tasks the DAG deliberately closes at the gate. *Rejected:* two
+  loops with separate budgets — it re-implements a distinction the loop's
+  signals already collapse; which trigger fired is not observable in the
+  outcome, only in the prompt. *Trade-off:* per-trigger budgets are lost;
+  the knob is per-run config, and the benchmark's per-task `fix_attempts`
+  records (BENCHMARK.md §4.3) are the instrument for revisiting the number.

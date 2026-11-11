@@ -171,9 +171,18 @@ Teams adopting coding agents today face four gaps:
   (ADR-14), with a dedicated branch merged back into integration on gate
   approval; a task's diff SHALL be measured against its own branch point, not
   the run's base.
-- FR-105: Review/analyze failures SHALL trigger a bounded Developer repair
-  loop (default 2) resuming the same harness session; QA failures a bounded
-  Resolver loop (default 3); exhaustion SHALL escalate to a human gate.
+- FR-105: Each dev task SHALL run one bounded fix loop that folds every
+  failure signal of the attempt into a single repair prompt — deterministic
+  test results, clean-context QA findings, and review/adversary blocking
+  findings — with the task's own harness role doing the repairing (default
+  `max_fix_attempts = 2`). Repair attempts SHALL resume the same harness
+  session when it is sound to do so (matching stack, not near the context
+  ceiling, within the resume cap of FR-802) and start a fresh session
+  otherwise; the test-drift backstop SHALL escalate directly, spending no
+  repair attempts. Exhaustion SHALL escalate to the human gate `task:{id}`,
+  whose `revise` may grant further rounds bounded by `max_gate_rounds`.
+  Analyze findings do not re-enter repair: they gate at merge as the
+  advisory traceability check (FR-106).
 - FR-106: The quality gate SHALL be deterministic and classify each check as
   **absolute** or **advisory**. Absolute checks — the change introduces no lint
   finding, no critical security finding, and no failing test, each measured
