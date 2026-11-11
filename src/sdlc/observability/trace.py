@@ -25,6 +25,7 @@ class RunEventKind(StrEnum):
     TOOL_ESCALATION = "tool_escalation"
     MODEL_USAGE = "model_usage"
     MEMORY_RETAINED = "memory_retained"
+    MEMORY_RECALLED = "memory_recalled"  # 021 FR-402: stage-level recall snapshot recorded
     RUN_FINISHED = "run_finished"
 
 

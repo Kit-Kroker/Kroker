@@ -56,7 +56,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
   (plan T042, T011)
 - [x] T005 Add `snapshot_hash: str = ""`, `ref: ArtifactRef | None = None` (import `ArtifactRef` from `S/core/models.py:92`) and `persist_failed: bool = False` to `RecallSnapshot` in `S/memory/models.py:23`. Add a `model_validator(mode="after")` that sets `snapshot_hash` via `recall_snapshot_hash` when it is empty and `query_hash or degraded`. Rewrite the class docstring to describe the persisted, hashed behaviour. T004 must pass. (plan T011)
 - [x] T006 [P] Add `"recall_snapshot": "recall"` to `_SUBDIRS` in `S/artifacts/store.py:22`. (plan T012)
-- [ ] T007 [P] Add `MEMORY_RECALLED = "memory_recalled"` to `RunEventKind` in `S/observability/trace.py:16`, next to `MEMORY_RETAINED`. (plan T020)
+- [x] T007 [P] Add `MEMORY_RECALLED = "memory_recalled"` to `RunEventKind` in `S/observability/trace.py:16`, next to `MEMORY_RETAINED`. (plan T020)
 - [ ] T008 Checkpoint:
   - run `pytest -q T/test_recall_query_hash.py T/test_memory_models.py T/test_hindsight_recall.py T/test_recall_snapshot_artifact.py T/test_memory_activities.py`, which must be green with the first three files unedited (except `T/test_memory_models.py`, by T004);
   - run `pytest -m temporal -q T/replay/test_research_retain_replay.py`, which must pass without editing the history (FR-009 early signal).
