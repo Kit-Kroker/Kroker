@@ -65,14 +65,29 @@ class RecallInput:
 def _persisted(snap: RecallSnapshot, run_id: str) -> RecallSnapshot:
     """Write the snapshot's canonical bytes to the artifact store as a
     hash-named recall_snapshot and return the snapshot with its ref set.
-    No-op without a run id (direct calls never touch disk)."""
+    No-op without a run id (direct calls never touch disk). A persistence
+    failure never propagates (FR-008: memory I/O stays non-blocking): the
+    snapshot degrades to empty items, persist_failed=True, and the
+    validator re-hashes it — so its memo key can never collide with a
+    healthy snapshot's (FR-006)."""
     if run_id == "":
         return snap
-    data = recall_snapshot_canonical(
-        snap.bank, snap.watermark, snap.query_hash, snap.items, snap.degraded
-    )
-    ref = LocalFileStore().put("recall_snapshot", run_id, f"{snap.snapshot_hash}.json", data)
-    return snap.model_copy(update={"ref": ref})
+    try:
+        data = recall_snapshot_canonical(
+            snap.bank, snap.watermark, snap.query_hash, snap.items, snap.degraded
+        )
+        ref = LocalFileStore().put("recall_snapshot", run_id, f"{snap.snapshot_hash}.json", data)
+        return snap.model_copy(update={"ref": ref})
+    except Exception:
+        logger.warning("recall snapshot persistence failed; degrading", exc_info=True)
+        return RecallSnapshot(
+            query_hash=snap.query_hash,
+            bank=snap.bank,
+            watermark=snap.watermark,
+            items=[],
+            degraded=True,
+            persist_failed=True,
+        )
 
 
 @activity.defn
@@ -98,13 +113,17 @@ async def recall_snapshot(inp: RecallInput) -> RecallSnapshot:
     except Exception:
         logger.warning("recall degraded to empty snapshot", exc_info=True)
         query_hash = recall_query_hash(inp.bank, inp.query, inp.filters, inp.watermark)
-        return RecallSnapshot(
+        degraded = RecallSnapshot(
             query_hash=query_hash,
             bank=inp.bank,
             watermark=inp.watermark or "unknown",
             items=[],
             degraded=True,
         )
+        # 021 R-5/Q3: a backend-degraded snapshot is what the stage saw — it
+        # is persisted too (hash-named, so retries are idempotent) unless
+        # persistence itself fails, in which case _persisted degrades again.
+        return _persisted(degraded, inp.run_id)
 
 
 @dataclass

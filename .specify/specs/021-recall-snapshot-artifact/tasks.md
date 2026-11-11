@@ -175,7 +175,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
   - (d) `T/test_memory_activities.py:61` (`test_recall_snapshot_degrades_on_backend_error`) still passes unedited.
 
   (plan T043, T013)
-- [ ] T025 [US3] In `S/memory/activities.py`, wrap the `put` inside `_persisted` in its own `try/except Exception`. On failure, log a warning with `exc_info` and return `RecallSnapshot(query_hash=snap.query_hash, bank=snap.bank, watermark=snap.watermark, items=[], degraded=True, persist_failed=True)`, letting the validator hash it. Route the outer-`except` degraded snapshot through `_persisted` as well. `recall_snapshot` must still never raise. T024 must pass. (plan T013)
+- [x] T025 [US3] In `S/memory/activities.py`, wrap the `put` inside `_persisted` in its own `try/except Exception`. On failure, log a warning with `exc_info` and return `RecallSnapshot(query_hash=snap.query_hash, bank=snap.bank, watermark=snap.watermark, items=[], degraded=True, persist_failed=True)`, letting the validator hash it. Route the outer-`except` degraded snapshot through `_persisted` as well. `recall_snapshot` must still never raise. T024 must pass. (plan T013)
 - [ ] T026 [US3] Run `pytest -q T/test_recall_snapshot_artifact.py T/test_memory_activities.py` (green), then `pytest -m temporal -q T/replay/test_research_retain_replay.py` (green, history unedited). (quickstart Q2, Q5; plan T050)
 
 ---
