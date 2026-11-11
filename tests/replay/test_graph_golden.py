@@ -24,28 +24,34 @@ GREENFIELD = next(s for s in SCENARIOS if s.name == "greenfield_happy")
 # run of the FeatureWorkflow leg (renamed test_memo_key_inputs_match_the_
 # pinned_keys by 020 T021) before FeatureWorkflow was deleted. Each tuple is
 # one content_key call: (stage, input_json, digest, model, watermark), in
-# call order.
+# call order. 021 T028 re-pinned the fifth element from "wm-e74" to
+# "wm-e74|<snapshot hash>": the recall slot now carries the content hash of
+# each stage's recall snapshot (FR-010). The snapshots are DEGRADED here —
+# FakeMemory cannot parse the non-numeric watermark "wm-e74" (021 R-4; card
+# .workspace/tasks/2026-11-11-fakememory-nonnumeric-watermark.md) — so each
+# hash is the degraded-empty-answer hash for that stage's query, captured
+# from a live run, never computed by hand.
 MEMO_PARITY_KEYS: list[tuple] = [
     (
         "clarify",
         '{"title":"Hello service","description":"Add /hello","mode":"greenfield","repo_url":"/fake/repo","base_branch":"main","constraints":[]}',  # noqa: E501
         "26db68a05e6b307a9f372378694db871b374584fd653af10d7d055953f6e8cc9",
         "zai:glm-5.3",
-        "wm-e74",
+        "wm-e74|309700822ce49bc670694d7c8212d859d1e33c805626b4f7077e559fd278124d",
     ),
     (
         "architect",
         '{"summary":"Add a greeting endpoint.","functional_requirements":["GET /hello returns 200"],"non_functional_requirements":["p95 < 100ms"],"out_of_scope":["auth"],"open_questions":[{"id":"q1","question":"Anonymous access ok?","why_it_matters":"scopes auth work","suggested_answer":"yes","answer":"yes","dimension":null,"asked_by":null,"materiality":null,"evidence":null}],"spec_ref":null}',  # noqa: E501
         "21b8cd74f178a7d0830dd0adca58ea699294f8dffcafb7e461db6cdd52f36afd62579cdaf3c2bad333929e3200992b846fff534ac99cd259a94d811c6ac80e99",  # noqa: E501
         "zai:glm-5.3",
-        "wm-e74",
+        "wm-e74|3cc9885d9451a09034a2b183a4d2f47ddf3828702c38af67f3b57a5153880afd",
     ),
     (
         "plan",
         '{"overview":"Single FastAPI service with one route.","decisions":[{"id":"d1","decision":"Use FastAPI","rationale":"matches team stack","alternatives_considered":[]}],"affected_modules":[],"new_components":["app/main.py"],"risks":[],"spec_ref":null,"confidence":0.95,"delta":null}',  # noqa: E501
         "90bf1e5a44ad50328703903309f55d18e7efc3b81cd74c270321b82d59552d9b4997a572fb2dff55ccb556489ccdbbe2fae207f9b2c5410915262e3cb6fc7a82",  # noqa: E501
         "zai:glm-5.3",
-        "wm-e74",
+        "wm-e74|f90a1828b7e49e254dad06ea797b8828fbd1325eb1eae168b4761273dbe82f18",
     ),
 ]
 
@@ -144,5 +150,10 @@ async def test_memo_key_inputs_match_the_pinned_keys(monkeypatch, tmp_path):
     assert seen, "memoization must have computed keys"
     # 020 T007 pinned these from the FeatureWorkflow leg before deletion;
     # the GraphWorkflow leg must keep producing them, byte for byte.
+    # 021 T028: the fifth element is now "wm-e74|<recall snapshot hash>"
+    # (FR-010). The hash is the DEGRADED-empty-answer hash per stage —
+    # FakeMemory cannot parse the non-numeric watermark "wm-e74"
+    # (021 R-4; card
+    # .workspace/tasks/2026-11-11-fakememory-nonnumeric-watermark.md).
     assert seen == MEMO_PARITY_KEYS
-    assert all(args[-1] == "wm-e74" for args in seen)
+    assert all(args[-1].startswith("wm-e74|") for args in seen)
