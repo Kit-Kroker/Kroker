@@ -37,7 +37,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
 
 **Purpose**: the hash definition, the model fields, the store subdir and the event kind. Nothing here changes runtime behaviour on its own.
 
-- [ ] T002 [P] Write failing tests in new file `T/test_recall_snapshot_artifact.py` (section "hash") for `recall_snapshot_canonical` / `recall_snapshot_hash` in `S/memory/query_hash.py`:
+- [x] T002 [P] Write failing tests in new file `T/test_recall_snapshot_artifact.py` (section "hash") for `recall_snapshot_canonical` / `recall_snapshot_hash` in `S/memory/query_hash.py`:
   - the same inputs give the same hash;
   - swapping two items changes the hash;
   - `degraded=True` vs `False` with an identical bank, watermark, query_hash and `items=[]` gives different hashes;
@@ -54,7 +54,7 @@ The ids below are sequential (T001 and up). Each task names the plan id it imple
   - `RecallSnapshot.model_validate_json('{"query_hash":"01cb","bank":"project:default","watermark":"0","items":[],"degraded":false}')` (the pre-021 shape recorded in `T/replay/histories/research_retain_grounded.json`) validates and gets a hash.
 
   (plan T042, T011)
-- [ ] T005 Add `snapshot_hash: str = ""`, `ref: ArtifactRef | None = None` (import `ArtifactRef` from `S/core/models.py:92`) and `persist_failed: bool = False` to `RecallSnapshot` in `S/memory/models.py:23`. Add a `model_validator(mode="after")` that sets `snapshot_hash` via `recall_snapshot_hash` when it is empty and `query_hash or degraded`. Rewrite the class docstring to describe the persisted, hashed behaviour. T004 must pass. (plan T011)
+- [x] T005 Add `snapshot_hash: str = ""`, `ref: ArtifactRef | None = None` (import `ArtifactRef` from `S/core/models.py:92`) and `persist_failed: bool = False` to `RecallSnapshot` in `S/memory/models.py:23`. Add a `model_validator(mode="after")` that sets `snapshot_hash` via `recall_snapshot_hash` when it is empty and `query_hash or degraded`. Rewrite the class docstring to describe the persisted, hashed behaviour. T004 must pass. (plan T011)
 - [ ] T006 [P] Add `"recall_snapshot": "recall"` to `_SUBDIRS` in `S/artifacts/store.py:22`. (plan T012)
 - [ ] T007 [P] Add `MEMORY_RECALLED = "memory_recalled"` to `RunEventKind` in `S/observability/trace.py:16`, next to `MEMORY_RETAINED`. (plan T020)
 - [ ] T008 Checkpoint:
