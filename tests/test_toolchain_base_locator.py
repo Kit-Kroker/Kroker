@@ -89,6 +89,21 @@ def test_go_dotdot_component_is_contained(tmp_path):
     assert go.base_locator_exists(str(base), "example.com/foo/../../etc") is False
 
 
+def test_go_absolute_form_is_contained(tmp_path):
+    # `module//etc` passes the prefix check lexically (rel = "/etc") and
+    # carries no `..`, but os.path.join DISCARDS root for a component that
+    # starts with `/` -- unguarded, isdir probed the real absolute /etc and
+    # answered True (RED on Linux). A leading slash (and a backslash, the
+    # Windows path separator) cannot occur in a Go import path: malformed
+    # -> absent, deferring to the authoritative collect step.
+    base = tmp_path / "base"
+    base.mkdir()
+    (base / "go.mod").write_text("module example.com/foo\n", encoding="utf-8")
+    go = GoToolchain()
+    assert go.base_locator_exists(str(base), "example.com/foo//etc") is False
+    assert go.base_locator_exists(str(base), "example.com/foo\\..\\escape") is False
+
+
 def test_go_unparseable_module_line_is_absent(tmp_path):
     # No path (`module` alone) or a whitespace-bearing path: nothing maps
     # the locator onto the tree, so the answer is absent, not a guess.

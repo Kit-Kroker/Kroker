@@ -523,15 +523,19 @@ class GoToolchain(ToolchainAdapter):
                 return False
             # The bare module root maps onto the worktree root itself.
             rel = "" if locator == path else locator.removeprefix(path + "/")
-            # Containment guard: the prefix check above is LEXICAL, so a
-            # locator like `module/../outside` passes it while isdir would
-            # stat outside the base worktree -- and locators are report-
-            # derived classnames, i.e. arbitrary strings. "A locator outside
-            # the module -> False" must hold in effect, not just lexically.
-            # Lexical rejection of `..` components, not realpath: no symlink
-            # surprises, no extra syscalls, deterministic; a rejected
-            # traversal defers to the authoritative collect step (DS6).
-            if ".." in rel.split("/"):
+            # Containment guard: the prefix check above is LEXICAL, so
+            # malformed locators pass it while isdir would stat outside the
+            # base worktree -- and locators are report-derived classnames,
+            # i.e. arbitrary strings. "A locator outside the module -> False"
+            # must hold in effect, not just lexically. Three shapes, none of
+            # which can occur in a Go import path: `..` components traverse
+            # upward; a leading `/` makes os.path.join DISCARD root entirely
+            # (join(root, "/etc") is "/etc"); a backslash is Windows' path
+            # separator (the workers run there) and splits nothing on POSIX.
+            # Lexical rejection, not realpath: no symlink surprises, no
+            # extra syscalls, deterministic; a rejected locator defers to
+            # the authoritative collect step (DS6).
+            if ".." in rel.split("/") or rel.startswith("/") or "\\" in rel:
                 return False
             return os.path.isdir(os.path.join(root, rel))
         return False  # no module directive at all
