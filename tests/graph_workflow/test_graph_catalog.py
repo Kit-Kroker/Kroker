@@ -16,7 +16,11 @@ from sdlc.workflows.graph_catalog import (
     select_graph,
     template_revise_bounds,
 )
-from sdlc.workflows.graph_nodes.base import graph_has_research, project_cfg
+from sdlc.workflows.graph_nodes.base import (
+    graph_has_constitution,
+    graph_has_research,
+    project_cfg,
+)
 from sdlc.workflows.models import SeededWork
 from tests.fakes.canned import ARCH, PLAN, e2e_config, greenfield_idea
 from tests.graph.fixtures.registries import roles
@@ -35,6 +39,12 @@ def test_research_graph_is_the_only_one_with_research():
     assert [n for n in sorted(SHIPPED) if graph_has_research(SHIPPED[n])] == ["default-research"]
 
 
+def test_constitution_graph_is_the_only_one_with_constitution():
+    assert [n for n in sorted(SHIPPED) if graph_has_constitution(SHIPPED[n])] == [
+        "default-constitution"
+    ]
+
+
 def test_select_graph():
     reg = roles()
     assert select_graph(PipelineConfig(), None, reg) is SHIPPED["default"]
@@ -42,12 +52,27 @@ def test_select_graph():
         select_graph(PipelineConfig(research_enabled=True), None, reg)
         is SHIPPED["default-research"]
     )
+    assert (
+        select_graph(PipelineConfig(constitution_enabled=True), None, reg)
+        is SHIPPED["default-constitution"]
+    )
     no_research = roles(research=None)
     assert (
         select_graph(PipelineConfig(research_enabled=True), None, no_research) is SHIPPED["default"]
     )
+    no_constitution = roles(constitution=None)
+    assert (
+        select_graph(PipelineConfig(constitution_enabled=True), None, no_constitution)
+        is SHIPPED["default"]
+    )
+    # research wins when both flags are on: no shipped graph carries both nodes
+    assert (
+        select_graph(PipelineConfig(research_enabled=True, constitution_enabled=True), None, reg)
+        is SHIPPED["default-research"]
+    )
     seeded = SeededWork(arch=ARCH, plan=PLAN)
     assert select_graph(PipelineConfig(research_enabled=True), seeded, reg) is SHIPPED["seeded"]
+    assert select_graph(PipelineConfig(constitution_enabled=True), seeded, reg) is SHIPPED["seeded"]
 
 
 def test_template_revise_bounds_sets_only_pre_code_revise_edges():
@@ -111,14 +136,27 @@ def test_build_run_input_rejects_zero_gate_rounds():
 
 
 @pytest.mark.parametrize(
-    ("name", "research"), [("default", False), ("default-research", True), ("seeded", False)]
+    ("name", "research", "constitution"),
+    [
+        ("default", False, False),
+        ("default-research", True, False),
+        ("default-constitution", False, True),
+        ("seeded", False, False),
+    ],
 )
-def test_projection_over_shipped_graphs_is_identity(name, research):
+def test_projection_over_shipped_graphs_is_identity(name, research, constitution):
     cfg = e2e_config()
     cfg.research_enabled = research
+    cfg.constitution_enabled = constitution
     graph = SHIPPED[name]
     for n in graph.nodes:
         assert (
-            project_cfg(cfg, n, NODE_TYPES[n.type], research_in_graph=graph_has_research(graph))
+            project_cfg(
+                cfg,
+                n,
+                NODE_TYPES[n.type],
+                research_in_graph=graph_has_research(graph),
+                constitution_in_graph=graph_has_constitution(graph),
+            )
             == cfg
         ), n.id

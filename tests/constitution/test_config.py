@@ -16,8 +16,9 @@ from sdlc.graph import NODE_TYPES, from_yaml
 from sdlc.workflows.graph_catalog import GRAPHS_DIR
 from sdlc.workflows.graph_nodes.base import graph_has_constitution, project_cfg
 
-# default-constitution is opt-in: NOT in graph_catalog.SHIPPED_NAMES until a
-# later task wires selection, so this module loads both graphs by path.
+# default-constitution ships in graph_catalog.SHIPPED (FR-112 selection:
+# cfg.constitution_enabled plus the role); this module loads both graphs by
+# path to pin the overlay directly, independent of catalog wiring.
 
 
 def _graph(name: str):

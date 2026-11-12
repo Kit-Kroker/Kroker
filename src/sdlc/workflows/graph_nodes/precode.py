@@ -69,14 +69,14 @@ async def intake_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> 
 async def constitution_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> NodeResult:
     if t_constitution is None:
         raise RuntimeError(
-            "constitution node on a worker without agents/constitution (select_graph guards this)"
+            "constitution node on a worker without agents/constitution (select_graph "
+            "requires the role before picking default-constitution)"
         )
     out = await constitution_step(
         nc.ctx,
         cfg=cfg,
         idea=nc.facts.idea,
         repo_path=nc.facts.repo_path,
-        agent=t_constitution,
     )
     # The payload IS the artifact: its digest field is the memo seam the
     # downstream handlers read, so object and key always move together.

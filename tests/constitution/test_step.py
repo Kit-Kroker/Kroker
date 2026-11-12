@@ -137,7 +137,7 @@ async def test_flag_off_zero_commands(monkeypatch):
     monkeypatch.setattr(temporalio.workflow, "execute_activity", _no_activity)
     ctx = _Ctx()
 
-    out = await step(ctx, cfg=PipelineConfig(), idea=BROWN, repo_path=None, agent=object())
+    out = await step(ctx, cfg=PipelineConfig(), idea=BROWN, repo_path=None)
 
     assert out == Constitution(drafted_by="empty", principles=[], digest="")
     assert ctx.statuses == []
@@ -174,7 +174,7 @@ async def test_flag_on_partial_freeze_path(monkeypatch):
     cfg = PipelineConfig(constitution_enabled=True)
     cfg.roles["constitution"] = RoleConfig(kind="proposer", model="run-model")
 
-    out = await step(ctx, cfg=cfg, idea=BROWN, repo_path="/repo", agent=object())
+    out = await step(ctx, cfg=cfg, idea=BROWN, repo_path="/repo")
 
     # the one model call crossed the boundary with the run's particulars
     assert [name for name, _ in scheduled] == ["draft_constitution", "price_usage"]
@@ -262,7 +262,6 @@ async def test_degraded_emits_fail(monkeypatch):
         cfg=PipelineConfig(constitution_enabled=True),
         idea=BROWN,
         repo_path="/repo",
-        agent=object(),
     )
 
     assert out == Constitution(drafted_by="empty", principles=[], digest="")

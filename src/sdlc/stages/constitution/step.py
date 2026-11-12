@@ -16,7 +16,6 @@ kill a run, so a degraded constitution fails soft into the empty artifact.
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
@@ -98,7 +97,6 @@ async def step(
     cfg: PipelineConfig,
     idea: IdeaBrief,
     repo_path: str | None,
-    agent: Any = None,
 ) -> Constitution:
     """Run the constitution stage.
 
@@ -106,10 +104,9 @@ async def step(
     digest sentinel keys and prompts downstream exactly as no constitution
     stage at all (FR-010 byte-identity). Flag on → one draft activity →
     pure freeze → priced usage → STAGE_ENDED (a warning when freeze dropped
-    principles, a FAIL outcome when nothing survived) → retain. `agent` is
-    the registry handle the graph handler resolved (the research step's
-    `research_agent` seam); the activity re-resolves the registry agent
-    itself, so the step only forwards it.
+    principles, a FAIL outcome when nothing survived) → retain. The draft
+    activity re-resolves the registry agent itself; the step hands it only
+    the run's particulars.
     """
     if not cfg.constitution_enabled:
         return Constitution(drafted_by="empty", principles=[], digest="")

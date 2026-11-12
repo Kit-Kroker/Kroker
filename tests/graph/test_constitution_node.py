@@ -32,8 +32,9 @@ CONSTITUTION_EDGES = {
     ("constitution", "constitution", "planner", "constitution"),
 }
 
-# default-constitution is opt-in: NOT in graph_catalog.SHIPPED_NAMES until a
-# later task wires selection, so this module loads it by path.
+# default-constitution ships in graph_catalog.SHIPPED (FR-112: selected when
+# cfg.constitution_enabled is set and the role ships); this module still loads
+# every graph by path so the sha pin below stays independent of catalog wiring.
 GRAPH_NAMES = ("default", "default-research", "seeded", "default-constitution")
 
 

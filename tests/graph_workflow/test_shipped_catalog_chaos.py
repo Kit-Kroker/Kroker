@@ -212,7 +212,7 @@ def test_seeded_graph_carries_no_pre_code_stages():
 def test_shipped_lookup_rejects_unknown_names_and_pins_the_catalog():
     from sdlc.workflows.graph_catalog import SHIPPED
 
-    assert set(SHIPPED) == {"default", "default-research", "seeded"}
+    assert set(SHIPPED) == {"default", "default-research", "default-constitution", "seeded"}
     with pytest.raises(KeyError):
         SHIPPED["nope"]
 

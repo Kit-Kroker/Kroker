@@ -13,7 +13,7 @@ file carries only what is true *here*.
   (root AGENTS.md: importing a type another stage produces is not a call).
   This slice imports no other stage.
 - The step signature takes `ctx: StageContext` as first argument, never the
-  workflow instance (`step(ctx, *, cfg, idea, repo_path, agent=None)`).
+  workflow instance (`step(ctx, *, cfg, idea, repo_path)`).
 - The step never calls `ctx.gate` and never calls `ctx.record`: completion is
   a `STAGE_ENDED` emitted directly via `ctx.emit` — no benchmark row, no
   `duration_s`; cost reaches the run through the `MODEL_USAGE` event.
@@ -64,10 +64,11 @@ file carries only what is true *here*.
   zero-token `RoleUsage` instead.
 - `default.graph.yaml`'s content sha is pinned (E-72 identity discipline):
   the node ships in the separate `default-constitution.graph.yaml` — never
-  edit the default file to add it. `default-constitution` is not in
-  `graph_catalog.SHIPPED_NAMES` (selection wiring is deferred); a run pins
-  the graph explicitly, and `constitution_enabled` is overlaid from the
-  pinned graph's own shape at the single `project_cfg` call site.
+  edit the default file to add it. `select_graph` picks that graph when
+  `cfg.constitution_enabled` is set and the registry ships the role (research
+  wins when both flags are on); a run may still pin a custom graph
+  explicitly, and `constitution_enabled` is overlaid from the pinned graph's
+  own shape at the single `project_cfg` call site.
 
 ## Tests
 
