@@ -334,14 +334,15 @@ def _memory_block(items: Sequence[str]) -> str:
     return "\nRelevant memory:\n- " + "\n- ".join(items)
 
 
-def clarify_prompt(idea_json: str, memory: Sequence[str], constitution_block: str = "") -> str:
-    """The block is the bounded constitution render ("" when absent; see
-    stages/constitution/prompts.py). It sits between the idea and recall
-    per the spec hierarchy: idea -> constitution -> codebase map -> recall.
-    At the default the output is byte-identical to the two-arg form
-    (FR-010)."""
-    return (
-        idea_json
-        + (f"\n\n{constitution_block}" if constitution_block else "")
-        + _memory_block(memory)
-    )
+def clarify_prompt(idea_json: str, memory: Sequence[str], blocks: str = "") -> str:
+    """`blocks` is the pre-composed render of the optional upstream
+    artifacts: the constitution block and, after it, the requirements
+    block ("" for each when absent — stages/constitution/prompts.py and
+    stages/requirements/prompts.py; step.py joins whichever are present
+    with one blank line and passes the composition positionally). It sits
+    between the idea and recall per the spec hierarchy idea ->
+    constitution -> requirements -> codebase map -> recall — the map's
+    slot is vacant here: it reaches the fan-out's probes as grounding,
+    not this prompt. At the default the output is byte-identical to the
+    two-arg form (FR-010)."""
+    return idea_json + (f"\n\n{blocks}" if blocks else "") + _memory_block(memory)
