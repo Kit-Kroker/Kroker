@@ -26,6 +26,7 @@ PAYLOAD_TYPES: Mapping[str, str] = MappingProxyType(
         "ImplementationPlan": "sdlc.stages.plan.models:ImplementationPlan",
         "NodeFailure": "sdlc.core.models:NodeFailure",
         "PullRequest": "sdlc.workflows.models:PullRequest",
+        "Requirements": "sdlc.stages.requirements.models:Requirements",
         "ResearchBrief": "sdlc.stages.research.models:ResearchBrief",
     }
 )

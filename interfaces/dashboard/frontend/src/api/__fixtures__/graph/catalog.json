@@ -151,6 +151,13 @@
         },
         {
           "name": "requirements",
+          "direction": "in",
+          "payload": "Requirements",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "requirements",
           "direction": "out",
           "payload": "ClarifiedRequirements",
           "required": true,
@@ -239,6 +246,10 @@
             "port": "trigger"
           },
           {
+            "type": "requirements",
+            "port": "trigger"
+          },
+          {
             "type": "research",
             "port": "trigger"
           },
@@ -296,6 +307,10 @@
           {
             "type": "plan",
             "port": "constitution"
+          },
+          {
+            "type": "requirements",
+            "port": "constitution"
           }
         ],
         "fail": []
@@ -348,6 +363,10 @@
             "port": "codebase_map"
           },
           {
+            "type": "requirements",
+            "port": "codebase_map"
+          },
+          {
             "type": "research",
             "port": "codebase_map"
           }
@@ -363,6 +382,10 @@
           },
           {
             "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "requirements",
             "port": "trigger"
           },
           {
@@ -422,6 +445,10 @@
           },
           {
             "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "requirements",
             "port": "trigger"
           },
           {
@@ -516,6 +543,10 @@
           },
           {
             "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "requirements",
             "port": "trigger"
           },
           {
@@ -620,6 +651,10 @@
             "port": "trigger"
           },
           {
+            "type": "requirements",
+            "port": "trigger"
+          },
+          {
             "type": "research",
             "port": "trigger"
           },
@@ -709,6 +744,10 @@
             "port": "trigger"
           },
           {
+            "type": "requirements",
+            "port": "trigger"
+          },
+          {
             "type": "research",
             "port": "trigger"
           },
@@ -774,6 +813,10 @@
             "port": "trigger"
           },
           {
+            "type": "requirements",
+            "port": "trigger"
+          },
+          {
             "type": "research",
             "port": "trigger"
           },
@@ -800,6 +843,10 @@
             "port": "trigger"
           },
           {
+            "type": "requirements",
+            "port": "trigger"
+          },
+          {
             "type": "research",
             "port": "trigger"
           },
@@ -823,6 +870,10 @@
           },
           {
             "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "requirements",
             "port": "trigger"
           },
           {
@@ -916,6 +967,10 @@
           },
           {
             "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "requirements",
             "port": "trigger"
           },
           {
@@ -1083,6 +1138,10 @@
             "port": "trigger"
           },
           {
+            "type": "requirements",
+            "port": "trigger"
+          },
+          {
             "type": "research",
             "port": "trigger"
           },
@@ -1093,6 +1152,59 @@
           {
             "type": "seed.spec",
             "port": "trigger"
+          }
+        ],
+        "fail": []
+      }
+    },
+    {
+      "type": "requirements",
+      "kind": "stage",
+      "role": "product",
+      "canonical_stage": "requirements",
+      "default_id": "requirements",
+      "ports": [
+        {
+          "name": "trigger",
+          "direction": "in",
+          "payload": null,
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "constitution",
+          "direction": "in",
+          "payload": "Constitution",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "codebase_map",
+          "direction": "in",
+          "payload": "CodebaseMap",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
+          "name": "requirements",
+          "direction": "out",
+          "payload": "Requirements",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "fail",
+          "direction": "out",
+          "payload": "NodeFailure",
+          "required": true,
+          "multiplicity": "one"
+        }
+      ],
+      "connectable": {
+        "requirements": [
+          {
+            "type": "clarify",
+            "port": "requirements"
           }
         ],
         "fail": []
@@ -1170,6 +1282,10 @@
           },
           {
             "type": "context",
+            "port": "trigger"
+          },
+          {
+            "type": "requirements",
             "port": "trigger"
           },
           {

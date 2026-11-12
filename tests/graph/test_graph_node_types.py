@@ -56,6 +56,7 @@ def test_payload_allowlist_seed():
         "ImplementationPlan": "sdlc.stages.plan.models:ImplementationPlan",
         "NodeFailure": "sdlc.core.models:NodeFailure",
         "PullRequest": "sdlc.workflows.models:PullRequest",
+        "Requirements": "sdlc.stages.requirements.models:Requirements",
         "ResearchBrief": "sdlc.stages.research.models:ResearchBrief",
     }
 
@@ -107,7 +108,7 @@ def test_fixture_graph_is_port_compatible_against_seed():
 def _broken_registry() -> dict[str, NodeTypeSpec]:
     return {
         "bad_key": _stage("architect", _out("spec", "ArchitectureSpec"), role="architect"),
-        "dup": _stage("dup", _in("x", None), _out("x", None)),
+        "dup": _stage("dup", _out("x", None), _out("x", None)),
         "unknown_payload": _stage("unknown_payload", _out("y", "NoSuchModel")),
         "bad_stage": _stage("bad_stage", _out("ok", None), canonical_stage="plan"),
         "bad_role": _stage("bad_role", _out("ok", None), role="architecht"),
@@ -249,8 +250,8 @@ def test_unknown_stage_is_the_literal_and_not_canonical():
     assert UNKNOWN_STAGE not in CANONICAL_STAGES
 
 
-def test_shipped_registry_declares_a_stage_for_all_seventeen_types():
-    assert len(NODE_TYPES) == 17
+def test_shipped_registry_declares_a_stage_for_all_eighteen_types():
+    assert len(NODE_TYPES) == 18
 
 
 @pytest.mark.parametrize("type_", sorted(NODE_TYPES))

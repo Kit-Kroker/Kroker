@@ -59,6 +59,7 @@ EXPECTED_PORTS = {
 
 BUDGETED = {
     "constitution": "continuing",
+    "requirements": "continuing",
     "research": "continuing",
     "clarify": "continuing",
     "analyze": "continuing",
@@ -117,7 +118,7 @@ def test_every_stage_has_exactly_one_nodefailure_fail_port_and_gates_do_not():
 # ---- the budget_after partition -----------------------------------------------
 
 
-def test_exactly_six_types_carry_a_budget_and_the_rest_do_not():
+def test_exactly_seven_types_carry_a_budget_and_the_rest_do_not():
     budgets = {name: spec.budget_after for name, spec in NODE_TYPES.items()}
     assert budgets == {**{name: "none" for name in NODE_TYPES}, **BUDGETED}
 
@@ -126,12 +127,19 @@ def test_exactly_six_types_carry_a_budget_and_the_rest_do_not():
 
 
 def test_no_duplicate_port_names_on_any_node_type():
+    # (direction, name) is a port's identity (FR-113): an in-port may echo an
+    # out-port's name -- only a same-direction clash is a duplicate.
     offenders = {}
     for name, spec in NODE_TYPES.items():
-        seen = [p.name for p in spec.ports]
-        dupes = sorted({n for n in seen if seen.count(n) > 1})
+        seen: set[tuple[str, str]] = set()
+        dupes: set[str] = set()
+        for p in spec.ports:
+            identity = (p.direction, p.name)
+            if identity in seen:
+                dupes.add(p.name)
+            seen.add(identity)
         if dupes:
-            offenders[name] = dupes
+            offenders[name] = sorted(dupes)
     assert offenders == {}
 
 

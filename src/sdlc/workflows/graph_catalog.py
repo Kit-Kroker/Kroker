@@ -52,6 +52,9 @@ NOT_EXECUTABLE: Mapping[str, str] = MappingProxyType(
         "gate.research": (
             "the research refine loop is handler-internal until research-as-topology (E74-OQ-2)"
         ),
+        # Interim (FR-113): the requirements node type ships ahead of its
+        # handler so graphs can pin it; Task 8 wires the step and removes this.
+        "requirements": "the requirements stage has no handler until FR-113 wires it",
     }
 )
 # node type -> the gate name its handler opens internally

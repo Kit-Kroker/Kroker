@@ -303,9 +303,10 @@ def test_executable_with_empty_handler_types_flags_every_node():
 def test_executable_flags_not_executable_types():
     from sdlc.workflows.graph_catalog import NOT_EXECUTABLE, SHIPPED, executable
 
-    # FR-112 Task 7: the constitution handler landed, so only the research
-    # refine loop stays handler-internal.
-    assert set(NOT_EXECUTABLE) == {"gate.research"}
+    # FR-112 Task 7 landed the constitution handler; FR-113 Task 4 ships the
+    # requirements type ahead of its handler (interim NOT_EXECUTABLE) --
+    # Task 8 wires that step and removes the entry.
+    assert set(NOT_EXECUTABLE) == {"gate.research", "requirements"}
     with_research_gate = PipelineGraph(
         schema_version=1,
         nodes=[*SHIPPED["default"].nodes, node("research", "gate.research")],

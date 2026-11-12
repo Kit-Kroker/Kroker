@@ -38,6 +38,7 @@ def test_catalog_types():
         "merge",
         "plan",
         "plan_check",
+        "requirements",
         "research",
         "seed.plan",
         "seed.spec",

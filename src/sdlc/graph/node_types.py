@@ -116,6 +116,23 @@ _CATALOG: tuple[NodeTypeSpec, ...] = (
         canonical_stage="context",
         ports=(_in("trigger", None), _out("map", "CodebaseMap"), _reject(), _fail()),
     ),
+    # FR-113 partial freeze: like constitution (FR-112), the requirements
+    # stage never REJECTS -- a partial draft still freezes and flows
+    # downstream (stages/requirements/verify), so no reject port.
+    NodeTypeSpec(
+        type="requirements",
+        kind="stage",
+        role="product",
+        canonical_stage="requirements",
+        budget_after="continuing",
+        ports=(
+            _in("trigger", None, required=False),
+            _in("constitution", "Constitution", required=False),
+            _in("codebase_map", "CodebaseMap", required=False),
+            _out("requirements", "Requirements"),
+            _fail(),
+        ),
+    ),
     # FR-112 partial freeze: the constitution stage never REJECTS (a partial
     # constitution still flows downstream), so this type has no reject port.
     NodeTypeSpec(
@@ -157,6 +174,8 @@ _CATALOG: tuple[NodeTypeSpec, ...] = (
             _in("codebase_map", "CodebaseMap", required=False),
             _in("research", "ResearchBrief", required=False),
             _in("constitution", "Constitution", required=False),
+            # FR-113: the Product drafter's artifact, clarify's only new seam.
+            _in("requirements", "Requirements", required=False),
             _out("requirements", "ClarifiedRequirements"),
             _fail(),
         ),
@@ -355,8 +374,18 @@ def check_node_types(
         spec = registry[key]
         if key != spec.type:
             problems.append(f"{key}: registry key does not match spec.type {spec.type!r}")
-        names = [p.name for p in spec.ports]
-        for dup in sorted({n for n in names if names.count(n) > 1}):
+        # A port's identity is (direction, name) -- find_port and the topology
+        # key it that way -- so an in-port may echo an out-port's name
+        # (FR-113: clarify takes `requirements` in beside its `requirements`
+        # out). Only a same-direction clash is a duplicate.
+        seen: set[tuple[str, str]] = set()
+        duplicates: set[str] = set()
+        for port in spec.ports:
+            identity = (port.direction, port.name)
+            if identity in seen:
+                duplicates.add(port.name)
+            seen.add(identity)
+        for dup in sorted(duplicates):
             problems.append(f"{key}: duplicate port name {dup!r}")
         for port in spec.ports:
             if port.payload is None:
