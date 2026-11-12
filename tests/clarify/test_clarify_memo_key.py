@@ -37,6 +37,13 @@ from sdlc.stages.clarify.prompts import (
     probe_prompt_digest,
     prompt_digest,
 )
+from sdlc.stages.constitution.models import Constitution, Principle
+from sdlc.stages.requirements.models import (
+    FunctionalRequirement,
+    Requirements,
+    Story,
+    SuccessCriterion,
+)
 
 
 def _map(name: str = "cap001", tree: str = "t1") -> CodebaseMap:
@@ -275,3 +282,159 @@ async def test_memo_key_changed_constitution_digest_flips_the_key():
     assert a != b
     assert a != base
     assert b != base
+
+
+# ---- FR-113: the requirements digest joins the key; "" is the identity ----
+
+
+@pytest.mark.asyncio
+async def test_memo_key_requirements_digest_empty_equals_flag_off():
+    """FR-010 byte-identity, the FR-112 seam repeated: a run that never saw
+    a requirements draft (kwarg absent) and one handed the flag-off digest
+    "" must key byte-identically."""
+    assert await _step_key(requirements_digest="") == await _step_key()
+
+
+@pytest.mark.asyncio
+async def test_memo_key_changed_requirements_digest_flips_the_key():
+    base = await _step_key()
+    a = await _step_key(requirements_digest="a" * 64)
+    b = await _step_key(requirements_digest="b" * 64)
+    assert a != b
+    assert a != base
+    assert b != base
+
+
+# ---- FR-113: the requirements block renders into the prompt ------------
+
+
+class _PromptCaptureContext(_StubContext):
+    """Runs the producer for real (cached_stage invokes run_fn) and records
+    every prompt the step built, so the render seam is pinned through the
+    step's own prompt assembly rather than a hand-built prompt string."""
+
+    def __init__(self, memory: list[str] | None = None) -> None:
+        super().__init__()
+        self.prompts: list[str] = []
+        self._memory = memory if memory is not None else []
+
+    async def recall(self, cfg: Any, bank: str, *, query: str, filters: dict[str, str]) -> Any:
+        from sdlc.memory.models import RecallSnapshot
+
+        return RecallSnapshot(query_hash="qh", bank=bank, watermark="wm", items=self._memory)
+
+    async def cached_stage(
+        self,
+        cfg: Any,
+        stage: str,
+        key: str,
+        artifact_type: Any,
+        run_fn: Any,
+        *,
+        prompt_digest: str = "",
+        recall_ref: str = "",
+    ) -> tuple[ClarifiedRequirements, bool]:
+        self.cached_stage_calls.append(
+            {
+                "cfg": cfg,
+                "stage": stage,
+                "key": key,
+                "artifact_type": artifact_type,
+                "prompt_digest": prompt_digest,
+            }
+        )
+        await run_fn()
+        return (
+            ClarifiedRequirements(
+                summary="stub summary",
+                functional_requirements=[],
+                non_functional_requirements=[],
+                out_of_scope=[],
+                open_questions=[],
+            ),
+            False,
+        )
+
+    async def run_role(
+        self, cfg: Any, role: str, model: str, agent: Any, prompt: str, **kwargs: Any
+    ) -> Any:
+        from types import SimpleNamespace
+
+        self.prompts.append(prompt)
+        return SimpleNamespace(
+            output=ClarifiedRequirements(
+                summary="stub summary",
+                functional_requirements=[],
+                non_functional_requirements=[],
+                out_of_scope=[],
+                open_questions=[],
+            )
+        )
+
+
+async def _capture_prompts(**kw) -> list[str]:
+    ctx = _PromptCaptureContext(memory=["prior memory"])
+    await clarify.step(
+        ctx,
+        cfg=PipelineConfig(),
+        idea=IdeaBrief(title="test idea", description="some desc", mode=ProjectMode.GREENFIELD),
+        clarify_agent=None,
+        route_agent=None,
+        probe_agent=None,
+        **kw,
+    )
+    return ctx.prompts
+
+
+_REQUIREMENTS = Requirements(
+    stories=[
+        Story(
+            id="US-1",
+            narrative="As a user, I want a button, so that life is easier.",
+            functional=[FunctionalRequirement(id="FR-1", text="The button renders.")],
+            success_criteria=[SuccessCriterion(id="SC-1", text="Clicking it works.")],
+            source_ref=None,
+        )
+    ],
+    digest="d" * 64,
+    drafted_by="agent",
+)
+
+_CONSTITUTION = Constitution(
+    principles=[
+        Principle(
+            id="CP-1",
+            statement="Be bounded.",
+            normative="MUST",
+            rationale="why",
+            source_ref=None,
+        )
+    ],
+    digest="d" * 64,
+    drafted_by="agent",
+)
+
+
+@pytest.mark.asyncio
+async def test_prompt_without_requirements_is_byte_identical():
+    """FR-010: an explicit flag-off requirements=None must build the exact
+    prompt bytes the kwarg-absent run builds."""
+    plain = (await _capture_prompts())[0]
+    explicit_none = (await _capture_prompts(requirements=None))[0]
+    assert explicit_none == plain
+    assert "US-1" not in plain
+
+
+@pytest.mark.asyncio
+async def test_requirements_block_renders_between_constitution_and_recall():
+    """Spec hierarchy: idea -> constitution -> requirements -> codebase map
+    -> recall. Clarify's prompt carries no map block of its own (the map
+    reaches the fan-out's probes as grounding, not this prompt), so the
+    pinnable edges here pin the whole hierarchy this prompt can show: the
+    requirements block renders AFTER the constitution block and BEFORE the
+    recall block -- ahead of the (vacant) map slot."""
+    prompt = (await _capture_prompts(constitution=_CONSTITUTION, requirements=_REQUIREMENTS))[0]
+    assert "CP-1" in prompt and "US-1" in prompt
+    assert prompt.index("test idea") < prompt.index("CP-1")
+    assert prompt.index("CP-1") < prompt.index("US-1")
+    assert prompt.index("US-1") < prompt.index("Relevant memory")

@@ -38,6 +38,8 @@ with workflow.unsafe.imports_passed_through():
     from ...observability.trace import RunEventKind
     from ..constitution.models import Constitution
     from ..constitution.prompts import render_constitution
+    from ..requirements.models import Requirements
+    from ..requirements.prompts import render_requirements
     from .merge import merge_clarification
     from .models import ClarifiedRequirements, ProbeResult
     from .prompts import (
@@ -124,6 +126,8 @@ async def step(
     brief_digest: str = "",
     constitution_digest: str = "",
     constitution: Constitution | None = None,
+    requirements: Requirements | None = None,
+    requirements_digest: str = "",
     clarify_agent: Any,
     route_agent: Any,
     probe_agent: Any,
@@ -164,6 +168,15 @@ async def step(
     # prompts stay byte-identical (FR-010).
     _constitution_block = render_constitution(constitution) if constitution is not None else ""
 
+    # FR-113: the bounded requirements block, same rule. It renders after
+    # the constitution block and before the map/recall — the spec
+    # hierarchy idea -> constitution -> requirements -> codebase map ->
+    # recall. The blocks compose with one blank line between whichever
+    # are present; at the defaults the composition is "" and prompts stay
+    # byte-identical (FR-010).
+    _requirements_block = render_requirements(requirements) if requirements is not None else ""
+    _blocks = "\n\n".join(b for b in (_constitution_block, _requirements_block) if b)
+
     async def _run_clarify_single() -> ClarifiedRequirements:
         """Pre-E-85 path: one call, one prompt. Byte-identical to before."""
         return (
@@ -172,7 +185,7 @@ async def step(
                 "clarify",
                 clarify_model,
                 clarify_agent,
-                clarify_prompt(idea.model_dump_json(), snapshot.items, _constitution_block),
+                clarify_prompt(idea.model_dump_json(), snapshot.items, _blocks),
                 into=clarify_spend,
             )
         ).output
@@ -195,9 +208,7 @@ async def step(
             _egress,
             route_agent=route_agent,
             probe_agent=probe_agent,
-            route_prompt=clarify_prompt(
-                idea.model_dump_json(), snapshot.items, _constitution_block
-            ),
+            route_prompt=clarify_prompt(idea.model_dump_json(), snapshot.items, _blocks),
             idea_json=idea.model_dump_json(),
             grounding=(render_for_prompt(codebase_map) if codebase_map is not None else ""),
             mode=idea.mode,
@@ -208,14 +219,17 @@ async def step(
     _salt = prompt_digest(cfg)
 
     # FR-112: constitution_digest joins the memo inputs beside brief_digest
-    # (the FR-103 precedent). Omitted-while-"" is the string seam's form of
+    # (the FR-103 precedent); FR-113: requirements_digest follows it.
+    # Omitted-while-"" is the string seam's form of
     # ResearchDeps.research_model's omit-when-default serializer: an empty
     # digest concatenates to the identity, so a run that never saw a
-    # constitution keys byte-identically to today (FR-010).
+    # constitution — or a requirements draft — keys byte-identically to
+    # today (FR-010).
+    _memo_input = idea.model_dump_json() + brief_digest
     reqs, _ = await ctx.cached_stage(
         cfg,
         "clarify",
-        idea.model_dump_json() + brief_digest + constitution_digest + _clarify_key_extra,
+        _memo_input + constitution_digest + requirements_digest + _clarify_key_extra,
         ClarifiedRequirements,
         _run_clarify_fanout if cfg.clarify_probes_enabled else _run_clarify_single,
         prompt_digest=_salt,
