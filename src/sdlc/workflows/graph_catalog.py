@@ -146,7 +146,7 @@ def select_graph(
         return SHIPPED["default-research"]
     # FR-112: the constitution opt-in, research's guard shape. Research wins
     # the precedence when both flags are on -- no shipped graph carries both
-    # nodes, so that run pins a custom graph explicitly.
+    # nodes, so a run wanting both needs a graph that carries both.
     if cfg.constitution_enabled and "constitution" in roles_map:
         return SHIPPED["default-constitution"]
     # FR-113: the requirements opt-in, the same guard shape. Precedence is

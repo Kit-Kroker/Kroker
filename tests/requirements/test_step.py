@@ -343,7 +343,7 @@ def test_freeze_rules_are_the_contract_clause():
     """REQUIREMENTS-1.4 states the shipped partial-freeze rules in their
     OPERATIONAL order, and freeze() enforces each one. The order is pinned
     on both sides: the brownfield source_ref drop runs BEFORE the text
-    rules (the len(dropped)==3 shape) — a rejected story's texts never
+    rules (the rescue case below) — a rejected story's texts never
     enter the keyspace."""
     clause = _clause_text("REQUIREMENTS-1.4")
     # the clause names every rule the code applies
@@ -356,9 +356,9 @@ def test_freeze_rules_are_the_contract_clause():
     # ...and states the order as operational: brownfield drop before texts
     assert "before" in clause and "keyspace" in clause
 
-    # behavior: three ungrounded brownfield stories contribute exactly one
-    # dropped entry each (their narratives) — had the text rules run first,
-    # each story's FR/SC texts would drop as noise/duplicates too.
+    # behavior: three ungrounded brownfield stories drop as units — exactly
+    # one dropped entry each (their narratives), for missing refs. The
+    # keyspace ordering itself is pinned by the rescue case below.
     ungrounded = [
         DraftStory(
             narrative=f"As a user I want {name} so that Y.",

@@ -66,9 +66,8 @@ file carries only what is true *here*.
   the node ships in the separate `default-constitution.graph.yaml` — never
   edit the default file to add it. `select_graph` picks that graph when
   `cfg.constitution_enabled` is set and the registry ships the role (research
-  wins when both flags are on); a run may still pin a custom graph
-  explicitly, and `constitution_enabled` is overlaid from the pinned graph's
-  own shape at the single `project_cfg` call site.
+  wins when both flags are on); `constitution_enabled` is overlaid from the
+  pinned graph's own shape at the single `project_cfg` call site.
 
 ## Tests
 

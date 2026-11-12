@@ -38,7 +38,9 @@ class Ctx:
         self.prompts.append(prompt)
         return SimpleNamespace(output=SimpleNamespace())
 
-    async def cached_stage(self, cfg, stage, input_json, output_type, run_fn, *, prompt_digest="", recall_ref=""):
+    async def cached_stage(
+        self, cfg, stage, input_json, output_type, run_fn, *, prompt_digest="", recall_ref=""
+    ):
         self.keys.append(input_json)
         return await run_fn(), False
 

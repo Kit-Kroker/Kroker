@@ -7,7 +7,10 @@ file carries only what is true *here*.
 
 ## Invariants
 
-- Cross-stage calls are banned. The clarify stage does not import other stages.
+- Cross-stage calls are banned. The legal imports are types and renders, not
+  calls: `Constitution`/`render_constitution` and `Requirements`/
+  `render_requirements` arrive via step.py's `imports_passed_through` block
+  (root AGENTS.md: importing a type another stage produces is not a call).
 - The step signature takes `ctx: StageContext` as first argument, never the workflow instance.
 - Agents arrive as keyword arguments (`clarify_agent`, `route_agent`, `probe_agent`), never imported from `sdlc.agents.roles` to prevent circular imports during worker boot.
 - The activity invocation sequence must preserve the replay invariant: step finishes at `ctx.record`, returning `reqs`, and the workflow performs `_board_publish` and `_retain`.
