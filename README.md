@@ -16,7 +16,7 @@ do (`claude -p`, `opencode run`) inside isolated git worktrees.
 ## Roles
 Governed by the versioned registry in `agents/` (`agents/registry.yaml` +
 one `agents/<role>/` folder per role) and validated at worker boot
-(`src/sdlc/agents/loader.py`) — 3 harness + 8 required proposer + 5 optional
+(`src/sdlc/agents/loader.py`) — 3 harness + 8 required proposer + 8 optional
 proposer roles.
 
 | Role | Kind | Runs as |
@@ -34,6 +34,7 @@ proposer roles.
 | handoff *(optional, `handoff_enabled`, FR-805)* | Pydantic AI, extracts task→task claims from the scrubbed session | activity via TemporalDurability, best-effort |
 | adversary *(optional, `adversarial_review_enabled`)* | Pydantic AI, decorrelated second opinion (different model identity than dev+reviewer) on the approving path | activity via TemporalDurability, advisory, fail-open |
 | constitution *(optional, `constitution_enabled`, FR-112)* | Pydantic AI, one bounded draft of governing principles over a read-only repo workspace (FileSystem 4 read tools + RepoContext); frozen deterministically, no gate | activity via TemporalDurability; off by default (the run's graph opts in) |
+| product *(optional, `requirements_enabled`, FR-113)* | Pydantic AI, one bounded draft of story-shaped requirements (US/FR/SC, ids code-assigned at freeze) over a read-only repo workspace (FileSystem 4 read tools + RepoContext); frozen deterministically, no gate | activity via TemporalDurability; off by default (the run's graph opts in) |
 
 ## Human-in-the-loop
 Gates: clarify, architecture, plan, merge, deploy — each `hard` / `soft` /

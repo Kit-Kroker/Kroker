@@ -231,6 +231,10 @@ Teams adopting coding agents today face four gaps:
 - **FR-112 (new scope)** constitution drafter — off by default; read-only
   FileSystem+RepoContext; deterministic partial freeze; Constitution
   artifact feeds clarify/architect/plan.
+- **FR-113 (new scope)** requirements drafter — Product proposer drafts
+  story-shaped Requirements (US/FR/SC code-numbered), read-only
+  FileSystem+RepoContext, deterministic partial freeze, off by default;
+  feeds clarify.
 
 ### Agents (FR-200)
 - FR-201: Agents SHALL be declared in a versioned registry (`agents.yaml`):

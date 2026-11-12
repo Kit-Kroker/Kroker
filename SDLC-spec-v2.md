@@ -37,7 +37,7 @@ workflows on the `ai-sdlc` task queue.
 | 0 | intake | *(deterministic)* | workflow init | `IdeaBrief{mode}` | mode ∈ {greenfield, brownfield} resolved |
 | 1 | constitution | *(deterministic + optional drafter)* | local code | `Constitution` | governing principles fixed |
 | 2 | context | Cartographer *(brownfield only)* | activity (repo tools) | `CodebaseMap` | modules, contracts, hot spots extracted from repo |
-| 3 | requirements | Product | activity via TemporalDurability | `Requirements` | ≥1 story; FR-### + SC-### |
+| 3 | requirements | Product *(optional; off by default — FR-113)* | activity via TemporalDurability | `Requirements` | ≥1 story; FR-### + SC-### |
 | 4 | research | Researcher *(optional; off by default — FR-107)* | activity via TemporalDurability (bounded per-run: searches, fetches, cost) | `ResearchBrief` | grounded findings carry source URL + verbatim quote verified against bytes fetched this run; unverifiable claims flagged inferred or omitted; stage off by default |
 | 5 | clarify | Clarifier | activity via TemporalDurability + **gate(clarify)** | `Clarifications` | ambiguities resolved; low-confidence ones routed to human |
 | 6 | architecture | Architect | activity via TemporalDurability + **gate(architecture)** | `Architecture` | greenfield: stack+tree+contracts; brownfield: **delta** (added/modified/removed) grounded in `CodebaseMap` |

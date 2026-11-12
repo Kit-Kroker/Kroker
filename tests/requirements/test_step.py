@@ -13,6 +13,8 @@ verify module's own outputs, not re-implemented here.
 from __future__ import annotations
 
 import importlib
+import pathlib
+import re
 
 import pytest
 import temporalio.workflow
@@ -34,6 +36,7 @@ from sdlc.stages.requirements.models import (
     requirements_digest,
 )
 from sdlc.stages.requirements.stage import DraftInput, _DraftResult
+from sdlc.stages.requirements.verify import freeze
 
 # The package __init__ re-exports the step FUNCTION as
 # `requirements.step`'s submodule shadow rule; bind the module itself (the
@@ -316,3 +319,79 @@ async def test_cap_warns(monkeypatch):
     assert _ended(ctx)["outcome"] == "pass"
     assert _ended(ctx)["warning"] == "capped to 2 stories at freeze"
     assert len(ctx.retained) == 1
+
+
+def _clause_text(clause_id: str) -> str:
+    """The named clause's text from the slice contract, requirements.md —
+    from its `### <id>` heading to the next heading. The contract is a
+    shipped doc, so citing it is part of the assertion: a clause that was
+    deleted or renumbered fails here, not silently in review."""
+    contract = pathlib.Path("src/sdlc/stages/requirements/requirements.md").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(
+        rf"^### {re.escape(clause_id)}\n(.*?)(?=^### |^## |\Z)",
+        contract,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    assert match is not None, f"{clause_id} not found in requirements.md"
+    return match.group(1)
+
+
+@pytest.mark.clause("REQUIREMENTS-1.4")
+def test_freeze_rules_are_the_contract_clause():
+    """REQUIREMENTS-1.4 states the shipped partial-freeze rules in their
+    OPERATIONAL order, and freeze() enforces each one. The order is pinned
+    on both sides: the brownfield source_ref drop runs BEFORE the text
+    rules (the len(dropped)==3 shape) — a rejected story's texts never
+    enter the keyspace."""
+    clause = _clause_text("REQUIREMENTS-1.4")
+    # the clause names every rule the code applies
+    assert "US-1" in clause and "surviving order" in clause  # code-assigned ids
+    assert "source_ref" in clause  # brownfield grounding drop (strip semantics)
+    assert "duplicate" in clause  # exact-duplicate collapse, global keyspaces
+    assert "whitespace-only" in clause  # narrative + text noise drops
+    assert "max_stories" in clause  # the cap keeps the first max_stories
+    assert "degrade" in clause  # zero survivors
+    # ...and states the order as operational: brownfield drop before texts
+    assert "before" in clause and "keyspace" in clause
+
+    # behavior: three ungrounded brownfield stories contribute exactly one
+    # dropped entry each (their narratives) — had the text rules run first,
+    # each story's FR/SC texts would drop as noise/duplicates too.
+    ungrounded = [
+        DraftStory(
+            narrative=f"As a user I want {name} so that Y.",
+            functional=[f"The system does {name}."],
+            success_criteria=[f"{name} visibly happens."],
+            source_ref=None,
+        )
+        for name in ("X", "Z", "W")
+    ]
+    res = freeze(DraftOutput(stories=ungrounded), mode="brownfield")
+    assert res.degraded is True
+    assert res.dropped == [s.narrative for s in ungrounded]
+
+    # a rejected story's text must not block the same text in a survivor
+    rescue = freeze(
+        DraftOutput(
+            stories=[
+                DraftStory(
+                    narrative="As a user I want U so that Y.",
+                    functional=["The system does X."],
+                    success_criteria=[],
+                    source_ref="   ",  # whitespace ref counts as missing
+                ),
+                DraftStory(
+                    narrative="As a user I want V so that Y.",
+                    functional=["The system does X."],
+                    success_criteria=[],
+                    source_ref="docs/prd.md",
+                ),
+            ]
+        ),
+        mode="brownfield",
+    )
+    assert [fr.text for fr in rescue.frozen.stories[0].functional] == ["The system does X."]
+    assert rescue.frozen.digest != ""
+    assert rescue.degraded is False
