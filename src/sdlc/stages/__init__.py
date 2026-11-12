@@ -32,6 +32,7 @@ def __getattr__(name: str) -> Any:
             merge,
             plan,
             qa,
+            requirements,
             research,
             retro,
             review,
@@ -52,6 +53,7 @@ def __getattr__(name: str) -> Any:
             architecture,
             plan,
             constitution,
+            requirements,
         )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

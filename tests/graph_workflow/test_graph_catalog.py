@@ -28,11 +28,16 @@ from tests.graph.fixtures.registries import roles
 
 ALL_TYPES = [t for t in NODE_TYPES if t not in NOT_EXECUTABLE]
 
+# roles() plus the product role the default-requirements graph needs (the
+# requirements node's type declares role='product'; roles() ships without
+# it, mirroring a registry whose agents/product/ folder did not ship).
+SHIPPED_ROLES = {**roles(), "product": RoleConfig(kind="proposer", model="anthropic:glm-5.2")}
+
 
 @pytest.mark.parametrize("name", sorted(SHIPPED))
 def test_shipped_graphs_are_legal_and_executable(name):
     graph = SHIPPED[name]
-    assert validate(graph, roles=roles()).problems == ()
+    assert validate(graph, roles=SHIPPED_ROLES).problems == ()
     assert executable(graph, ALL_TYPES) == ()
 
 
@@ -46,8 +51,15 @@ def test_constitution_graph_is_the_only_one_with_constitution():
     ]
 
 
+def test_requirements_graph_is_the_only_one_with_requirements():
+    assert [n for n in sorted(SHIPPED) if graph_has_requirements(SHIPPED[n])] == [
+        "default-requirements"
+    ]
+
+
 def test_select_graph():
     reg = roles()
+    with_product = SHIPPED_ROLES
     assert select_graph(PipelineConfig(), None, reg) is SHIPPED["default"]
     assert (
         select_graph(PipelineConfig(research_enabled=True), None, reg)
@@ -56,6 +68,10 @@ def test_select_graph():
     assert (
         select_graph(PipelineConfig(constitution_enabled=True), None, reg)
         is SHIPPED["default-constitution"]
+    )
+    assert (
+        select_graph(PipelineConfig(requirements_enabled=True), None, with_product)
+        is SHIPPED["default-requirements"]
     )
     no_research = roles(research=None)
     assert (
@@ -66,14 +82,36 @@ def test_select_graph():
         select_graph(PipelineConfig(constitution_enabled=True), None, no_constitution)
         is SHIPPED["default"]
     )
-    # research wins when both flags are on: no shipped graph carries both nodes
+    # requirements_enabled without the product role: plain default (the
+    # registry guard shape -- the graph would not validate without the role)
+    assert select_graph(PipelineConfig(requirements_enabled=True), None, reg) is SHIPPED["default"]
+    # precedence research > constitution > requirements: the first flag with
+    # its role present wins, in that order
     assert (
         select_graph(PipelineConfig(research_enabled=True, constitution_enabled=True), None, reg)
         is SHIPPED["default-research"]
     )
+    assert (
+        select_graph(
+            PipelineConfig(research_enabled=True, requirements_enabled=True), None, with_product
+        )
+        is SHIPPED["default-research"]
+    )
+    assert (
+        select_graph(
+            PipelineConfig(constitution_enabled=True, requirements_enabled=True),
+            None,
+            with_product,
+        )
+        is SHIPPED["default-constitution"]
+    )
     seeded = SeededWork(arch=ARCH, plan=PLAN)
     assert select_graph(PipelineConfig(research_enabled=True), seeded, reg) is SHIPPED["seeded"]
     assert select_graph(PipelineConfig(constitution_enabled=True), seeded, reg) is SHIPPED["seeded"]
+    assert (
+        select_graph(PipelineConfig(requirements_enabled=True), seeded, with_product)
+        is SHIPPED["seeded"]
+    )
 
 
 def test_template_revise_bounds_sets_only_pre_code_revise_edges():
@@ -137,18 +175,20 @@ def test_build_run_input_rejects_zero_gate_rounds():
 
 
 @pytest.mark.parametrize(
-    ("name", "research", "constitution"),
+    ("name", "research", "constitution", "requirements"),
     [
-        ("default", False, False),
-        ("default-research", True, False),
-        ("default-constitution", False, True),
-        ("seeded", False, False),
+        ("default", False, False, False),
+        ("default-research", True, False, False),
+        ("default-constitution", False, True, False),
+        ("default-requirements", False, False, True),
+        ("seeded", False, False, False),
     ],
 )
-def test_projection_over_shipped_graphs_is_identity(name, research, constitution):
+def test_projection_over_shipped_graphs_is_identity(name, research, constitution, requirements):
     cfg = e2e_config()
     cfg.research_enabled = research
     cfg.constitution_enabled = constitution
+    cfg.requirements_enabled = requirements
     graph = SHIPPED[name]
     for n in graph.nodes:
         assert (

@@ -34,6 +34,7 @@ SHIPPED_NAMES: tuple[str, ...] = (
     "default",
     "default-research",
     "default-constitution",
+    "default-requirements",
     "seeded",
 )
 
@@ -52,9 +53,6 @@ NOT_EXECUTABLE: Mapping[str, str] = MappingProxyType(
         "gate.research": (
             "the research refine loop is handler-internal until research-as-topology (E74-OQ-2)"
         ),
-        # Interim (FR-113): the requirements node type ships ahead of its
-        # handler so graphs can pin it; Task 8 wires the step and removes this.
-        "requirements": "the requirements stage has no handler until FR-113 wires it",
     }
 )
 # node type -> the gate name its handler opens internally
@@ -151,6 +149,12 @@ def select_graph(
     # nodes, so that run pins a custom graph explicitly.
     if cfg.constitution_enabled and "constitution" in roles_map:
         return SHIPPED["default-constitution"]
+    # FR-113: the requirements opt-in, the same guard shape. Precedence is
+    # research > constitution > requirements -- no shipped graph carries
+    # more than one of the three nodes, so a run wanting another
+    # combination needs a graph that carries it.
+    if cfg.requirements_enabled and "product" in roles_map:
+        return SHIPPED["default-requirements"]
     return SHIPPED["default"]
 
 

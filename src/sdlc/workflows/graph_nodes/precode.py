@@ -20,6 +20,7 @@ with workflow.unsafe.imports_passed_through():
         t_clarify_route,
         t_constitution,
         t_planner,
+        t_product,
         t_research,
     )
     from ...core.models import PipelineConfig, ProjectMode
@@ -31,6 +32,7 @@ with workflow.unsafe.imports_passed_through():
     from ...stages.constitution.step import step as constitution_step
     from ...stages.plan.step import prepare as plan_prepare
     from ...stages.plan.step import produce as plan_produce
+    from ...stages.requirements.step import step as requirements_step
     from ...stages.research.models import ResearchBrief
     from ...vcs import IntegrationInput, setup_integration_branch
     from .base import NodeContext, NodeResult, guidance_text, input_model
@@ -83,6 +85,24 @@ async def constitution_node(nc: NodeContext, act: Activation, cfg: PipelineConfi
     return NodeResult(port="constitution", payload=out)
 
 
+async def requirements_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> NodeResult:
+    if t_product is None:
+        raise RuntimeError(
+            "requirements node on a worker without agents/product (select_graph "
+            "requires the role before picking default-requirements)"
+        )
+    out = await requirements_step(
+        nc.ctx,
+        cfg=cfg,
+        idea=nc.facts.idea,
+        repo_path=nc.facts.repo_path,
+    )
+    # The payload IS the artifact (constitution_node's rule): its digest
+    # field is the memo seam the clarify handler reads, so object and key
+    # always move together.
+    return NodeResult(port="requirements", payload=out)
+
+
 async def context_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> NodeResult:
     res = await context.step(
         nc.ctx,
@@ -128,6 +148,9 @@ async def clarify_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
     # FR-112: object and digest from the SAME payload — the artifact's own
     # digest field — so the prompt and the memo key always move together.
     constitution = input_model(nc, act, "constitution")
+    # FR-113: the requirements draft rides the same rule (the payload IS
+    # the artifact; its digest field is the memo seam).
+    requirements = input_model(nc, act, "requirements")
     reqs = await clarify.step(
         nc.ctx,
         cfg=cfg,
@@ -136,6 +159,8 @@ async def clarify_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
         brief_digest=digest,
         constitution=constitution,
         constitution_digest=constitution.digest if constitution is not None else "",
+        requirements=requirements,
+        requirements_digest=requirements.digest if requirements is not None else "",
         clarify_agent=t_clarify,
         route_agent=t_clarify_route,
         probe_agent=t_clarify_probe,

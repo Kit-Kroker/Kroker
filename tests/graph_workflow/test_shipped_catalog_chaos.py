@@ -212,7 +212,13 @@ def test_seeded_graph_carries_no_pre_code_stages():
 def test_shipped_lookup_rejects_unknown_names_and_pins_the_catalog():
     from sdlc.workflows.graph_catalog import SHIPPED
 
-    assert set(SHIPPED) == {"default", "default-research", "default-constitution", "seeded"}
+    assert set(SHIPPED) == {
+        "default",
+        "default-research",
+        "default-constitution",
+        "default-requirements",
+        "seeded",
+    }
     with pytest.raises(KeyError):
         SHIPPED["nope"]
 
@@ -303,10 +309,10 @@ def test_executable_with_empty_handler_types_flags_every_node():
 def test_executable_flags_not_executable_types():
     from sdlc.workflows.graph_catalog import NOT_EXECUTABLE, SHIPPED, executable
 
-    # FR-112 Task 7 landed the constitution handler; FR-113 Task 4 ships the
-    # requirements type ahead of its handler (interim NOT_EXECUTABLE) --
-    # Task 8 wires that step and removes the entry.
-    assert set(NOT_EXECUTABLE) == {"gate.research", "requirements"}
+    # FR-112 Task 7 landed the constitution handler and FR-113 Task 8 the
+    # requirements one -- both interim NOT_EXECUTABLE entries are gone; only
+    # the handler-internal research refine loop gate remains.
+    assert set(NOT_EXECUTABLE) == {"gate.research"}
     with_research_gate = PipelineGraph(
         schema_version=1,
         nodes=[*SHIPPED["default"].nodes, node("research", "gate.research")],

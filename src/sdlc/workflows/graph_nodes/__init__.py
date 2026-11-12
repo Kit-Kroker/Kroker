@@ -24,6 +24,7 @@ from .precode import (
     context_node,
     intake_node,
     plan_node,
+    requirements_node,
     research_node,
 )
 
@@ -42,6 +43,7 @@ HANDLERS: Mapping[str, Handler] = MappingProxyType(
         "merge": merge_node,
         "plan": plan_node,
         "plan_check": plan_check_node,
+        "requirements": requirements_node,
         "research": research_node,
         "seed.plan": seed_plan_node,
         "seed.spec": seed_spec_node,
