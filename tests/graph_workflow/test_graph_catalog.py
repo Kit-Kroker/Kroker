@@ -18,6 +18,7 @@ from sdlc.workflows.graph_catalog import (
 )
 from sdlc.workflows.graph_nodes.base import (
     graph_has_constitution,
+    graph_has_requirements,
     graph_has_research,
     project_cfg,
 )
@@ -157,6 +158,7 @@ def test_projection_over_shipped_graphs_is_identity(name, research, constitution
                 NODE_TYPES[n.type],
                 research_in_graph=graph_has_research(graph),
                 constitution_in_graph=graph_has_constitution(graph),
+                requirements_in_graph=graph_has_requirements(graph),
             )
             == cfg
         ), n.id

@@ -61,6 +61,7 @@ with workflow.unsafe.imports_passed_through():
         RunFacts,
         StoredPayload,
         graph_has_constitution,
+        graph_has_requirements,
         graph_has_research,
         project_cfg,
     )
@@ -127,6 +128,7 @@ class GraphDispatcher:
         self._nodes = {n.id: n for n in graph.nodes}
         self._research = graph_has_research(graph)
         self._constitution = graph_has_constitution(graph)
+        self._requirements = graph_has_requirements(graph)
         self._payloads: dict[str, StoredPayload] = {}
         self._carries: dict[str, dict[str, Any]] = {}
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -239,6 +241,7 @@ class GraphDispatcher:
             spec,
             research_in_graph=self._research,
             constitution_in_graph=self._constitution,
+            requirements_in_graph=self._requirements,
         )
         nc = NodeContext(
             ctx=self._services,

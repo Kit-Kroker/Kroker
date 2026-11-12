@@ -99,7 +99,13 @@ def _decision(**kw):
 def _project(cfg, node, spec_type, *, research_in_graph=False):
     from sdlc.workflows.graph_nodes.base import project_cfg
 
-    return project_cfg(cfg, node, NODE_TYPES[spec_type], research_in_graph=research_in_graph)
+    return project_cfg(
+        cfg,
+        node,
+        NODE_TYPES[spec_type],
+        research_in_graph=research_in_graph,
+        requirements_in_graph=False,
+    )
 
 
 def _graph_run_input(**kw):

@@ -56,5 +56,6 @@ def test_project_cfg_constitution_enabled_follows_the_graph(graph_name, expected
         NODE_TYPES["constitution"],
         research_in_graph=False,
         constitution_in_graph=graph_has_constitution(graph),
+        requirements_in_graph=False,
     )
     assert out.constitution_enabled is expected

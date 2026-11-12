@@ -327,6 +327,18 @@ class ConstitutionConfig(BaseModel):
     max_requests: int = 6
 
 
+class RequirementsConfig(BaseModel):
+    """FR-113 bounds for the requirements stage: at most `max_stories`
+    stories in at most `max_requests` model requests. The stage runs only
+    when `PipelineConfig.requirements_enabled` is on, and that flag is set
+    by graph presence -- never by project config alone (mirrors
+    research_enabled and constitution_enabled)."""
+
+    enabled: bool = False
+    max_stories: int = 8
+    max_requests: int = 6
+
+
 class DeployConfig(BaseModel):
     """FR-1105: the hosting target is an adapter resolved from configuration,
     not a choice an agent makes. Off by default (D-9)."""
@@ -403,6 +415,10 @@ class PipelineConfig(BaseModel):
     # `research` sits here plainly and the graph presence flag
     # (constitution_enabled) is the only gate that matters.
     constitution: ConstitutionConfig = Field(default_factory=ConstitutionConfig)
+    # FR-113: the requirements bounds. No omit-when-default serializer --
+    # `research` sits here plainly and the graph presence flag
+    # (requirements_enabled) is the only gate that matters.
+    requirements: RequirementsConfig = Field(default_factory=RequirementsConfig)
     deploy: DeployConfig = Field(default_factory=DeployConfig)
     research_enabled: bool = False  # FR-107: off by default; the
     # default pipeline is unchanged
@@ -410,6 +426,9 @@ class PipelineConfig(BaseModel):
     constitution_enabled: bool = False  # FR-112: off by default; the
     # run's graph opts in by
     # carrying a constitution node
+    requirements_enabled: bool = False  # FR-113: off by default; the
+    # run's graph opts in by
+    # carrying a requirements node
     containment_enabled: bool = False  # FR-703: off by default; the
     # policy is a fence, not a
     # sandbox — see ADR-17

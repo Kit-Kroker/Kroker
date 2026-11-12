@@ -130,6 +130,10 @@ def graph_has_constitution(graph: PipelineGraph) -> bool:
     return any(n.type == "constitution" for n in graph.nodes)
 
 
+def graph_has_requirements(graph: PipelineGraph) -> bool:
+    return any(n.type == "requirements" for n in graph.nodes)
+
+
 def project_cfg(
     cfg: PipelineConfig,
     node: GraphNode,
@@ -137,10 +141,13 @@ def project_cfg(
     *,
     research_in_graph: bool,
     constitution_in_graph: bool = False,
+    requirements_in_graph: bool,
 ) -> PipelineConfig:
     """The per-activation cfg (spec §5.2): a node role fills an unoverridden
     role (U5), a node gate overlays cfg.gates[node.id], research_enabled
-    follows the graph, and so does constitution_enabled (FR-112). Equal to
+    follows the graph, and so do constitution_enabled (FR-112) and
+    requirements_enabled (FR-113 -- the kwarg is required, mirroring
+    research; a defaulted bridge fails silently instead of loudly). Equal to
     `cfg` for every shipped graph (pinned in Task 14)."""
     roles = dict(cfg.roles)
     if node.role is not None and spec.role is not None and spec.role not in cfg.roles:
@@ -154,5 +161,6 @@ def project_cfg(
             "gates": gates,
             "research_enabled": research_in_graph,
             "constitution_enabled": constitution_in_graph,
+            "requirements_enabled": requirements_in_graph,
         }
     )

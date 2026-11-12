@@ -108,6 +108,7 @@ def test_project_cfg_is_identity_without_node_config():
         GraphNode(id="architect", type="architect"),
         NODE_TYPES["architect"],
         research_in_graph=False,
+        requirements_in_graph=False,
     )
     assert out == cfg
 
@@ -116,11 +117,19 @@ def test_project_cfg_node_role_fills_only_an_unoverridden_role():
     node = GraphNode(
         id="architect", type="architect", role=RoleConfig(kind="proposer", model="node-model")
     )
-    filled = project_cfg(PipelineConfig(), node, NODE_TYPES["architect"], research_in_graph=False)
+    filled = project_cfg(
+        PipelineConfig(),
+        node,
+        NODE_TYPES["architect"],
+        research_in_graph=False,
+        requirements_in_graph=False,
+    )
     assert filled.roles["architect"].model == "node-model"
     run = PipelineConfig()
     run.roles["architect"] = RoleConfig(kind="proposer", model="run-model")
-    kept = project_cfg(run, node, NODE_TYPES["architect"], research_in_graph=False)
+    kept = project_cfg(
+        run, node, NODE_TYPES["architect"], research_in_graph=False, requirements_in_graph=False
+    )
     assert kept.roles["architect"].model == "run-model"  # U5: run-level override wins
 
 
@@ -131,6 +140,7 @@ def test_project_cfg_gate_and_research():
         node,
         NODE_TYPES["gate.plan"],
         research_in_graph=False,
+        requirements_in_graph=False,
     )
     assert out.gates["plan"].policy is GatePolicy.OFF
     assert out.research_enabled is False
