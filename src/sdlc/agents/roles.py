@@ -136,6 +136,10 @@ risk_agent = AGENTS.get("risk")
 # ships; the STAGE runs only when the run enables the flag (feature.py).
 constitution_agent = AGENTS.get("constitution")
 
+# Optional product (requirements) drafter (FR-113). Present iff
+# agents/product/ ships; the STAGE runs only when the run enables the flag.
+product_agent = AGENTS.get("product")
+
 # E-85: two extra agents for the clarify fan-out. NOT new registry roles --
 # they reuse the clarify role's model, so agents/ stays at 15 roles and the
 # loader is untouched.
@@ -221,6 +225,7 @@ STAGE_ROLES: dict[str, str] = {
     "discover": "discover",  # optional; present iff the folder ships
     "risk": "risk",  # optional; present iff the folder ships
     "constitution": "constitution",  # optional; present iff the folder ships
+    "requirements": "product",  # optional; present iff the folder ships
 }
 
 # Both maps are keyed by stage and looked up together in _cached_stage. Keep
@@ -291,6 +296,8 @@ t_risk = risk_agent
 
 t_constitution = constitution_agent
 
+t_product = product_agent
+
 ALL_TEMPORAL_AGENTS = [
     t_clarify,
     t_clarify_route,
@@ -317,3 +324,5 @@ if t_risk is not None:
     ALL_TEMPORAL_AGENTS.append(t_risk)
 if t_constitution is not None:
     ALL_TEMPORAL_AGENTS.append(t_constitution)
+if t_product is not None:
+    ALL_TEMPORAL_AGENTS.append(t_product)

@@ -72,9 +72,19 @@ REQUIRED_ROLES = HARNESS_ROLES | PROPOSER_ROLES
 # joins it for the identical reason at the next phase (E-49 RD7).
 # 'constitution' joins as an opt-in-flag stage (FR-112): the drafter runs
 # only when the run enables it, but its folder is KNOWN so the graph node
-# type's role cross-check resolves.
+# type's role cross-check resolves. 'product' joins for the same reason at
+# the next stage (FR-113, requirements).
 OPTIONAL_ROLES: frozenset[str] = frozenset(
-    {"research", "deep_review", "handoff", "adversary", "discover", "risk", "constitution"}
+    {
+        "research",
+        "deep_review",
+        "handoff",
+        "adversary",
+        "discover",
+        "risk",
+        "constitution",
+        "product",
+    }
 )
 
 # REQUIRED_ROLES gates PRESENCE (a missing one fails boot).
