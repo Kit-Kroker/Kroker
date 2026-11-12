@@ -30,7 +30,12 @@ with workflow.unsafe.imports_passed_through():
     from .models import GraphRunInput, SeededWork
 
 GRAPHS_DIR = Path(__file__).parent / "graphs"
-SHIPPED_NAMES: tuple[str, ...] = ("default", "default-research", "seeded")
+SHIPPED_NAMES: tuple[str, ...] = (
+    "default",
+    "default-research",
+    "default-constitution",
+    "seeded",
+)
 
 
 def _load(name: str) -> PipelineGraph:
@@ -46,7 +51,7 @@ NOT_EXECUTABLE: Mapping[str, str] = MappingProxyType(
     {
         "gate.research": (
             "the research refine loop is handler-internal until research-as-topology (E74-OQ-2)"
-        )
+        ),
     }
 )
 # node type -> the gate name its handler opens internally
@@ -138,6 +143,11 @@ def select_graph(
         roles_map = registry_roles
     if cfg.research_enabled and "research" in roles_map:  # feature.py:535 guard
         return SHIPPED["default-research"]
+    # FR-112: the constitution opt-in, research's guard shape. Research wins
+    # the precedence when both flags are on -- no shipped graph carries both
+    # nodes, so that run pins a custom graph explicitly.
+    if cfg.constitution_enabled and "constitution" in roles_map:
+        return SHIPPED["default-constitution"]
     return SHIPPED["default"]
 
 

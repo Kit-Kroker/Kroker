@@ -35,7 +35,7 @@ workflows on the `ai-sdlc` task queue.
 | # | Stage | Owner | Temporal construct | Persisted artifact | Success criteria |
 |---|---|---|---|---|---|
 | 0 | intake | *(deterministic)* | workflow init | `IdeaBrief{mode}` | mode ∈ {greenfield, brownfield} resolved |
-| 1 | constitution | *(deterministic)* | local code | `Constitution` | governing principles fixed |
+| 1 | constitution | *(deterministic + optional drafter)* | local code | `Constitution` | governing principles fixed |
 | 2 | context | Cartographer *(brownfield only)* | activity (repo tools) | `CodebaseMap` | modules, contracts, hot spots extracted from repo |
 | 3 | requirements | Product | activity via TemporalDurability | `Requirements` | ≥1 story; FR-### + SC-### |
 | 4 | research | Researcher *(optional; off by default — FR-107)* | activity via TemporalDurability (bounded per-run: searches, fetches, cost) | `ResearchBrief` | grounded findings carry source URL + verbatim quote verified against bytes fetched this run; unverifiable claims flagged inferred or omitted; stage off by default |
@@ -55,8 +55,10 @@ workflows on the `ai-sdlc` task queue.
 > NOT a research stage; grounded web research is genuinely new scope. The DAG is
 > now 15 stages.
 
-Kept from v1: constitution, quality gate, and summary are deterministic code —
-no LLM call. The propose/persist split is kept: QA and DevOps *propose*
+Kept from v1: quality gate and summary are deterministic code — no LLM call.
+Constitution keeps its deterministic freeze and adds an **optional drafter**
+(FR-112, off by default): one bounded proposer run whose raw principles are
+frozen by code. The propose/persist split is kept: QA and DevOps *propose*
 (test files, `DeployPlan`); the orchestration *persists* what actually
 happened (`TestReport`, `DeployReport`).
 

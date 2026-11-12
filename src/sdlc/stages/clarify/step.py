@@ -36,6 +36,8 @@ with workflow.unsafe.imports_passed_through():
         RoleUsage,
     )
     from ...observability.trace import RunEventKind
+    from ..constitution.models import Constitution
+    from ..constitution.prompts import render_constitution
     from .merge import merge_clarification
     from .models import ClarifiedRequirements, ProbeResult
     from .prompts import (
@@ -120,6 +122,8 @@ async def step(
     idea: IdeaBrief,
     codebase_map: CodebaseMap | None = None,
     brief_digest: str = "",
+    constitution_digest: str = "",
+    constitution: Constitution | None = None,
     clarify_agent: Any,
     route_agent: Any,
     probe_agent: Any,
@@ -155,6 +159,11 @@ async def step(
 
     clarify_spend = RoleUsage(role="clarify", model=clarify_model)
 
+    # FR-112: the bounded constitution block ("" when there is no
+    # constitution — flag off or nothing survived freeze), so default-path
+    # prompts stay byte-identical (FR-010).
+    _constitution_block = render_constitution(constitution) if constitution is not None else ""
+
     async def _run_clarify_single() -> ClarifiedRequirements:
         """Pre-E-85 path: one call, one prompt. Byte-identical to before."""
         return (
@@ -163,7 +172,7 @@ async def step(
                 "clarify",
                 clarify_model,
                 clarify_agent,
-                clarify_prompt(idea.model_dump_json(), snapshot.items),
+                clarify_prompt(idea.model_dump_json(), snapshot.items, _constitution_block),
                 into=clarify_spend,
             )
         ).output
@@ -186,7 +195,9 @@ async def step(
             _egress,
             route_agent=route_agent,
             probe_agent=probe_agent,
-            route_prompt=clarify_prompt(idea.model_dump_json(), snapshot.items),
+            route_prompt=clarify_prompt(
+                idea.model_dump_json(), snapshot.items, _constitution_block
+            ),
             idea_json=idea.model_dump_json(),
             grounding=(render_for_prompt(codebase_map) if codebase_map is not None else ""),
             mode=idea.mode,
@@ -196,10 +207,15 @@ async def step(
     _clarify_key_extra = _clarify_memo_extra(cfg, codebase_map)
     _salt = prompt_digest(cfg)
 
+    # FR-112: constitution_digest joins the memo inputs beside brief_digest
+    # (the FR-103 precedent). Omitted-while-"" is the string seam's form of
+    # ResearchDeps.research_model's omit-when-default serializer: an empty
+    # digest concatenates to the identity, so a run that never saw a
+    # constitution keys byte-identically to today (FR-010).
     reqs, _ = await ctx.cached_stage(
         cfg,
         "clarify",
-        idea.model_dump_json() + brief_digest + _clarify_key_extra,
+        idea.model_dump_json() + brief_digest + constitution_digest + _clarify_key_extra,
         ClarifiedRequirements,
         _run_clarify_fanout if cfg.clarify_probes_enabled else _run_clarify_single,
         prompt_digest=_salt,

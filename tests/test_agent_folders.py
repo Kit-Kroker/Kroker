@@ -31,6 +31,7 @@ PRE_MIGRATION_AGENT_NAMES = {
     "adversary": "adversary_agent",
     "discover": "discover_agent",
     "risk": "risk_agent",
+    "constitution": "constitution_agent",
 }
 
 

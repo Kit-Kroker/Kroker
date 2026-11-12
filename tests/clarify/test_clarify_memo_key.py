@@ -237,3 +237,41 @@ async def test_step_flag_off_passes_empty_prompt_digest_and_no_memo_extra():
     call = ctx.cached_stage_calls[0]
     assert call["prompt_digest"] == ""
     assert call["key"] == idea.model_dump_json()
+
+
+# ---- FR-112: the constitution digest joins the key; "" is the identity ----
+
+
+async def _step_key(**kw) -> str:
+    """Run clarify.step once and return the memo key it handed cached_stage."""
+    ctx = _StubContext()
+    await clarify.step(
+        ctx,
+        cfg=PipelineConfig(),
+        idea=IdeaBrief(title="test idea", description="some desc", mode=ProjectMode.GREENFIELD),
+        clarify_agent=None,
+        route_agent=None,
+        probe_agent=None,
+        **kw,
+    )
+    return ctx.cached_stage_calls[0]["key"]
+
+
+@pytest.mark.asyncio
+async def test_memo_key_constitution_digest_empty_equals_flag_off():
+    """FR-010 byte-identity: a run that never saw a constitution (kwarg
+    absent) and one handed the flag-off digest "" must key byte-identically
+    -- the omit-while-default discipline of ResearchDeps.research_model,
+    expressed on the memo-key seam as an empty string concatenating to the
+    identity."""
+    assert await _step_key(constitution_digest="") == await _step_key()
+
+
+@pytest.mark.asyncio
+async def test_memo_key_changed_constitution_digest_flips_the_key():
+    base = await _step_key()
+    a = await _step_key(constitution_digest="a" * 64)
+    b = await _step_key(constitution_digest="b" * 64)
+    assert a != b
+    assert a != base
+    assert b != base

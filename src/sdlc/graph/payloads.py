@@ -21,6 +21,7 @@ PAYLOAD_TYPES: Mapping[str, str] = MappingProxyType(
         "BuildResult": "sdlc.workflows.models:BuildResult",
         "ClarifiedRequirements": "sdlc.stages.clarify.models:ClarifiedRequirements",
         "CodebaseMap": "sdlc.context.models:CodebaseMap",
+        "Constitution": "sdlc.stages.constitution.models:Constitution",
         "GateDecision": "sdlc.core.models:GateDecision",
         "ImplementationPlan": "sdlc.stages.plan.models:ImplementationPlan",
         "NodeFailure": "sdlc.core.models:NodeFailure",

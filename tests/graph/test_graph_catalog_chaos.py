@@ -58,6 +58,7 @@ EXPECTED_PORTS = {
 }
 
 BUDGETED = {
+    "constitution": "continuing",
     "research": "continuing",
     "clarify": "continuing",
     "analyze": "continuing",
@@ -116,7 +117,7 @@ def test_every_stage_has_exactly_one_nodefailure_fail_port_and_gates_do_not():
 # ---- the budget_after partition -----------------------------------------------
 
 
-def test_exactly_five_types_carry_a_budget_and_the_rest_do_not():
+def test_exactly_six_types_carry_a_budget_and_the_rest_do_not():
     budgets = {name: spec.budget_after for name, spec in NODE_TYPES.items()}
     assert budgets == {**{name: "none" for name in NODE_TYPES}, **BUDGETED}
 

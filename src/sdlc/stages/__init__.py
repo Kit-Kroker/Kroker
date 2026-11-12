@@ -25,6 +25,7 @@ def __getattr__(name: str) -> Any:
             architecture,
             clarify,
             code,
+            constitution,
             context,
             deploy,
             intake,
@@ -50,6 +51,7 @@ def __getattr__(name: str) -> Any:
             code,
             architecture,
             plan,
+            constitution,
         )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

@@ -59,7 +59,7 @@ def test_render_registry_tables_and_count():
 
     roles = read_roles(Path("agents"))
     md = render_registry(roles, [CrewRow("coder", "opencode", "m", True)])
-    assert "17 roles" in md
+    assert "18 roles" in md
     assert "| architect | proposer |" in md
     assert "## Crew roles (E-88)" in md
 

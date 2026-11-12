@@ -183,6 +183,44 @@ DONE = NodeState(round=1, status="done", taken_port="done")
 WORKED = NodeState(round=1, status="done", taken_port="out")
 
 
+# ---- constitution presence wiring (FR-112 Task 7, ruling a) --------------------
+
+
+def test_dispatcher_pins_constitution_presence_from_the_graph():
+    """constitution_enabled reaches every per-activation cfg from graph
+    presence, exactly as research presence flows: the dispatcher computes it
+    once from the pinned graph and hands it to project_cfg at _start."""
+    from sdlc.core.models import RoleConfig
+    from sdlc.graph import NODE_TYPES, from_yaml
+    from sdlc.workflows.graph_catalog import GRAPHS_DIR
+    from sdlc.workflows.graph_dispatch import GraphDispatcher
+    from sdlc.workflows.graph_nodes import HANDLERS
+
+    assert "constitution" in HANDLERS  # the interim NOT_EXECUTABLE is gone
+
+    def _over(name: str) -> GraphDispatcher:
+        graph = from_yaml((GRAPHS_DIR / f"{name}.graph.yaml").read_text(encoding="utf-8"))
+        report = validate(
+            graph,
+            NODE_TYPES,
+            roles=roles(constitution=RoleConfig(kind="proposer", model="anthropic:glm-5.2")),
+        )
+        assert report.topology is not None, report.problems
+        return GraphDispatcher(
+            host=object(),
+            services=None,
+            router=GraphRouter(report.topology),
+            graph=graph,
+            registry=NODE_TYPES,
+            handlers={},
+            facts=_facts(),
+            cfg=PipelineConfig(),
+        )
+
+    assert _over("default-constitution")._constitution is True
+    assert _over("default")._constitution is False
+
+
 # ---- outcome_string: the §5.6 wire contract ----------------------------------
 
 

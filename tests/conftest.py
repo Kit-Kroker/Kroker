@@ -330,6 +330,17 @@ def write_registry_dir(root, version=1):
         b"    return Agent(model, name='risk_agent',\n"
         b"                 system_prompt=instructions, capabilities=list(capabilities))\n"
     )
+    # Optional constitution drafter (FR-112): a plain proposer.
+    cst = root / "constitution"
+    cst.mkdir(exist_ok=True)
+    (cst / "agent.yaml").write_bytes(b"kind: proposer\nmodel: anthropic:glm-5.2\n")
+    (cst / "instructions.md").write_bytes(b"draft the constitution")
+    (cst / "agent.py").write_bytes(
+        b"from pydantic_ai import Agent\n"
+        b"def build(model, instructions, model_settings, *, capabilities=()):\n"
+        b"    return Agent(model, name='constitution_agent',\n"
+        b"                 system_prompt=instructions, capabilities=list(capabilities))\n"
+    )
     return root
 
 

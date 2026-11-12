@@ -28,6 +28,7 @@ def test_catalog_types():
         "architect",
         "clarify",
         "code",
+        "constitution",
         "context",
         "deploy",
         "gate.architecture",

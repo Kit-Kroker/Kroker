@@ -18,6 +18,7 @@ with workflow.unsafe.imports_passed_through():
         t_clarify,
         t_clarify_probe,
         t_clarify_route,
+        t_constitution,
         t_planner,
         t_research,
     )
@@ -27,6 +28,7 @@ with workflow.unsafe.imports_passed_through():
     from ...stages import clarify, context, intake, research
     from ...stages.architecture.step import prepare as arch_prepare
     from ...stages.architecture.step import produce as arch_produce
+    from ...stages.constitution.step import step as constitution_step
     from ...stages.plan.step import prepare as plan_prepare
     from ...stages.plan.step import produce as plan_produce
     from ...stages.research.models import ResearchBrief
@@ -62,6 +64,23 @@ async def intake_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> 
     nc.host._base_sha = integration.head_sha
     nc.host._integration_wt = integration.worktree_path
     return NodeResult(port=port)
+
+
+async def constitution_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> NodeResult:
+    if t_constitution is None:
+        raise RuntimeError(
+            "constitution node on a worker without agents/constitution (select_graph "
+            "requires the role before picking default-constitution)"
+        )
+    out = await constitution_step(
+        nc.ctx,
+        cfg=cfg,
+        idea=nc.facts.idea,
+        repo_path=nc.facts.repo_path,
+    )
+    # The payload IS the artifact: its digest field is the memo seam the
+    # downstream handlers read, so object and key always move together.
+    return NodeResult(port="constitution", payload=out)
 
 
 async def context_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> NodeResult:
@@ -106,12 +125,17 @@ async def clarify_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
     digest = (
         nc.payload(research_ref).meta.get("digest", "") if isinstance(research_ref, str) else ""
     )
+    # FR-112: object and digest from the SAME payload — the artifact's own
+    # digest field — so the prompt and the memo key always move together.
+    constitution = input_model(nc, act, "constitution")
     reqs = await clarify.step(
         nc.ctx,
         cfg=cfg,
         idea=nc.facts.idea,
         codebase_map=input_model(nc, act, "codebase_map"),
         brief_digest=digest,
+        constitution=constitution,
+        constitution_digest=constitution.digest if constitution is not None else "",
         clarify_agent=t_clarify,
         route_agent=t_clarify_route,
         probe_agent=t_clarify_probe,
@@ -142,12 +166,16 @@ async def architect_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) 
     prep = carry["prep"]
     reqs = input_model(nc, act, "requirements")
     assert reqs is not None
+    # FR-112: object and digest from the SAME payload (clarify_node's rule).
+    constitution = input_model(nc, act, "constitution")
     spec = await arch_produce(
         nc.ctx,
         prep,
         cfg=cfg,
         requirements=reqs,
         codebase_map=codebase_map,
+        constitution=constitution,
+        constitution_digest=constitution.digest if constitution is not None else "",
         memory_watermark=nc.host._memory_watermark,
         repo_path=nc.facts.repo_path,
         architect_agent=t_architect,
@@ -165,12 +193,16 @@ async def plan_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> No
     prep = carry["prep"]
     arch = input_model(nc, act, "spec")
     assert arch is not None
+    # FR-112: object and digest from the SAME payload (clarify_node's rule).
+    constitution = input_model(nc, act, "constitution")
     plan = await plan_produce(
         nc.ctx,
         prep,
         cfg=cfg,
         architecture=arch,
         requirements=input_model(nc, act, "requirements"),
+        constitution=constitution,
+        constitution_digest=constitution.digest if constitution is not None else "",
         planner_agent=t_planner,
         guidance=guidance_text(nc, act),
     )

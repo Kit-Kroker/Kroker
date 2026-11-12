@@ -226,10 +226,10 @@ def test_prompt_sha_for_differs_across_prompted_roles():
 
 def test_prompted_roles_is_the_registry_instruction_set():
     """PROMPTED_ROLES pins the REGISTRY-instruction set -- prompt_sha_for
-    branches on registry presence. Orchestrator ruling: this 14-role set is
+    branches on registry presence. Orchestrator ruling: this 15-role set is
     NOT the record-writer inventory; that stage vocabulary is pinned by the
     CELL_STAGE_ORDER check in tests/test_benchmark_models.py (T002). The
-    14 roles whose agents/<role>/instructions.md ships today:"""
+    15 roles whose agents/<role>/instructions.md ships today:"""
     assert isinstance(PROMPTED_ROLES, frozenset)
     assert PROMPTED_ROLES == frozenset(r for r in REGISTRY if REGISTRY[r].instructions is not None)
     assert PROMPTED_ROLES == frozenset(
@@ -238,6 +238,7 @@ def test_prompted_roles_is_the_registry_instruction_set():
             "analyst",
             "architect",
             "clarify",
+            "constitution",
             "deep_review",
             "devops_planner",
             "discover",

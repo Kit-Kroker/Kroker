@@ -37,6 +37,8 @@ with workflow.unsafe.imports_passed_through():
     )
     from ...memory.models import MemoryKind
     from ..clarify.models import ClarifiedRequirements
+    from ..constitution.models import Constitution
+    from ..constitution.prompts import render_constitution
     from ..context.activities import DeltaCheckInput, check_brownfield_delta
     from .models import ArchitectureSpec
     from .prompts import prompt_digest
@@ -132,6 +134,8 @@ async def produce(
     *,
     cfg: PipelineConfig,
     requirements: ClarifiedRequirements,
+    constitution_digest: str = "",
+    constitution: Constitution | None = None,
     codebase_map: CodebaseMap | None = None,
     memory_watermark: str | None = None,
     repo_path: str = "/var/sdlc/repo",
@@ -174,9 +178,15 @@ async def produce(
     delta_guidance: str | None = None
     reqs_for_architect = _requirements_for_downstream(requirements)
     snapshot = prep.snapshot
+    # FR-112: the bounded constitution block ("" when absent), inserted
+    # between the requirements and the codebase map per the spec hierarchy:
+    # idea -> constitution -> codebase map -> recall. Byte-identical to
+    # today when there is no constitution (FR-010).
+    constitution_block = render_constitution(constitution) if constitution is not None else ""
     while True:
         prompt = (
             f"mode={prep.mode_val}\n{reqs_for_architect}"
+            + (f"\n\n{constitution_block}" if constitution_block else "")
             + (prep.map_block if codebase_map is not None else "")
             + ("\nRelevant memory:\n- " + "\n- ".join(snapshot.items) if snapshot.items else "")
             + (f"\nRevision guidance from reviewer:\n{guidance}" if guidance else "")
@@ -195,8 +205,14 @@ async def produce(
             )
             return res.output
 
+        # FR-112: constitution_digest joins the memo inputs beside the
+        # content terms. Omitted-while-"" is the string seam's form of
+        # ResearchDeps.research_model's omit-when-default serializer: an
+        # empty digest concatenates to the identity, so a run that never
+        # saw a constitution keys byte-identically to today (FR-010).
         cache_key = (
             reqs_for_architect
+            + constitution_digest
             + (guidance or "")
             + (prep.map_key if codebase_map is not None else "")
             + (delta_guidance or "")

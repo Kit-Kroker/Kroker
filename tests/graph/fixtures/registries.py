@@ -75,6 +75,7 @@ def roles(**overrides: RoleConfig | None) -> dict[str, RoleConfig]:
     base: dict[str, RoleConfig] = {
         "architect": RoleConfig(kind="proposer", model="anthropic:glm-5.2"),
         "clarify": RoleConfig(kind="proposer", model="anthropic:glm-5.2"),
+        "constitution": RoleConfig(kind="proposer", model="anthropic:glm-5.2"),
         "dev": RoleConfig(
             kind="harness", harness=HarnessKind.OPENCODE, model="zai-coding-plan/glm-5.2"
         ),
