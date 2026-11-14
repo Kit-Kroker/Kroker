@@ -34,8 +34,12 @@ def gate_context_text(incident: Incident) -> str:
     """The GateContext body for a repair gate: the incident, the plan, the
     three confidences, and the line that keeps 'approved' honest (FR-012)."""
     lines = [f"INC-{incident.no}  {incident.key}", f"state: {incident.state.value}"]
-    if incident.plan is None:
+    if incident.plan is None or not incident.plan.actions:
+        # FR-009's edge: a plan with zero actions is still gated, rendered
+        # "no action proposed" — it never counts as resolved.
         lines.append("plan: no action proposed")
+        if incident.plan is not None:
+            lines.append(f"analysis: {incident.plan.analysis[:400]}")
     else:
         p = incident.plan
         lines += [

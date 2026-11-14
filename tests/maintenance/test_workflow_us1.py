@@ -17,13 +17,15 @@ import time
 import pytest
 from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models.function import FunctionModel
-from sdlc.workflows.maintenance import MaintenanceWorkflow
 from temporalio import activity, workflow
+from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
+from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.maintenance.models import MaintenanceConfig, MaintenanceState, RepairProposal
+from sdlc.workflows.maintenance import MaintenanceWorkflow
 from sdlc.workflows.triage import TriageWorkflow
 from tests.fakes.fake_agents import failing_durable_agent, fake_agent_activities
 from tests.maintenance.conftest import commit_build_break, git, head_sha
@@ -106,11 +108,14 @@ def _failing_maintainer_activities():
 
 async def test_cycle_one_records_baseline_and_opens_nothing(repo_dir):
     before = _repo_fingerprint(repo_dir)
-    async with await WorkflowEnvironment.start_time_skipping() as env:
+    async with await WorkflowEnvironment.start_time_skipping(
+        data_converter=pydantic_data_converter
+    ) as env:
         async with Worker(
             env.client,
             task_queue=TASK_QUEUE,
             workflows=[MaintenanceWorkflow, TriageWorkflow],
+            plugins=[SdlcPydanticAIPlugin()],
             activities=[*TRIAGE_ACTIVITIES, *_maintainer_activities(), fake_notify],
         ):
             handle = await env.client.start_workflow(
@@ -122,10 +127,10 @@ async def test_cycle_one_records_baseline_and_opens_nothing(repo_dir):
             await handle.signal("nudge")
 
             async def _baseline_recorded() -> bool:
-                return (await handle.query("maintenance_state")).baseline_recorded
+                return (await handle.query(MaintenanceWorkflow.maintenance_state)).baseline_recorded
 
             await _until(_baseline_recorded, what="cycle 1 baseline")
-            incidents = await handle.query("incidents")
+            incidents = await handle.query(MaintenanceWorkflow.incidents)
             assert incidents == []
 
     assert _repo_fingerprint(repo_dir) == before  # SC-002
@@ -138,11 +143,14 @@ async def test_cycle_one_records_baseline_and_opens_nothing(repo_dir):
 
 async def test_a_break_becomes_one_incident_one_plan_one_gate(repo_dir):
     before = _repo_fingerprint(repo_dir)
-    async with await WorkflowEnvironment.start_time_skipping() as env:
+    async with await WorkflowEnvironment.start_time_skipping(
+        data_converter=pydantic_data_converter
+    ) as env:
         async with Worker(
             env.client,
             task_queue=TASK_QUEUE,
             workflows=[MaintenanceWorkflow, TriageWorkflow],
+            plugins=[SdlcPydanticAIPlugin()],
             activities=[*TRIAGE_ACTIVITIES, *_maintainer_activities(), fake_notify],
         ):
             handle = await env.client.start_workflow(
@@ -154,20 +162,24 @@ async def test_a_break_becomes_one_incident_one_plan_one_gate(repo_dir):
             await handle.signal("nudge")  # cycle 1: baseline
 
             async def _baseline_recorded() -> bool:
-                return (await handle.query("maintenance_state")).baseline_recorded
+                return (await handle.query(MaintenanceWorkflow.maintenance_state)).baseline_recorded
 
             await _until(_baseline_recorded, what="cycle 1 baseline")
 
+            # SC-002's observation starts AFTER the test's own seeding
+            # commit: everything the loop does from here must be read-only.
             commit_build_break(repo_dir)
+            before = _repo_fingerprint(repo_dir)
             await handle.signal("nudge")  # cycle 2: detect, plan, gate
 
             async def _incident_opened() -> bool:
                 return any(
-                    i.key == "build_probe:build_failed::" for i in await handle.query("incidents")
+                    i.key == "build_probe:build_failed::"
+                    for i in await handle.query(MaintenanceWorkflow.incidents)
                 )
 
             await _until(_incident_opened, what="the break to become an incident")
-            incidents = await handle.query("incidents")
+            incidents = await handle.query(MaintenanceWorkflow.incidents)
             assert len(incidents) == 1
             inc = incidents[0]
             assert inc.plan is not None
@@ -176,7 +188,7 @@ async def test_a_break_becomes_one_incident_one_plan_one_gate(repo_dir):
             assert inc.plan.floor == pytest.approx(0.45)  # JUDGEMENT, not reproduced
             assert inc.plan.effective == pytest.approx(min(0.9, 0.45))
 
-            pending = await handle.query("pending_decisions")
+            pending = await handle.query(MaintenanceWorkflow.pending_decisions)
             gates = [p.gate for p in pending]
             assert "repair:1" in gates
 
@@ -191,11 +203,14 @@ async def test_a_break_becomes_one_incident_one_plan_one_gate(repo_dir):
 async def test_proposer_failure_degrades_retries_then_escalates(repo_dir):
     failing_acts = _failing_maintainer_activities()
 
-    async with await WorkflowEnvironment.start_time_skipping() as env:
+    async with await WorkflowEnvironment.start_time_skipping(
+        data_converter=pydantic_data_converter
+    ) as env:
         async with Worker(
             env.client,
             task_queue=TASK_QUEUE,
             workflows=[MaintenanceWorkflow, TriageWorkflow],
+            plugins=[SdlcPydanticAIPlugin()],
             activities=[*TRIAGE_ACTIVITIES, *failing_acts, fake_notify],
         ):
             handle = await env.client.start_workflow(
@@ -207,7 +222,7 @@ async def test_proposer_failure_degrades_retries_then_escalates(repo_dir):
             await handle.signal("nudge")
 
             async def _baseline_recorded() -> bool:
-                return (await handle.query("maintenance_state")).baseline_recorded
+                return (await handle.query(MaintenanceWorkflow.maintenance_state)).baseline_recorded
 
             await _until(_baseline_recorded, what="cycle 1 baseline")
 
@@ -215,11 +230,11 @@ async def test_proposer_failure_degrades_retries_then_escalates(repo_dir):
             await handle.signal("nudge")  # attempt 1 fails
 
             async def _open_with_note() -> bool:
-                incs = await handle.query("incidents")
+                incs = await handle.query(MaintenanceWorkflow.incidents)
                 return bool(incs) and incs[0].state.value == "open" and incs[0].note
 
             await _until(_open_with_note, what="analysis_failed note")
-            inc = (await handle.query("incidents"))[0]
+            inc = (await handle.query(MaintenanceWorkflow.incidents))[0]
             assert "analysis_failed" in inc.note
             assert inc.plan is None
             assert inc.plan_attempts == 1
@@ -227,7 +242,9 @@ async def test_proposer_failure_degrades_retries_then_escalates(repo_dir):
             await handle.signal("nudge")  # attempt 2: max_plan_attempts=2 -> escalated
 
             async def _escalated() -> bool:
-                return (await handle.query("incidents"))[0].state.value == "escalated"
+                return (await handle.query(MaintenanceWorkflow.incidents))[
+                    0
+                ].state.value == "escalated"
 
             await _until(_escalated, what="escalation after max attempts")
 
@@ -243,11 +260,14 @@ async def test_zero_action_plan_still_gates_as_no_action_proposed(repo_dir):
     proposal = RepairProposal(
         analysis="The evidence supports no repair.", actions=[], self_confidence=0.5
     )
-    async with await WorkflowEnvironment.start_time_skipping() as env:
+    async with await WorkflowEnvironment.start_time_skipping(
+        data_converter=pydantic_data_converter
+    ) as env:
         async with Worker(
             env.client,
             task_queue=TASK_QUEUE,
             workflows=[MaintenanceWorkflow, TriageWorkflow],
+            plugins=[SdlcPydanticAIPlugin()],
             activities=[*TRIAGE_ACTIVITIES, *_maintainer_activities(proposal), fake_notify],
         ):
             handle = await env.client.start_workflow(
@@ -259,20 +279,20 @@ async def test_zero_action_plan_still_gates_as_no_action_proposed(repo_dir):
             await handle.signal("nudge")
 
             async def _baseline_recorded() -> bool:
-                return (await handle.query("maintenance_state")).baseline_recorded
+                return (await handle.query(MaintenanceWorkflow.maintenance_state)).baseline_recorded
 
             await _until(_baseline_recorded, what="cycle 1 baseline")
             commit_build_break(repo_dir)
             await handle.signal("nudge")
 
             async def _plan_recorded() -> bool:
-                return any(i.plan for i in await handle.query("incidents"))
+                return any(i.plan for i in await handle.query(MaintenanceWorkflow.incidents))
 
             await _until(_plan_recorded, what="the zero-action plan")
-            inc = (await handle.query("incidents"))[0]
+            inc = (await handle.query(MaintenanceWorkflow.incidents))[0]
             assert inc.plan is not None
             assert inc.plan.actions == []
-            pending = await handle.query("pending_decisions")
+            pending = await handle.query(MaintenanceWorkflow.pending_decisions)
             item = next(p for p in pending if p.gate == "repair:1")
             assert "no action proposed" in item.spec_summary
 
@@ -283,11 +303,14 @@ async def test_zero_action_plan_still_gates_as_no_action_proposed(repo_dir):
 
 
 async def test_history_replays_clean(repo_dir):
-    async with await WorkflowEnvironment.start_time_skipping() as env:
+    async with await WorkflowEnvironment.start_time_skipping(
+        data_converter=pydantic_data_converter
+    ) as env:
         async with Worker(
             env.client,
             task_queue=TASK_QUEUE,
             workflows=[MaintenanceWorkflow, TriageWorkflow],
+            plugins=[SdlcPydanticAIPlugin()],
             activities=[*TRIAGE_ACTIVITIES, *_maintainer_activities(), fake_notify],
         ):
             handle = await env.client.start_workflow(
@@ -299,7 +322,7 @@ async def test_history_replays_clean(repo_dir):
             await handle.signal("nudge")
 
             async def _baseline_recorded() -> bool:
-                return (await handle.query("maintenance_state")).baseline_recorded
+                return (await handle.query(MaintenanceWorkflow.maintenance_state)).baseline_recorded
 
             await _until(_baseline_recorded, what="cycle 1 baseline")
             commit_build_break(repo_dir)
@@ -307,7 +330,8 @@ async def test_history_replays_clean(repo_dir):
 
             async def _incident_opened() -> bool:
                 return any(
-                    i.key == "build_probe:build_failed::" for i in await handle.query("incidents")
+                    i.key == "build_probe:build_failed::"
+                    for i in await handle.query(MaintenanceWorkflow.incidents)
                 )
 
             await _until(_incident_opened, what="one incident")
