@@ -30,6 +30,9 @@ static DIR_SEQ: AtomicUsize = AtomicUsize::new(0);
 // ---- the scripted client -------------------------------------------------
 
 /// What the client answers when the server elicits.
+/// (T028's confirm tests script every variant; until then the linter
+/// would flag the unused ones.)
+#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 enum ElicitAnswer {
     /// accept, carrying `confirm`.
@@ -59,6 +62,7 @@ impl TestClient {
         }
     }
 
+    #[allow(dead_code)] // T028 scripts decline/abort
     fn set_answer(&self, answer: ElicitAnswer) {
         *self.answer.lock().unwrap() = answer;
     }
@@ -281,7 +285,7 @@ async fn an_object_result_maps_to_structured_content_plus_json_text() {
         json!({"call": [{"frame": {"ok": true, "value": value}}]}),
     )
     .await;
-    let result = call(&h.client, "decide_gate").await;
+    let result = call(&h.client, "read_artifact").await;
     assert_ne!(result.is_error, Some(true));
     assert_eq!(result.structured_content.as_ref(), Some(&value));
     assert_eq!(

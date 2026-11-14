@@ -215,9 +215,7 @@ impl Bridge {
         let init = json!({
             "op": "init", "id": "init", "protocol": BRIDGE_PROTOCOL, "actor": self.actor
         });
-        if let Err(e) = self.write_frame(&init).await {
-            return Err(e);
-        }
+        self.write_frame(&init).await?;
         let describe = tokio::time::timeout(HANDSHAKE_TIMEOUT, describe_rx)
             .await
             .map_err(|_| BridgeError::Internal("bridge handshake timed out".into()))?
@@ -422,10 +420,10 @@ async fn read_loop(stdout: ChildStdout, state: Arc<Mutex<Inner>>) {
                 .unwrap_or("")
                 .to_string();
             let tx = state.lock().await.pending.remove(&id);
-            if let Some(tx) = tx {
-                if tx.send(frame).is_err() {
-                    warn!("bridge terminal frame dropped: waiter {id} gone");
-                }
+            if let Some(tx) = tx
+                && tx.send(frame).is_err()
+            {
+                warn!("bridge terminal frame dropped: waiter {id} gone");
             }
         }
         // Whatever is left is a partial line: it may not exceed the cap.
