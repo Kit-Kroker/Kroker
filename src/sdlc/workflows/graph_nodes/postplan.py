@@ -12,7 +12,7 @@ with workflow.unsafe.imports_passed_through():
     from ...core.models import PipelineConfig
     from ...graph.router import Activation
     from ...stages import analyze, deploy, merge
-    from ...validators import validate_task_graph
+    from ...validators import covers_all, dag_acyclic, deps_resolve, ids_unique, task_size
     from ...vcs import DiffInput, get_task_diff
     from ..build import run_tasks
     from ..models import AnalyzeResult, BuildResult, PullRequest
@@ -26,10 +26,29 @@ ACT = workflow.ActivityConfig(
 async def plan_check_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> NodeResult:
     plan = input_model(nc, act, "plan")
     assert plan is not None
-    graph_error = validate_task_graph(plan.tasks)
-    if graph_error:
-        return NodeResult(port="halt", result=f"failed:plan-validation:{graph_error}")
-    # Sync only after the graph is valid (feature.py:614-617).
+    # FR-205 halt family, checked in order -- the order is part of the
+    # contract: duplicate ids are named before the graph checks, because the
+    # downstream {t.id: t} collapse would silently drop tasks and hide every
+    # later fault. Each reason rides the halt port verbatim.
+    halt = ids_unique(plan.tasks) or deps_resolve(plan.tasks) or dag_acyclic(plan.tasks)
+    if halt:
+        return NodeResult(port="halt", result=f"failed:plan-validation:{halt}")
+    # Coverage is vacuous without a requirements artifact (the default graph
+    # has no requirements_doc edge) or when it carries no stories.
+    req_doc = input_model(nc, act, "requirements_doc")
+    if req_doc is not None and req_doc.stories:
+        uncovered = covers_all(plan.tasks, [fr.id for s in req_doc.stories for fr in s.functional])
+        if uncovered:
+            return NodeResult(
+                port="halt",
+                result=(
+                    f"failed:plan-validation:requirement(s) not covered by any task: {uncovered!r}"
+                ),
+            )
+    halt = task_size(plan.tasks, cfg.plan)
+    if halt:
+        return NodeResult(port="halt", result=f"failed:plan-validation:{halt}")
+    # Sync only after every check passes (feature.py:614-617).
     await nc.host._board_sync_tasks(cfg, nc.host._plan_version, plan.tasks)
     return NodeResult(port="ok", payload=plan)
 
