@@ -23,7 +23,7 @@ from temporalio.workflow import ActivityConfig
 from ..core.models import PipelineConfig
 from ..stages.clarify.models import ClarifyRoute, ProbeResult
 from ..stages.clarify.prompts import PROBE_SYSTEM, ROUTE_SCOPE
-from .loader import build_agents, load_registry
+from .loader import build_agents, effective_validation_retries, load_registry
 from .model_ids import single_retry_layer
 from .payload_guard import payload_guard
 
@@ -235,6 +235,21 @@ STAGE_ROLES: dict[str, str] = {
 # KeyError at import on a tree that ships an OPTIONAL_ROLES slot but no folder.
 STAGE_MODELS: dict[str, str] = {
     stage: _model(role) for stage, role in STAGE_ROLES.items() if role in REGISTRY
+}
+
+# FR-202: each role's validated-output retry budget, keyed by ROLE name like
+# REGISTRY (not by stage like STAGE_MODELS -- consumers resolve a role, and
+# role names are the registry's vocabulary). Proposer and research roles
+# only: harness roles run a CLI and emit no validated artifacts to retry,
+# and the loader already rejects the knob on them (VR-1b). Values are ints
+# by construction -- VR-1 materializes None to the registry default during
+# _parse -- read back through effective_validation_retries for the type
+# guarantee. Unlike the agent names in this module this is plain data, not
+# a Temporal activity name, so it is not a wire contract.
+OUTPUT_RETRIES: dict[str, int] = {
+    name: effective_validation_retries(REGISTRY, name)
+    for name, cfg in REGISTRY.items()
+    if cfg.kind != "harness"
 }
 
 

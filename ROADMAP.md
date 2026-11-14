@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-11-14 (requirements FR-602 landed — E-11's MCP channel adapter: a Rust rmcp stdio server over a Python verb bridge serving the twelve operator verbs with approval-gated writes; 15 of 15 stages live; full history in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
+| Last verified | 2026-11-14 (agents FR-202 landed — every proposer's output-validation retry count is registry-configured: `defaults.validation_retries` + per-role `agent.yaml` override, forwarded to `agent.run` per call only when set; same day as FR-602's MCP channel adapter — both in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -317,7 +317,7 @@
 
 ### Agents (FR-200)
 - [x] **FR-201** versioned `config/agents.yaml` registry (role/kind/model) — governs all eleven roles (3 harness + 8 proposer); `PipelineConfig.roles` is a purity-mandated mirror asserted at boot.
-- [ ] ⚠️ **FR-202** schema-validated artifacts + re-prompt — Pydantic `output_type` gives validation; configurable `validation_retries` knob not surfaced.
+- [x] **FR-202** schema-validated artifacts + re-prompt — Pydantic `output_type` gives validation; the re-prompt count is now configured: `agents/registry.yaml` `defaults.validation_retries` + per-role `agent.yaml` override (1..5, fail-closed parse, harness roles rejected), forwarded to `agent.run` per call **only when set ≠ 1** (004 D7a precedent — the twelve default roles forward nothing, replay-identical); the four evidenced roles (planner, research, product, constitution) keep their 3 via config, discover/risk are wired at their direct calls (VR-3a), and research's stage-local plan/synthesis agents went 1→3 — the one behavior delta (VR-4, off-by-default stage). `docs/superpowers/specs/2026-11-14-validation-retries-knob-design.md`.
 - [x] **FR-203** `claude -p` / `opencode run` adapters, harness-agnostic workflow (`harness/adapters.py`, `HARNESSES`).
 - [x] **FR-204** reviewer clean-context, model-family inequality enforced by boot-time `validate_registry`, no session resume. **(new)**
 - [ ] ⚠️ **FR-205** proposer MAY/MUST NOT validators — only inline dependency-cycle check; no dedicated `validators.py`. Tracked as AP-2.3.

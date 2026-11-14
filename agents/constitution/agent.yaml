@@ -5,3 +5,8 @@
 # code change.
 kind: proposer
 model: zai:glm-5.3
+# FR-202: the validated-output retry budget the drafter's run site forwards
+# per call (same value the role used to pin at construction — planner/
+# research precedent: a malformed draft re-prompts with the validation error,
+# so 3 gives the self-correction loop room).
+validation_retries: 3

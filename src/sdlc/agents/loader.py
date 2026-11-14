@@ -17,7 +17,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -158,17 +158,53 @@ def _parse(path: str | os.PathLike | None = None) -> dict[str, RoleConfig]:
     reg = root / "registry.yaml"
     if not reg.is_file():
         raise RegistryError(f"missing {reg}: every registry declares its version")
-    version = (yaml.safe_load(reg.read_text(encoding="utf-8")) or {}).get("version")
+    declared = yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
+    version = declared.get("version")
     if version != 1:
         raise RegistryError(f"unsupported registry version {version!r} in {reg}; expected 1")
+    default_retries = _defaults_validation_retries(declared, reg)
 
     roles: dict[str, RoleConfig] = {}
     for d in sorted(p for p in root.iterdir() if p.is_dir()):
-        roles[d.name] = _parse_role(d.name, d)
+        roles[d.name] = _parse_role(d.name, d, default_retries)
     return roles
 
 
-def _parse_role(name: str, d: Path) -> RoleConfig:
+def _defaults_validation_retries(declared: dict, reg: Path) -> int | None:
+    """FR-202: the optional `defaults:` block beside `version`. Returns the
+    default validated-output retry count, or None when the block is absent
+    (registries without it stay legal). Every rule here is fail-closed
+    (VR-1): an unknown key is a default no site would ever read — silent
+    dead config, the same hazard `_parse_role` rejects harness roles for —
+    and an out-of-range count would quietly under- or over-retry every
+    proposer at once."""
+    defaults = declared.get("defaults")
+    if defaults is None:
+        return None
+    if not isinstance(defaults, dict):
+        raise RegistryError(
+            f"{reg}: defaults must be a mapping of role-config defaults, "
+            f"got {type(defaults).__name__}"
+        )
+    unknown = sorted(key for key in defaults if key != "validation_retries")
+    if unknown:
+        raise RegistryError(
+            f"{reg}: unknown key(s) in defaults: {', '.join(unknown)} — a "
+            f"default no site reads is silent dead config. "
+            f"Known keys: validation_retries"
+        )
+    raw = defaults.get("validation_retries")
+    if raw is None:
+        return None
+    # bool is an int subclass in Python; a YAML `true` is not a retry count.
+    if isinstance(raw, bool) or not isinstance(raw, int) or not 1 <= raw <= 5:
+        raise RegistryError(
+            f"{reg}: defaults.validation_retries must be an int in 1..5, got {raw!r}"
+        )
+    return raw
+
+
+def _parse_role(name: str, d: Path, default_retries: int | None = None) -> RoleConfig:
     if name not in KNOWN_ROLES:
         raise RegistryError(
             f"unknown role directory '{name}' in {d.parent}: the directory name "
@@ -187,6 +223,20 @@ def _parse_role(name: str, d: Path) -> RoleConfig:
             f"contents"
         )
     cfg = RoleConfig(**data)
+    # FR-202 (VR-1b): the knob is legal only on roles that emit validated
+    # artifacts (proposer/research). A harness role runs a CLI and would
+    # never read it — the same silent-dead-config rule as the unread files
+    # checked below.
+    if cfg.kind == "harness" and cfg.validation_retries is not None:
+        raise RegistryError(
+            f"role '{name}' is kind=harness and declares validation_retries, "
+            f"which would never be read (harness roles run CLIs and emit no "
+            f"validated artifacts): silent dead config"
+        )
+    # VR-1: None never survives parsing — materialize the registry default
+    # (harness roles included; the value is simply unread there).
+    if cfg.validation_retries is None:
+        cfg = cfg.model_copy(update={"validation_retries": default_retries})
     instructions_file = d / "instructions.md"
     needs_prompt = cfg.kind != "harness"
     if needs_prompt:
@@ -227,6 +277,15 @@ def load_registry(path: str | os.PathLike | None = None) -> dict[str, RoleConfig
     roles = _parse(path)
     validate_registry(roles)
     return roles
+
+
+def effective_validation_retries(roles: Mapping[str, RoleConfig], role: str) -> int:
+    """FR-202: the retry count a role's validated-output loop runs with.
+    Post-_parse the field is materialized; the 1 fallback covers hand-built
+    mappings (the graph fixtures' dict-built registries) whose RoleConfigs
+    still carry None."""
+    cfg = roles[role]
+    return cfg.validation_retries if cfg.validation_retries is not None else 1
 
 
 # Roles whose verdict gates a run; each must run different weights than `dev`.

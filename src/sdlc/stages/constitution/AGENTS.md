@@ -36,6 +36,12 @@ file carries only what is true *here*.
   loader with `[durability, single_retry_layer(), payload_guard()]`, so every
   activity-side model request runs with provider SDK retries off — the
   activity's own attempt budget is the only retry layer. Nothing re-adds one.
+- Output-retry forwarding (FR-202): the registry's `validation_retries` for
+  `constitution` is forwarded per call as `retries={"output": n}`, only when
+  set, at the drafter's run site (`stage.py`'s three branches) — an output
+  retry is a semantic re-prompt with the validation error (a different
+  prompt), not a stacked infra retry, so the 004 single-layer rule above is
+  unbroken.
 - Model forwarding (004 D7a): the activity forwards `inp.model` only when it
   differs from the registry `constitution` model; an equal or absent override
   calls exactly as before, so no-override runs and replays are untouched.

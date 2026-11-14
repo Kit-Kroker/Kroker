@@ -1,23 +1,21 @@
-"""Edge pins around the research agent's output-retry widening
-(sbatch-2026-10-19 T7; task
-.workspace/tasks/2026-10-05-research-agent-output-retries-1.md).
+"""Edge pins around the research role's output-retry budget after the
+FR-202 cutover. The straight pins (construction default, registry value)
+and the four run-site forwarding tests live in
+tests/research/test_research_agent_retries.py; this file is the edge
+margin around the construction:
 
-The live failure was "Exceeded maximum output retries (1)" from the
-research role's structured output — pydantic-ai's default budget of 1
-spends its only attempt on the first, uncorrected response. The planned
-fix mirrors the planner precedent (agents/planner/agent.py,
-retries={"output": 3}, pinned by tests/plan/test_planner_agent_retries.py).
-qa-happy's tests/research/test_research_agent_retries.py covers the
-straight widening; this file is the edge margin around it:
-
-- the widening must be SCOPED: the tool-result retry budget stays at the
-  framework default (1) on BOTH provider branches — a bare ``retries=3``
-  would also widen tool retries, which this role's evidence says nothing
-  about;
-- the widening must reach BOTH provider branches (fake and the
-  exa/CodeMode construction path), not just the plain one;
-- the edit must not disturb the rest of the construction: the Temporal
-  activity name and the ResearchBrief output wiring stay as they are.
+- construction must stay at the DEFAULT on both provider branches (fake
+  and the exa/CodeMode construction path) — the budget lives in
+  agents/research/agent.yaml, and a retries kwarg re-pinned here would be
+  a second source that shadows the knob;
+- the widening must stay SCOPED to output: the tool-result retry budget
+  stays at the framework default (1) on BOTH branches — the forwarded
+  budget is always retries={"output": n}, never a bare int, which this
+  role's live evidence ("Exceeded maximum output retries (1)" — output
+  validation only) says nothing about widening;
+- the cutover must not disturb the rest of the construction: the
+  Temporal activity name and the ResearchBrief output wiring stay as
+  they are.
 
 Attribute names introspected on the installed pydantic-ai 2.51.0 (not
 guessed): ``_max_output_retries``, ``_max_tool_retries`` (verified: a
@@ -55,44 +53,42 @@ def _build(provider: str):
     )
 
 
-def test_widening_stays_scoped_tool_result_retries_untouched():
-    """PIN (green today — no retries kwarg exists yet, tool budget is the
-    default; must stay green after the fix): retries={"output": 3} leaves
-    _max_tool_retries at 1 on both provider branches. A future edit that
-    widens the whole retries setting (bare int instead of the scoped dict)
-    fails here — this role's live evidence is about OUTPUT validation
-    only."""
+def test_construction_stays_at_the_default_on_both_provider_branches():
+    """The budget's one source is agents/research/agent.yaml (FR-202); the
+    live 'Exceeded maximum output retries (1)' was on the production exa
+    path, so a kwarg re-pinned on EITHER branch — not just the plain one —
+    would reintroduce a second budget that silently wins or loses against
+    the registry knob."""
+    for provider in _PROVIDERS:
+        agent = _build(provider)
+        assert agent._max_output_retries == 1, (
+            f"provider={provider!r}: construction pins the output retry "
+            f"budget at {agent._max_output_retries}, not the default 1 — "
+            f"the budget lives in agents/research/agent.yaml and is "
+            f"forwarded per call; construction must not re-pin it"
+        )
+
+
+def test_tool_result_retries_stay_untouched_on_both_branches():
+    """The registry budget is forwarded as retries={{"output": n}}, never a
+    bare int, and construction stays kwarg-free — so the tool-result retry
+    budget keeps the framework default on both branches. This role's live
+    evidence is about OUTPUT validation only."""
     for provider in _PROVIDERS:
         agent = _build(provider)
         assert agent._max_tool_retries == 1, (
             f"provider={provider!r}: tool-result retry budget is "
             f"{agent._max_tool_retries}, not the default 1 — the widening "
-            f"leaked beyond the output path; scope it as "
-            f'retries={{"output": ...}} (planner precedent)'
-        )
-
-
-def test_both_provider_branches_widen_the_output_retry_budget():
-    """RED today (default 1 on both branches): the fix must reach the
-    agent construction shared by every provider route — the live
-    'Exceeded maximum output retries (1)' was on the production exa path,
-    so widening only the plain branch would fix the test shape and miss
-    the failure it was written for."""
-    for provider in _PROVIDERS:
-        agent = _build(provider)
-        assert agent._max_output_retries == 3, (
-            f"provider={provider!r}: output retry budget is "
-            f"{agent._max_output_retries}, expected 3 — the research "
-            f"agent dies on its first uncorrected output attempt "
-            f"(task 2026-10-05, planner precedent)"
+            f"leaked beyond the output path; keep it scoped as "
+            f'retries={{"output": ...}}'
         )
 
 
 def test_construction_undisturbed_name_and_output_type():
-    """PIN (green today; must stay green): the edit must not disturb the
-    rest of the construction — the Temporal activity name (NEVER rename)
-    and the ResearchBrief output wiring survive the widening on both
-    provider branches."""
+    """PIN (green before and after the cutover): the edit must not disturb
+    the rest of the construction — the Temporal activity name (NEVER
+    rename) and the ResearchBrief output wiring survive on both provider
+    branches."""
     for provider in _PROVIDERS:
         agent = _build(provider)
         assert agent.name == "research_agent", (

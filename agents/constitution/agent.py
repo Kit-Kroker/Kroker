@@ -40,11 +40,14 @@ def build(
         model_settings=model_settings,
         system_prompt=instructions,
         capabilities=[*capabilities, *own_capabilities],
-        # Same shape and value as the planner's and research's (agents/
-        # planner/agent.py:40, agents/research/agent.py:79): a malformed
-        # final draft re-prompts with the exact validation error, so a
-        # budget of 1 spends its only retry on the uncorrected attempt;
-        # 3 gives the self-correction loop room. Scoped to `output` only —
-        # tool-result retries aren't this role's failure mode.
-        retries={"output": 3},
+        # Same shape as the planner's and research's (agents/planner/
+        # agent.py's FR-202 note, agents/research/agent.py:79): a malformed final
+        # draft re-prompts with the exact validation error, so a budget
+        # of 1 spends its only retry on the uncorrected attempt; 3 gives
+        # the self-correction loop room. Scoped to `output` only —
+        # tool-result retries aren't this role's failure mode. The 3
+        # itself now lives in agents/constitution/agent.yaml (FR-202) and
+        # is forwarded per call at the drafter's run site (stages/
+        # constitution/stage.py); construction stays at the default so
+        # the registry is the one source of the budget.
     )

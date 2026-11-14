@@ -1647,6 +1647,20 @@
               ],
               "default": null,
               "title": "Activity Heartbeat Minutes"
+            },
+            "validation_retries": {
+              "anyOf": [
+                {
+                  "maximum": 5,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Validation Retries"
             }
           },
           "title": "RoleConfig",

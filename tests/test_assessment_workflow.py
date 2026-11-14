@@ -476,3 +476,132 @@ def test_evaluate_gates_pure_step_evaluates_against_dispositions():
     assert evaluate(rmap, cmap, ()).verdict is RiskGateVerdict.BLOCK
     # With the disposition: PASS
     assert evaluate(rmap, cmap, (_disposition(),)).verdict is RiskGateVerdict.PASS
+
+
+# --- FR-202 (VR-3a): output-retry forwarding at the two direct calls -------
+#
+# The discover/risk proposers bypass the RoleHost seam (assessment.py calls
+# the module-level t_<role> agents directly), so the registry's
+# validated-output retry budget must be forwarded at the call sites
+# themselves -- same idiom as _run_role, only when set. The posture is
+# tests/durability/test_payload_guard_callsites.py's: the agent is patched
+# onto the assessment module's own name, discover_context is served
+# in-process, every run_or_degrade call takes its fallback, and the
+# recorder raises after recording so each site's fail-closed catch is the
+# thing that returns.
+
+
+class _RecordingProposer:
+    """Records every kwargs dict t_<role>.run received, then raises -- the
+    forwarding is observable only on the calling side, and the raise rides
+    the site's existing fail-closed catch so the phase still returns."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def run(self, *args: object, **kwargs: object) -> object:
+        self.calls.append(kwargs)
+        raise RuntimeError("recorder: kwargs captured")
+
+
+def _measured_discover_context():
+    from sdlc.assessment.discover.map import DiscoverContext, GraphSummary
+
+    return DiscoverContext(
+        graph=GraphSummary(
+            parsed=1,
+            unparsed=0,
+            edges=0,
+            unresolved_relative_rate=Measurement.measured(0.0),
+        ),
+        collected=Measurement.measured(1.0),
+    )
+
+
+def _scan_outcome():
+    from sdlc.workflows.scanning import ScanOutcome
+
+    return ScanOutcome(
+        result=PhaseResult(phase=PhaseId.SCAN, collected=Measurement.measured(1.0)),
+        scan=_scan_result(),
+        tree_hash="t" * 40,
+    )
+
+
+def _serve_discover_lead_ins(monkeypatch: pytest.MonkeyPatch) -> None:
+    """discover_context answers in-process; every other activity raises, so
+    each run_or_degrade call takes its fallback (memo MISS)."""
+    import sdlc.workflows.assessment as assessment_module
+    from sdlc.assessment.activities import discover_context
+
+    async def _fake_activity(activity: object, arg: object, **_opts: object) -> object:
+        if activity is discover_context:
+            return _measured_discover_context()
+        raise RuntimeError("no activity runtime in-process")
+
+    monkeypatch.setattr(assessment_module.workflow, "execute_activity", _fake_activity)
+
+
+def test_discover_forwards_configured_retries(monkeypatch):
+    """VR-3a: the direct t_discover call forwards the role's configured
+    budget -- registry 3 makes retries={"output": 3} reach the agent; the
+    shipped registry (discover at the default 1) carries NO retries kwarg
+    at all, so a default call is byte-identical to one that never knew
+    about the knob. Fail-closed is untouched: the recorder's raise still
+    lands in the existing catch and yields no map."""
+    import asyncio
+
+    import sdlc.workflows.assessment as assessment_module
+
+    # Premise: the shipped registry carries discover at the default.
+    assert assessment_module.OUTPUT_RETRIES.get("discover", 1) == 1
+
+    agent = _RecordingProposer()
+    monkeypatch.setattr(assessment_module, "t_discover", agent)
+    _serve_discover_lead_ins(monkeypatch)
+    wf = AssessmentWorkflow()
+    inp = AssessmentInput(repo_dir="/r")
+
+    # Shipped registry: no retries kwarg.
+    out = asyncio.run(wf._discover(inp, _triage(), _scan_outcome()))
+    assert agent.calls == [{}]
+    assert out.map is None
+    assert out.result.collected.reason.startswith("discover proposer failed:")
+
+    # Configured 3: the budget reaches the agent.
+    monkeypatch.setattr(assessment_module, "OUTPUT_RETRIES", {"discover": 3, "risk": 3})
+    out = asyncio.run(wf._discover(inp, _triage(), _scan_outcome()))
+    assert agent.calls == [{}, {"retries": {"output": 3}}]
+    assert out.result.collected.reason.startswith("discover proposer failed:")
+
+
+def test_risk_forwards_configured_retries(monkeypatch):
+    """VR-3a's risk twin: the direct t_risk call forwards the configured
+    budget (3 -> retries={"output": 3}); the shipped registry (risk at the
+    default 1) carries no retries kwarg. The recorder's raise still
+    degrades to the baseline with judgment NOT_COLLECTED -- RD7 untouched."""
+    import asyncio
+
+    import sdlc.workflows.assessment as assessment_module
+
+    # Premise: the shipped registry carries risk at the default.
+    assert assessment_module.OUTPUT_RETRIES.get("risk", 1) == 1
+
+    agent = _RecordingProposer()
+    monkeypatch.setattr(assessment_module, "t_risk", agent)
+    wf = AssessmentWorkflow()
+    cmap = CapabilityMap(collected=Measurement.measured(1.0))
+    inp = AssessmentInput(repo_dir="/r")
+
+    # Shipped registry: no retries kwarg.
+    out = asyncio.run(wf._judge(inp, _triage(), cmap, _risk_map(), proposing=True))
+    assert agent.calls == [{}]
+    assert out.collected.state is CollectionState.MEASURED, "the composites survive"
+    assert out.judgment.state is CollectionState.NOT_COLLECTED
+    assert out.judgment.reason.startswith("the risk proposer ran and failed:")
+
+    # Configured 3: the budget reaches the agent.
+    monkeypatch.setattr(assessment_module, "OUTPUT_RETRIES", {"discover": 3, "risk": 3})
+    out = asyncio.run(wf._judge(inp, _triage(), cmap, _risk_map(), proposing=True))
+    assert agent.calls == [{}, {"retries": {"output": 3}}]
+    assert out.judgment.reason.startswith("the risk proposer ran and failed:")

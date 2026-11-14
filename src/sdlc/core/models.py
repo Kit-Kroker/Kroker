@@ -217,6 +217,8 @@ class RoleConfig(BaseModel):
     # is known to go quiet longer (or shorter) between heartbeats than others.
     activity_timeout_hours: int | None = None
     activity_heartbeat_minutes: int | None = None
+    # FR-202: validated-output retries; None inherits registry defaults.validation_retries.
+    validation_retries: int | None = Field(default=None, ge=1, le=5)
 
 
 class ExecutionMode(StrEnum):

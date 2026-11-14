@@ -1,3 +1,4 @@
 kind: research
 model: zai:glm-5.3
 provider: exa
+validation_retries: 3

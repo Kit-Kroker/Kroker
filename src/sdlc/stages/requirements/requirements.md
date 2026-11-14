@@ -105,7 +105,9 @@ policy. The usage is always handed back, including a zero-spend
 ### REQUIREMENTS-1.7
 The drafter is the optional registry role `product` (kind proposer,
 Temporal wire name `product_agent` — never renamed; `output_type` is
-`DraftOutput` with `retries={"output": 3}`) carrying a read-only
+`DraftOutput`, with the role's registry `validation_retries` forwarded per
+call at the run site as `retries={"output": n}`, only when set — 3 in the
+shipped registry, agents/product/agent.yaml [FR-202]) carrying a read-only
 `FileSystem` capability exposing exactly `read_file`, `search_files`,
 `find_files`, `list_directory`, plus `RepoContext` with no walk-up past
 the workspace. `STAGE_ROLES["requirements"] = "product"` is the one place

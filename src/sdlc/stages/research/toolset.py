@@ -75,7 +75,7 @@ async def research_subquery_reported(
     advice and documentation URL into the architect's context (AM2/R9). Both
     degrades still report the spend made so far; any other exception
     propagates (residual R1)."""
-    from sdlc.agents.roles import REGISTRY, t_research
+    from sdlc.agents.roles import OUTPUT_RETRIES, REGISTRY, t_research
 
     if t_research is None:
         raise RuntimeError(
@@ -84,21 +84,30 @@ async def research_subquery_reported(
         )
     run_usage = RunUsage()
     usage_limits = UsageLimits(request_limit=deps.max_requests)
+    # FR-202 (VR-3): the role here is `research` even though the CALLER
+    # is the architect — the inner run validates a ResearchBrief, so it
+    # gets the research role's validated-output retry budget, forwarded
+    # only when set (the 004 D7a only-when-set precedent, same as the
+    # stage's fan-out sites). Construction stays at pydantic-ai's
+    # default; the registry is the one source of the budget.
+    run_kwargs: dict = {"deps": deps, "usage_limits": usage_limits, "usage": run_usage}
+    n = OUTPUT_RETRIES.get("research", 1)
+    if n != 1:
+        run_kwargs["retries"] = {"output": n}
     # 004 T033 (D7/FR-001 path c): under a research override the deps carry
     # it; forward it so the model that answers is the override. Without an
-    # override the call is made exactly as before, bar the two new kwargs.
+    # override the call is made exactly as before, bar the kwargs above.
     try:
         if deps.research_model is not None:
             result = await t_research.run(
                 question,
-                deps=deps,
                 model=deps.research_model,
-                usage_limits=usage_limits,
-                usage=run_usage,
+                **run_kwargs,
             )
         else:
             result = await t_research.run(
-                question, deps=deps, usage_limits=usage_limits, usage=run_usage
+                question,
+                **run_kwargs,
             )
         brief = cast(ResearchBrief, result.output)
     except BudgetExceeded as exc:

@@ -25,13 +25,20 @@ file carries only what is true *here*.
   attempt budget is the only retry layer. The registry `research_agent`
   (sub-question fan-out, architect tool) gets the same capability via
   `build_agents`.
+- Output-retry forwarding (FR-202): the registry's `validation_retries` for
+  `research` is forwarded per call as `retries={"output": n}`, only when
+  set, at every run site in this slice (`stage.py`'s plan, sub-question and
+  synthesis sites, `toolset.py`'s two) — an output retry is a semantic
+  re-prompt with the validation error (a different prompt), not a stacked
+  infra retry, so the 004 single-layer rule above is unbroken.
 - Model forwarding (004): the sub-question fan-out passes `model=inp.model`
   when it differs from the registry `research` model (D7a; `inp.model` is
   already an activity input, so the wire is unchanged). The architect's
   research tool receives the run's forwarded `research` override on
   `ResearchDeps.research_model` (populated by the architecture slice only
   under an override; omitted from serialization while None) and passes it
-  as `model=` — no-override deps and calls are byte-identical to before.
+  as `model=` — no-override deps and model handling are byte-identical
+  to before.
   The tool also bounds its inner run with `ResearchDeps.max_requests` (the
   architecture slice passes `cfg.research.max_requests`; omitted from
   serialization at the default) and returns the inner run's usage beside

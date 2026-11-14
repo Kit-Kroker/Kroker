@@ -73,3 +73,19 @@ def test_research_is_a_stage_but_optional():
     # Present in the shipped tree, so it resolves a model + prompt sha.
     assert "research" in roles.STAGE_MODELS
     assert "research" in roles.PROMPT_SHAS
+
+
+def test_output_retries_keyspace_is_exactly_the_validated_artifact_roles():
+    """FR-202 structural pin: OUTPUT_RETRIES is keyed by ROLE name (like
+    REGISTRY, not stage like STAGE_MODELS) and covers every proposer/research
+    role and no harness role — harness roles emit no validated artifacts to
+    retry. Deliberately no concrete-value pins here: Tasks 3-6 add overrides,
+    and those values are pinned in their own tests."""
+    expected = {name for name, cfg in roles.REGISTRY.items() if cfg.kind != "harness"}
+    assert roles.OUTPUT_RETRIES.keys() == expected
+
+
+def test_output_retries_values_are_bounded_retry_counts():
+    for retries in roles.OUTPUT_RETRIES.values():
+        assert isinstance(retries, int)
+        assert retries >= 1

@@ -78,10 +78,12 @@ exhausted cap); any other exception propagates to the activity retry policy.
 ### CONSTITUTION-1.7
 The drafter is the optional registry role `constitution` (kind proposer,
 Temporal wire name `constitution_agent` — never renamed; `output_type` is
-`DraftOutput` with `retries={"output": 3}`) carrying a read-only
-`FileSystem` capability exposing exactly `read_file`, `search_files`,
-`find_files`, `list_directory`, plus `RepoContext` with no walk-up past the
-workspace. The activity hands its spend back as
+`DraftOutput`, with the role's registry `validation_retries` forwarded per
+call at the run site as `retries={"output": n}`, only when set — 3 in the
+shipped registry, agents/constitution/agent.yaml [FR-202]) carrying a
+read-only `FileSystem` capability exposing exactly `read_file`,
+`search_files`, `find_files`, `list_directory`, plus `RepoContext` with no
+walk-up past the workspace. The activity hands its spend back as
 `RoleUsage(role="constitution", cost_usd=None)`; dollars are priced
 workflow-side because pricing must stay replay-safe and never fail a stage.
 [FR-112]
