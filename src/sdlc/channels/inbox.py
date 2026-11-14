@@ -113,7 +113,12 @@ async def fetch_inbox(client) -> Inbox:
     concurrently, and aggregate. A run with nothing pending is dropped, not
     listed; a run whose query raised becomes an InboxError instead of
     aborting the whole fetch."""
-    run_ids = await list_open_run_ids(client, "GraphWorkflow", "CrewTaskWorkflow")
+    # 023a R11: repair gates join the cross-run inbox. MaintenanceWorkflow
+    # is a GateHost-only run like CrewTaskWorkflow — pending_decisions
+    # supplies its items; it exposes no run_state.
+    run_ids = await list_open_run_ids(
+        client, "GraphWorkflow", "CrewTaskWorkflow", "MaintenanceWorkflow"
+    )
     results = await asyncio.gather(*(_fetch_one(client, rid) for rid in run_ids))
 
     inbox = Inbox(total_open_runs=len(run_ids))
