@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-11-14 (agents FR-202 landed — every proposer's output-validation retry count is registry-configured: `defaults.validation_retries` + per-role `agent.yaml` override, forwarded to `agent.run` per call only when set; same day as FR-602's MCP channel adapter — both in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
+| Last verified | 2026-11-15 (FR-205 validators landed — the `sdlc.validators` library with plan_check's ordered halt family, the requirements artifact reaching planner prompt/memo/plan_check via the `requirements_doc` port, and clarify's brownfield evidence-path discard; details in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -320,7 +320,7 @@
 - [x] **FR-202** schema-validated artifacts + re-prompt — Pydantic `output_type` gives validation; the re-prompt count is now configured: `agents/registry.yaml` `defaults.validation_retries` + per-role `agent.yaml` override (1..5, fail-closed parse, harness roles rejected), forwarded to `agent.run` per call **only when set ≠ 1** (004 D7a precedent — the twelve default roles forward nothing, replay-identical); the four evidenced roles (planner, research, product, constitution) keep their 3 via config, discover/risk are wired at their direct calls (VR-3a), and research's stage-local plan/synthesis agents went 1→3 — the one behavior delta (VR-4, off-by-default stage). `docs/superpowers/specs/2026-11-14-validation-retries-knob-design.md`.
 - [x] **FR-203** `claude -p` / `opencode run` adapters, harness-agnostic workflow (`harness/adapters.py`, `HARNESSES`).
 - [x] **FR-204** reviewer clean-context, model-family inequality enforced by boot-time `validate_registry`, no session resume. **(new)**
-- [ ] ⚠️ **FR-205** proposer MAY/MUST NOT validators — only inline dependency-cycle check; no dedicated `validators.py`. Tracked as AP-2.3.
+- [x] **FR-205** proposer MAY/MUST NOT validators — closed by the shared `sdlc.validators` library (pure checks `ids_unique`/`deps_resolve`/`dag_acyclic`/`covers_all`/`task_size` + `path_like_tokens`, the `paths_exist` activity, ADR-24 evidence schemas), plan_check's ordered halt family (`failed:plan-validation:*`, board sync only after all pass), and clarify's brownfield evidence-path discard (patch `023-clarify-evidence-paths`). Tracked as AP-2.3.
 
 ### Human-in-the-loop (FR-300)
 - [ ] ⚠️ **FR-301** hard/soft/off + threshold + revise + `MAX_GATE_ROUNDS` — wired for architecture/plan/merge; soft still confidence-only (no deterministic-check AND-clause); no calibration monitoring. The AND-clause is ADR-24's direction; the agent plan names no item for it, and its nearest home is AP-3 (computed `approve`) and AP-4 (`plan_valid`). Tool-call approval now escalates into this same machinery (E-17), so a `pre_tool` denial and a human gate are one mechanism.
