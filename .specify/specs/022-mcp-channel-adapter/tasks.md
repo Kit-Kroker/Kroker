@@ -1,6 +1,6 @@
 # Tasks: MCP server as a channel adapter (E-11, round 022, FR-602 / US-7)
 
-**Status**: Reviewer-approved (tasks checklist, pass 3, 2026-11-14). Record: [checklists/tasks.md](checklists/tasks.md). Pass 1 had 3 gaps (Rust test-first ordering, a same-file parallel claim, a stale id); pass 2 had 2 stale ids. Do not implement before the next owner gate.
+**Status**: Implemented and converged 2026-11-14 — 42/42 tasks committed on `main`, each reviewer-approved; converge confirmed the intent inventory (FR-001–018, SC-001–006, US1–4); battery green (`ruff`, `ruff format`, `mypy`, `scripts/check_file_size.py`, `scripts/check_mcp.py`; fast tier at the recorded 11-id baseline — see checklists and `T001`'s baseline file). Pass 1 had 3 gaps (Rust test-first ordering, a same-file parallel claim, a stale id); pass 2 had 2 stale ids. Residual: quickstart manual steps 1–5 need a live MCP client + Temporal dev-server (operator run; recorded in `8b66f4f3`).
 
 **Input**: `.specify/specs/022-mcp-channel-adapter/`:
 - spec.md (GATE 1: Q1 Rust held, Q2 elicitation fail-closed, Q3 twelve verbs);
