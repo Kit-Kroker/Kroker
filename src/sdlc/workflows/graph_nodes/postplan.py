@@ -12,7 +12,7 @@ with workflow.unsafe.imports_passed_through():
     from ...core.models import PipelineConfig
     from ...graph.router import Activation
     from ...stages import analyze, deploy, merge
-    from ...stages.plan.validation import validate_task_graph
+    from ...validators import validate_task_graph
     from ...vcs import DiffInput, get_task_diff
     from ..build import run_tasks
     from ..models import AnalyzeResult, BuildResult, PullRequest

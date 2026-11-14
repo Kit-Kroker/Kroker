@@ -6,7 +6,7 @@ T1-T6 while the surviving T7 still depended on them). `validate_task_graph`
 runs right after the plan gate so a bad graph fails fast and legibly instead."""
 
 from sdlc.stages.plan.models import DevTask
-from sdlc.stages.plan.validation import validate_task_graph
+from sdlc.validators import validate_task_graph
 
 
 def _task(id_: str, depends_on: list[str] | None = None) -> DevTask:

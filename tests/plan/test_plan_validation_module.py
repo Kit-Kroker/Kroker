@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from sdlc.stages.plan.models import DevTask
-from sdlc.stages.plan.validation import validate_task_graph
+from sdlc.validators import validate_task_graph
 
 
 def _task(tid: str, deps: list[str] | None = None) -> DevTask:
