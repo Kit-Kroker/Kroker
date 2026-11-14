@@ -122,6 +122,7 @@ from .workflows.assessment import AssessmentWorkflow
 from .workflows.crew import CrewTaskWorkflow
 from .workflows.deployment import DeploymentWorkflow
 from .workflows.graph import GraphWorkflow
+from .workflows.maintenance import MaintenanceWorkflow
 from .workflows.reflect import ReflectWorkflow
 from .workflows.tidyup import TidyUpWorkflow
 from .workflows.triage import TriageWorkflow
@@ -290,6 +291,7 @@ async def main() -> None:
             TidyUpWorkflow,
             AssessmentWorkflow,
             CrewTaskWorkflow,
+            MaintenanceWorkflow,
         ],
         activities=get_worker_activities(),
     )
