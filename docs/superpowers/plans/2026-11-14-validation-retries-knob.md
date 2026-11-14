@@ -93,7 +93,7 @@ git commit -m "feat(registry): defaults.validation_retries knob, fail-closed par
 - Consumes: `REGISTRY: dict[str, RoleConfig]` (Task 1's materialized field).
 - Produces: `OUTPUT_RETRIES: dict[str, int]` — proposer+research roles only (`kind != "harness"`), one entry each, value = the materialized count. Every later task imports it from `sdlc.agents.roles`.
 
-- [ ] **Step 1: Write the failing test** — keyspace equals `{n for n, c in REGISTRY.items() if c.kind != "harness"}`; every value is an `int >= 1`; with the shipped registry (no overrides yet) every value is 1.
+- [ ] **Step 1: Write the failing test** — keyspace equals `{n for n, c in REGISTRY.items() if c.kind != "harness"}`; every value is an `int >= 1`. Structural pins only — do NOT assert the shipped registry's concrete values (Tasks 3–6 add overrides, and those pins live in their own tests).
 
 - [ ] **Step 2: Run to verify failure** — `pytest tests/test_stage_models.py -v`, FAIL (no `OUTPUT_RETRIES`).
 
