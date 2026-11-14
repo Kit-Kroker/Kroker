@@ -14,6 +14,7 @@ protocol-only; every log line goes to stderr.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import inspect
 import json
@@ -21,6 +22,7 @@ import logging
 import os
 import re
 import sys
+import time
 from collections.abc import Callable
 from typing import Any, BinaryIO, get_type_hints
 
@@ -304,8 +306,47 @@ async def _preview_pending(deps: Any, name: str, model: Any) -> dict[str, Any]:
     return {"message": "\n".join(lines), "digest": digest}
 
 
+async def _await_with_progress(
+    rid: Any, send: Callable[[dict[str, Any]], Any], interval: float | None, call: Any
+) -> Any:
+    """Await a PROGRESS verb, emitting a progress frame every interval.
+
+    The wait between frames never cancels the verb (the task is shielded);
+    an outer cancel — the cancel op or EOF — DOES cancel it, because a
+    cancelled wait is a cancelled verb. The frame carries the elapsed
+    seconds since the call started; the message is deliberately constant
+    (contracts/bridge-protocol.md leaves it a plain string).
+    """
+    if interval is None:
+        return await call()
+    task = asyncio.ensure_future(call())
+    start = time.monotonic()
+    while True:
+        try:
+            return await asyncio.wait_for(asyncio.shield(task), timeout=interval)
+        except TimeoutError:
+            await send(
+                {
+                    "op": "progress",
+                    "id": rid,
+                    "elapsed_s": round(time.monotonic() - start, 3),
+                    "message": "waiting",
+                }
+            )
+        except asyncio.CancelledError:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+            raise
+
+
 async def _handle_request(
-    op: str, rid: Any, req: dict[str, Any], deps: Any, send: Callable[[dict[str, Any]], Any]
+    op: str,
+    rid: Any,
+    req: dict[str, Any],
+    deps: Any,
+    send: Callable[[dict[str, Any]], Any],
+    progress_interval_s: float | None = None,
 ) -> None:
     """One preview/call request -> exactly one terminal frame (T022/T027)."""
     tool = req.get("tool")
@@ -369,7 +410,10 @@ async def _handle_request(
             await send(_error_frame(rid, "changed", SENTENCE_CHANGED))
             return
     try:
-        value = await fn(deps, **validated)
+        interval: float | None = None
+        if descriptor.get("progress"):
+            interval = PROGRESS_INTERVAL_S if progress_interval_s is None else progress_interval_s
+        value = await _await_with_progress(rid, send, interval, lambda: fn(deps, **validated))
     except asyncio.CancelledError:
         await send(_error_frame(rid, "cancelled", "cancelled"))
         return
@@ -408,9 +452,10 @@ async def serve(
     One task per request id (the contract allows concurrency); writes are
     serialised behind a lock. On EOF in-flight tasks get a brief grace to
     finish, then are cancelled, and the deps' poller (when present) is
-    closed before returning.
+    closed before returning. progress_interval_s overrides the frame
+    cadence for PROGRESS verbs (tests shrink it; default 15 s).
     """
-    del progress_interval_s  # used from T035
+    interval = PROGRESS_INTERVAL_S if progress_interval_s is None else progress_interval_s
     lock = asyncio.Lock()
     deps: Any = None
     tasks: dict[Any, asyncio.Task] = {}
@@ -488,7 +533,7 @@ async def serve(
                     _error_frame(rid, "bad_request", sentence_bad_request("duplicate request id"))
                 )
                 continue
-            tasks[rid] = asyncio.create_task(_handle_request(op, rid, req, deps, send))
+            tasks[rid] = asyncio.create_task(_handle_request(op, rid, req, deps, send, interval))
             # Give the task its first slice now: a buffered cancel for this
             # id must land inside the verb await, not on an unstarted task
             # (whose body would never run and never emit a terminal frame).
