@@ -68,7 +68,8 @@ async def _serve_lines(lines: list[bytes], factory) -> _FakeWriter:
 
 
 def _init(actor: str, request_id: str = "1") -> bytes:
-    return (json.dumps({"op": "init", "id": request_id, "protocol": 1, "actor": actor}) + "\n").encode()
+    frame = {"op": "init", "id": request_id, "protocol": 1, "actor": actor}
+    return (json.dumps(frame) + "\n").encode()
 
 
 # --- framing (T010) ---------------------------------------------------------
@@ -191,6 +192,7 @@ def test_fake_bridge_print_in_verb_keeps_stdout_pure_json(tmp_path):
 
 
 # --- describe (T012)--------------------------------------------------------
+
 
 def _tools():
     # Lazy: READ_TOOLS/WRITE_TOOLS move into sdlc.operator.tools under T007.
