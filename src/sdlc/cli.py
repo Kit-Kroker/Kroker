@@ -358,6 +358,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     register_benchmark_subparsers(bsub)
 
+    # 023a T021 (R12): the maintain verbs live in sdlc.maintenance.cli;
+    # only the ≤10-line hook is here (cli.py sits near the 1000-line ceiling).
+    from .maintenance.cli import register_maintain_subparsers
+
+    mnt = sub.add_parser("maintain")
+    mntsub = mnt.add_subparsers(dest="maintain_cmd", required=True)
+    register_maintain_subparsers(mntsub)
+
     ev = sub.add_parser("eval")
     ev.add_argument("target", help="a role name")
     ev.add_argument("--case", default=None)
@@ -490,6 +498,12 @@ async def main() -> None:
             os.environ.get("TEMPORAL_HOST", "localhost:7233"),
             data_converter=pydantic_data_converter,
         )
+
+    if args.cmd == "maintain":
+        from .maintenance.cli import run_maintain
+
+        assert client is not None
+        raise SystemExit(await run_maintain(args, client))
 
     if args.cmd == "start":
         cfg = _start_config(args)

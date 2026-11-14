@@ -15,16 +15,16 @@ from __future__ import annotations
 import argparse
 
 import pytest
+from temporalio.client import WorkflowFailureError
+
 from sdlc.maintenance.cli import register_maintain_subparsers, run_maintain
 
 
 def _parser() -> argparse.ArgumentParser:
-    # A fresh parser per test: the top-level shape mirrors cli.py's
-    # ArgumentParser (prog "sdlc"), with only the maintain subtree.
+    # A fresh parser per test, exercising register_maintain_subparsers
+    # directly at its own level (cli.py nests it under "maintain").
     p = argparse.ArgumentParser(prog="sdlc")
-    sub = p.add_subparsers(dest="cmd", required=True)
-    m = sub.add_parser("maintain")
-    msub = m.add_subparsers(dest="maintain_cmd", required=True)
+    msub = p.add_subparsers(dest="maintain_cmd", required=True)
     register_maintain_subparsers(msub)
     return p
 
@@ -39,10 +39,13 @@ class _FakeStart:
         self.started: list[dict] = []
 
     async def __call__(self, wf, state, *, id: str, task_queue: str):  # noqa: A002
-        from temporalio.client import WorkflowExecutionAlreadyStartedError
-
         if self.already_started:
-            raise WorkflowExecutionAlreadyStartedError(f"workflow id already started: {id}")
+            # The real client surfaces an already-started workflow as a
+            # WorkflowFailureError carrying the already-started failure
+            # in cause; args carries the legible message here.
+            err = WorkflowFailureError(cause=None)
+            err.args = (f"workflow id already started: {id}",)
+            raise err
         self.started.append({"id": id, "task_queue": task_queue, "state": state})
         return None
 
@@ -62,7 +65,7 @@ def _run(argv: list[str], client, capsys) -> int:
 # ------------------------------- enable ------------------------------------- #
 
 
-async def test_enable_starts_maintain_id_and_prints_it(repo_dir, capsys):
+def test_enable_starts_maintain_id_and_prints_it(repo_dir, capsys):
     client = _FakeClient()
     code = _run(
         ["enable", "demo", "--repo", str(repo_dir), "--ack-unattended-build-probe"],
@@ -176,8 +179,8 @@ class _QueryClient:
         self.get_workflow_handle = lambda wid: _Handle()
 
 
-async def test_incidents_renders_the_contract_table(capsys):
-    from sdlc.maintenance.models import Incident, MaintenanceSummary
+def test_incidents_renders_the_contract_table(capsys):
+    from sdlc.maintenance.models import Incident, IncidentState, MaintenanceSummary
 
     inc = Incident(
         no=1,
@@ -186,6 +189,7 @@ async def test_incidents_renders_the_contract_table(capsys):
         commit_sha="a" * 40,
         first_seen_cycle=2,
         last_seen_cycle=2,
+        state=IncidentState.AWAITING_DECISION,
     )
     summary = MaintenanceSummary(
         project="demo",
@@ -200,12 +204,12 @@ async def test_incidents_renders_the_contract_table(capsys):
     assert code == 0
     out = capsys.readouterr().out
     assert "INC-1" in out
-    assert "open" in out
+    assert "awaiting_decision" in out
     assert "build_probe:build_failed::" in out
     assert "repair:1" in out
 
 
-async def test_incidents_all_includes_terminal(capsys):
+def test_incidents_all_includes_terminal(capsys):
     from sdlc.maintenance.models import Incident, IncidentState, MaintenanceSummary
 
     terminal = Incident(
@@ -234,7 +238,7 @@ async def test_incidents_all_includes_terminal(capsys):
     assert "INC-2" not in capsys.readouterr().out
 
 
-async def test_incidents_state_prints_the_summary(capsys):
+def test_incidents_state_prints_the_summary(capsys):
     from sdlc.maintenance.models import MaintenanceSummary
 
     summary = MaintenanceSummary(
