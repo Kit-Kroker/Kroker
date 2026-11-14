@@ -691,3 +691,226 @@ async def test_pending_call_confirmed_false_when_handle_keeps_item_pending(tmp_p
     frame = _frame_for(writer, "2")
     assert frame["ok"] is True
     assert frame["value"]["confirmed"] is False
+
+
+# --- start (US3 happy half: preview + call for confirm=start, start_run) ----
+#
+# RED until T032 wires confirm=="start": today both preview and call refuse
+# with bad_request "confirm is not wired yet", so _preview_digest fails first.
+# qa-chaos appends the error half below this section.
+# Every test name carries "start" so `pytest -k start` selects this section.
+
+START_BF = {
+    "title": "Add SSO",
+    "mode": "brownfield",
+    "description": "single sign-on",
+    "repo": "https://github.com/acme/api",
+}
+FLEET_CAP_ENV = "SDLC_FLEET_PENDING_CAP"
+
+
+@pytest.mark.asyncio
+async def test_start_preview_message_lists_title_mode_repo_description(tmp_path, monkeypatch):
+    monkeypatch.delenv(FLEET_CAP_ENV, raising=False)
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _preview("2", "start_run", START_BF)],
+        _holder_factory(tmp_path, holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is True, frame
+
+    message = frame["value"]["message"]
+    for needle in ("Add SSO", "brownfield", "https://github.com/acme/api", "single sign-on"):
+        assert needle in message, (needle, message)
+    assert "fleet:" not in message
+
+
+@pytest.mark.asyncio
+async def test_start_preview_includes_fleet_line_when_cap_set(tmp_path, monkeypatch):
+    monkeypatch.setenv(FLEET_CAP_ENV, "3")
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _preview("2", "start_run", START_BF)],
+        _holder_factory(tmp_path, holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is True, frame
+    assert "fleet: 2/3" in frame["value"]["message"], frame["value"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_start_preview_digest_is_stable_and_ignores_the_fleet_cap(tmp_path, monkeypatch):
+    monkeypatch.delenv(FLEET_CAP_ENV, raising=False)
+    digest_a = await _preview_digest(tmp_path / "a", "start_run", START_BF)
+
+    monkeypatch.setenv(FLEET_CAP_ENV, "3")
+    digest_b = await _preview_digest(tmp_path / "b", "start_run", START_BF)
+
+    assert re.fullmatch(r"[0-9a-f]{64}", digest_a), digest_a
+    assert re.fullmatch(r"[0-9a-f]{64}", digest_b), digest_b
+    assert digest_a == digest_b
+
+    monkeypatch.delenv(FLEET_CAP_ENV, raising=False)
+    other_title = await _preview_digest(
+        tmp_path / "c", "start_run", {**START_BF, "title": "Add OIDC"}
+    )
+    assert other_title != digest_a
+
+
+@pytest.mark.asyncio
+async def test_start_call_starts_run_and_returns_the_starter_id(tmp_path, monkeypatch):
+    monkeypatch.delenv(FLEET_CAP_ENV, raising=False)
+    digest = await _preview_digest(tmp_path / "p", "start_run", START_BF)
+
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _call("2", "start_run", START_BF, digest)],
+        _holder_factory(tmp_path / "c", holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is True, frame
+    assert frame["value"] == "feature-add-sso"
+    assert holder["deps"].recorder.started == [
+        {
+            "wf_id": "feature-add-sso",
+            "title": "Add SSO",
+            "mode": "brownfield",
+            "description": "single sign-on",
+        }
+    ]
+
+
+# --- start (T031 error half: refusals, cap, duplicate, digest swap) ----------
+
+
+@pytest.mark.asyncio
+async def test_start_call_brownfield_without_repo_is_tool_error_and_starter_not_called(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv(FLEET_CAP_ENV, raising=False)
+    args = {"title": "Add SSO", "mode": "brownfield", "description": "single sign-on"}
+    digest = await _preview_digest(tmp_path / "p", "start_run", args)
+
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _call("2", "start_run", args, digest)],
+        _holder_factory(tmp_path / "c", holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is False
+    assert frame["error"]["code"] == "tool_error"
+    assert frame["error"]["message"] == (
+        "a brownfield run needs repo set to the repository url; "
+        "ask the operator which repository this is for"
+    )
+    assert holder["deps"].recorder.started == []
+
+
+@pytest.mark.asyncio
+async def test_start_call_fleet_at_cap_is_b4_sentence_and_starter_not_called(tmp_path, monkeypatch):
+    monkeypatch.setenv(FLEET_CAP_ENV, "2")  # fleet holds 2 pending runs: AT cap is refused
+    args = {"title": "Add SSO", "mode": "greenfield", "description": "single sign-on"}
+    digest = await _preview_digest(tmp_path / "p", "start_run", args)
+
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _call("2", "start_run", args, digest)],
+        _holder_factory(tmp_path / "c", holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is False
+    assert frame["error"]["code"] == "tool_error"
+    assert frame["error"]["message"] == (
+        "the fleet is at capacity: 2 run(s) are already awaiting a human "
+        "decision and the cap is 2. Do not retry; tell the operator to "
+        "clear some pending decisions first (the inbox lists them)."
+    )
+    assert holder["deps"].recorder.started == []
+
+
+@pytest.mark.asyncio
+async def test_start_call_slugless_title_is_slug_sentence_and_starter_not_called(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv(FLEET_CAP_ENV, raising=False)
+    args = {"title": "!!!", "mode": "greenfield", "description": "punctuation only"}
+    digest = await _preview_digest(tmp_path / "p", "start_run", args)
+
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _call("2", "start_run", args, digest)],
+        _holder_factory(tmp_path / "c", holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is False
+    assert frame["error"]["code"] == "tool_error"
+    assert frame["error"]["message"] == (
+        "title '!!!' has no letters or digits to build a run id from; "
+        "ask the operator for a descriptive title"
+    )
+    assert holder["deps"].recorder.started == []
+
+
+@pytest.mark.asyncio
+async def test_start_call_duplicate_start_is_duplicate_sentence(tmp_path, monkeypatch):
+    monkeypatch.delenv(FLEET_CAP_ENV, raising=False)
+    args = {"title": "Add SSO", "mode": "greenfield", "description": "single sign-on"}
+    digest = await _preview_digest(tmp_path / "p", "start_run", args)
+
+    holder: dict = {}
+
+    def factory(actor: str):
+        deps = build_fake_deps(tmp_path / "c", actor)
+        holder["deps"] = deps
+
+        async def already_started(*a, **kw):
+            raise Exception("workflow execution already started")
+
+        deps.starter = already_started  # OperatorDeps is a mutable dataclass
+        return deps
+
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _call("2", "start_run", args, digest)],
+        factory,
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is False
+    assert frame["error"]["code"] == "tool_error"
+    assert frame["error"]["message"] == (
+        "a run with id 'feature-add-sso' already exists; call get_run on it, "
+        "or start this one under a different title"
+    )
+    assert holder["deps"].recorder.started == []
+
+
+@pytest.mark.asyncio
+async def test_start_call_swapped_args_expect_digest_is_changed_and_starter_not_called(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv(FLEET_CAP_ENV, raising=False)
+    digest = await _preview_digest(tmp_path / "p", "start_run", START_BF)
+
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [
+            _init("mcp:test"),
+            _call("2", "start_run", {**START_BF, "title": "Add OIDC"}, digest),
+        ],
+        _holder_factory(tmp_path / "c", holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is False
+    assert frame["error"]["code"] == "changed"
+    assert frame["error"]["message"] == (
+        "the pending item changed while you were confirming; re-read the inbox and retry"
+    )
+    assert holder["deps"].recorder.started == []

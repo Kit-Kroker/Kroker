@@ -28,6 +28,7 @@ from pydantic import BaseModel, ValidationError, create_model
 
 from ..channels.contract import default_render
 from ..channels.transport import resolve_key
+from ..dashboard.fleet import fleet_pending_cap, pending_run_count
 from . import tools
 from .errors import ToolError, translate
 
@@ -230,6 +231,37 @@ class _LineReader:
 _PENDING_KINDS = {"decide_gate": "gate", "answer_question": "text"}
 
 
+async def _preview_start(deps: Any, name: str, model: Any) -> dict[str, Any]:
+    """The confirm=start preview (T032, data-model.md PreviewResult).
+
+    The message lists what the operator is about to start. The fleet line
+    is ADVISORY (B4): the authoritative cap check is tools.start_run's, at
+    call time — so the line must not enter the digest. Hence rendered is
+    null and the digest covers {tool, args} only; a fleet state change can
+    never invalidate a confirmation, and the cap env is read before the
+    poller is touched (no snapshot fan-out when B4 is not configured).
+    """
+    lines = [
+        f"Title: {model.title}",
+        f"Mode: {model.mode.value}",
+    ]
+    if model.repo:
+        lines.append(f"Repo: {model.repo}")
+    if model.description:
+        lines.append(f"Description: {model.description}")
+    cap = fleet_pending_cap()
+    if cap is not None:
+        pending = pending_run_count(await deps.poller.snapshot())
+        lines.append(f"fleet: {pending}/{cap}")
+    canonical = json.dumps(
+        {"tool": name, "args": model.model_dump(mode="json"), "rendered": None},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return {"message": "\n".join(lines), "digest": digest}
+
+
 async def _preview_pending(deps: Any, name: str, model: Any) -> dict[str, Any]:
     """The confirm=pending preview (T027, data-model.md PreviewResult).
 
@@ -292,15 +324,15 @@ async def _handle_request(
             _error_frame(rid, "bad_request", sentence_bad_request("preview is for confirm tools"))
         )
         return
-    if confirm not in ("none", "pending"):
-        # Fail closed (FR-005): confirm=="start" lands in T032.
+    if confirm not in ("none", "pending", "start"):
+        # Fail closed (FR-005): unknown confirm values never run.
         await send(
             _error_frame(rid, "bad_request", sentence_bad_request("confirm is not wired yet"))
         )
         return
     expect_digest = req.get("expect_digest")
     if (
-        confirm == "pending"
+        confirm != "none"
         and op == "call"
         and (not isinstance(expect_digest, str) or not expect_digest)
     ):
@@ -323,9 +355,10 @@ async def _handle_request(
     except ValidationError as exc:
         await send(_error_frame(rid, "bad_request", sentence_bad_request(_validation_summary(exc))))
         return
-    if confirm == "pending":
+    if confirm in ("pending", "start"):
+        previewer = _preview_pending if confirm == "pending" else _preview_start
         try:
-            preview = await _preview_pending(deps, tool, model)
+            preview = await previewer(deps, tool, model)
         except ToolError as exc:
             await send(_error_frame(rid, "tool_error", exc.message))
             return
@@ -356,6 +389,8 @@ async def _handle_request(
             validated.get("key"),
             getattr(value, "confirmed", "?"),
         )
+    elif confirm == "start":
+        _log.info("mcp write actor=%s tool=%s run=%s", getattr(deps, "actor", "?"), tool, value)
     if isinstance(value, BaseModel):
         value = value.model_dump(mode="json")
     await send(_result_frame(rid, value))
