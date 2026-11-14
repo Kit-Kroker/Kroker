@@ -178,8 +178,7 @@ def env_file_findings() -> list[TriageFinding]:
             signal=secrets.SIGNAL_ID,
             rule="secret_committed",
             severity="critical",
-            detail=".env is committed. Every value in it must be treated as "
-            "disclosed and rotated.",
+            detail=".env is committed. Every value in it must be treated as disclosed and rotated.",
             fix_class=FixClass.JUDGEMENT,
             path=".env",
         ),
@@ -187,8 +186,7 @@ def env_file_findings() -> list[TriageFinding]:
             signal=secrets.SIGNAL_ID,
             rule="env_file_tracked",
             severity="high",
-            detail=".env is tracked; add it to .gitignore and remove it from "
-            "the index.",
+            detail=".env is tracked; add it to .gitignore and remove it from the index.",
             fix_class=FixClass.MECHANICAL,
             path=".gitignore",
         ),
