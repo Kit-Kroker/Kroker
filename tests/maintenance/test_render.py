@@ -10,10 +10,9 @@ Subject: ``sdlc.maintenance.prompt.render_repair_prompt`` and
 
 from __future__ import annotations
 
+from sdlc.maintenance.models import Incident, IncidentState, RepairAction, RepairPlan
 from sdlc.maintenance.prompt import render_repair_prompt
 from sdlc.maintenance.render import gate_context_text, incidents_table
-
-from sdlc.maintenance.models import Incident, IncidentState, RepairAction, RepairPlan
 from tests.maintenance.conftest import build_break_finding, env_file_findings
 
 LIMIT = 16 * 1024  # the 16 KiB prompt bound

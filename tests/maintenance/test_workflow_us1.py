@@ -15,7 +15,6 @@ import asyncio
 import time
 
 import pytest
-from pydantic_ai.capabilities import ResolveModelId
 from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models.function import FunctionModel
 from sdlc.workflows.maintenance import MaintenanceWorkflow
