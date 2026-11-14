@@ -76,7 +76,14 @@ Since FR-202, `_run_role` also forwards the role's configured
 validated-output retry budget: `OUTPUT_RETRIES.get(role, 1)`, and only a
 non-default n injects `kwargs.setdefault("retries", {"output": n})` —
 a role at the default carries no `retries` kwarg at all (the 004 D7a
-only-when-set precedent), and an explicit caller value always wins.
+only-when-set precedent), and an explicit caller value always wins. The
+two assessment proposers bypass `_run_role` (workflows/assessment.py's
+`_discover`/`_judge` call the module-level `t_discover`/`t_risk` agents
+directly), so they forward the same budget inline at the call sites —
+`OUTPUT_RETRIES` imported beside the agents under `imports_passed_through`,
+the same only-when-set rule building `run_kwargs["retries"] = {"output": n}`
+inside each site's fail-closed `try` — and a default (1) call carries no
+kwarg, so no-override replays are unchanged.
 
 ## The proposer payload guard (007)
 
