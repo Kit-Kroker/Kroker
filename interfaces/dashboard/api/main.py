@@ -15,54 +15,25 @@ working. The dashboard mounts under /api.
 Bound to localhost, unauthenticated, by design (spec D4 / OQ-11).
 """
 
+import functools
 import logging
 import os
 
-from temporalio.client import Client
-from temporalio.contrib.pydantic import pydantic_data_converter
-
 from sdlc.board.api import create_app
-from sdlc.board.store import BoardStore
-from sdlc.core.models import (
-    IdeaBrief,
-    PipelineConfig,
-)
 from sdlc.dashboard.api import create_router
-from sdlc.dashboard.fleet import FleetPoller
-from sdlc.graph.start import start_graph_run
 from sdlc.observability.logfire_setup import configure as configure_logfire
+from sdlc.operator import runtime
 from sdlc.operator.agent import ChatConfigError, build_chat_app
-from sdlc.operator.deps import OperatorDeps
-from sdlc.worker import TASK_QUEUE
-from sdlc.workflows.graph import GraphWorkflow
-from sdlc.workflows.graph_catalog import build_run_input
 
 log = logging.getLogger(__name__)
 
 app = create_app()
 
+poller = runtime.build_poller()
 
-async def _connect() -> Client:
-    # pydantic_data_converter is non-negotiable: without it RunState and
-    # PendingDecision do not round-trip (cli.py:317).
-    return await Client.connect(
-        os.environ.get("TEMPORAL_HOST", "localhost:7233"), data_converter=pydantic_data_converter
-    )
-
-
-poller = FleetPoller(_connect)
-
-
-async def _start(idea: IdeaBrief, cfg: PipelineConfig, wf_id: str) -> str:
-    client = await poller._client_or_connect()
-    run_input = build_run_input(idea, cfg)  # GraphStartError -> 422 in dashboard/api.py
-    handle = await start_graph_run(
-        client, GraphWorkflow.run, run_input, id=wf_id, task_queue=TASK_QUEUE
-    )
-    return handle.id
-
-
-app.include_router(create_router(poller, starter=_start), prefix="/api")
+app.include_router(
+    create_router(poller, starter=functools.partial(runtime.start_graph, poller)), prefix="/api"
+)
 
 
 def mount_chat(target, fleet_poller) -> bool:
@@ -80,14 +51,10 @@ def mount_chat(target, fleet_poller) -> bool:
         # is what gives the chat surface per-conversation traces beside the
         # pipeline's (spec 12). It is a no-op without a Logfire token.
         configure_logfire()
-        # The CLASS, not an instance: tools._board opens and closes a store
-        # per call inside the worker thread it runs on. A single shared
-        # connection here would be pinned to the import thread by sqlite's
-        # check_same_thread, and would never be closed -- board/api.py:65
-        # opens one per request for exactly these reasons.
-        deps = OperatorDeps(
-            poller=fleet_poller, board=BoardStore, starter=_start, actor="chat:local"
-        )
+        # The deps shape (board as the BoardStore CLASS, starter via the
+        # shared runtime seam) is composed by runtime.operator_deps; the
+        # reasoning lives there and in tools._board.
+        deps = runtime.operator_deps(fleet_poller, "chat:local")
         target.mount("/chat", build_chat_app(deps))
     except ChatConfigError as e:
         log.warning("chat surface not mounted: %s", e)

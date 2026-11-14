@@ -20,9 +20,16 @@ def test_cli_start_builds_a_graph_run_input_and_starts_graph_workflow():
 
 
 def test_dashboard_starter_starts_graph_workflow():
-    src = (ROOT / "interfaces" / "dashboard" / "api" / "main.py").read_text(encoding="utf-8")
-    assert "GraphWorkflow.run" in src and "build_run_input(" in src
-    assert "FeatureWorkflow" not in src
+    main_src = (ROOT / "interfaces" / "dashboard" / "api" / "main.py").read_text(encoding="utf-8")
+    runtime_src = (ROOT / "src" / "sdlc" / "operator" / "runtime.py").read_text(encoding="utf-8")
+    # 022 T005 moved the starter out of main.py's _start into
+    # sdlc.operator.runtime; the dashboard composes that seam. The E-74
+    # invariant is unchanged: every dashboard start is a GraphWorkflow run
+    # built by build_run_input — GraphWorkflow is named as a string there
+    # (022 R5: importing the class would load the registry at import time).
+    assert "runtime.start_graph" in main_src
+    assert '"GraphWorkflow"' in runtime_src and "build_run_input(" in runtime_src
+    assert "FeatureWorkflow" not in main_src and "FeatureWorkflow" not in runtime_src
 
 
 def test_open_run_queries_include_both_types():
