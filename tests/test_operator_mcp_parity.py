@@ -158,3 +158,152 @@ def test_reads_get_run_unknown_id_is_iserror_with_verbatim_tool_error(mcp, direc
     with pytest.raises(ToolError) as exc:
         asyncio.run(tools.get_run(direct, "nope"))
     assert _text(result) == exc.value.message
+
+
+# --- decide_or_answer (US2 acceptance over the real binary, T030) -----------
+#
+# Each test spawns its own server + fake bridge so the signal record can be
+# read after the bridge exits (it is written on exit, not on signal).
+
+from contextlib import contextmanager  # noqa: E402
+
+from sdlc.channels.contract import default_render  # noqa: E402
+from tests.mcp_stdio_client import MRTR_PROTOCOL, OLD_PROTOCOL  # noqa: E402
+from tests.operator_fakes import GATE  # noqa: E402
+
+E1_CAPS = {"elicitation": {"form": {}}}
+MRTR_META = {
+    "io.modelcontextprotocol/protocolVersion": MRTR_PROTOCOL,
+    "io.modelcontextprotocol/clientCapabilities": E1_CAPS,
+}
+ACCEPT = {"action": "accept", "content": {"confirm": True}}
+DECIDE_ARGS = {"run_id": "feature-add-sso", "key": "architecture#2", "outcome": "approve"}
+ANSWER_ARGS = {"run_id": "feature-fix-cache", "key": "Q1", "text": "use redis"}
+NOT_CONFIRMED = "the operator did not confirm; nothing was changed"
+NO_PATH = (
+    "this write needs a human confirmation that this MCP client did not provide; "
+    "nothing was changed. Use the dashboard or `python -m sdlc.cli` instead."
+)
+INVALID = (
+    "this confirmation is invalid or was already used; nothing was changed — call the tool again"
+)
+
+
+@contextmanager
+def _session(tmp_path, *, protocol=OLD_PROTOCOL, caps=E1_CAPS, env=None):
+    """Spawn the real binary + fake bridge; yield (client, record_path).
+
+    The record is written when the bridge exits, so read it only after this
+    context has closed the client.
+    """
+    shared = tmp_path / "board"
+    shared.mkdir(parents=True, exist_ok=True)
+    record = tmp_path / "record.json"
+    argv = [
+        _BIN,
+        "--repo",
+        str(REPO_ROOT),
+        "--bridge-cmd",
+        sys.executable,
+        str(FAKE_BRIDGE),
+        str(shared),
+        str(record),
+    ]
+    client = McpStdioClient(argv, env=env)
+    try:
+        client.initialize(protocol_version=protocol, capabilities=caps, client_name=CLIENT_NAME)
+        yield client, record
+    finally:
+        client.close()
+
+
+def _signals(record: Path) -> list[dict]:
+    return json.loads(record.read_text(encoding="utf-8"))["signals"]
+
+
+def test_decide_or_answer_e1_accept_confirms_and_signals(tmp_path):
+    with _session(tmp_path) as (client, record):
+        result = client.call_tool("decide_gate", DECIDE_ARGS)
+    assert not result.get("isError")
+    assert result["structuredContent"]["confirmed"] is True
+
+    signals = _signals(record)
+    assert len(signals) == 1, signals
+    assert signals[0]["name"] == "submit_gate_decision"
+    assert signals[0]["run_id"] == "feature-add-sso"
+    assert '"reviewer": "mcp:parity-client"' in json.dumps(signals[0]["args"])
+
+    assert default_render(GATE).title in client.elicited[0]["message"]
+
+
+def test_decide_or_answer_e1_decline_sends_nothing(tmp_path):
+    with _session(tmp_path) as (client, record):
+        client.elicitation = ("decline",)
+        result = client.call_tool("decide_gate", DECIDE_ARGS)
+    assert result["isError"] is True
+    assert _text(result) == NOT_CONFIRMED
+    assert _signals(record) == []
+
+
+def test_decide_or_answer_no_capability_fails_closed(tmp_path):
+    with _session(tmp_path, caps={}) as (client, record):
+        result = client.call_tool("decide_gate", DECIDE_ARGS)
+    assert result["isError"] is True
+    assert _text(result) == NO_PATH
+    assert _signals(record) == []
+    assert client.elicited == []
+
+
+def test_decide_or_answer_e2_accept_then_replay_is_refused(tmp_path):
+    with _session(tmp_path, protocol=MRTR_PROTOCOL) as (client, record):
+        first = client.call_tool("decide_gate", DECIDE_ARGS, meta=MRTR_META)
+        assert first.get("resultType") == "input_required", first
+        state = first["requestState"]
+
+        accepted = client.call_tool_retry(
+            "decide_gate", DECIDE_ARGS, {"confirm": ACCEPT}, state, meta=MRTR_META
+        )
+        assert not accepted.get("isError")
+        assert accepted["structuredContent"]["confirmed"] is True
+
+        replay = client.call_tool_retry(
+            "decide_gate", DECIDE_ARGS, {"confirm": ACCEPT}, state, meta=MRTR_META
+        )
+    assert replay["isError"] is True
+    assert _text(replay) == INVALID
+
+    signals = _signals(record)
+    assert len(signals) == 1, signals
+    assert signals[0]["name"] == "submit_gate_decision"
+
+
+def test_decide_or_answer_answer_question_e1_signals_key_and_text(tmp_path):
+    with _session(tmp_path) as (client, record):
+        result = client.call_tool("answer_question", ANSWER_ARGS)
+    assert not result.get("isError")
+    assert result["structuredContent"]["confirmed"] is True
+
+    signals = _signals(record)
+    assert len(signals) == 1, signals
+    assert signals[0]["name"] == "answer_question"
+    assert signals[0]["run_id"] == "feature-fix-cache"
+    dumped = json.dumps(signals[0]["args"])
+    assert '"Q1"' in dumped and '"use redis"' in dumped
+
+
+def test_decide_or_answer_keep_pending_reports_confirmed_false(tmp_path):
+    with _session(tmp_path, env={"SDLC_FAKE_KEEP_PENDING": "1"}) as (client, record):
+        result = client.call_tool("decide_gate", DECIDE_ARGS)
+    assert not result.get("isError")
+    assert result["structuredContent"]["confirmed"] is False
+    assert len(_signals(record)) == 1
+
+
+def test_decide_or_answer_write_tool_annotations(tmp_path):
+    with _session(tmp_path) as (client, _record):
+        listed = client.list_tools()["tools"]
+    by = {t["name"]: t for t in listed}
+    for name in ("start_run", "answer_question", "decide_gate"):
+        ann = by[name]["annotations"]
+        assert ann["destructiveHint"] is True, name
+        assert ann["readOnlyHint"] is False, name

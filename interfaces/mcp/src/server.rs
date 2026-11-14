@@ -19,7 +19,7 @@ use rmcp::model::{
 use rmcp::service::{NotificationContext, RequestContext, RoleServer};
 use rmcp::{ErrorData as McpError, ServerHandler};
 use serde_json::Value;
-use tokio::sync::{Mutex, oneshot};
+use tokio::sync::{Mutex, watch};
 use tracing::warn;
 
 use crate::actor;
@@ -65,6 +65,19 @@ pub enum ElicitMode {
     None,
 }
 
+/// The bridge handshake's completion signal: `Pending` from construction
+/// until `on_initialized`'s spawned task lands the bridge + describe, then
+/// `Ready`. A watch channel (not a oneshot) because requests may pipeline:
+/// every waiter gets its own receiver clone, a request that outran the
+/// `initialized` notification WAITS rather than errors, and the sender
+/// living in the state means an absent handshake surfaces as the fixed
+/// 20 s timeout sentence (SC-003), never a channel error.
+#[derive(Clone)]
+enum Handshake {
+    Pending,
+    Ready(Arc<Vec<ToolDescriptor>>),
+}
+
 /// Per-session state, populated during the initialize handshake.
 pub struct SessionState {
     pub bridge: Option<Arc<Bridge>>,
@@ -72,7 +85,21 @@ pub struct SessionState {
     pub protocol_version: Option<String>,
     pub elicit_mode: ElicitMode,
     pub(crate) confirm: Option<Arc<confirm::ConfirmGate>>,
-    tools_rx: Option<oneshot::Receiver<Arc<Vec<ToolDescriptor>>>>,
+    handshake: (watch::Sender<Handshake>, watch::Receiver<Handshake>),
+}
+
+impl SessionState {
+    fn new() -> Self {
+        let (tx, rx) = watch::channel(Handshake::Pending);
+        Self {
+            bridge: None,
+            tools: None,
+            protocol_version: None,
+            elicit_mode: ElicitMode::None,
+            confirm: None,
+            handshake: (tx, rx),
+        }
+    }
 }
 
 pub struct Server {
@@ -84,14 +111,7 @@ impl Server {
     pub fn new(cfg: ServerConfig) -> Self {
         Self {
             cfg,
-            state: Arc::new(Mutex::new(SessionState {
-                bridge: None,
-                tools: None,
-                protocol_version: None,
-                elicit_mode: ElicitMode::None,
-                confirm: None,
-                tools_rx: None,
-            })),
+            state: Arc::new(Mutex::new(SessionState::new())),
         }
     }
 
@@ -109,27 +129,26 @@ impl Server {
         }
     }
 
-    /// The session's tools, awaiting the bridge handshake (20 s).
+    /// The session's tools, awaiting the bridge handshake (20 s). Callers
+    /// that race the `initialized` notification wait here for it — the
+    /// handshake completing is what orders every request after init.
     async fn tools(&self) -> Result<Arc<Vec<ToolDescriptor>>, McpError> {
-        let cached = self.state.lock().await.tools.clone();
-        if let Some(tools) = cached {
-            return Ok(tools);
+        let mut rx = self.state.lock().await.handshake.1.clone();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        loop {
+            if let Handshake::Ready(tools) = rx.borrow().clone() {
+                return Ok(tools);
+            }
+            if tokio::time::timeout_at(deadline, rx.changed())
+                .await
+                .is_err()
+            {
+                return Err(McpError::internal_error(
+                    "the bridge did not describe its tools in 20 s",
+                    None,
+                ));
+            }
         }
-        let rx = self.state.lock().await.tools_rx.take();
-        let Some(rx) = rx else {
-            return Err(McpError::internal_error(
-                "the bridge session is not initialised",
-                None,
-            ));
-        };
-        let tools = tokio::time::timeout(Duration::from_secs(20), rx)
-            .await
-            .map_err(|_| {
-                McpError::internal_error("the bridge did not describe its tools in 20 s", None)
-            })?
-            .map_err(|_| McpError::internal_error("the bridge handshake failed", None))?;
-        self.state.lock().await.tools = Some(tools.clone());
-        Ok(tools)
     }
 
     /// The session's bridge, once `initialized` has spawned it.
@@ -219,8 +238,6 @@ impl ServerHandler for Server {
                     .map(|info| actor::normalise(&info.client_info.name))
             })
             .unwrap_or_else(|| "mcp:local".to_string());
-        let (tx, rx) = oneshot::channel();
-        self.state.lock().await.tools_rx = Some(rx);
         let repo = self.cfg.repo.clone();
         let bridge_cmd = self.cfg.bridge_cmd.clone();
         let state = self.state.clone();
@@ -233,12 +250,15 @@ impl ServerHandler for Server {
                         let mut s = state.lock().await;
                         s.bridge = Some(bridge.clone());
                         s.tools = Some(tools.clone());
+                        // Wakes every waiter (and arms late joiners via
+                        // borrow): requests that raced this notification
+                        // proceed now, in order after the handshake.
+                        let _ = s.handshake.0.send(Handshake::Ready(tools));
                     }
-                    let _ = tx.send(tools);
                 }
                 Err(e) => {
                     warn!("bridge spawn failed: {e}");
-                    // leave tools_rx unsatisfied: callers time out with a
+                    // leave the handshake Pending: callers time out with a
                     // fixed sentence instead of a raw error (SC-003).
                 }
             }

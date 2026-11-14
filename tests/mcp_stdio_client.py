@@ -166,22 +166,36 @@ class McpStdioClient:
         return self._request("tools/call", params)
 
     def call_tool_mrtr(
-        self, name: str, args: dict[str, Any] | None, responses: dict[str, Any]
+        self,
+        name: str,
+        args: dict[str, Any] | None,
+        responses: dict[str, Any],
+        meta: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Call; on an input_required result, retry with the given
         inputResponses keyed by input-request key and the echoed
         requestState. Returns the FIRST result (input_required included)
         so tests can assert on both rounds."""
-        first = self.call_tool(name, args)
+        first = self.call_tool(name, args, meta=meta)
         if first.get("resultType") != "input_required":
             return first
-        retry = {
-            "name": name,
-            "arguments": args or {},
-            "inputResponses": responses,
-            "requestState": first.get("requestState"),
-        }
-        return self._request("tools/call", retry)
+        return self.call_tool_retry(name, args, responses, first.get("requestState"), meta=meta)
+
+    def call_tool_retry(
+        self,
+        name: str,
+        args: dict[str, Any] | None,
+        responses: dict[str, Any],
+        request_state: Any,
+        meta: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """One manual MRTR round: top-level inputResponses/requestState."""
+        params: dict[str, Any] = {"name": name, "arguments": args or {}}
+        params["inputResponses"] = responses
+        params["requestState"] = request_state
+        if meta is not None:
+            params["_meta"] = meta
+        return self._request("tools/call", params)
 
     def cancel(self, request_id: Any) -> None:
         self._send(

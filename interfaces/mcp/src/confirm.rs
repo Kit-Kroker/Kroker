@@ -176,8 +176,27 @@ pub async fn confirm_and_call(
     request_state: Option<&str>,
     input_responses: Option<&InputResponses>,
 ) -> Result<CallToolResponse, McpError> {
+    // 0. An E2 retry validates (and burns) its sealed state BEFORE any
+    //    bridge I/O. Preview-first is unreachable-correct on this path:
+    //    the state's own first use resolved the pending item it sealed,
+    //    so a replay's preview would fail NoMatch and mask the
+    //    contract's invalid-confirmation sentence (mcp-tools.md refusal
+    //    table outranks the sketch's ordering; found by the T030 replay
+    //    parity test). Bonus: a tampered/expired/replayed state now
+    //    costs zero bridge roundtrips.
+    let sealed_digest = match (session.mode, request_state) {
+        (ElicitMode::E2, Some(sealed)) => match session.gate.consume(sealed, tool, args).await {
+            Ok(digest) => Some(digest),
+            Err(()) => return Ok(error_result(INVALID_SENTENCE)),
+        },
+        _ => None,
+    };
+
     // 1. Preview. An error here is the operator's to read — no human is
     //    bothered with a write that cannot even be described (SC-003).
+    //    On an E2 retry with a still-valid state this may honestly fail
+    //    (another channel resolved the item in between); that surfaces
+    //    verbatim, which is the truthful answer.
     let preview_id = session.bridge.next_id();
     let preview = match session.bridge.preview(&preview_id, tool, args).await {
         Ok(preview) => preview,
@@ -201,7 +220,7 @@ pub async fn confirm_and_call(
             }
         }
         ElicitMode::E2 => {
-            let Some(sealed) = request_state else {
+            let Some(digest) = sealed_digest else {
                 // First round: issue the same confirmation form as an
                 // input request, with the sealed state to echo back.
                 let sealed = session.gate.seal(tool, args, &preview.digest)?;
@@ -224,10 +243,9 @@ pub async fn confirm_and_call(
                     Some(sealed),
                 )));
             };
-            let digest = match session.gate.consume(sealed, tool, args).await {
-                Ok(digest) => digest,
-                Err(()) => return Ok(error_result(INVALID_SENTENCE)),
-            };
+            // Retry with a valid state: the digest the human approved is
+            // the sealed one — if the world moved since, the bridge's
+            // own digest check answers `changed` (FR-006).
             if !response_confirms(input_responses.and_then(|r| r.get("confirm"))) {
                 return Ok(error_result(DID_NOT_CONFIRM_SENTENCE));
             }

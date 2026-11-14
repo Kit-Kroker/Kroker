@@ -19,6 +19,7 @@ Stdlib + sdlc only; no pytest import (it must run cold in a subprocess).
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -53,19 +54,52 @@ def main() -> None:
     data_dir = Path(argv[0]) if argv else Path(".mcp_fake_bridge_data")
     data_dir.mkdir(parents=True, exist_ok=True)
     record = Path(argv[1]) if len(argv) > 1 else None
+    # The confirmed=false race (FR-006): with this env set, the fake
+    # handles KEEP the pending item after signaling, so the reply comes
+    # back confirmed=false (parity tests flip it per spawn).
+    keep_pending = os.environ.get("SDLC_FAKE_KEEP_PENDING") == "1"
+
+    def dump_record() -> None:
+        if record is None:
+            return
+        try:
+            record_to(record)
+        except Exception:
+            # No deps built yet: an empty timeline still gives the test a
+            # file to read.
+            record.write_text('{"signals": [], "started": []}\n', encoding="utf-8")
+
+    def wrap_handle(handle) -> None:
+        # Eager record dumps: the server kills this child on its own exit
+        # (kill_on_drop), so an exit-time dump alone races the SIGKILL.
+        # The timeline is on disk the moment it changes.
+        original = handle.signal
+
+        async def signal(name, *args, **kw):
+            await original(name, *args, **kw)
+            dump_record()
+
+        handle.signal = signal
+
+    def factory(actor: str):
+        deps = build_fake_deps(data_dir, actor)
+        if keep_pending:
+            for handle in deps.recorder.handles.values():
+                handle.drop_on_signal = False
+        if record is not None:
+            for handle in deps.recorder.handles.values():
+                wrap_handle(handle)
+            dump_record()
+        return deps
 
     proto = bridge.isolate_stdout()  # protocol fd 1; prints go to stderr
     if print_flag:
         _install_printing_verb()
     try:
-        asyncio.run(bridge._serve_pipes(lambda actor: build_fake_deps(data_dir, actor), proto))
+        asyncio.run(bridge._serve_pipes(factory, proto))
     finally:
-        if record is not None:
-            try:
-                record_to(record)
-            except Exception:
-                # No init ever arrived (no deps built): an empty timeline.
-                record.write_text('{"signals": [], "started": []}\n', encoding="utf-8")
+        # Starts (US3) and any straggler state still land here.
+        dump_record()
 
 
 if __name__ == "__main__":
