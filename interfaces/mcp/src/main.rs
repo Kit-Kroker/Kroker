@@ -1,6 +1,7 @@
-//! Placeholder entry: T019 replaces this with the real arg parsing and
-//! stdio serve loop. Exists so `cargo test` can compile `mod actor`.
+//! kroker-mcp binary entry. Stub phase (T017): serves nothing.
+//! T019 implements `--repo` / `--bridge-cmd` parsing, `SDLC_MCP_ACTOR`
+//! validation, stderr-only tracing, and `Server::new(cfg).serve(stdio())`.
 
-mod actor;
-
-fn main() {}
+fn main() {
+    todo!("T019: args, tracing-to-stderr, serve(stdio())")
+}

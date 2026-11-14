@@ -19,6 +19,11 @@ Scenario shape:
 A step's raw lines are written verbatim (so a test can emit an oversize
 line or interleaved progress frames); without "lines" the step replies
 with a canned terminal frame for that op.
+
+Step consumption is durable ACROSS bridge respawns: a cursor file
+(record_path + ".cursor") records how many steps of each op queue were
+consumed, so a respawned child continues the scenario instead of
+replaying it (the supervisor tests rely on this).
 """
 
 import json
@@ -31,6 +36,21 @@ def isolate_stdout():
     os.dup2(2, 1)
     sys.stdout = sys.stderr
     return proto
+
+
+def load_cursor(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {"preview": 0, "call": 0}
+
+
+def save_cursor(path, cursor):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(cursor, fh)
+    os.replace(tmp, path)
 
 
 CANNED_TOOLS = [
@@ -86,9 +106,21 @@ def load_scenario(arg: str) -> dict:
 def main() -> None:
     scenario = load_scenario(sys.argv[1]) if len(sys.argv) > 1 else {}
     record_path = scenario.get("record_path")
+    cursor_path = (
+        scenario.get("cursor_path")
+        or ((record_path + ".cursor") if record_path else None)
+    )
+    cursor = load_cursor(cursor_path) if cursor_path else {"preview": 0, "call": 0}
     proto = isolate_stdout()
     steps = {"preview": list(scenario.get("preview", [])), "call": list(scenario.get("call", []))}
+    for op, consumed in cursor.items():
+        if op in steps and isinstance(consumed, int):
+            del steps[op][:consumed]
     describe = scenario.get("describe") or default_describe()
+
+    def save_cursor_now():
+        if cursor_path:
+            save_cursor(cursor_path, cursor)
 
     def send(obj):
         proto.write((json.dumps(obj, separators=(",", ":")) + "\n").encode("utf-8"))
@@ -122,6 +154,8 @@ def main() -> None:
             queue = steps[op]
             if queue:
                 step = queue.pop(0)
+                cursor[op] = cursor.get(op, 0) + 1
+                save_cursor_now()
                 for raw in step.get("lines", []):
                     proto.write((raw + "\n").encode("utf-8"))
                 if "exit" in step:
