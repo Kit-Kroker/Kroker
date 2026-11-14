@@ -358,38 +358,35 @@ async fn child_died(state: &std::sync::Arc<Mutex<Inner>>) {
 
 /// The reader task: one line per frame, at most 4 MiB; oversize or
 /// unparsable frames (or EOF) kill the child and fail in-flight calls.
+///
+/// A read may deliver several frames AND the start of the next one in a
+/// single chunk, so complete lines are drained from a carry buffer and
+/// the partial tail is kept for the next read (a partial tail parsed
+/// early would be a false "unparsable frame").
 async fn read_loop(stdout: ChildStdout, state: Arc<Mutex<Inner>>) {
     let mut reader = BufReader::with_capacity(64 * 1024, stdout);
-    let mut buf: Vec<u8> = Vec::with_capacity(4096);
+    let mut carry: Vec<u8> = Vec::with_capacity(4096);
     let mut chunk = [0u8; 16 * 1024];
     loop {
-        buf.clear();
-        loop {
-            match reader.read(&mut chunk).await {
-                Ok(0) => {
-                    warn!("bridge child stdout closed");
-                    child_died(&state).await;
-                    return;
-                }
-                Ok(n) => {
-                    buf.extend_from_slice(&chunk[..n]);
-                    if buf.len() > MAX_FRAME_BYTES {
-                        warn!("bridge frame exceeded {} bytes", MAX_FRAME_BYTES);
-                        child_died(&state).await;
-                        return;
-                    }
-                    if buf.contains(&b'\n') {
-                        break;
-                    }
-                }
-                Err(e) => {
-                    warn!("bridge read error: {e}");
-                    child_died(&state).await;
-                    return;
-                }
+        match reader.read(&mut chunk).await {
+            Ok(0) => {
+                warn!("bridge child stdout closed");
+                child_died(&state).await;
+                return;
+            }
+            Ok(n) => carry.extend_from_slice(&chunk[..n]),
+            Err(e) => {
+                warn!("bridge read error: {e}");
+                child_died(&state).await;
+                return;
             }
         }
-        for line in buf.split(|b| *b == b'\n') {
+        // Drain complete lines first: a full frame plus the start of the
+        // next may legally share a chunk; only a PARTIAL line left in the
+        // carry counts toward the per-frame cap.
+        while let Some(pos) = carry.iter().position(|b| *b == b'\n') {
+            let line: Vec<u8> = carry.drain(..=pos).collect();
+            let line = &line[..line.len() - 1]; // strip the newline
             if line.is_empty() {
                 continue;
             }
@@ -430,6 +427,12 @@ async fn read_loop(stdout: ChildStdout, state: Arc<Mutex<Inner>>) {
                     warn!("bridge terminal frame dropped: waiter {id} gone");
                 }
             }
+        }
+        // Whatever is left is a partial line: it may not exceed the cap.
+        if carry.len() > MAX_FRAME_BYTES {
+            warn!("bridge frame exceeded {} bytes", MAX_FRAME_BYTES);
+            child_died(&state).await;
+            return;
         }
     }
 }
