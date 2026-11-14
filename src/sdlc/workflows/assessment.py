@@ -26,7 +26,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from ..agents.roles import PROMPT_SHAS, STAGE_MODELS, t_discover, t_risk
+    from ..agents.roles import OUTPUT_RETRIES, PROMPT_SHAS, STAGE_MODELS, t_discover, t_risk
     from ..assessment.activities import (
         AssessRiskInput,
         BlueprintInput,
@@ -450,7 +450,18 @@ class AssessmentWorkflow(GateHost):
         verification = None
         if inp.propose_discover and t_discover is not None:
             try:
-                run = await t_discover.run(render_discover_prompt(context))
+                # FR-202 (VR-3a): this proposer bypasses the RoleHost seam,
+                # so the discover role's validated-output retry budget is
+                # forwarded HERE, only when set -- a default (1) run carries
+                # no retries kwarg at all (the 004 D7a only-when-set
+                # precedent, same idiom as _run_role), and construction
+                # stays at pydantic-ai's default so the registry is the one
+                # source of the budget.
+                run_kwargs: dict = {}
+                n = OUTPUT_RETRIES.get("discover", 1)
+                if n != 1:
+                    run_kwargs["retries"] = {"output": n}
+                run = await t_discover.run(render_discover_prompt(context), **run_kwargs)
                 # The durable agent's run() is untyped generically; the
                 # discover agent's output_type IS DiscoverProposal.
                 proposal = cast(DiscoverProposal, run.output)
@@ -672,7 +683,16 @@ class AssessmentWorkflow(GateHost):
             )
 
         try:
-            run = await t_risk.run(render_risk_prompt(cmap, baseline))
+            # FR-202 (VR-3a): the risk twin of _discover's forwarding -- the
+            # proposer bypasses the RoleHost seam, so the role's configured
+            # budget is forwarded here, only when set (a default 1 run
+            # carries no retries kwarg at all; the registry is the one
+            # source of the budget).
+            run_kwargs: dict = {}
+            n = OUTPUT_RETRIES.get("risk", 1)
+            if n != 1:
+                run_kwargs["retries"] = {"output": n}
+            run = await t_risk.run(render_risk_prompt(cmap, baseline), **run_kwargs)
             # The risk agent's output_type IS RiskProposal.
             proposal = cast(RiskProposal, run.output)
         except Exception as e:  # noqa: BLE001
