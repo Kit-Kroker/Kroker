@@ -4,8 +4,8 @@ No I/O, no top-level temporalio import -- importable from workflow code and
 activities alike. This module opens the library with the plan-graph checks
 migrated verbatim from stages/plan/validation.py (E-74 origin), the new
 ids_unique check, and path_like_tokens -- the pure tokenizer the tree-reading
-activity in activities.py consumes; evidence schemas (evidence.py) follow in
-a later task.
+activity in activities.py consumes; the ADR-24 handoff evidence schemas
+live separately in evidence.py.
 """
 
 from __future__ import annotations
