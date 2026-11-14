@@ -54,7 +54,10 @@ EXEMPT_PATTERNS = (
     "build/*",
     "*/dist/*",
     "*/node_modules/*",
+    # generated lock files
     "uv.lock",
+    "Cargo.lock",
+    "*/Cargo.lock",
     "*-lock.json",
 )
 

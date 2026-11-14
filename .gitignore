@@ -30,6 +30,7 @@ node_modules/
 interfaces/ui/dist-ds/
 interfaces/ui/dist-types/
 interfaces/ui/showcase/dist/
+interfaces/mcp/target/
 test-results/
 playwright-report/
 /graphs/
