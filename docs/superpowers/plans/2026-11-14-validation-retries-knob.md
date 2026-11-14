@@ -45,7 +45,7 @@ The five failure modes the spec implies but the happy path misses; each is pinne
 - Consumes: `RoleConfig`, `RegistryError`, `_parse`/`_parse_role` as they exist.
 - Produces: `RoleConfig.validation_retries: int | None = Field(default=None, ge=1, le=5)` — after `_parse`, an int for every role (override → default materialized); `effective_validation_retries(roles: Mapping[str, RoleConfig], role: str) -> int` in `agents/loader.py` (returns the materialized value, final fallback 1).
 
-- [ ] **Step 1: Write the failing tests** — one tmp-registry builder, then: default applied when a role omits the key; per-role override wins over the default; `defaults:` carrying an unknown key → `RegistryError`; `defaults.validation_retries` of 0 or 6 → `RegistryError`; per-role value of 0 or 6 → pydantic `ValidationError`; a `kind: harness` role (reuse the dev-role shape from an existing fixture registry) carrying the key → `RegistryError` whose message names the role and the silent-dead-config rule; `effective_validation_retries` precedence (materialized value, 1 when the mapping hand-built with `None`, e.g. the graph fixtures' dict-built registries).
+- [x] **Step 1: Write the failing tests** — one tmp-registry builder, then: default applied when a role omits the key; per-role override wins over the default; `defaults:` carrying an unknown key → `RegistryError`; `defaults.validation_retries` of 0 or 6 → `RegistryError`; per-role value of 0 or 6 → pydantic `ValidationError`; a `kind: harness` role (reuse the dev-role shape from an existing fixture registry) carrying the key → `RegistryError` whose message names the role and the silent-dead-config rule; `effective_validation_retries` precedence (materialized value, 1 when the mapping hand-built with `None`, e.g. the graph fixtures' dict-built registries).
 
 ```python
 def test_defaults_unknown_key_rejected(tmp_path):
@@ -54,21 +54,21 @@ def test_defaults_unknown_key_rejected(tmp_path):
         load_registry(tmp_path)
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `pytest tests/test_registry_validation_retries.py -v`
 Expected: FAIL (`RoleConfig` has no field; `defaults` unread).
 
-- [ ] **Step 3: Implement in `core/models.py` + `agents/loader.py`**
+- [x] **Step 3: Implement in `core/models.py` + `agents/loader.py`**
 
 `RoleConfig` gains the field (plain `int | None` with `Field(default=None, ge=1, le=5)`; no docstring essay — one line citing FR-202). In `_parse`: after the version check, read optional `defaults`; every key other than `validation_retries` → `RegistryError`; the value must be an `int` in 1..5 else `RegistryError`; stash it. In `_parse_role`: after `cfg = RoleConfig(**data)` — if `cfg.kind == "harness"` and `cfg.validation_retries is not None` → `RegistryError` (cite the same "silent dead config" rule `_parse_role` uses for unread files); else if `cfg.validation_retries is None` → materialize the default via `cfg.model_copy(update={"validation_retries": default})` (harness roles included — the value is simply unread there). Add `effective_validation_retries` as a two-line function.
 
-- [ ] **Step 4: Run tests — new file plus the registry neighbors**
+- [x] **Step 4: Run tests — new file plus the registry neighbors**
 
 Run: `pytest tests/test_registry_validation_retries.py tests/test_registry_mirror.py tests/test_registry_ignores_fixtures.py tests/durability/test_loader_contract_edges.py -v`
 Expected: PASS (registries without `defaults:` stay legal — the block is optional).
 
-- [ ] **Step 5: Ship the real `defaults:` block** — `agents/registry.yaml`:
+- [x] **Step 5: Ship the real `defaults:` block** — `agents/registry.yaml`:
 
 ```yaml
 version: 1
@@ -76,7 +76,7 @@ defaults:
   validation_retries: 1
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/sdlc/core/models.py src/sdlc/agents/loader.py agents/registry.yaml tests/test_registry_validation_retries.py
@@ -93,15 +93,15 @@ git commit -m "feat(registry): defaults.validation_retries knob, fail-closed par
 - Consumes: `REGISTRY: dict[str, RoleConfig]` (Task 1's materialized field).
 - Produces: `OUTPUT_RETRIES: dict[str, int]` — proposer+research roles only (`kind != "harness"`), one entry each, value = the materialized count. Every later task imports it from `sdlc.agents.roles`.
 
-- [ ] **Step 1: Write the failing test** — keyspace equals `{n for n, c in REGISTRY.items() if c.kind != "harness"}`; every value is an `int >= 1`. Structural pins only — do NOT assert the shipped registry's concrete values (Tasks 3–6 add overrides, and those pins live in their own tests).
+- [x] **Step 1: Write the failing test** — keyspace equals `{n for n, c in REGISTRY.items() if c.kind != "harness"}`; every value is an `int >= 1`. Structural pins only — do NOT assert the shipped registry's concrete values (Tasks 3–6 add overrides, and those pins live in their own tests).
 
-- [ ] **Step 2: Run to verify failure** — `pytest tests/test_stage_models.py -v`, FAIL (no `OUTPUT_RETRIES`).
+- [x] **Step 2: Run to verify failure** — `pytest tests/test_stage_models.py -v`, FAIL (no `OUTPUT_RETRIES`).
 
-- [ ] **Step 3: Implement** — one comprehension beside `STAGE_MODELS`, same comment shape (FR-202, role-keyed like `REGISTRY`, why harness roles are absent).
+- [x] **Step 3: Implement** — one comprehension beside `STAGE_MODELS`, same comment shape (FR-202, role-keyed like `REGISTRY`, why harness roles are absent).
 
-- [ ] **Step 4: Run** — `pytest tests/test_stage_models.py -v`, PASS.
+- [x] **Step 4: Run** — `pytest tests/test_stage_models.py -v`, PASS.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(agents): OUTPUT_RETRIES computed from the registry (FR-202)"`
+- [x] **Step 5: Commit** — `git commit -m "feat(agents): OUTPUT_RETRIES computed from the registry (FR-202)"`
 
 ### Task 3: `_run_role` forwarding + planner cutover (together — planner must never drop to 1 at any commit)
 
@@ -122,15 +122,15 @@ if n != 1:
     kwargs.setdefault("retries", {"output": n})
 ```
 
-- [ ] **Step 1: Write the failing tests** — in the new file, three cases against a recording fake agent and a monkeypatched `sdlc.workflows.role_host.OUTPUT_RETRIES`: role configured 3 → `run` receives `retries={"output": 3}`; role at 1 → no `retries` key in the recorded kwargs (`test_role_at_default_forwards_nothing`); an explicit caller `retries` is not clobbered (`setdefault` semantics). In the planner file: construction default is now 1 (`agent._max_output_retries == 1`) and `OUTPUT_RETRIES["planner"] == 3` because `agents/planner/agent.yaml` carries the key.
+- [x] **Step 1: Write the failing tests** — in the new file, three cases against a recording fake agent and a monkeypatched `sdlc.workflows.role_host.OUTPUT_RETRIES`: role configured 3 → `run` receives `retries={"output": 3}`; role at 1 → no `retries` key in the recorded kwargs (`test_role_at_default_forwards_nothing`); an explicit caller `retries` is not clobbered (`setdefault` semantics). In the planner file: construction default is now 1 (`agent._max_output_retries == 1`) and `OUTPUT_RETRIES["planner"] == 3` because `agents/planner/agent.yaml` carries the key.
 
-- [ ] **Step 2: Run to verify failure** — `pytest tests/test_run_role_output_retries.py tests/plan/test_planner_agent_retries.py -v`, FAIL.
+- [x] **Step 2: Run to verify failure** — `pytest tests/test_run_role_output_retries.py tests/plan/test_planner_agent_retries.py -v`, FAIL.
 
-- [ ] **Step 3: Implement all three edits** (idiom above; planner `agent.py` cutover; `agent.yaml` key). The planner comment keeps the 2026-09 live evidence and gains one line: the 3 now lives in `agents/planner/agent.yaml` (FR-202).
+- [x] **Step 3: Implement all three edits** (idiom above; planner `agent.py` cutover; `agent.yaml` key). The planner comment keeps the 2026-09 live evidence and gains one line: the 3 now lives in `agents/planner/agent.yaml` (FR-202).
 
-- [ ] **Step 4: Run the touched paths** — `pytest tests/test_run_role_output_retries.py tests/plan/ tests/test_run_role_sub_run_harvest.py -v`, PASS.
+- [x] **Step 4: Run the touched paths** — `pytest tests/test_run_role_output_retries.py tests/plan/ tests/test_run_role_sub_run_harvest.py -v`, PASS.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(roles): forward configured output retries at the model-egress point; planner to registry (FR-202)"`
+- [x] **Step 5: Commit** — `git commit -m "feat(roles): forward configured output retries at the model-egress point; planner to registry (FR-202)"`
 
 ### Task 4: Research slice cutover — all four in-slice sites
 
@@ -146,15 +146,15 @@ if n != 1:
 - Consumes: `OUTPUT_RETRIES` via the slice's existing in-function import precedent (`from sdlc.agents.roles import REGISTRY` at `stage.py:291` — import `OUTPUT_RETRIES` the same way, at each site; `toolset.py` likewise).
 - Produces: nothing other tasks use.
 
-- [ ] **Step 1: Write the failing tests** — rewrite both pinning files: construction default 1; `OUTPUT_RETRIES["research"] == 3`; each of the four sites forwards `{"output": 3}` into the slice's existing `_agent`/fake seams (sub-question seam exists at `stage.py`; plan/synthesis via their `_model`-adjacent seams; toolset via its test seam — follow `tests/research/`'s existing fakes).
+- [x] **Step 1: Write the failing tests** — rewrite both pinning files: construction default 1; `OUTPUT_RETRIES["research"] == 3`; each of the four sites forwards `{"output": 3}` into the slice's existing `_agent`/fake seams (sub-question seam exists at `stage.py`; plan/synthesis via their `_model`-adjacent seams; toolset via its test seam — follow `tests/research/`'s existing fakes).
 
-- [ ] **Step 2: Run to verify failure** — `pytest tests/research/test_research_agent_retries.py tests/research/test_research_agent_retries_edges.py -v`, FAIL.
+- [x] **Step 2: Run to verify failure** — `pytest tests/research/test_research_agent_retries.py tests/research/test_research_agent_retries_edges.py -v`, FAIL.
 
-- [ ] **Step 3: Implement** — drop the construction kwarg, add the yaml key, apply Task 3's idiom at all five `agent.run` calls (three in `stage.py`, two in `toolset.py`; `role` is `"research"` at every site — including the architect's tool, per spec VR-3). Add the AGENTS.md line.
+- [x] **Step 3: Implement** — drop the construction kwarg, add the yaml key, apply Task 3's idiom at all five `agent.run` calls (three in `stage.py`, two in `toolset.py`; `role` is `"research"` at every site — including the architect's tool, per spec VR-3). Add the AGENTS.md line.
 
-- [ ] **Step 4: Run the slice** — `pytest tests/research/ -q`, PASS (note: plan/synthesis go 1→3 — the spec's one flagged behavior delta, VR-4).
+- [x] **Step 4: Run the slice** — `pytest tests/research/ -q`, PASS (note: plan/synthesis go 1→3 — the spec's one flagged behavior delta, VR-4).
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(research): registry-driven output retries at all research run sites (FR-202)"`
+- [x] **Step 5: Commit** — `git commit -m "feat(research): registry-driven output retries at all research run sites (FR-202)"`
 
 ### Task 5: Constitution cutover
 
@@ -165,23 +165,23 @@ if n != 1:
 - Modify: `src/sdlc/stages/constitution/constitution.md` (reword the `retries={"output": 3}` mechanism line at :80–81 to the registry-forwarded form) and `src/sdlc/stages/constitution/AGENTS.md` (one line, as research's)
 - Test: `tests/constitution/test_role.py` (rewrite the `_max_output_retries == 3` pin at :84)
 
-- [ ] **Step 1: Write the failing test** — construction default 1; `OUTPUT_RETRIES["constitution"] == 3`; the `_agent` seam's recorded kwargs carry `retries={"output": 3}`.
+- [x] **Step 1: Write the failing test** — construction default 1; `OUTPUT_RETRIES["constitution"] == 3`; the `_agent` seam's recorded kwargs carry `retries={"output": 3}`.
 
-- [ ] **Step 2: Run to verify failure** — `pytest tests/constitution/ -v`, FAIL.
+- [x] **Step 2: Run to verify failure** — `pytest tests/constitution/ -v`, FAIL.
 
-- [ ] **Step 3: Implement** (idiom from Task 3, `role="constitution"`).
+- [x] **Step 3: Implement** (idiom from Task 3, `role="constitution"`).
 
-- [ ] **Step 4: Run the slice** — `pytest tests/constitution/ -q`, PASS.
+- [x] **Step 4: Run the slice** — `pytest tests/constitution/ -q`, PASS.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(constitution): registry-driven output retries on the drafter (FR-202)"`
+- [x] **Step 5: Commit** — `git commit -m "feat(constitution): registry-driven output retries on the drafter (FR-202)"`
 
 ### Task 6: Requirements cutover
 
 Exactly Task 5's shape for the product drafter: `agents/product/agent.py` (:52), `agents/product/agent.yaml`, `src/sdlc/stages/requirements/stage.py` (`_draft_requirements_impl`'s 3 run branches), `src/sdlc/stages/requirements/requirements.md` (:107–108) + `AGENTS.md` line, `tests/requirements/test_role.py` (:85 pin).
 
-- [ ] **Step 1: Failing test** — as Task 5, `role="product"`. Run `pytest tests/requirements/ -v` → FAIL.
-- [ ] **Step 2: Implement.** Run `pytest tests/requirements/ -q` → PASS.
-- [ ] **Step 3: Commit** — `git commit -m "feat(requirements): registry-driven output retries on the drafter (FR-202)"`
+- [x] **Step 1: Failing test** — as Task 5, `role="product"`. Run `pytest tests/requirements/ -v` → FAIL.
+- [x] **Step 2: Implement.** Run `pytest tests/requirements/ -q` → PASS.
+- [x] **Step 3: Commit** — `git commit -m "feat(requirements): registry-driven output retries on the drafter (FR-202)"`
 
 ### Task 7: Assessment direct calls — discover and risk (builder-check amendment VR-3a)
 
@@ -192,15 +192,15 @@ Exactly Task 5's shape for the product drafter: `agents/product/agent.py` (:52),
 **Interfaces:**
 - Consumes: `OUTPUT_RETRIES`; the try/except fail-closed wrappers stay untouched — forwarding goes inside the `try`, before the call.
 
-- [ ] **Step 1: Write the failing tests** — monkeypatch `sdlc.workflows.assessment.OUTPUT_RETRIES` to `{"discover": 3, "risk": 3}` and assert each fake agent's recorded kwargs carry `retries={"output": 3}`; unpatched (shipped registry: both 1) asserts NO `retries` kwarg (`test_discover_forwards_configured_retries`, `test_risk_forwards_configured_retries`).
+- [x] **Step 1: Write the failing tests** — monkeypatch `sdlc.workflows.assessment.OUTPUT_RETRIES` to `{"discover": 3, "risk": 3}` and assert each fake agent's recorded kwargs carry `retries={"output": 3}`; unpatched (shipped registry: both 1) asserts NO `retries` kwarg (`test_discover_forwards_configured_retries`, `test_risk_forwards_configured_retries`).
 
-- [ ] **Step 2: Run to verify failure** — `pytest tests/test_assessment_workflow.py -v`, FAIL.
+- [x] **Step 2: Run to verify failure** — `pytest tests/test_assessment_workflow.py -v`, FAIL.
 
-- [ ] **Step 3: Implement** — the Task 3 idiom inline at both call sites (`role="discover"` / `role="risk"`; no `_run_role` refactor, per spec VR-3a).
+- [x] **Step 3: Implement** — the Task 3 idiom inline at both call sites (`role="discover"` / `role="risk"`; no `_run_role` refactor, per spec VR-3a).
 
-- [ ] **Step 4: Run** — `pytest tests/test_assessment_workflow.py tests/test_assessment_workflow_e2e.py -q`, PASS.
+- [x] **Step 4: Run** — `pytest tests/test_assessment_workflow.py tests/test_assessment_workflow_e2e.py -q`, PASS.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(assessment): forward configured output retries at the discover/risk direct calls (FR-202)"`
+- [x] **Step 5: Commit** — `git commit -m "feat(assessment): forward configured output retries at the discover/risk direct calls (FR-202)"`
 
 ### Task 8: Durability pin — per-call `retries` drives the output-retry loop
 
@@ -210,11 +210,11 @@ Exactly Task 5's shape for the product drafter: `agents/product/agent.py` (:52),
 **Interfaces:**
 - Consumes: pydantic-ai `Agent` + `TemporalDurability` as wired in `tests/durability/`; per-call `run(..., retries={"output": 2})`.
 
-- [ ] **Step 1: Write the failing-then-passing pin** — a stub model whose first final output fails `output_type` validation and second passes; assert (a) a per-call `retries={"output": 2}` schedules a second model request under the durability capability, (b) the same agent called WITHOUT the override (construction default 1) raises `UnexpectedModelBehavior` on the first malformed output. If the harness needs the ephemeral dev-server, mark the test `temporal` per house style and verify with `pytest -m temporal`.
+- [x] **Step 1: Write the failing-then-passing pin** — a stub model whose first final output fails `output_type` validation and second passes; assert (a) a per-call `retries={"output": 2}` schedules a second model request under the durability capability, (b) the same agent called WITHOUT the override (construction default 1) raises `UnexpectedModelBehavior` on the first malformed output. If the harness needs the ephemeral dev-server, mark the test `temporal` per house style and verify with `pytest -m temporal`.
 
-- [ ] **Step 2: Run** — `pytest tests/durability/test_per_call_output_retries.py -v` (plus `-m temporal` if marked), PASS. This is Review Focus #1's pin — it must exercise the durable wrapper, not a bare in-process agent.
+- [x] **Step 2: Run** — `pytest tests/durability/test_per_call_output_retries.py -v` (plus `-m temporal` if marked), PASS. This is Review Focus #1's pin — it must exercise the durable wrapper, not a bare in-process agent.
 
-- [ ] **Step 3: Commit** — `git commit -m "test(durability): pin per-call output retries through TemporalDurability (FR-202)"`
+- [x] **Step 3: Commit** — `git commit -m "test(durability): pin per-call output retries through TemporalDurability (FR-202)"`
 
 ### Task 9: Close-out — ROADMAP, last-verified log, spec status
 
@@ -223,8 +223,8 @@ Exactly Task 5's shape for the product drafter: `agents/product/agent.py` (:52),
 - Modify: `docs/roadmap/last-verified-log.md` (prepend the full close-out entry: what landed, the four cutover roles, discover/risk wiring, the research plan/synthesis 1→3 delta)
 - Modify: `docs/superpowers/specs/2026-11-14-validation-retries-knob-design.md` (Status → implemented)
 
-- [ ] **Step 1: Full verification** — `pytest` (fast tier), `pytest -m temporal tests/durability/ tests/research/ -q` if Task 8 marked temporal, `ruff check . && ruff format --check . && mypy`. All green before the docs flip.
+- [x] **Step 1: Full verification** — `pytest` (fast tier), `pytest -m temporal tests/durability/ tests/research/ -q` if Task 8 marked temporal, `ruff check . && ruff format --check . && mypy`. All green before the docs flip.
 
-- [ ] **Step 2: Write the three doc edits** — the roadmap row cites the spec path and the one behavior delta; the log entry carries the detail.
+- [x] **Step 2: Write the three doc edits** — the roadmap row cites the spec path and the one behavior delta; the log entry carries the detail.
 
-- [ ] **Step 3: Commit** — `git commit -m "docs: FR-202 closed — configured validation retries (ROADMAP, log, spec)"`
+- [x] **Step 3: Commit** — `git commit -m "docs: FR-202 closed — configured validation retries (ROADMAP, log, spec)"`

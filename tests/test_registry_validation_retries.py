@@ -25,9 +25,11 @@ def _write_registry(root, defaults=None):
     reason under test."""
     root = write_registry_dir(root)
     if defaults is not None:
-        lines = ["version: 1", "defaults:", *(
-            f"  {key}: {value}" for key, value in defaults.items()
-        )]
+        lines = [
+            "version: 1",
+            "defaults:",
+            *(f"  {key}: {value}" for key, value in defaults.items()),
+        ]
         (root / "registry.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return root
 

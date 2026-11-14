@@ -1,7 +1,7 @@
 # FR-202 close-out: the configured validation-retry count — design
 
 Date: 2026-11-14
-Status: draft — awaiting human approval (builder check done; two amendments folded in, see VR-3a/VR-1b)
+Status: implemented 2026-11-14 (branch feat/fr202-validation-retries)
 Owner: brainstorming session (superpowers), picked approach: **A — registry default + per-role override, forwarded per call**
 
 ## Intent
