@@ -307,3 +307,60 @@ def test_decide_or_answer_write_tool_annotations(tmp_path):
         ann = by[name]["annotations"]
         assert ann["destructiveHint"] is True, name
         assert ann["readOnlyHint"] is False, name
+
+
+# --- start (US3 acceptance over the real binary, T033) ----------------------
+#
+# Reuses _session (E1 caps, OLD protocol, client "parity-client"). The record
+# carries "started" entries as well as "signals"; read it only after the
+# session context has closed the client.
+
+START_ARGS = {"title": "Add SSO", "mode": "greenfield", "description": "single sign-on"}
+BF_NO_REPO = {"title": "Add SSO", "mode": "brownfield", "description": "single sign-on"}
+BROWNFIELD_SENTENCE = (
+    "a brownfield run needs repo set to the repository url; "
+    "ask the operator which repository this is for"
+)
+
+
+def _started(record: Path) -> list[dict]:
+    return json.loads(record.read_text(encoding="utf-8"))["started"]
+
+
+def test_start_accept_elicits_and_records_one_start(tmp_path):
+    with _session(tmp_path) as (client, record):
+        result = client.call_tool("start_run", START_ARGS)
+    assert not result.get("isError")
+    assert _text(result) == "feature-add-sso"
+
+    assert "Add SSO" in client.elicited[0]["message"]
+    assert "greenfield" in client.elicited[0]["message"]
+
+    assert _started(record) == [
+        {
+            "wf_id": "feature-add-sso",
+            "title": "Add SSO",
+            "mode": "greenfield",
+            "description": "single sign-on",
+        }
+    ]
+    assert _signals(record) == []
+
+
+def test_start_decline_records_nothing(tmp_path):
+    with _session(tmp_path) as (client, record):
+        client.elicitation = ("decline",)
+        result = client.call_tool("start_run", START_ARGS)
+    assert result["isError"] is True
+    assert _text(result) == NOT_CONFIRMED
+    assert _started(record) == []
+    assert _signals(record) == []
+
+
+def test_start_brownfield_without_repo_refused_after_confirmation(tmp_path):
+    with _session(tmp_path) as (client, record):
+        result = client.call_tool("start_run", BF_NO_REPO)
+    assert result["isError"] is True
+    assert _text(result) == BROWNFIELD_SENTENCE
+    assert client.elicited, "a human must be asked before the refusal"
+    assert _started(record) == []

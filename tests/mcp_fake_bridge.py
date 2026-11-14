@@ -81,6 +81,18 @@ def main() -> None:
 
         handle.signal = signal
 
+    def wrap_starter(deps) -> None:
+        # Starts append inside deps.starter (US3) — same kill_on_drop race
+        # as signals; dump the moment a start lands.
+        original = deps.starter
+
+        async def starter(idea, cfg, wf_id):
+            started = await original(idea, cfg, wf_id)
+            dump_record()
+            return started
+
+        deps.starter = starter
+
     def factory(actor: str):
         deps = build_fake_deps(data_dir, actor)
         if keep_pending:
@@ -89,6 +101,7 @@ def main() -> None:
         if record is not None:
             for handle in deps.recorder.handles.values():
                 wrap_handle(handle)
+            wrap_starter(deps)
             dump_record()
         return deps
 
