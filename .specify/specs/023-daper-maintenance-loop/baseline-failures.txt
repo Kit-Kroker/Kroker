@@ -1,0 +1,21 @@
+# T001 baseline — fast tier (`uv run --extra dev pytest -q`) on main @
+# eb2dd323, 2026-11-14, in the throwaway worktree /tmp/opencode/wt-base-023.
+#
+# 8 pre-existing failures observed; the sorted id set is byte-identical to
+# .specify/specs/022-mcp-channel-adapter/baseline-failures.txt, and every id
+# is inside the 11-id set recorded by
+# .specify/specs/021-recall-snapshot-artifact/baseline-failures.txt. No novel
+# id vs either file — failures neither grew nor moved since 022.
+#
+# Excluded from this list by construction: the RED-first QA test files for
+# this round (tests/maintenance/*), untracked at T001 and landing per task;
+# at T001 they fail on the missing modules they specify.
+
+tests/test_benchmark_acceptance_stalled.py::test_sc003_recompute_stored_acceptance
+tests/test_deveval_corpus.py::test_imported_cases_state_role_and_visibility[deveval-hone]
+tests/test_deveval_corpus.py::test_imported_cases_state_role_and_visibility[deveval-particle-swarm-optimization]
+tests/test_deveval_corpus.py::test_imported_cases_state_role_and_visibility[deveval-stocktrends]
+tests/test_prompt_migration.py::test_prompt_shas_did_not_move
+tests/test_read_fixtures_fresh.py::test_committed_recordings_equal_a_fresh_build
+tests/test_read_fixtures_fresh.py::test_pristine_copy_passes_the_record_check
+tests/test_todo_api_case_loads.py::test_todo_api_case_file_exists_and_loads
