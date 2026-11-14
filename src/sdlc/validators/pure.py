@@ -2,17 +2,66 @@
 
 No I/O, no top-level temporalio import -- importable from workflow code and
 activities alike. This module opens the library with the plan-graph checks
-migrated verbatim from stages/plan/validation.py (E-74 origin) and the new
-ids_unique check; later tasks add tree-reading validators (activities.py)
-and evidence schemas (evidence.py).
+migrated verbatim from stages/plan/validation.py (E-74 origin), the new
+ids_unique check, and path_like_tokens -- the pure tokenizer the tree-reading
+activity in activities.py consumes; evidence schemas (evidence.py) follow in
+a later task.
 """
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 from ..core.models import PlanConfig
 from ..stages.plan.models import DevTask
+
+
+def _norm_path(p: str) -> str:
+    """Windows-authored hints and POSIX diff paths name the same file.
+
+    Verbatim twin of stages/plan/models.py's ``_norm_path`` (the drift
+    comparison's copy). Duplicated on purpose rather than moved: importing
+    a private stage helper would couple this library to a detail the plan
+    slice may reshape freely, and two lines are cheaper than that seam
+    breach. Change them together.
+    """
+    return p.replace("\\", "/").strip().lstrip("./")
+
+
+# A path-like token WITHOUT a separator still qualifies when it ends in a
+# known source/config extension -- this is what lets `README.md` through
+# while `sdlc.stages.plan.validation` (a symbol) stays out.
+_PATH_EXT_RE = re.compile(
+    r"[\w.-]+\.(py|ts|tsx|js|go|rs|md|yaml|yml|json|toml|txt|cfg|ini|sql|sh)$"
+)
+
+# One tokenizer run: word chars, dots, slashes, hyphens. Prose punctuation
+# (`;`, quotes, parens) splits tokens off instead of riding along, so
+# "configs/prod.yaml;" yields the clean path.
+_TOKEN_RE = re.compile(r"[\w./\\-]+")
+
+
+def path_like_tokens(text: str) -> list[str]:
+    """The path-like tokens in free agent prose, normalized, sorted, deduped.
+
+    A token qualifies when it contains a path separator (``/`` or ``\\``)
+    or ends in a known source/config extension; each hit is normalized by
+    the local `_norm_path` (the plan/models.py twin) so ``.\\src\\app.py``
+    and ``src/app.py`` collapse to one entry. Symbols (`module.attr:26`)
+    and bare prose yield `[]`.
+
+    Task 6's clarify validation feeds agent-written prose through this to
+    get a checkable path list; sorting and deduping here keeps the output
+    deterministic, so the activity result and any failure message quoting
+    it are stable across retries.
+    """
+    hits = {
+        _norm_path(tok)
+        for tok in _TOKEN_RE.findall(text)
+        if "/" in tok or "\\" in tok or _PATH_EXT_RE.search(tok)
+    }
+    return sorted(p for p in hits if p)
 
 
 def ids_unique(tasks: list[DevTask]) -> str | None:

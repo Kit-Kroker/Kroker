@@ -1,13 +1,14 @@
 """Pure validators of the FR-205 library (`sdlc.validators.pure`).
 
 The plan-graph tests are ported verbatim from tests/plan/ (they pin the
-migration from stages/plan/validation.py); ids_unique and the purity pin
-are new. The scheduler's ready-loop (feature.py's `run_one` caller) only
-discovers an unsatisfiable task graph after execution has already started,
-surfacing the opaque `failed:dependency-cycle` outcome deep into a run (see
-bench-todo-api-greenfield-1785868165: a plan-revision round dropped tasks
-T1-T6 while the surviving T7 still depended on them). `validate_task_graph`
-runs right after the plan gate so a bad graph fails fast and legibly instead.
+migration from stages/plan/validation.py); ids_unique, the tokenizer tests
+and the purity pin are new. The scheduler's ready-loop (workflows/build.py
+run_tasks) only discovers an unsatisfiable task graph after execution has
+already started, surfacing the opaque `failed:dependency-cycle` outcome deep
+into a run (see bench-todo-api-greenfield-1785868165: a plan-revision round
+dropped tasks T1-T6 while the surviving T7 still depended on them).
+`validate_task_graph` runs right after the plan gate so a bad graph fails
+fast and legibly instead.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from sdlc.validators import (
     dag_acyclic,
     deps_resolve,
     ids_unique,
+    path_like_tokens,
     task_size,
     validate_task_graph,
 )
@@ -124,6 +126,22 @@ def test_task_size_names_first_breach():
     assert task_size([big], PlanConfig()) == "task 'T3' exceeds plan limits: files_hint=25>24"
 
 
+def test_task_size_names_criteria_only_breach():
+    assert (
+        task_size([_task("T1", criteria=["c"] * 13)], PlanConfig())
+        == "task 'T1' exceeds plan limits: criteria=13>12"
+    )
+
+
+def test_task_size_names_first_breach_across_tasks():
+    # Both tasks breach; the report names whichever comes first in
+    # task-list order, whichever limit it trips.
+    t1 = _task("T1", criteria=["c"] * 13)
+    t2 = _task("T2", files_hint=["f"] * 25)
+    assert task_size([t1, t2], PlanConfig()) == "task 'T1' exceeds plan limits: criteria=13>12"
+    assert task_size([t2, t1], PlanConfig()) == "task 'T2' exceeds plan limits: files_hint=25>24"
+
+
 def test_devtask_covers_defaults_empty_and_old_json_deserializes():
     assert DevTask(id="T1", title="t", description="d", acceptance_criteria=["a"]).covers == []
     legacy = json.loads(
@@ -147,3 +165,19 @@ def test_pure_module_has_no_temporalio_or_io():
     ]
     res = subprocess.run(cmd, capture_output=True, text=True, check=False)
     assert res.returncode == 0, f"stdout: {res.stdout}, stderr: {res.stderr}"
+
+
+def test_path_like_tokens_paths_and_extensions():
+    assert path_like_tokens("see src/app.py and configs/prod.yaml; also README.md") == [
+        "README.md",
+        "configs/prod.yaml",
+        "src/app.py",
+    ]  # sorted
+
+
+def test_path_like_tokens_symbols_and_prose_pass_through_empty():
+    assert path_like_tokens("sdlc.stages.plan.validation:26 and 'the merge step'") == []
+
+
+def test_path_like_tokens_normalizes_windows_and_dot_slash():
+    assert path_like_tokens(".\\src\\app.py ./lib.ts") == ["lib.ts", "src/app.py"]
