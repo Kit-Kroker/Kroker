@@ -92,7 +92,7 @@ jobs:
       - name: Install dependencies (from uv.lock)
         run: uv sync --frozen --extra dev
 
-      - uses: Swatinem/rust-cache@v3
+      - uses: Swatinem/rust-cache@v2
         with:
           workspaces: interfaces/mcp
 
