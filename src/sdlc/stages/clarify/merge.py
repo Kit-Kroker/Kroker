@@ -116,9 +116,7 @@ def merge_clarification(
         q
         for q in candidates
         if q.dimension not in grounded
-        or not (
-            q.evidence and missing_paths and set(path_like_tokens(q.evidence or "")) & missing_paths
-        )
+        or not (q.evidence and missing_paths and set(path_like_tokens(q.evidence)) & missing_paths)
     ]
 
     # DISCARD anything below the bar both prompts already state. A sub-floor

@@ -387,6 +387,53 @@ def test_plan_check_passes_without_requirements_doc():
     assert host.synced == (3, ["t1"])  # the clean pass still syncs
 
 
+def test_plan_check_coverage_passes_vacuously_on_stories_without_functional():
+    pp = _postplan()
+    host = Host()
+    # A requirements_doc whose stories carry NO functional requirements
+    # defines zero requirement ids -- covers_all has nothing to demand, so
+    # a taskless `covers` list still rides "ok".
+    story = Story(
+        id="US-1",
+        narrative="As a user, I want a vibe, so that the product vibes.",
+        functional=[],
+        success_criteria=[],
+    )
+    req_doc = Requirements(stories=[story], digest=requirements_digest([story]), drafted_by="agent")
+    plan = ImplementationPlan(tasks=[_t("t1")])
+    payloads = {
+        "plan#1.approve": StoredPayload(model=plan, producer="plan#1"),
+        "requirements#1.freeze": StoredPayload(model=req_doc, producer="requirements#1"),
+    }
+    nc = _nc("plan_check", payloads=payloads, host=host)
+    inputs = {"plan": "plan#1.approve", "requirements_doc": "requirements#1.freeze"}
+
+    out = asyncio.run(pp.plan_check_node(nc, _act("plan_check", inputs), PipelineConfig()))
+
+    assert (out.port, out.payload) == ("ok", plan)
+    assert host.synced == (3, ["t1"])
+
+
+def test_plan_check_passes_an_empty_task_list():
+    pp = _postplan()
+    host = Host()
+    # Zero tasks: ids_unique/deps_resolve/dag_acyclic/task_size are all
+    # vacuously true and, without a requirements_doc, coverage never runs.
+    plan = ImplementationPlan(tasks=[])
+    nc = _nc(
+        "plan_check",
+        payloads={"plan#1.approve": StoredPayload(model=plan, producer="plan#1")},
+        host=host,
+    )
+
+    out = asyncio.run(
+        pp.plan_check_node(nc, _act("plan_check", {"plan": "plan#1.approve"}), PipelineConfig())
+    )
+
+    assert (out.port, out.payload) == ("ok", plan)
+    assert host.synced == (3, [])
+
+
 # ---- code_node: run_tasks exceptions and failure strings --------------------------
 
 

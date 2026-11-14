@@ -44,9 +44,13 @@ strict flag-off byte-identity. [E-85]
 ### CLARIFY-1.6
 The memo key's recall slot is the run's memory watermark, extended with the stage's recall snapshot hash when memory is on. [FR-402, 021]
 
+### CLARIFY-1.7
+Evidence-path discard (023): when `_evidence_paths_enabled()` (patch `023-clarify-evidence-paths` — a wire name recorded in histories, never renamed; False outside a workflow, because the check's only action is a real activity call) AND the mode is BROWNFIELD AND a `repo_path` is set, the fan-out collects the path-like tokens of every question's evidence (route + probes, via `sdlc.validators.path_like_tokens`) and settles them against the repo in ONE batched `paths_exist` activity call (1-minute start-to-close, single attempt, sorted token list pinning the command input). `merge_clarification` then DISCARDs — never recorded on `dropped`, which means "material but lost the cap" — grounded-dimension questions whose evidence cites a missing path: grounded speculation by another route. Flag-off, greenfield, seeded and single-mode runs leave `missing_paths` empty, the tokenizer is never consulted, and the merge is byte-identical to pre-023. [FR-205, E-85]
+
 ## Failure modes
 
 - **Model failure or timeout in single mode**: Handled by bounded retry policy or surfaces as workflow failure.
 - **Probe failure in fan-out mode**: Bounded retry; on exhaustion or timeout, the failing dimension is dropped from results without failing sibling probes or the overall stage.
+- **Evidence citing a missing path (brownfield fan-out, patch 023)**: The question is discarded at merge (CLARIFY-1.7) — never a stage failure; the `paths_exist` activity runs with a single attempt and a missing path is a finding, not an error.
 - **Gate timeout**: When `ask_and_wait` reaches timeout, raises gate timeout error per workflow gate policy.
 - **Unattended execution**: When gate policy is OFF, suggested answers are used to ensure the pipeline proceeds without blocking.
