@@ -181,3 +181,12 @@ def test_path_like_tokens_symbols_and_prose_pass_through_empty():
 
 def test_path_like_tokens_normalizes_windows_and_dot_slash():
     assert path_like_tokens(".\\src\\app.py ./lib.ts") == ["lib.ts", "src/app.py"]
+
+
+def test_path_like_tokens_keeps_dotfile_leading_dot():
+    """023 carry-over pin: `lstrip("./")` strips EVERY leading dot and slash
+    character, corrupting dotfiles (`.github/workflows/ci.yaml` ->
+    `github/...`) -- a false-missing report and, downstream, a false DISCARD
+    of a question citing a file that exists. The local normalizer removes ONE
+    `./` prefix and never bare dot characters."""
+    assert path_like_tokens("see .github/workflows/ci.yaml") == [".github/workflows/ci.yaml"]

@@ -20,13 +20,18 @@ from ..stages.plan.models import DevTask
 def _norm_path(p: str) -> str:
     """Windows-authored hints and POSIX diff paths name the same file.
 
-    Verbatim twin of stages/plan/models.py's ``_norm_path`` (the drift
-    comparison's copy). Duplicated on purpose rather than moved: importing
-    a private stage helper would couple this library to a detail the plan
-    slice may reshape freely, and two lines are cheaper than that seam
-    breach. Change them together.
+    Deliberately DIVERGES from the stages/plan/models.py twin: that copy
+    ``lstrip("./")``-es every leading dot AND slash character, corrupting
+    dotfile paths (``.github/workflows/ci.yaml`` -> ``github/...``). The
+    drift comparison tolerates it because it normalizes both sides
+    identically -- self-consistent corruption. Here a corrupted token is a
+    false-missing report and, downstream, a false DISCARD of a question
+    citing a file that exists, so this copy strips separators/whitespace and
+    then removes ONE leading ``./`` prefix, never bare dot characters. The
+    twin must stay byte-identical; change this one alone.
     """
-    return p.replace("\\", "/").strip().lstrip("./")
+    p = p.replace("\\", "/").strip()
+    return p[2:] if p.startswith("./") else p
 
 
 # A path-like token WITHOUT a separator still qualifies when it ends in a
@@ -47,9 +52,11 @@ def path_like_tokens(text: str) -> list[str]:
 
     A token qualifies when it contains a path separator (``/`` or ``\\``)
     or ends in a known source/config extension; each hit is normalized by
-    the local `_norm_path` (the plan/models.py twin) so ``.\\src\\app.py``
-    and ``src/app.py`` collapse to one entry. Symbols (`module.attr:26`)
-    and bare prose yield `[]`.
+    the local `_norm_path` -- which deliberately diverges from the
+    plan/models.py twin on dotfiles -- so ``.\\src\\app.py`` and
+    ``src/app.py`` collapse to one entry while ``.github/workflows/ci.yaml``
+    keeps its leading dot. Symbols (`module.attr:26`) and bare prose yield
+    `[]`.
 
     Task 6's clarify validation feeds agent-written prose through this to
     get a checkable path list; sorting and deduping here keeps the output

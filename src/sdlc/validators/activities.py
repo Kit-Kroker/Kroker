@@ -18,9 +18,11 @@ from .pure import _norm_path
 def paths_exist(repo_path: str, paths: list[str]) -> dict[str, bool]:
     """Map each requested path to whether it exists under ``repo_path``.
 
-    Each token is normalized first (`_norm_path`, the plan/models.py twin),
-    so Windows separators and ``./``-prefixed hints resolve to the same
-    file as the POSIX form. Missing and empty entries map to False rather
+    Each token is normalized first (`_norm_path`, the validators-local
+    normalizer, which deliberately diverges from the plan/models.py twin on
+    dotfiles), so Windows separators and ``./``-prefixed hints resolve to the
+    same file as the POSIX form while a dotfile keeps its leading dot.
+    Missing and empty entries map to False rather
     than raising or collapsing into the repo root -- a validator that dies
     on the first absent path would hide every finding after it, and an
     empty token resolving to ``repo_path`` itself would read as a false

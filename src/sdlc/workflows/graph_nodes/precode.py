@@ -165,6 +165,7 @@ async def clarify_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
         route_agent=t_clarify_route,
         probe_agent=t_clarify_probe,
         clarify_model=resolve_role_model(cfg, "clarify"),
+        repo_path=nc.facts.repo_path,
     )
     await nc.host._board_publish(cfg, "requirements", reqs.model_dump_json())
     await nc.ctx.retain(
