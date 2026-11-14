@@ -256,3 +256,48 @@ def test_incidents_state_prints_the_summary(capsys):
     assert "cycle 7" in out
     assert "open_gates" in out or "open gates" in out.lower()
     assert "ack" in out.lower()
+
+
+# =========================================================================== #
+# ## post-hoc QA audit (qa-chaos, 2026-11-15)
+#
+# FINDING (see report): the executor's test_enable_invalid_config_refused_exit_1
+# passed tmp_path — NOT a git repo — as --repo, so it exits 1 at the git-tree
+# check and never reaches MaintenanceConfig validation. The bullet it claims
+# to pin ("enable validates MaintenanceConfig") had no working refusal test.
+# The tests below put a VALID git repo under an invalid config; contracts/
+# cli.md says that is exit 1 with a one-line reason on stderr.
+# =========================================================================== #
+
+
+@pytest.mark.parametrize(
+    "project,extra",
+    [
+        ("Demo", ["--no-build-probe"]),  # uppercase: regex refusal
+        ("demo", ["--no-build-probe", "--threshold", "0.4"]),  # below the 0.5 bound
+    ],
+    ids=["bad-project", "bad-threshold"],
+)
+def test_enable_with_an_invalid_config_on_a_valid_git_repo_refuses_exit_1(
+    repo_dir, capsys, project, extra
+):
+    client = _FakeClient()
+    code = _run(["enable", project, "--repo", str(repo_dir), *extra], client, capsys)
+    assert code == 1  # contracts/cli.md: a refused operation, not a traceback
+    assert not client.start_workflow.started
+    err = capsys.readouterr().err.strip()
+    assert err, "a refusal carries a one-line reason on stderr"
+    assert len(err.splitlines()) == 1
+
+
+def test_incidents_on_a_not_enabled_project_is_refused_exit_1(capsys):
+    class _DeadHandle:
+        async def query(self, name, **kw):  # noqa: ANN001
+            raise RuntimeError("workflow not found: maint-ghost")
+
+    class _DeadClient:
+        def get_workflow_handle(self, wid):  # noqa: ANN001
+            return _DeadHandle()
+
+    assert _run(["incidents", "ghost"], _DeadClient(), capsys) == 1
+    assert "not enabled" in capsys.readouterr().err

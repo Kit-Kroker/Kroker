@@ -341,3 +341,63 @@ async def test_history_replays_clean(repo_dir):
         history, raise_on_replay_failure=True
     )
     assert result is not None
+
+
+# =========================================================================== #
+# ## post-hoc QA audit (qa-chaos, 2026-11-15)
+#
+# Gap found against T017/R3: "Gates never block the cycle" had no test —
+# every executor test stops at the first pending gate. Here a THIRD cycle
+# must complete (the fault persists, seen_count bumps) while repair:1 sits
+# undecided.
+# =========================================================================== #
+
+
+async def test_a_pending_gate_never_blocks_the_next_cycle(repo_dir):
+    async with await WorkflowEnvironment.start_time_skipping(
+        data_converter=pydantic_data_converter
+    ) as env:
+        async with Worker(
+            env.client,
+            task_queue=TASK_QUEUE,
+            workflows=[MaintenanceWorkflow, TriageWorkflow],
+            plugins=[SdlcPydanticAIPlugin()],
+            activities=[*TRIAGE_ACTIVITIES, *_maintainer_activities(), fake_notify],
+        ):
+            handle = await env.client.start_workflow(
+                MaintenanceWorkflow.run,
+                _state(repo_dir),
+                id="maint-demo",
+                task_queue=TASK_QUEUE,
+            )
+            await handle.signal("nudge")
+
+            async def _baseline_recorded() -> bool:
+                return (await handle.query(MaintenanceWorkflow.maintenance_state)).baseline_recorded
+
+            await _until(_baseline_recorded, what="cycle 1 baseline")
+
+            commit_build_break(repo_dir)
+            await handle.signal("nudge")  # cycle 2: incident + plan + gate
+
+            async def _gate_pending() -> bool:
+                pending = await handle.query(MaintenanceWorkflow.pending_decisions)
+                return any(p.gate == "repair:1" for p in pending)
+
+            await _until(_gate_pending, what="repair:1 to open")
+
+            await handle.signal("nudge")  # cycle 3, while repair:1 is undecided
+
+            async def _fault_persisted_in_cycle_3() -> bool:
+                incs = await handle.query(MaintenanceWorkflow.incidents)
+                return bool(incs) and incs[0].seen_count == 2
+
+            await _until(_fault_persisted_in_cycle_3, what="cycle 3 to complete")
+
+            # The cycle ran to completion without any decision: the gate is
+            # still pending and the incident still awaiting.
+            pending = await handle.query(MaintenanceWorkflow.pending_decisions)
+            assert [p.gate for p in pending] == ["repair:1"]
+            inc = (await handle.query(MaintenanceWorkflow.incidents))[0]
+            assert inc.state.value == "awaiting_decision"
+            assert inc.decision is None

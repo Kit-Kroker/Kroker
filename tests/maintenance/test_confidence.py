@@ -113,3 +113,60 @@ def test_effective_is_min_of_self_and_floor():
     assert floor == pytest.approx(0.6)
     assert min(0.2, floor) == 0.2  # self below the floor: self wins
     assert min(0.99, floor) == pytest.approx(0.6)  # self above: the floor caps
+
+
+# =========================================================================== #
+# ## post-hoc QA audit (qa-chaos, 2026-11-15)
+#
+# Gaps found against T011: "effective == min(self, floor)" was pinned only
+# TAUTOLOGICALLY (the test called Python's min() on its own constants and
+# asserted Python's min works — no implementation in the loop), MECHANICAL
+# had no never-below-zero case, and nothing kept garbage-negative penalty
+# inputs from pushing the floor ABOVE its ceiling.
+# =========================================================================== #
+
+
+def test_effective_is_min_of_self_and_floor_is_enforced_by_the_plan_model():
+    # The non-tautological pin: RepairPlan carries a model validator, so a
+    # plan whose effective is not the lower of self and floor cannot exist.
+    from pydantic import ValidationError
+
+    from sdlc.maintenance.models import RepairPlan
+
+    def _plan(**kw):
+        base = dict(
+            analysis="a",
+            actions=[],
+            self_confidence=0.5,
+            floor=0.6,
+            effective=0.5,  # the correct value: min(0.5, 0.6)
+            author_model="m",
+        )
+        base.update(kw)
+        return RepairPlan(**base)
+
+    assert _plan().effective == pytest.approx(0.5)  # self below floor: self wins
+    assert _plan(self_confidence=0.9, effective=0.6).effective == pytest.approx(0.6)
+    with pytest.raises(ValidationError) as exc_info:
+        _plan(self_confidence=0.5, effective=0.9)  # above the cap: refused
+    assert "effective" in str(exc_info.value)
+
+
+def test_mechanical_floor_never_drops_below_zero():
+    # 0.95 - 0.15 (not reproduced) - 0.6 (3 reopens) - 0.25 (5 extra actions)
+    # = -0.05 -> floored. Only the JUDGEMENT side of the floor was pinned.
+    v = confidence_floor(_mechanical(), reproduced=False, reopens=3, n_actions=6)
+    assert v == 0.0
+
+
+@pytest.mark.parametrize("reopens,n_actions", [(-5, -3), (0, 0), (-1, 1)])
+def test_garbage_penalty_inputs_never_lift_the_floor_above_its_ceiling(reopens, n_actions):
+    # Chaos: unclamped arithmetic would turn negative reopens or a zero /
+    # negative action count into a floor ABOVE the ceiling (e.g. 0.95 + 1.0),
+    # raising the cap the whole design rests on. Anything but the ceiling
+    # itself is a bug.
+    for finding in (_mechanical(), _judgement()):
+        v = confidence_floor(finding, reproduced=True, reopens=reopens, n_actions=n_actions)
+        assert v == pytest.approx(
+            confidence_floor(finding, reproduced=True, reopens=0, n_actions=1)
+        )

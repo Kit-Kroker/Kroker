@@ -80,3 +80,38 @@ def test_registry_without_the_maintainer_folder_still_loads() -> None:
         parsed = loader.load_registry(root)  # type: ignore[arg-type]
     assert "maintainer" not in parsed
     assert "planner" in parsed
+
+
+# =========================================================================== #
+# ## post-hoc QA audit (qa-chaos, 2026-11-15)
+#
+# Gaps found against T009's brief: the brief demanded a tmp-registry test
+# WITH the maintainer folder present ("load_registry returns it with
+# instructions loaded") — only the absence case had been written — and the
+# STAGE_ROLES/STAGE_MODELS keyset sanity assertion.
+# =========================================================================== #
+
+
+def test_a_tmp_registry_with_the_maintainer_folder_loads_it_with_instructions() -> None:
+    # The mirror of the absence case: the production folder dropped into a
+    # tmp registry must load as a proposer with its instructions attached.
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as td:
+        root = write_registry_dir(Path(td))
+        # The harness registry already materialises a maintainer slot (T010
+        # grew write_registry_dir); overwrite it with the production files.
+        shutil.copytree(Path("agents/maintainer"), root / "maintainer", dirs_exist_ok=True)
+        parsed = loader.load_registry(root)  # type: ignore[arg-type]
+    cfg = parsed["maintainer"]
+    assert cfg.kind == "proposer"
+    assert cfg.model is not None
+    assert cfg.instructions
+
+
+def test_stage_roles_and_stage_models_keysets_stay_identical() -> None:
+    # Wiring sanity the T009 brief asked for alongside the new role; mirrors
+    # tests/test_stage_models.py so a maintainer wiring mistake cannot hide
+    # behind that file alone.
+    assert set(roles.STAGE_ROLES) == set(roles.STAGE_MODELS)
+    assert roles.STAGE_ROLES.get("maintenance") == "maintainer"

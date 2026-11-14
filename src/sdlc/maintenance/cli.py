@@ -62,16 +62,23 @@ async def _enable(args: argparse.Namespace, client) -> int:  # noqa: ANN001
     if not _is_git_work_tree(repo):
         print(f"not a git work tree: {repo}", file=sys.stderr)
         return 1
-    cfg = MaintenanceConfig(
-        project=args.project,
-        repo_dir=repo,
-        default_branch=args.branch,
-        build_probe=not args.no_build_probe,
-        ack_unattended_build_probe=args.ack_unattended_build_probe,
-        advisory_source=args.advisory_source,
-        threshold=args.threshold,
-        gate_timeout_hours=args.gate_timeout_hours,
-    )
+    try:
+        cfg = MaintenanceConfig(
+            project=args.project,
+            repo_dir=repo,
+            default_branch=args.branch,
+            build_probe=not args.no_build_probe,
+            ack_unattended_build_probe=args.ack_unattended_build_probe,
+            advisory_source=args.advisory_source,
+            threshold=args.threshold,
+            gate_timeout_hours=args.gate_timeout_hours,
+        )
+    except Exception as e:  # noqa: BLE001 -- a refusal, never a traceback
+        # contracts/cli.md: one line on stderr — pydantic's multi-line
+        # ValidationError flattens, field names included.
+        reason = " ".join(str(e).split())[:300]
+        print(f"invalid configuration: {reason}", file=sys.stderr)
+        return 1
     from ..workflows.maintenance import MaintenanceWorkflow
 
     try:

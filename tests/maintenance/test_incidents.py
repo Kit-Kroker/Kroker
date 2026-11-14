@@ -328,3 +328,67 @@ def test_output_is_byte_identical_across_input_orderings():
 
 def test_detect_signals_are_exactly_three():
     assert DETECT_SIGNALS == {"secrets", "build_probe", "dependencies"}
+
+
+# =========================================================================== #
+# ## post-hoc QA audit (qa-chaos, 2026-11-15)
+#
+# Gaps found against the T013 matrix: the literal "`prev` over
+# MAX_PREV_FINDINGS" bullet was only ever exercised by flooding CURR (both
+# existing truncation tests flood the current report; prev is clean), and the
+# data-model's "a later NEW of the same key opens a fresh incident with a
+# fresh no" sentence had no test at all.
+# =========================================================================== #
+
+
+def test_prev_over_the_cap_truncates_even_when_curr_is_clean():
+    # The task text names the PREV side of the cap (R6's payload note). The
+    # executor's tests flood only curr; here prev is the flooded side and
+    # curr is clean — the guard must still fire and must carry the clean
+    # report forward instead of the partial one.
+    from sdlc.triage.models import finding_identity
+
+    baselined = _with_baseline(_state(cycle=1), make_triage())
+    flood = [critical_advisory(package=f"p{i}") for i in range(MAX_PREV_FINDINGS + 1)]
+    flooded_prev = make_triage({"dependencies": flood})
+    assert len(flood) > MAX_PREV_FINDINGS
+    assert len({finding_identity(f) for f in flood}) == len(flood)
+
+    state, events = step(baselined.model_copy(update={"prev": flooded_prev}), make_triage())
+
+    assert events.truncated is True
+    assert state.incidents == []  # never guess on a partial picture
+    assert state.cycle == baselined.cycle + 1
+    # The partial prev is NOT carried: the clean current report replaces it.
+    assert sum(len(s.findings) for s in state.prev.signals) == 0
+
+
+def test_a_resolved_incident_reopening_opens_a_fresh_incident_with_a_fresh_no():
+    # data-model §IncidentState: "Terminal incidents stay in `incidents` for
+    # the query. A later NEW of the same key opens a fresh incident with a
+    # fresh `no`." Untested by the executor's file.
+    from sdlc.triage.models import finding_identity
+
+    baselined = _with_baseline(_state(cycle=1), make_triage())
+    fault = critical_advisory(package="regressor")
+    identity = finding_identity(fault)
+
+    first, _ = step(baselined, make_triage({"dependencies": [fault]}))
+    opened = [i for i in first.incidents if i.key == identity]
+    assert len(opened) == 1
+    first_no = opened[0].no
+
+    second, _ = step(first, make_triage())  # fixed by hand
+    assert second.incidents[0].state is IncidentState.RESOLVED_EXTERNALLY
+
+    third, _ = step(second, make_triage({"dependencies": [fault]}))  # it is back
+    rounds = [i for i in third.incidents if i.key == identity]
+    assert len(rounds) == 2  # the terminal record AND the fresh incident
+    fresh = next(i for i in rounds if i.no != first_no)
+    assert fresh.no != first_no
+    assert fresh.no >= first_no  # numbers are never reused (models.py)
+    assert fresh.state is IncidentState.OPEN
+    assert fresh.seen_count == 1
+    assert fresh.first_seen_cycle > opened[0].first_seen_cycle
+    still_old = next(i for i in rounds if i.no == first_no)
+    assert still_old.state is IncidentState.RESOLVED_EXTERNALLY
