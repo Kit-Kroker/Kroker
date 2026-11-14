@@ -1,1 +1,6 @@
+# FR-202: the default validated-output retry count for every role that
+# emits schema-validated artifacts. Per-role override lives in the role's
+# own agent.yaml (validation_retries); 1..5, enforced by the loader.
 version: 1
+defaults:
+  validation_retries: 1
