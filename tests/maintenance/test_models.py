@@ -34,7 +34,10 @@ from tests.maintenance.conftest import env_file_findings, make_triage
 
 
 def _cfg(**kw) -> MaintenanceConfig:
-    base = dict(project="demo", repo_dir="/srv/repos/demo")
+    # build_probe defaults to True, which requires the explicit NFR-9 ack
+    # (R14); probe-off tests pass their own ack=False. Corrected during T005:
+    # the original bare helper contradicted T004's own ack-refusal rule.
+    base = dict(project="demo", repo_dir="/srv/repos/demo", ack_unattended_build_probe=True)
     base.update(kw)
     return MaintenanceConfig(**base)
 
@@ -65,7 +68,7 @@ def test_build_probe_true_with_ack_validates():
 
 
 def test_build_probe_false_without_ack_validates():
-    cfg = _cfg(build_probe=False)
+    cfg = _cfg(build_probe=False, ack_unattended_build_probe=False)
     assert cfg.build_probe is False
     assert cfg.ack_unattended_build_probe is False
 
@@ -402,7 +405,7 @@ def test_gate_timeout_hours_refuses_values_outside_one_to_168(hours):
 
 def test_build_probe_true_without_ack_is_refused_and_names_the_ack_field():
     with pytest.raises(ValidationError) as exc_info:
-        _cfg(build_probe=True)  # ack defaults to False
+        _cfg(build_probe=True, ack_unattended_build_probe=False)  # ack absent is the default
     assert "ack_unattended_build_probe" in _err_text(exc_info)
 
 
