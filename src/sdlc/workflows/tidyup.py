@@ -42,6 +42,11 @@ with workflow.unsafe.imports_passed_through():
     from .pipeline_child import execute_pipeline_child
     from .triage import TriageInput, TriageWorkflow
 
+    # 023a T008: triage_gates moved to .triage_child (lifted unchanged); the
+    # import here keeps `from sdlc.workflows.tidyup import triage_gates`
+    # working for every existing importer.
+    from .triage_child import triage_gates
+
 # Local git only; a retry is free because the branch is force-created.
 VERIFY_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(minutes=10), retry_policy=RetryPolicy(maximum_attempts=3)
@@ -145,21 +150,6 @@ def unrecognized_selection(selected: list[str] | None, backlog: list[str]) -> li
     if not selected:
         return []
     return sorted(set(selected) - set(backlog))
-
-
-def triage_gates(inp_gates: GateSettings, gating: bool) -> GateSettings:
-    """The gates handed to a TriageWorkflow child.
-
-    The BEFORE triage gates admission, so the operator's settings apply. The
-    AFTER triage only measures the verification tree to classify the delta;
-    it must not open a readiness gate and park 48h on a non-READY verdict
-    (which --no-build-probe makes INDETERMINATE by construction). OFF resolves
-    automatically; the verdict is still computed and recorded as
-    readiness_after, and the override does not feed compute_delta.
-    """
-    if gating:
-        return inp_gates
-    return GateSettings(default_gate_policy=GatePolicy.OFF)
 
 
 def _backlog_summary(pairs, deferred_from: int) -> str:
