@@ -32,6 +32,8 @@ with workflow.unsafe.imports_passed_through():
     from ...prompts import planner_prompt
     from ..constitution.models import Constitution
     from ..constitution.prompts import render_constitution
+    from ..requirements.models import Requirements
+    from ..requirements.prompts import render_requirements
     from .models import ImplementationPlan
     from .prompts import prompt_digest
 
@@ -105,6 +107,7 @@ async def produce(
     constitution_digest: str = "",
     constitution: Constitution | None = None,
     requirements: ClarifiedRequirements | None = None,
+    requirements_doc: Requirements | None = None,
     planner_agent: Any = None,
     guidance: str | None = None,
 ) -> ImplementationPlan:
@@ -114,8 +117,24 @@ async def produce(
     # planner prompt has no map slot). Byte-identical to today when there
     # is no constitution (FR-010).
     constitution_block = render_constitution(constitution) if constitution is not None else ""
+    # FR-205: the bounded requirements block plus the one instruction line
+    # that makes the ids load-bearing — the planner's covers field is what
+    # plan_check's coverage halt reads. An artifact without stories renders
+    # to "" and gets NO instruction line; the flag-off path stays
+    # byte-identical (FR-010).
+    if requirements_doc is not None and requirements_doc.stories:
+        requirements_block = (
+            render_requirements(requirements_doc)
+            + "\nEach task must list the FR ids it implements in its covers field."
+        )
+    else:
+        requirements_block = ""
     prompt = planner_prompt(
-        architecture.model_dump_json(), prep.snapshot.items, guidance, constitution_block
+        architecture.model_dump_json(),
+        prep.snapshot.items,
+        guidance,
+        constitution_block,
+        requirements_block,
     )
 
     async def _produce() -> ImplementationPlan:
@@ -133,8 +152,16 @@ async def produce(
     # is the string seam's form of ResearchDeps.research_model's
     # omit-when-default serializer: an empty digest concatenates to the
     # identity, so a run that never saw a constitution keys byte-identically
-    # to today (FR-010).
-    cache_key = architecture.model_dump_json() + constitution_digest + (guidance or "")
+    # to today (FR-010). FR-205: the requirements artifact's own digest
+    # (clarify's same-payload rule) joins between constitution_digest and
+    # guidance under the same omitted-while-"" rule, so requirements-off
+    # runs can't hit requirements-on caches and vice versa.
+    cache_key = (
+        architecture.model_dump_json()
+        + constitution_digest
+        + (requirements_doc.digest if requirements_doc is not None else "")
+        + (guidance or "")
+    )
     plan_obj, _ = await ctx.cached_stage(
         cfg,
         "plan",

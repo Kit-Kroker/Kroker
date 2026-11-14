@@ -19,6 +19,10 @@ edges:
 - {source: intake, source_port: ok, target: requirements, target_port: trigger}
 - {source: intake, source_port: brownfield, target: requirements, target_port: trigger}
 - {source: requirements, source_port: requirements, target: clarify, target_port: requirements}
+# FR-205: the raw artifact also reaches the planner (prompt block + memo
+# digest) and plan_check (coverage halt) on the requirements_doc port.
+- {source: requirements, source_port: requirements, target: planner, target_port: requirements_doc}
+- {source: requirements, source_port: requirements, target: plan_check, target_port: requirements_doc}
 - {source: context, source_port: map, target: clarify, target_port: codebase_map}
 - {source: context, source_port: map, target: architect, target_port: codebase_map}
 - {source: clarify, source_port: requirements, target: architect, target_port: requirements}

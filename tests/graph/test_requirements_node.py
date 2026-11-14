@@ -5,7 +5,7 @@ The Product drafter never REJECTS (a partial freeze still flows
 downstream -- FR-112's constitution ruling, re-applied): the type has NO
 reject port, only optional trigger/constitution/codebase_map ins, the
 artifact out, and the shared fail port. The graph is default.graph.yaml
-plus one node and three edges; the default file itself must stay
+plus one node and five edges; the default file itself must stay
 byte-identical (pinned below) because its content_sha identifies every
 stored run built on it.
 
@@ -34,6 +34,16 @@ REQUIREMENTS_EDGES = {
     ("intake", "ok", "requirements", "trigger"),
     ("intake", "brownfield", "requirements", "trigger"),
     ("requirements", "requirements", "clarify", "requirements"),
+}
+
+# FR-205 delivery edges: the raw Requirements artifact rides a NEW port to
+# the planner (prompt block + memo digest) and plan_check (coverage halt);
+# plan's existing `requirements` slot stays ClarifiedRequirements. Both are
+# load-bearing: ids must reach the *prompt* or covers stays empty and
+# covers_all halts every requirements-enabled run.
+REQUIREMENTS_DELIVERY_EDGES = {
+    ("requirements", "requirements", "planner", "requirements_doc"),
+    ("requirements", "requirements", "plan_check", "requirements_doc"),
 }
 
 # default-requirements is not in graph_catalog.SHIPPED until FR-113 Task 8
@@ -142,13 +152,13 @@ def test_every_graph_yaml_validates(name):
 
 
 def test_requirements_graph_is_default_plus_requirements():
-    """Exactly default's nodes and edges plus one node and the three edges:
+    """Exactly default's nodes and edges plus one node and the five edges:
     nothing else about the default topology may drift."""
     base = _graph("default")
     graph = _graph("default-requirements")
     assert {n.id for n in graph.nodes} == {n.id for n in base.nodes} | {"requirements"}
     assert {n.type for n in graph.nodes if n.id == "requirements"} == {"requirements"}
-    assert _keys(graph) == _keys(base) | REQUIREMENTS_EDGES
+    assert _keys(graph) == _keys(base) | REQUIREMENTS_EDGES | REQUIREMENTS_DELIVERY_EDGES
 
 
 def test_requirements_graph_node_types_match_default():
@@ -160,4 +170,13 @@ def test_requirements_graph_node_types_match_default():
 
 
 def test_requirements_edges_present():
-    assert REQUIREMENTS_EDGES <= _keys(_graph("default-requirements"))
+    assert REQUIREMENTS_EDGES | REQUIREMENTS_DELIVERY_EDGES <= _keys(_graph("default-requirements"))
+
+
+def test_requirements_doc_port_on_plan_and_plan_check():
+    """FR-205's delivery port: optional, carries the raw Requirements
+    payload — a distinct slot from plan's ClarifiedRequirements in-port."""
+    for type_ in ("plan", "plan_check"):
+        port = find_port(NODE_TYPES[type_], "requirements_doc", "in")
+        assert port is not None, type_
+        assert (port.payload, port.required) == ("Requirements", False)

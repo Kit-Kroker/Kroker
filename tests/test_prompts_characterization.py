@@ -42,6 +42,18 @@ def test_planner_guidance_empty_string_is_omitted():
     assert planner_prompt(ARCH, [], "") == ARCH
 
 
+def test_planner_requirements_block_inserted_after_constitution():
+    # FR-205: the requirements block rides the constitution_block pattern,
+    # inserted between the constitution block and recall.
+    out = planner_prompt(ARCH, [], None, "CONST", "REQS")
+    assert out == ARCH + "\n\nCONST" + "\n\nREQS"
+
+
+def test_planner_requirements_block_empty_is_byte_identical():
+    # FR-010: "" default keeps the five-arg-with-defaults call byte-identical.
+    assert planner_prompt(ARCH, [], None, "CONST", "") == planner_prompt(ARCH, [], None, "CONST")
+
+
 def test_qa_includes_diff_stat():
     assert qa_prompt(["a1", "a2"], '{"passed":true}', "STAT", "PATCH") == (
         "Frozen contract assertions:\n- a1\n- a2"

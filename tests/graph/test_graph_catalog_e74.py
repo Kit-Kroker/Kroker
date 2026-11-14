@@ -84,6 +84,9 @@ FAIL = ("NodeFailure", True, "failed")
             "plan_check",
             {
                 ("in", "plan"): ("ImplementationPlan", True, None),
+                # FR-205: the raw requirements artifact; absent on the
+                # default graph, where coverage is vacuous.
+                ("in", "requirements_doc"): ("Requirements", False, None),
                 ("out", "ok"): ("ImplementationPlan", True, None),
                 ("out", "halt"): (None, True, "failed"),
                 ("out", "fail"): FAIL,

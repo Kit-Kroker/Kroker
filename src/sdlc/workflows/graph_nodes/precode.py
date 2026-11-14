@@ -226,6 +226,9 @@ async def plan_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> No
         cfg=cfg,
         architecture=arch,
         requirements=input_model(nc, act, "requirements"),
+        # FR-205: the raw Requirements artifact rides the requirements_doc
+        # edge (default graph: no such edge -> None -> byte-identical run).
+        requirements_doc=input_model(nc, act, "requirements_doc"),
         constitution=constitution,
         constitution_digest=constitution.digest if constitution is not None else "",
         planner_agent=t_planner,

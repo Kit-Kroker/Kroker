@@ -8,10 +8,12 @@ file carries only what is true *here*.
 ## Invariants
 
 - Cross-stage calls are banned. The legal imports are types and renders, not
-  calls: clarify imports `Requirements` from `requirements.models` and
-  `render_requirements` from `requirements.prompts` (root AGENTS.md:
-  importing a type another stage produces is not a call) — clarify is the
-  artifact's ONLY downstream consumer. This slice imports no other stage.
+  calls: clarify and plan import `Requirements` from `requirements.models`
+  and `render_requirements` from `requirements.prompts` (root AGENTS.md:
+  importing a type another stage produces is not a call) — those two are
+  the artifact's ONLY downstream consumers (plan's seam is FR-205: memo
+  digest + prompt block via the graph's `requirements_doc` port). This
+  slice imports no other stage.
 - The step signature takes `ctx: StageContext` as first argument, never the
   workflow instance (`step(ctx, *, cfg, idea, repo_path)`).
 - The step never calls `ctx.gate` and never calls `ctx.record`: completion is

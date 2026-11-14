@@ -126,9 +126,11 @@ rejects), and `budget_after="continuing"`. A port's identity is
 `(direction, name)` (E-72), so clarify legally carries an in-port and an
 out-port both named `requirements`. `Requirements` is registered in
 `PAYLOAD_TYPES`; `default-requirements.graph.yaml` is the default graph
-plus one node and three edges (two triggers from intake, one artifact
-edge to clarify's `requirements` in-port), leaving the default graph's
-content sha untouched. `select_graph` picks that graph only when
+plus one node and five edges (two triggers from intake, one artifact edge
+to clarify's `requirements` in-port, and the two FR-205 delivery edges
+from the same artifact port to planner's and plan_check's
+`requirements_doc` in-ports), leaving the default graph's content sha
+untouched. `select_graph` picks that graph only when
 `cfg.requirements_enabled` is set and the registry ships the `product`
 role — precedence research > constitution > requirements (no shipped
 graph carries more than one of the three nodes, and there is no
@@ -136,7 +138,7 @@ explicit-pin mechanism, so another combination needs a graph that
 carries it). [FR-113]
 
 ### REQUIREMENTS-1.9
-The downstream seam is clarify ONLY. Clarify takes the `requirements`
+The downstream seam is clarify and plan. Clarify takes the `requirements`
 object plus `requirements_digest` read from the same payload, both
 omitted at the default, so a run that never saw a requirements draft
 keys byte-identically to today (FR-010). The bounded block is
@@ -148,7 +150,14 @@ through its third parameter `blocks` — the constitution block, then the
 requirements block — placing the requirements between the idea and the
 codebase map/recall (idea → constitution → requirements → map → recall),
 with the map reaching the fan-out's probes as grounding rather than a
-prompt block. [FR-113, FR-010]
+prompt block. Plan (FR-205) takes the same artifact through the graph's
+`requirements_doc` port — its digest joins the planner memo key between
+the constitution digest and guidance (same omitted-while-"" rule), and
+`render_requirements` plus the covers instruction renders into the
+planner prompt, because the planner's `covers` field is what plan_check's
+coverage halt reads; an artifact without stories renders no block and no
+instruction line, so the flag-off path stays byte-identical.
+[FR-113, FR-205, FR-010]
 
 ### REQUIREMENTS-1.10
 The slice exports `step` (on its submodule — the package attribute is
