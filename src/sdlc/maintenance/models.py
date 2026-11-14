@@ -141,8 +141,7 @@ class MaintenanceKickInput(BaseModel):
     def _project_slug(cls, v: str) -> str:
         if not _PROJECT_RE.match(v):
             raise ValueError(
-                "project must match ^[a-z0-9][a-z0-9-]{0,62}$; the kicker "
-                "signals maint-<project>"
+                "project must match ^[a-z0-9][a-z0-9-]{0,62}$; the kicker signals maint-<project>"
             )
         return v
 
