@@ -5,6 +5,7 @@ RepoContext) append AFTER the loader-supplied ones (003 contract)."""
 
 from dataclasses import dataclass
 
+import pytest
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai_harness import FileSystem, RepoContext
@@ -13,6 +14,8 @@ from agents.product.agent import build
 from sdlc.agents import loader, roles
 from sdlc.stages.requirements.deps import RequirementsDeps
 from sdlc.stages.requirements.models import DraftOutput
+from sdlc.stages.requirements.stage import DraftInput
+from sdlc.stages.requirements.stage import _draft_requirements_impl as draft_requirements
 
 
 @dataclass
@@ -76,10 +79,55 @@ def test_capabilities_read_only():
 
 def test_output_is_the_draft_not_the_frozen_artifact():
     """Controller ruling: ids/digest are code-assigned downstream (freeze,
-    Task 2), so the agent proposes DraftOutput over RequirementsDeps and
-    retries malformed output 3 times (planner/research/constitution
-    precedent)."""
+    Task 2), so the agent proposes DraftOutput over RequirementsDeps
+    (planner/research precedent). FR-202: construction stays at the runtime
+    default -- the registry is the one source of the retry budget."""
     agent = build("test", "charter", ModelSettings())
     assert agent._output_type is DraftOutput
     assert agent._deps_type is RequirementsDeps
-    assert agent._max_output_retries == 3
+    assert agent._max_output_retries == 1
+
+
+def test_output_retry_budget_lives_in_the_registry():
+    """FR-202: agents/product/agent.yaml carries `validation_retries: 3`
+    (planner/research precedent), so the roles registry reads 3 for the role
+    and the run site forwards `retries={"output": 3}`."""
+    assert roles.OUTPUT_RETRIES["product"] == 3
+
+
+class _RecordingAgent:
+    """Stands in for the registry agent at the impl's `_agent` seam (the
+    test_stage.py `_Recorder` shape): records the kwargs run() received."""
+
+    def __init__(self) -> None:
+        self.kwargs: dict = {}
+
+    async def run(self, prompt, **kw):
+        self.kwargs = dict(kw)
+
+        class _Result:
+            output = DraftOutput()
+
+        return _Result()
+
+
+@pytest.fixture
+def _runs_root(monkeypatch, tmp_path):
+    """The greenfield scratch dir resolves under $SDLC_RUNS_ROOT -- keep the
+    scratch out of the checkout (the research suite's convention)."""
+    monkeypatch.setenv("SDLC_RUNS_ROOT", str(tmp_path))
+
+
+@pytest.mark.asyncio
+async def test_run_site_forwards_the_registry_output_retries(_runs_root):
+    """FR-202: the drafter's run site forwards the registry budget per call
+    as `retries={"output": 3}` -- the `_agent` seam records it."""
+    inp = DraftInput(
+        idea_json='{"goal": "ship the requirements stage"}',
+        repo_path=None,
+        deps=RequirementsDeps(run_id="r1", mode="greenfield"),
+        model="test-model",
+    )
+    rec = _RecordingAgent()
+    await draft_requirements(inp, _agent=rec)
+    assert (rec.kwargs or {}).get("retries") == {"output": 3}
