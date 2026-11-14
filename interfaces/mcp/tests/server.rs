@@ -391,6 +391,13 @@ fn verb_names_absent() {
         "decide_gate",
     ];
     let src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    // The contract's fixed sentences quote some verb words in prose (the
+    // `changed` sentence says "re-read the inbox"); they are verbatim
+    // from contracts/bridge-protocol.md and are not tool references.
+    let exempt = [
+        kroker_mcp::bridge::CHANGED_SENTENCE,
+        "the factory raised BridgeDied; the operator should check the server log",
+    ];
     let mut checked = 0;
     let mut stack = vec![src];
     while let Some(dir) = stack.pop() {
@@ -405,7 +412,10 @@ fn verb_names_absent() {
                 continue;
             }
             checked += 1;
-            let text = std::fs::read_to_string(&path).unwrap();
+            let mut text = std::fs::read_to_string(&path).unwrap();
+            for sentence in exempt {
+                text = text.replace(sentence, "");
+            }
             for verb in VERBS {
                 assert!(
                     !text.contains(verb),

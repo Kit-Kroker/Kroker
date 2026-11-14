@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use rmcp::model::{
-    CallToolRequestParams, CallToolResponse, ListToolsResult, PaginatedRequestParams,
-    ServerCapabilities, ServerInfo,
+    CallToolRequestParams, CallToolResponse, InitializeResult, ListToolsResult,
+    PaginatedRequestParams, ServerCapabilities,
 };
 use rmcp::service::{RequestContext, RoleServer};
 use rmcp::{ErrorData as McpError, ServerHandler};
@@ -51,10 +51,10 @@ impl Server {
 }
 
 impl ServerHandler for Server {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> InitializeResult {
         // Tools capability ONLY (contracts/mcp-tools.md): no resources,
         // prompts, sampling or logging.
-        let mut info = ServerInfo::new(ServerCapabilities::builder().enable_tools().build());
+        let mut info = InitializeResult::new(ServerCapabilities::builder().enable_tools().build());
         info.server_info =
             rmcp::model::Implementation::new("kroker-mcp", env!("CARGO_PKG_VERSION"));
         info
@@ -66,7 +66,7 @@ impl ServerHandler for Server {
         context: RequestContext<RoleServer>,
     ) -> impl Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
         let _ = (request, context);
-        std::future::ready(todo!("T019: map describe to rmcp Tool list"))
+        async { todo!("T019: map describe to rmcp Tool list") }
     }
 
     fn call_tool(
@@ -75,6 +75,6 @@ impl ServerHandler for Server {
         context: RequestContext<RoleServer>,
     ) -> impl Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
         let _ = (request, context);
-        std::future::ready(todo!("T019: bridge call -> result mapping"))
+        async { todo!("T019: bridge call -> result mapping") }
     }
 }
