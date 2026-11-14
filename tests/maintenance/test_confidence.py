@@ -19,7 +19,6 @@ import pytest
 
 from sdlc.maintenance.confidence import confidence_floor
 from sdlc.triage.models import FixClass, TriageFinding
-
 from tests.maintenance.conftest import env_file_findings
 
 
