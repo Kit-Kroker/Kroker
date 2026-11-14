@@ -282,3 +282,84 @@ def test_enum_schemas_expose_gate_outcome_and_project_mode(descriptors):
     start = json.dumps(by["start_run"]["input_schema"])
     assert "GateOutcome" in decide or '"enum"' in decide
     assert "ProjectMode" in start or '"enum"' in start
+
+
+# --- reads — parity (T021 happy half) ---------------------------------------
+#
+# Each text read, called over the bridge `call` op, must return a value that
+# is byte-identical to awaiting the verb directly. Two identical deps are
+# built from two temp dirs so neither call sees the other's board writes.
+# 8 verbs, 10 cases (list_runs x3, get_run x2).
+
+from sdlc.operator import tools  # noqa: E402  (after the framing helpers)
+from tests.operator_fakes import RUN_A, build_fake_deps  # noqa: E402
+
+
+async def _serve_until_reply(lines: list[bytes], factory, reply_id: str) -> _FakeWriter:
+    """Serve with stdin held open until the terminal frame for reply_id lands.
+
+    serve() cancels in-flight calls on EOF, so closing stdin right after the
+    call frame would race the reply away. Here EOF is fed only once the
+    reply exists (or after a 10 s ceiling, so a hang fails instead of stalling).
+    """
+    bridge = _bridge()
+    reader = asyncio.StreamReader()
+    for line in lines:
+        reader.feed_data(line)
+    writer = _FakeWriter()
+    task = asyncio.ensure_future(bridge.serve(factory, reader, writer))
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 10
+    while loop.time() < deadline:
+        if any(f.get("id") == reply_id for f in writer.frames()):
+            break
+        await asyncio.sleep(0.01)
+    reader.feed_eof()
+    await asyncio.wait_for(task, timeout=10)
+    return writer
+
+
+READ_PARITY_CASES = [
+    ("list_runs_open", "list_runs", {"status": "open"}),
+    ("list_runs_closed", "list_runs", {"status": "closed"}),
+    ("list_runs_all", "list_runs", {"status": "all"}),
+    ("get_run_open", "get_run", {"run_id": RUN_A}),
+    ("get_run_closed", "get_run", {"run_id": "feature-old-thing"}),
+    ("inbox", "inbox", {}),
+    ("list_projects", "list_projects", {}),
+    ("get_project", "get_project", {"project": "kroker"}),
+    ("list_tasks", "list_tasks", {"project": "kroker"}),
+    ("project_events", "project_events", {"project": "kroker"}),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("case_id", "tool", "args"),
+    READ_PARITY_CASES,
+    ids=[c[0] for c in READ_PARITY_CASES],
+)
+async def test_read_call_value_is_byte_identical_to_direct_verb(tmp_path, case_id, tool, args):
+    shared_dir = tmp_path / "shared"
+    shared_dir.mkdir()
+
+    factory = lambda actor: build_fake_deps(shared_dir, actor)  # noqa: E731
+    writer = await _serve_until_reply(
+        [
+            _init("mcp:test"),
+            (json.dumps({"op": "call", "id": "2", "tool": tool, "args": args}) + "\n").encode(),
+        ],
+        factory,
+        reply_id="2",
+    )
+    result_frames = [f for f in writer.frames() if f.get("id") == "2"]
+
+    assert len(result_frames) == 1, f"expected one terminal frame for {case_id}"
+    frame = result_frames[0]
+    assert frame["ok"] is True, frame
+    assert isinstance(frame["value"], str)
+
+    direct_deps = build_fake_deps(shared_dir, "mcp:test")
+    expected = await getattr(tools, tool)(direct_deps, **args)
+
+    assert frame["value"] == expected

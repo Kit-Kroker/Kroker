@@ -23,9 +23,10 @@ import sys
 from collections.abc import Callable
 from typing import Any, BinaryIO, get_type_hints
 
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, ValidationError, create_model
 
 from . import tools
+from .errors import ToolError
 
 BRIDGE_PROTOCOL = 1
 MAX_FRAME_BYTES = 4 * 1024 * 1024
@@ -79,30 +80,55 @@ def isolate_stdout() -> BinaryIO:
 
 
 def _error_frame(rid: Any, code: str, message: str) -> dict[str, Any]:
-    return {"id": rid, "ok": False, "error": {"code": code, "message": message}}
+    return {"op": "result", "id": rid, "ok": False, "error": {"code": code, "message": message}}
 
 
 def _result_frame(rid: Any, value: Any) -> dict[str, Any]:
-    return {"id": rid, "ok": True, "value": value}
+    return {"op": "result", "id": rid, "ok": True, "value": value}
 
 
-def _descriptor(fn: Any, *, read_only: bool) -> dict[str, Any]:
-    """One ToolDescriptor (data-model.md) from a verb's signature.
+def _args_model(fn: Any) -> Any:
+    """A pydantic model over the verb's signature minus `deps` (FR-002).
 
     tools.py uses `from __future__ import annotations`, so hints come from
     get_type_hints (resolved against tools' own globals, where GateOutcome
-    and the typed result models live). `deps` is never a field: the client
-    must not see the injection seam (FR-002).
+    and the typed result models live). *args/**kwargs parameters never
+    become fields, so test doubles with ``**kwargs`` validate to ``{}``.
     """
     hints = get_type_hints(fn)
     fields: dict[str, Any] = {}
     for pname, param in inspect.signature(fn).parameters.items():
-        if pname == "deps":
+        if pname == "deps" or param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
             continue
         required = param.default is inspect.Parameter.empty
         fields[pname] = (hints.get(pname, Any), ... if required else param.default)
-    args_model = create_model(f"{fn.__name__}_args", **fields)
-    ret = hints.get("return")
+    return create_model(f"{fn.__name__}_args", **fields)
+
+
+def _find_member(name: str) -> Any:
+    """The membership tuple entry named `name`, or None."""
+    for fn in (*tools.READ_TOOLS, *tools.WRITE_TOOLS):
+        if fn.__name__ == name:
+            return fn
+    return None
+
+
+def _validation_summary(exc: ValidationError) -> str:
+    """loc + type only — a validation error must never echo values."""
+    parts = []
+    for err in exc.errors():
+        loc = ".".join(str(x) for x in err["loc"]) or "(root)"
+        parts.append(f"{loc}: {err['type']}")
+    return "; ".join(parts)
+
+
+def _descriptor(fn: Any, *, read_only: bool) -> dict[str, Any]:
+    """One ToolDescriptor (data-model.md) from a verb's signature."""
+    args_model = _args_model(fn)
+    ret = get_type_hints(fn).get("return")
     output_schema = (
         ret.model_json_schema() if isinstance(ret, type) and issubclass(ret, BaseModel) else None
     )
@@ -126,21 +152,74 @@ def _tool_descriptors() -> list[dict[str, Any]]:
 
 
 class _FrameTooLarge(Exception):
-    """A request line exceeded MAX_FRAME_BYTES."""
+    """A request line exceeded MAX_FRAME_BYTES. Carries the line's head
+    (a few KiB) so the caller can salvage an id for the error frame."""
+
+    def __init__(self, head: bytes) -> None:
+        super().__init__("frame too large")
+        self.head = head
 
 
-async def _read_line(reader: asyncio.StreamReader) -> bytes | None:
-    """One raw line, or None at EOF. Raises _FrameTooLarge past the cap.
+_ID_RE = re.compile(rb'"id"\s*:\s*(?:"([^"\\\x00-\x1f]{0,128})"|(-?\d+))')
 
-    The cap rides the StreamReader limit, which main() sets at the 4 MiB
-    protocol ceiling; readline()'s ValueError there consumes the runaway
-    line and keeps the stream positioned at the next one.
+
+def _salvage_id(head: bytes) -> Any:
+    """Best-effort request id from an oversize line's first bytes.
+
+    The frame is unparsable by definition, but its id sits near the start
+    in practice; echoing it lets the client correlate the refusal with the
+    request it sent. Returns None when no id is recoverable.
     """
-    try:
-        line = await reader.readline()
-    except ValueError as e:
-        raise _FrameTooLarge from e
-    return line or None
+    m = _ID_RE.search(head)
+    if m is None:
+        return None
+    if m.group(1) is not None:
+        return m.group(1).decode("utf-8", "replace")
+    return int(m.group(2))
+
+
+class _LineReader:
+    """Newline framing over a StreamReader, owning the 4 MiB cap.
+
+    Why not StreamReader.readline(): its own limit (64 KiB by default) is
+    far below the protocol ceiling, and on overrun the consumed bytes are
+    lost to us. Chunked reads plus a local carry keep the oversize path in
+    charge of its own bytes: the head is salvageable and the rest of the
+    runaway line is consumed so the next line starts in sync.
+    """
+
+    def __init__(self, reader: asyncio.StreamReader) -> None:
+        self._reader = reader
+        self._carry = bytearray()
+
+    async def readline(self) -> bytes | None:
+        """One line without its newline; a partial final line at EOF is
+        returned as-is; None only at a clean EOF. Raises _FrameTooLarge."""
+        while True:
+            nl = self._carry.find(b"\n")
+            if nl >= 0:
+                line = bytes(self._carry[:nl])
+                del self._carry[: nl + 1]
+                return line
+            if len(self._carry) > MAX_FRAME_BYTES:
+                head = bytes(self._carry[:4096])
+                self._carry.clear()
+                tail = bytearray()
+                while b"\n" not in tail:
+                    chunk = await self._reader.read(65536)
+                    if not chunk:
+                        break
+                    del tail[:-65536]
+                    tail += chunk
+                raise _FrameTooLarge(head)
+            chunk = await self._reader.read(65536)
+            if not chunk:
+                if self._carry:
+                    line = bytes(self._carry)
+                    self._carry.clear()
+                    return line
+                return None
+            self._carry += chunk
 
 
 async def _handle_request(
@@ -152,10 +231,55 @@ async def _handle_request(
         await send(_error_frame(rid, "bad_request", sentence_bad_request(SENTENCE_INIT_FIRST)))
         return
     descriptor = next((d for d in _tool_descriptors() if d["name"] == tool), None)
-    if descriptor is None:
+    member = _find_member(tool) if isinstance(tool, str) else None
+    fn = getattr(tools, tool, None) if isinstance(tool, str) else None
+    if descriptor is None or member is None or fn is None:
         await send(_error_frame(rid, "bad_request", sentence_bad_request(f"unknown tool {tool!r}")))
         return
-    await send(_error_frame(rid, "bad_request", sentence_bad_request("call is not wired yet")))
+    if descriptor["confirm"] != "none":
+        # Fail closed (FR-005): the preview/expect_digest handshake lands
+        # in T027/T029; until then no write verb may run over this path.
+        digest = req.get("expect_digest")
+        if not isinstance(digest, str) or not digest:
+            await send(
+                _error_frame(
+                    rid, "bad_request", sentence_bad_request("confirm tools require expect_digest")
+                )
+            )
+        else:
+            await send(
+                _error_frame(rid, "bad_request", sentence_bad_request("confirm is not wired yet"))
+            )
+        return
+    if op == "preview":
+        await send(
+            _error_frame(rid, "bad_request", sentence_bad_request("preview is for confirm tools"))
+        )
+        return
+    # Validate with the SAME schema describe published (the member's), then
+    # call the module attribute so tests (and future wrappers) can patch it.
+    raw = req.get("args")
+    args = raw if isinstance(raw, dict) else {}
+    try:
+        validated = dict(_args_model(member).model_validate(args))
+    except ValidationError as exc:
+        await send(_error_frame(rid, "bad_request", sentence_bad_request(_validation_summary(exc))))
+        return
+    try:
+        value = await fn(deps, **validated)
+    except asyncio.CancelledError:
+        await send(_error_frame(rid, "cancelled", "cancelled"))
+        return
+    except ToolError as exc:
+        await send(_error_frame(rid, "tool_error", exc.message))
+        return
+    except Exception as exc:
+        _log.exception("bridge call %r failed", tool)
+        await send(_error_frame(rid, "internal", sentence_internal(exc)))
+        return
+    if isinstance(value, BaseModel):
+        value = value.model_dump(mode="json")
+    await send(_result_frame(rid, value))
 
 
 async def serve(
@@ -168,13 +292,15 @@ async def serve(
     """Serve newline-delimited JSON requests until stdin EOF.
 
     One task per request id (the contract allows concurrency); writes are
-    serialised behind a lock. On EOF every task is cancelled and the
-    deps' poller (when present) is closed before returning.
+    serialised behind a lock. On EOF in-flight tasks get a brief grace to
+    finish, then are cancelled, and the deps' poller (when present) is
+    closed before returning.
     """
     del progress_interval_s  # used from T035
     lock = asyncio.Lock()
     deps: Any = None
     tasks: dict[Any, asyncio.Task] = {}
+    lines = _LineReader(reader)
 
     async def send(frame: dict[str, Any]) -> None:
         data = (json.dumps(frame, separators=(",", ":")) + "\n").encode("utf-8")
@@ -184,9 +310,13 @@ async def serve(
 
     while True:
         try:
-            line = await _read_line(reader)
-        except _FrameTooLarge:
-            await send(_error_frame(None, "bad_request", sentence_bad_request(SENTENCE_OVERSIZE)))
+            line = await lines.readline()
+        except _FrameTooLarge as e:
+            await send(
+                _error_frame(
+                    _salvage_id(e.head), "bad_request", sentence_bad_request(SENTENCE_OVERSIZE)
+                )
+            )
             continue
         if line is None:
             break  # EOF
@@ -224,14 +354,20 @@ async def serve(
                     )
                 )
                 continue
-            deps = deps_factory(actor)
+            try:
+                deps = deps_factory(actor)
+            except Exception as exc:  # the operator must learn the type only
+                _log.exception("deps factory failed")
+                await send(_error_frame(rid, "internal", sentence_internal(exc)))
+                continue
             await send(
                 {"op": "describe", "protocol": BRIDGE_PROTOCOL, "tools": _tool_descriptors()}
             )
         elif op == "cancel":
-            task = tasks.pop(rid, None)
-            if task is not None:
-                task.cancel()  # the task emits its own terminal frame
+            task = tasks.get(rid)
+            if task is not None and not task.done():
+                task.cancel()  # the task emits its own terminal frame; it
+                # stays in `tasks` so EOF cleanup awaits that frame
         elif op in ("preview", "call"):
             if rid in tasks:
                 await send(
@@ -239,16 +375,29 @@ async def serve(
                 )
                 continue
             tasks[rid] = asyncio.create_task(_handle_request(op, rid, req, deps, send))
+            # Give the task its first slice now: a buffered cancel for this
+            # id must land inside the verb await, not on an unstarted task
+            # (whose body would never run and never emit a terminal frame).
+            await asyncio.sleep(0)
         else:
             await send(_error_frame(rid, "bad_request", sentence_bad_request(SENTENCE_UNKNOWN_OP)))
 
+    # EOF: give in-flight tasks a brief grace to finish normally, then
+    # cancel the stragglers (the contract's cancel-on-EOF) and close the
+    # poller. The grace is what lets a call whose reply is already in
+    # flight complete cleanly instead of answering "cancelled".
+    if tasks:
+        await asyncio.wait(set(tasks.values()), timeout=0.25)
     for task in tasks.values():
         task.cancel()
     await asyncio.gather(*tasks.values(), return_exceptions=True)
     poller = getattr(deps, "poller", None) if deps is not None else None
     aclose = getattr(poller, "aclose", None)
     if aclose is not None:
-        await aclose()
+        try:
+            await aclose()
+        except Exception:
+            _log.exception("poller aclose failed at EOF")  # must not propagate
 
 
 async def _serve_pipes(deps_factory: DepsFactory, proto: BinaryIO) -> None:
