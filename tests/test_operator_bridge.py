@@ -157,13 +157,6 @@ def test_bridge_import_loads_no_web_or_worker_modules():
     assert result.stdout.strip() == ""
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "T023 creates tests/mcp_fake_bridge.py; RED until then "
-        "(missing file -> non-zero exit). Remove this xfail when T023 lands."
-    ),
-)
 def test_fake_bridge_print_in_verb_keeps_stdout_pure_json(tmp_path):
     marker = "HYGIENE-MARKER-7f3a"
     init = {"op": "init", "id": "1", "protocol": 1, "actor": "mcp:test"}
