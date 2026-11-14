@@ -158,16 +158,26 @@ async def _draft_constitution_impl(inp: DraftInput, _model=None, _agent=None) ->
     run_usage = RunUsage()
     usage_limits = UsageLimits(request_limit=inp.deps.max_requests)
     prompt = _draft_prompt(inp, repo_attached=repo is not None)
+    # FR-202: the constitution role's validated-output retry budget is
+    # registry-driven and forwarded per call, only when set — a default (1)
+    # run carries no retries kwarg at all (the 004 D7a only-when-set
+    # precedent), and construction stays at the default so the registry is
+    # the one source of the budget. The entry rides the same run_kwargs at
+    # all three branches below.
+    from sdlc.agents.roles import OUTPUT_RETRIES
+
+    run_kwargs: dict = {
+        "deps": inp.deps,
+        "usage_limits": usage_limits,
+        "usage": run_usage,
+        "workspace": workspace,
+    }
+    n = OUTPUT_RETRIES.get("constitution", 1)
+    if n != 1:
+        run_kwargs["retries"] = {"output": n}
     try:
         if _model is not None:
-            result = await agent.run(
-                prompt,
-                deps=inp.deps,
-                usage_limits=usage_limits,
-                model=_model,
-                usage=run_usage,
-                workspace=workspace,
-            )
+            result = await agent.run(prompt, model=_model, **run_kwargs)
         else:
             # 004 D7a (FR-001 path b): forward the resolved model only when
             # it differs from the registry one; an equal or absent override
@@ -177,22 +187,9 @@ async def _draft_constitution_impl(inp: DraftInput, _model=None, _agent=None) ->
 
             registry_model = REGISTRY["constitution"].model
             if registry_model is not None and inp.model != registry_model:
-                result = await agent.run(
-                    prompt,
-                    deps=inp.deps,
-                    usage_limits=usage_limits,
-                    model=inp.model,
-                    usage=run_usage,
-                    workspace=workspace,
-                )
+                result = await agent.run(prompt, model=inp.model, **run_kwargs)
             else:
-                result = await agent.run(
-                    prompt,
-                    deps=inp.deps,
-                    usage_limits=usage_limits,
-                    usage=run_usage,
-                    workspace=workspace,
-                )
+                result = await agent.run(prompt, **run_kwargs)
     except UsageLimitExceeded as exc:
         # Expected exhaustion: degrade ONCE. NEVER re-raise -- the bound is
         # config, so a retry hits the same exhausted cap and burns the
