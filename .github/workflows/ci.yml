@@ -76,3 +76,30 @@ jobs:
       # browser install and every npm call live inside the wrapper.
       - name: UI gate
         run: python scripts/check_ui.py
+
+  mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies (from uv.lock)
+        run: uv sync --frozen --extra dev
+
+      - uses: Swatinem/rust-cache@v3
+        with:
+          workspaces: interfaces/mcp
+
+      # One run: line, deliberately. tests/test_verify.py asserts every
+      # run: in this file has a matching gate in scripts/verify.py; every
+      # cargo call and the parity pytest live inside the wrapper. The
+      # wrapper runs through uv so its parity step's sys.executable is
+      # the venv python (pytest and the sdlc package live there).
+      - name: MCP gate
+        run: uv run --no-sync python scripts/check_mcp.py

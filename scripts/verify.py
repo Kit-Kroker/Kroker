@@ -48,6 +48,9 @@ GATES: tuple[tuple[str, list[str]], ...] = (
         [sys.executable, "-m", "pytest", "-m", "temporal", "-q", *_TEMPORAL_IGNORES],
     ),
     ("ui", [sys.executable, "scripts/check_ui.py"]),
+    # The Rust + parity tier (022): must run AFTER the fast tier so its
+    # pytest step reuses nothing the fast tier failed to build.
+    ("mcp", [sys.executable, "scripts/check_mcp.py"]),
 )
 
 
