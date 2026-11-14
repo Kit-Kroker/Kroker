@@ -72,6 +72,12 @@ then adds the spend to the caller's bag with `add_spend`, never
 `merge_usage`. A run with no report schedules nothing extra, which is why
 this needs no `workflow.patched` marker.
 
+Since FR-202, `_run_role` also forwards the role's configured
+validated-output retry budget: `OUTPUT_RETRIES.get(role, 1)`, and only a
+non-default n injects `kwargs.setdefault("retries", {"output": n})` —
+a role at the default carries no `retries` kwarg at all (the 004 D7a
+only-when-set precedent), and an explicit caller value always wins.
+
 ## The proposer payload guard (007)
 
 The proposer payload guard lives in `src/sdlc/agents/payload_guard.py`

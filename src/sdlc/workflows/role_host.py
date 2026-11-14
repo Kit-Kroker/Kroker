@@ -19,7 +19,7 @@ from temporalio.exceptions import ApplicationError
 
 with workflow.unsafe.imports_passed_through():
     from ..agents.model_ids import forwarded_model
-    from ..agents.roles import PROMPT_SHAS, STAGE_ROLES, resolve_role_model
+    from ..agents.roles import OUTPUT_RETRIES, PROMPT_SHAS, STAGE_ROLES, resolve_role_model
     from ..calibration.activities import VerdictInput, calibration_verdict
     from ..calibration.decision import auto_decision_for
     from ..calibration.models import INSUFFICIENT, CalibrationVerdict, LabelSource
@@ -206,7 +206,19 @@ class RoleHost:
         add_spend — never merge_usage, never _track_usage(into=into), so
         the bag keeps its label and its own call count. A run with no
         report schedules nothing here, which is why this needs no
-        workflow.patched marker."""
+        workflow.patched marker.
+
+        FR-202 (VR-3): the role's configured validated-output retry
+        budget is forwarded here too, only when set -- a role at the
+        default (1) carries no retries kwarg at all, so its call is
+        byte-identical to one that never knew about the knob (the 004 D7a
+        only-when-set precedent). setdefault: an explicit caller value
+        wins. Construction stays at pydantic-ai's default everywhere;
+        the registry, not the agent.py, is the single source of the
+        budget."""
+        n = OUTPUT_RETRIES.get(role, 1)
+        if n != 1:
+            kwargs.setdefault("retries", {"output": n})
         fwd = forwarded_model(cfg, role)
         if fwd is None:
             result = await agent.run(*args, **kwargs)
