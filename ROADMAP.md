@@ -260,7 +260,7 @@
   deadlock) did not bite this run; they remain open.
 - [ ] ⚠️ **P3** — Hindsight memory + confidence-gated soft gates → *SC-4 and SC-6 measurable*
   Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs). **The retro stage that makes them measurable is E-32** (§9.8); the on/off memory delta is the measurement E-31/E-33 exist to run.
-- [ ] **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*
+- [ ] ⚠️ **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*
   MCP surface landed (E-11, 2026-11-14 — FR-602, round 022). DAPER (E-14) and fleet scale not started.
 - [ ] ⚠️ **P5** — Triage + tidy-up (Tier 0/1), operator-run, single tenant → *one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded*
   E-40/E-41/E-42/E-43/E-44 all landed in code. `[x]` here means "exit criterion **demonstrated**" (see P1 above), and no `TidyUpWorkflow` has run end-to-end yet: the four-scenario temporal e2e the plan specifies is deferred — its multi-workflow fan-out (a `TriageWorkflow` child whose readiness gate must be serviced plus N `FeatureWorkflow` fix children) is heavier than this Windows host's temporal dev-server can run contended. The components are each green under their own `pytest -m temporal` e2e (`test_triage_workflow_e2e`, `test_seeded_work`'s seeded run, `test_verification_branch`), the full unit suite is green, and `.run()` sequencing is unit-tested and follows the verified `GateHost`/`TriageWorkflow` pattern. Held at ⚠️ until the `TidyUpWorkflow` e2e runs (a CI host that can run the fan-out, or the env contention resolved). Operator-run only; **does not depend on P7**.
