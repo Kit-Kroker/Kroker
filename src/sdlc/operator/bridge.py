@@ -14,13 +14,18 @@ protocol-only; every log line goes to stderr.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import os
 import re
 import sys
 from collections.abc import Callable
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, get_type_hints
+
+from pydantic import BaseModel, create_model
+
+from . import tools
 
 BRIDGE_PROTOCOL = 1
 MAX_FRAME_BYTES = 4 * 1024 * 1024
@@ -41,6 +46,16 @@ SENTENCE_INIT_FIRST = "init must precede every other op"
 SENTENCE_UNKNOWN_OP = "op must be one of init, preview, call, cancel"
 
 DepsFactory = Callable[[str], Any]
+
+# Which writes need which confirmation flavour (plan T021; every WRITE_TOOLS
+# member must appear here — the describe tests enforce it) and which tools
+# emit progress frames while they run.
+CONFIRM: dict[str, str] = {
+    "start_run": "start",
+    "answer_question": "pending",
+    "decide_gate": "pending",
+}
+PROGRESS = {"follow"}
 
 
 def sentence_internal(exc: BaseException) -> str:
@@ -71,9 +86,43 @@ def _result_frame(rid: Any, value: Any) -> dict[str, Any]:
     return {"id": rid, "ok": True, "value": value}
 
 
+def _descriptor(fn: Any, *, read_only: bool) -> dict[str, Any]:
+    """One ToolDescriptor (data-model.md) from a verb's signature.
+
+    tools.py uses `from __future__ import annotations`, so hints come from
+    get_type_hints (resolved against tools' own globals, where GateOutcome
+    and the typed result models live). `deps` is never a field: the client
+    must not see the injection seam (FR-002).
+    """
+    hints = get_type_hints(fn)
+    fields: dict[str, Any] = {}
+    for pname, param in inspect.signature(fn).parameters.items():
+        if pname == "deps":
+            continue
+        required = param.default is inspect.Parameter.empty
+        fields[pname] = (hints.get(pname, Any), ... if required else param.default)
+    args_model = create_model(f"{fn.__name__}_args", **fields)
+    ret = hints.get("return")
+    output_schema = (
+        ret.model_json_schema() if isinstance(ret, type) and issubclass(ret, BaseModel) else None
+    )
+    return {
+        "name": fn.__name__,
+        "description": inspect.getdoc(fn),
+        "input_schema": args_model.model_json_schema(),
+        "output_schema": output_schema,
+        "read_only": read_only,
+        "confirm": CONFIRM.get(fn.__name__, "none"),
+        "progress": fn.__name__ in PROGRESS,
+    }
+
+
 def _tool_descriptors() -> list[dict[str, Any]]:
-    """One ToolDescriptor per member of READ_TOOLS + WRITE_TOOLS (T013)."""
-    return []
+    """One ToolDescriptor per member of READ_TOOLS + WRITE_TOOLS, in the
+    membership order (which the parity tests pin)."""
+    return [_descriptor(fn, read_only=True) for fn in tools.READ_TOOLS] + [
+        _descriptor(fn, read_only=False) for fn in tools.WRITE_TOOLS
+    ]
 
 
 class _FrameTooLarge(Exception):
