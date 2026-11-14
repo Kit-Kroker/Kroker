@@ -356,3 +356,338 @@ async def test_read_call_value_is_byte_identical_to_direct_verb(tmp_path, case_i
     expected = await getattr(tools, tool)(direct_deps, **args)
 
     assert frame["value"] == expected
+
+
+# --- pending (US2 happy half: preview + call for confirm=pending verbs) -----
+#
+# RED until T027 lands: preview currently replies "confirm is not wired yet",
+# and call without expect_digest replies "confirm tools require expect_digest".
+# Every test name carries "pending" so `pytest -k pending` selects this section.
+
+import logging  # noqa: E402
+import re  # noqa: E402
+
+from sdlc.channels.contract import default_render  # noqa: E402
+from tests.operator_fakes import GATE, Q1, RUN_B  # noqa: E402
+
+GATE_KEY = "architecture#2"
+
+
+async def _serve_until_all(lines: list[bytes], factory, reply_ids: list[str]) -> _FakeWriter:
+    """Serve with stdin open until every reply id has a terminal frame.
+
+    Same rationale as _serve_until_reply: EOF cancels in-flight calls, so
+    stdin closes only after the replies it is waiting for have landed.
+    """
+    bridge = _bridge()
+    reader = asyncio.StreamReader()
+    for line in lines:
+        reader.feed_data(line)
+    writer = _FakeWriter()
+    task = asyncio.ensure_future(bridge.serve(factory, reader, writer))
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 10
+    while loop.time() < deadline:
+        seen = {f.get("id") for f in writer.frames()}
+        if all(rid in seen for rid in reply_ids):
+            break
+        await asyncio.sleep(0.01)
+    reader.feed_eof()
+    await asyncio.wait_for(task, timeout=10)
+    return writer
+
+
+def _frame_for(writer: _FakeWriter, rid: str) -> dict:
+    found = [f for f in writer.frames() if f.get("id") == rid]
+    assert len(found) == 1, f"expected one terminal frame for id {rid!r}, got {found}"
+    return found[0]
+
+
+def _line(frame: dict) -> bytes:
+    return (json.dumps(frame) + "\n").encode()
+
+
+def _preview(rid: str, tool: str, args: dict) -> bytes:
+    return _line({"op": "preview", "id": rid, "tool": tool, "args": args})
+
+
+def _call(rid: str, tool: str, args: dict, digest: str | None = None) -> bytes:
+    frame = {"op": "call", "id": rid, "tool": tool, "args": args}
+    if digest is not None:
+        frame["expect_digest"] = digest
+    return _line(frame)
+
+
+DECIDE_APPROVE = {"run_id": RUN_A, "key": GATE_KEY, "outcome": "approve"}
+ANSWER_Q1 = {"run_id": RUN_B, "key": "Q1", "text": "use redis"}
+
+
+def _holder_factory(tmp_path, holder: dict):
+    def factory(actor: str):
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        holder["deps"] = build_fake_deps(tmp_path, actor)
+        return holder["deps"]
+
+    return factory
+
+
+async def _preview_digest(tmp_path, tool: str, args: dict) -> str:
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _preview("2", tool, args)],
+        _holder_factory(tmp_path, holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is True, frame
+    return frame["value"]["digest"]
+
+
+@pytest.mark.asyncio
+async def test_pending_preview_decide_gate_message_renders_gate_and_proposal(tmp_path):
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _preview("2", "decide_gate", DECIDE_APPROVE)],
+        _holder_factory(tmp_path, holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is True, frame
+
+    value = frame["value"]
+    rendered = default_render(GATE)
+    assert rendered.title in value["message"]
+    assert rendered.body in value["message"]
+    for label, text in rendered.rows:
+        assert label in value["message"] and text in value["message"]
+    assert "Proposed: approve" in value["message"]
+    assert re.fullmatch(r"[0-9a-f]{64}", value["digest"]), value["digest"]
+
+
+@pytest.mark.asyncio
+async def test_pending_preview_digest_is_stable_across_calls(tmp_path):
+    first = await _preview_digest(tmp_path / "a", "decide_gate", DECIDE_APPROVE)
+    second = await _preview_digest(tmp_path / "b", "decide_gate", DECIDE_APPROVE)
+    assert first == second
+
+
+@pytest.mark.asyncio
+async def test_pending_preview_digest_differs_when_outcome_changes(tmp_path):
+    approve = await _preview_digest(tmp_path / "a", "decide_gate", DECIDE_APPROVE)
+    reject = await _preview_digest(
+        tmp_path / "b", "decide_gate", {**DECIDE_APPROVE, "outcome": "reject"}
+    )
+    assert approve != reject
+
+
+@pytest.mark.asyncio
+async def test_pending_preview_digest_differs_when_text_changes(tmp_path):
+    plain = await _preview_digest(tmp_path / "a", "decide_gate", DECIDE_APPROVE)
+    with_text = await _preview_digest(
+        tmp_path / "b", "decide_gate", {**DECIDE_APPROVE, "text": "looks good"}
+    )
+    assert plain != with_text
+
+
+@pytest.mark.asyncio
+async def test_pending_call_decide_gate_sends_one_signal_with_reviewer(tmp_path):
+    digest = await _preview_digest(tmp_path / "preview", "decide_gate", DECIDE_APPROVE)
+
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _call("2", "decide_gate", DECIDE_APPROVE, digest)],
+        _holder_factory(tmp_path / "call", holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is True, frame
+    assert frame["value"]["confirmed"] is True
+
+    signals = holder["deps"].recorder.handles[RUN_A].signals
+    assert len(signals) == 1, signals
+    name, payload = signals[0]
+    assert name == "submit_gate_decision"
+    decision = payload[0] if isinstance(payload, (list, tuple)) else payload
+    assert decision.reviewer == "mcp:test"
+    assert decision.decided_by == "human"
+
+
+@pytest.mark.asyncio
+async def test_pending_call_answer_question_sends_key_and_text(tmp_path):
+    digest = await _preview_digest(tmp_path / "preview", "answer_question", ANSWER_Q1)
+
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _call("2", "answer_question", ANSWER_Q1, digest)],
+        _holder_factory(tmp_path / "call", holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is True, frame
+    assert frame["value"]["confirmed"] is True
+
+    signals = holder["deps"].recorder.handles[RUN_B].signals
+    assert len(signals) == 1, signals
+    name, payload = signals[0]
+    assert name == "answer_question"
+    assert list(payload) == [Q1.key, "use redis"]
+
+
+@pytest.mark.asyncio
+async def test_pending_call_logs_mcp_write_line_at_info(tmp_path, caplog):
+    digest = await _preview_digest(tmp_path / "preview", "decide_gate", DECIDE_APPROVE)
+
+    caplog.set_level(logging.INFO, logger="sdlc.operator.bridge")
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _call("2", "decide_gate", DECIDE_APPROVE, digest)],
+        _holder_factory(tmp_path / "call", {}),
+        reply_ids=["2"],
+    )
+    assert _frame_for(writer, "2")["ok"] is True
+
+    expected = (
+        "mcp write actor=mcp:test tool=decide_gate run=feature-add-sso "
+        "key=architecture#2 confirmed=True"
+    )
+    messages = [r.getMessage() for r in caplog.records if r.name == "sdlc.operator.bridge"]
+    assert any(re.search(re.escape(expected), m) for m in messages), messages
+
+
+@pytest.mark.asyncio
+async def test_pending_follow_brake_survives_an_intervening_preview(tmp_path):
+    # Ten real follow waits would each block up to 60s, so the streak is
+    # preset to the brake limit instead: the next follow is already refused.
+    holder: dict = {}
+
+    def factory(actor: str):
+        deps = build_fake_deps(tmp_path, actor)
+        deps.follow_calls = deps.max_follow_calls
+        holder["deps"] = deps
+        return deps
+
+    writer = await _serve_until_all(
+        [
+            _init("mcp:test"),
+            _line({"op": "call", "id": "2", "tool": "follow", "args": {}}),
+            _preview("3", "decide_gate", DECIDE_APPROVE),
+            _line({"op": "call", "id": "4", "tool": "follow", "args": {}}),
+        ],
+        factory,
+        reply_ids=["2", "3", "4"],
+    )
+    first = _frame_for(writer, "2")
+    assert first["ok"] is False and first["error"]["code"] == "tool_error", first
+    assert "consecutive wait" in first["error"]["message"]
+
+    after = _frame_for(writer, "4")
+    assert after["ok"] is False and after["error"]["code"] == "tool_error", after
+    assert "consecutive wait" in after["error"]["message"]
+
+
+# --- pending (T026 error half: refusals and fail-closed confirm) -------------
+
+
+@pytest.mark.asyncio
+async def test_pending_preview_decide_gate_on_question_key_is_tool_error_with_check_kind_sentence(
+    tmp_path,
+):
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [
+            _init("mcp:test"),
+            _preview("2", "decide_gate", {"run_id": RUN_B, "key": "Q1", "outcome": "approve"}),
+        ],
+        _holder_factory(tmp_path, holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is False
+    assert frame["error"]["code"] == "tool_error"
+    assert (
+        frame["error"]["message"]
+        == "key 'Q1' on feature-fix-cache takes a text reply; use answer_question"
+    )
+
+
+@pytest.mark.asyncio
+async def test_pending_preview_stale_key_is_tool_error_with_nomatch_translation(tmp_path):
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [
+            _init("mcp:test"),
+            _preview("2", "decide_gate", {**DECIDE_APPROVE, "key": "architecture#99"}),
+        ],
+        _holder_factory(tmp_path, holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is False
+    assert frame["error"]["code"] == "tool_error"
+    assert frame["error"]["message"].endswith(
+        "This key is no longer pending; re-read the inbox or the run and use a current key."
+    )
+
+
+@pytest.mark.asyncio
+async def test_pending_call_without_expect_digest_is_bad_request_and_sends_nothing(tmp_path):
+    holder: dict = {}
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _call("2", "decide_gate", DECIDE_APPROVE)],
+        _holder_factory(tmp_path, holder),
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is False
+    assert frame["error"]["code"] == "bad_request"
+    assert holder["deps"].recorder.handles[RUN_A].signals == []
+
+
+@pytest.mark.asyncio
+async def test_pending_call_with_stale_expect_digest_is_changed_verbatim_and_sends_nothing(
+    tmp_path,
+):
+    digest = await _preview_digest(tmp_path / "p", "decide_gate", DECIDE_APPROVE)
+
+    holder: dict = {}
+
+    def factory(actor: str):
+        deps = build_fake_deps(tmp_path / "c", actor)
+        handle = deps.recorder.handles[RUN_A]
+        handle._pending[0] = handle._pending[0].model_copy(
+            update={"spec_summary": "changed underneath you"}
+        )
+        holder["deps"] = deps
+        return deps
+
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _call("2", "decide_gate", DECIDE_APPROVE, digest)],
+        factory,
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is False
+    assert frame["error"]["code"] == "changed"
+    assert (
+        frame["error"]["message"]
+        == "the pending item changed while you were confirming; re-read the inbox and retry"
+    )
+    assert holder["deps"].recorder.handles[RUN_A].signals == []
+
+
+@pytest.mark.asyncio
+async def test_pending_call_confirmed_false_when_handle_keeps_item_pending(tmp_path):
+    digest = await _preview_digest(tmp_path / "p", "decide_gate", DECIDE_APPROVE)
+
+    def factory(actor: str):
+        deps = build_fake_deps(tmp_path / "c", actor)
+        deps.recorder.handles[RUN_A].drop_on_signal = False
+        return deps
+
+    writer = await _serve_until_all(
+        [_init("mcp:test"), _call("2", "decide_gate", DECIDE_APPROVE, digest)],
+        factory,
+        reply_ids=["2"],
+    )
+    frame = _frame_for(writer, "2")
+    assert frame["ok"] is True
+    assert frame["value"]["confirmed"] is False

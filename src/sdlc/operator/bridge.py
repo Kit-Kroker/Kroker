@@ -14,6 +14,7 @@ protocol-only; every log line goes to stderr.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
 import json
 import logging
@@ -25,8 +26,10 @@ from typing import Any, BinaryIO, get_type_hints
 
 from pydantic import BaseModel, ValidationError, create_model
 
+from ..channels.contract import default_render
+from ..channels.transport import resolve_key
 from . import tools
-from .errors import ToolError
+from .errors import ToolError, translate
 
 BRIDGE_PROTOCOL = 1
 MAX_FRAME_BYTES = 4 * 1024 * 1024
@@ -222,6 +225,53 @@ class _LineReader:
             self._carry += chunk
 
 
+# The reply kind each confirm=pending verb demands — mirrors the want=
+# argument _reply passes _check_kind for the same verbs in tools.py.
+_PENDING_KINDS = {"decide_gate": "gate", "answer_question": "text"}
+
+
+async def _preview_pending(deps: Any, name: str, model: Any) -> dict[str, Any]:
+    """The confirm=pending preview (T027, data-model.md PreviewResult).
+
+    Resolves the pending item exactly the way the verb will — same handle,
+    same resolve_key, same _check_kind sentence on a wrong-kind key — then
+    renders it and digests {tool, args, rendered}. Deliberately does NOT
+    touch deps.note_other_tool(): a preview is not operator activity and
+    must not reset the follow streak.
+    """
+    try:
+        run_id = model.run_id
+        client = await deps.poller._client_or_connect()
+        handle = client.get_workflow_handle(run_id)
+        pending = await resolve_key(handle, model.key)
+        tools._check_kind(pending, _PENDING_KINDS[name], run_id)
+        rendered = default_render(pending)
+    except ToolError:
+        raise  # _check_kind's sentence is already operator-facing
+    except Exception as exc:
+        raise translate(exc) from exc  # NoMatch & friends -> ToolError
+    if name == "decide_gate":
+        proposal = f"Proposed: {model.outcome.value}"
+        if model.text:
+            proposal = f"{proposal} — {model.text}"
+    else:
+        proposal = f"Proposed: {model.text}"
+    lines = [rendered.title, rendered.body]
+    lines += [f"{label}: {text}" for label, text in rendered.rows]
+    lines.append(proposal)
+    canonical = json.dumps(
+        {
+            "tool": name,
+            "args": model.model_dump(mode="json"),
+            "rendered": rendered.model_dump(),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return {"message": "\n".join(lines), "digest": digest}
+
+
 async def _handle_request(
     op: str, rid: Any, req: dict[str, Any], deps: Any, send: Callable[[dict[str, Any]], Any]
 ) -> None:
@@ -233,27 +283,34 @@ async def _handle_request(
     descriptor = next((d for d in _tool_descriptors() if d["name"] == tool), None)
     member = _find_member(tool) if isinstance(tool, str) else None
     fn = getattr(tools, tool, None) if isinstance(tool, str) else None
-    if descriptor is None or member is None or fn is None:
+    if not isinstance(tool, str) or descriptor is None or member is None or fn is None:
         await send(_error_frame(rid, "bad_request", sentence_bad_request(f"unknown tool {tool!r}")))
         return
-    if descriptor["confirm"] != "none":
-        # Fail closed (FR-005): the preview/expect_digest handshake lands
-        # in T027/T029; until then no write verb may run over this path.
-        digest = req.get("expect_digest")
-        if not isinstance(digest, str) or not digest:
-            await send(
-                _error_frame(
-                    rid, "bad_request", sentence_bad_request("confirm tools require expect_digest")
-                )
-            )
-        else:
-            await send(
-                _error_frame(rid, "bad_request", sentence_bad_request("confirm is not wired yet"))
-            )
-        return
-    if op == "preview":
+    confirm = descriptor["confirm"]
+    if op == "preview" and confirm == "none":
         await send(
             _error_frame(rid, "bad_request", sentence_bad_request("preview is for confirm tools"))
+        )
+        return
+    if confirm not in ("none", "pending"):
+        # Fail closed (FR-005): confirm=="start" lands in T032.
+        await send(
+            _error_frame(rid, "bad_request", sentence_bad_request("confirm is not wired yet"))
+        )
+        return
+    expect_digest = req.get("expect_digest")
+    if (
+        confirm == "pending"
+        and op == "call"
+        and (not isinstance(expect_digest, str) or not expect_digest)
+    ):
+        # Fail closed (FR-005): a write verb runs only with the digest a
+        # preview handed the human. preview itself needs none — it is
+        # where the digest comes from.
+        await send(
+            _error_frame(
+                rid, "bad_request", sentence_bad_request("confirm tools require expect_digest")
+            )
         )
         return
     # Validate with the SAME schema describe published (the member's), then
@@ -261,10 +318,23 @@ async def _handle_request(
     raw = req.get("args")
     args = raw if isinstance(raw, dict) else {}
     try:
-        validated = dict(_args_model(member).model_validate(args))
+        model = _args_model(member).model_validate(args)
+        validated = dict(model)
     except ValidationError as exc:
         await send(_error_frame(rid, "bad_request", sentence_bad_request(_validation_summary(exc))))
         return
+    if confirm == "pending":
+        try:
+            preview = await _preview_pending(deps, tool, model)
+        except ToolError as exc:
+            await send(_error_frame(rid, "tool_error", exc.message))
+            return
+        if op == "preview":
+            await send(_result_frame(rid, preview))
+            return
+        if preview["digest"] != expect_digest:
+            await send(_error_frame(rid, "changed", SENTENCE_CHANGED))
+            return
     try:
         value = await fn(deps, **validated)
     except asyncio.CancelledError:
@@ -277,6 +347,15 @@ async def _handle_request(
         _log.exception("bridge call %r failed", tool)
         await send(_error_frame(rid, "internal", sentence_internal(exc)))
         return
+    if confirm == "pending":
+        _log.info(
+            "mcp write actor=%s tool=%s run=%s key=%s confirmed=%s",
+            getattr(deps, "actor", "?"),
+            tool,
+            validated.get("run_id"),
+            validated.get("key"),
+            getattr(value, "confirmed", "?"),
+        )
     if isinstance(value, BaseModel):
         value = value.model_dump(mode="json")
     await send(_result_frame(rid, value))
