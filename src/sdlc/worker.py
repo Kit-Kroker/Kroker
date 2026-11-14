@@ -96,6 +96,7 @@ from .notify.activities import notify
 from .observability.activities import export_run_artifacts
 from .pricing import price_usage
 from .stages import STAGE_MODULES
+from .task_queue import TASK_QUEUE  # noqa: F401 -- re-export
 from .triage.activities import (
     triage_baseline,
     triage_build_probe,
@@ -124,8 +125,6 @@ from .workflows.graph import GraphWorkflow
 from .workflows.reflect import ReflectWorkflow
 from .workflows.tidyup import TidyUpWorkflow
 from .workflows.triage import TriageWorkflow
-
-TASK_QUEUE = "ai-sdlc"
 
 
 def get_worker_activities() -> Sequence[Callable[..., Any]]:
