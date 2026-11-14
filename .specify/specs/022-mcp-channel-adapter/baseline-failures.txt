@@ -12,7 +12,11 @@
 # tests/test_operator_bridge.py), untracked at T001 and landing per task;
 # at T001 they fail on the missing modules they specify.
 #
-# Toolchain (T002): rustup/cargo — see the lines below.
+# Toolchain (T002): rustup was absent; installed user-locally (~/.cargo,
+# ~/.rustup, no sudo) per the owner ruling: rustup 1.29.3, default stable
+# toolchain rustc/cargo 1.100.0 (2026-11-09). rmcp 3.10 workspace manifest
+# (modelcontextprotocol/rust-sdk @ main, read 2026-11-14): rust-version 1.88,
+# edition 2024 — 1.100.0 satisfies it; M/rust-toolchain.toml pins 1.100.0.
 
 tests/test_benchmark_acceptance_stalled.py::test_sc003_recompute_stored_acceptance
 tests/test_deveval_corpus.py::test_imported_cases_state_role_and_visibility[deveval-hone]
