@@ -1,0 +1,24 @@
+# T001 baseline — fast tier (`uv run pytest -q`) on main @ eb3552b5, 2026-11-14.
+#
+# 8 pre-existing failures observed; every id is inside the 11-id set recorded
+# by .specify/specs/021-recall-snapshot-artifact/baseline-failures.txt, so no
+# novel failure vs that file. Three of 021's ids now pass on main and are
+# therefore absent here: tests/qa/test_qa_task_venv_provisioning.py::
+# test_run_test_suite_skips_provisioning_without_a_python_adapter and the two
+# tests/test_grade_oracle.py::test_grade_oracle_* ids. Failures shrank only.
+#
+# Excluded from this list by construction: the RED-first QA test files for
+# this round (tests/test_task_queue.py, tests/test_operator_runtime.py,
+# tests/test_operator_bridge.py), untracked at T001 and landing per task;
+# at T001 they fail on the missing modules they specify.
+#
+# Toolchain (T002): rustup/cargo — see the lines below.
+
+tests/test_benchmark_acceptance_stalled.py::test_sc003_recompute_stored_acceptance
+tests/test_deveval_corpus.py::test_imported_cases_state_role_and_visibility[deveval-hone]
+tests/test_deveval_corpus.py::test_imported_cases_state_role_and_visibility[deveval-particle-swarm-optimization]
+tests/test_deveval_corpus.py::test_imported_cases_state_role_and_visibility[deveval-stocktrends]
+tests/test_prompt_migration.py::test_prompt_shas_did_not_move
+tests/test_read_fixtures_fresh.py::test_committed_recordings_equal_a_fresh_build
+tests/test_read_fixtures_fresh.py::test_pristine_copy_passes_the_record_check
+tests/test_todo_api_case_loads.py::test_todo_api_case_file_exists_and_loads
