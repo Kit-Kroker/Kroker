@@ -119,7 +119,19 @@ async def _plan_research_impl(inp: PlanInput, _model=None) -> ResearchPlan:
         # (step.py) is the only retry layer.
         capabilities=[single_retry_layer()],
     )
-    result = await agent.run(_plan_prompt(inp))
+    # FR-202 (VR-4): this agent previously ran at pydantic-ai's default
+    # output-retry budget; the registry's research budget now reaches it
+    # per call, forwarded only when set — a default (1) run carries no
+    # retries kwarg at all (the 004 D7a only-when-set precedent), and
+    # construction stays at the default so the registry is the one
+    # source of the budget.
+    from sdlc.agents.roles import OUTPUT_RETRIES
+
+    run_kwargs: dict = {}
+    n = OUTPUT_RETRIES.get("research", 1)
+    if n != 1:
+        run_kwargs["retries"] = {"output": n}
+    result = await agent.run(_plan_prompt(inp), **run_kwargs)
     texts = [t.strip() for t in result.output.sub_questions if t and t.strip()]
     texts = texts[: inp.max_sub_questions]
 
@@ -273,13 +285,28 @@ async def _research_subquestion_impl(
         try:
             async with _heartbeating():
                 usage_limits = UsageLimits(request_limit=inp.max_requests)
+                # FR-202 (VR-3): the research role's validated-output
+                # retry budget is registry-driven and forwarded per call,
+                # only when set — a default (1) run carries no retries
+                # kwarg at all (the 004 D7a only-when-set precedent), and
+                # construction stays at the default so the registry is
+                # the one source of the budget. The entry rides the same
+                # run_kwargs at all three branches below.
+                from sdlc.agents.roles import OUTPUT_RETRIES
+
+                run_kwargs: dict = {
+                    "deps": deps,
+                    "usage_limits": usage_limits,
+                    "usage": run_usage,
+                }
+                n = OUTPUT_RETRIES.get("research", 1)
+                if n != 1:
+                    run_kwargs["retries"] = {"output": n}
                 if _model is not None:
                     result = await agent.run(
                         sub_question_prompt(sub.question),
-                        deps=deps,
-                        usage_limits=usage_limits,
                         model=_model,
-                        usage=run_usage,
+                        **run_kwargs,
                     )
                 else:
                     # 004 T032 (D7a/FR-001 path b): inp.model is the run's
@@ -294,17 +321,13 @@ async def _research_subquestion_impl(
                     if registry_model is not None and inp.model != registry_model:
                         result = await agent.run(
                             sub_question_prompt(sub.question),
-                            deps=deps,
-                            usage_limits=usage_limits,
                             model=inp.model,
-                            usage=run_usage,
+                            **run_kwargs,
                         )
                     else:
                         result = await agent.run(
                             sub_question_prompt(sub.question),
-                            deps=deps,
-                            usage_limits=usage_limits,
-                            usage=run_usage,
+                            **run_kwargs,
                         )
         except (BudgetExceeded, UsageLimitExceeded) as exc:
             # Expected exhaustion: degrade. NEVER re-raise -- the counter is
@@ -466,7 +489,17 @@ async def _synthesize_brief_impl(
         # 004 T013 (FR-007): same single-layer rule as the planner above.
         capabilities=[single_retry_layer()],
     )
-    result = await agent.run(_synthesis_prompt(inp, merged))
+    # FR-202 (VR-4): same registry-forwarded widening as the planner above
+    # — this agent previously ran at the default output budget; forwarded
+    # only when set, and construction stays at the default so the
+    # registry is the one source of the budget.
+    from sdlc.agents.roles import OUTPUT_RETRIES
+
+    run_kwargs: dict = {}
+    n = OUTPUT_RETRIES.get("research", 1)
+    if n != 1:
+        run_kwargs["retries"] = {"output": n}
+    result = await agent.run(_synthesis_prompt(inp, merged), **run_kwargs)
     out = result.output
 
     return merged.model_copy(
