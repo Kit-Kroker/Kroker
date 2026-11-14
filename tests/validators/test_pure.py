@@ -12,16 +12,38 @@ runs right after the plan gate so a bad graph fails fast and legibly instead.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 
+from sdlc.core.models import PlanConfig
 from sdlc.stages.plan.models import DevTask
-from sdlc.validators import dag_acyclic, deps_resolve, ids_unique, validate_task_graph
+from sdlc.validators import (
+    covers_all,
+    dag_acyclic,
+    deps_resolve,
+    ids_unique,
+    task_size,
+    validate_task_graph,
+)
 
 
-def _task(id_: str, depends_on: list[str] | None = None) -> DevTask:
+def _task(
+    id_: str,
+    depends_on: list[str] | None = None,
+    *,
+    covers: list[str] | None = None,
+    files_hint: list[str] | None = None,
+    criteria: list[str] | None = None,
+) -> DevTask:
     return DevTask(
-        id=id_, title="t", description="d", depends_on=depends_on or [], acceptance_criteria=[]
+        id=id_,
+        title="t",
+        description="d",
+        depends_on=depends_on or [],
+        acceptance_criteria=criteria or [],
+        files_hint=files_hint or [],
+        covers=covers or [],
     )
 
 
@@ -79,6 +101,40 @@ def test_ids_unique_passes():
 def test_ids_unique_names_duplicates_sorted():
     tasks = [_task("T2"), _task("T1"), _task("T2"), _task("T1")]
     assert ids_unique(tasks) == "duplicate task id(s): ['T1', 'T2']"
+
+
+def test_covers_all_passes_when_every_fr_covered():
+    frs = ["FR-1", "FR-2"]
+    tasks = [_task("T1", covers=["FR-1"]), _task("T2", covers=["FR-2", "FR-3"])]
+    assert covers_all(tasks, frs) == []
+
+
+def test_covers_all_names_uncovered_sorted_and_ignores_unknown_covers():
+    tasks = [_task("T1", covers=["FR-1", "US-9"])]
+    assert covers_all(tasks, ["FR-1", "FR-2", "FR-3"]) == ["FR-2", "FR-3"]
+
+
+def test_task_size_passes_at_limits():
+    limits = PlanConfig()
+    assert task_size([_task("T1", files_hint=["f"] * 24, criteria=["c"] * 12)], limits) is None
+
+
+def test_task_size_names_first_breach():
+    big = _task("T3", files_hint=["f"] * 25, criteria=["c"] * 13)
+    assert task_size([big], PlanConfig()) == "task 'T3' exceeds plan limits: files_hint=25>24"
+
+
+def test_devtask_covers_defaults_empty_and_old_json_deserializes():
+    assert DevTask(id="T1", title="t", description="d", acceptance_criteria=["a"]).covers == []
+    legacy = json.loads(
+        DevTask(id="T1", title="t", description="d", acceptance_criteria=["a"]).model_dump_json()
+    )
+    assert "covers" in legacy and legacy["covers"] == []
+
+
+def test_planconfig_defaults_pinned():
+    # The false-kill guard IS the generous default — pin the wire values.
+    assert PlanConfig() == PlanConfig(max_files_hint=24, max_criteria=12)
 
 
 def test_pure_module_has_no_temporalio_or_io():

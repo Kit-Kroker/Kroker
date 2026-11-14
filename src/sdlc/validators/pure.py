@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections import Counter
 
+from ..core.models import PlanConfig
 from ..stages.plan.models import DevTask
 
 
@@ -33,8 +34,8 @@ def deps_resolve(tasks: list[DevTask]) -> str | None:
     """None when every task's depends_on resolves to another task in the
     same plan; otherwise a human-readable reason.
 
-    Catches the failure shape the scheduler's ready-loop (run_one's caller,
-    below) would otherwise only discover after burning a run: a dangling
+    Catches the failure shape the scheduler (workflows/build.py run_tasks)
+    would otherwise only discover after burning a run: a dangling
     reference (a revision round dropped a task while a survivor still cites
     its id -- exactly bench-todo-api-greenfield-1785868165's single-task
     T7-depends-on-T3..T6 plan). Surfacing this right after the plan gate
@@ -53,12 +54,13 @@ def dag_acyclic(tasks: list[DevTask]) -> str | None:
     """None when the dependency graph has no cycle; otherwise a
     human-readable reason.
 
-    Catches the failure shape the scheduler's ready-loop (run_one's caller,
-    below) would otherwise only discover after burning a run: a true
-    A->B->A cycle. Surfacing this right after the plan gate turns it into an
-    immediate, legible `failed:plan-validation:...` instead of the
-    scheduler's opaque `failed:dependency-cycle` once tasks are already
-    mid-execution."""
+    Precondition: callers run deps_resolve first -- a standalone call
+    raises KeyError on unknown ids. Catches the failure shape the
+    scheduler (workflows/build.py run_tasks) would otherwise only discover
+    after burning a run: a true A->B->A cycle. Surfacing this right after
+    the plan gate turns it into an immediate, legible
+    `failed:plan-validation:...` instead of the scheduler's opaque
+    `failed:dependency-cycle` once tasks are already mid-execution."""
     ids = {t.id for t in tasks}
     by_id = {t.id: t for t in tasks}
     WHITE, GRAY, BLACK = 0, 1, 2
@@ -94,3 +96,39 @@ def validate_task_graph(tasks: list[DevTask]) -> str | None:
     stages/plan/validation.py module this package replaced; ids_unique is a
     separate check callers run before it."""
     return deps_resolve(tasks) or dag_acyclic(tasks)
+
+
+def covers_all(tasks: list[DevTask], requirement_ids: list[str]) -> list[str]:
+    """The requirement ids no task covers, sorted; an empty list is a pass.
+
+    Ids cited in `covers` but absent from `requirement_ids` are ignored --
+    a US-* cover is legal -- because the question asked here is only which
+    of the requirements artifact's ids would silently ship unimplemented:
+    the same dropped-requirement shape bench cases punish, discovered only
+    at acceptance if nobody checks at the plan gate."""
+    covered = {c for t in tasks for c in t.covers}
+    return sorted(r for r in requirement_ids if r not in covered)
+
+
+def task_size(tasks: list[DevTask], limits: PlanConfig) -> str | None:
+    """None when every task fits the plan's size limits; otherwise the
+    FIRST breach in task-list order, verbatim as the failure reason.
+
+    A task too large to finish in one harness session wedges the scheduler
+    on it -- and in wave mode, its whole wave -- after execution has
+    already started. Naming the first offender right after the plan gate
+    keeps the fix a plan edit instead of a mid-run rescue; the limits are
+    deliberately generous (PlanConfig) so only genuinely oversized tasks
+    trip them."""
+    for t in tasks:
+        if len(t.files_hint) > limits.max_files_hint:
+            return (
+                f"task {t.id!r} exceeds plan limits: "
+                f"files_hint={len(t.files_hint)}>{limits.max_files_hint}"
+            )
+        if len(t.acceptance_criteria) > limits.max_criteria:
+            return (
+                f"task {t.id!r} exceeds plan limits: "
+                f"criteria={len(t.acceptance_criteria)}>{limits.max_criteria}"
+            )
+    return None

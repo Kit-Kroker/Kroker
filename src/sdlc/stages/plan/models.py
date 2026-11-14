@@ -33,6 +33,10 @@ class DevTask(BaseModel):
     # other tasks (FR-104):
     # overlapping tasks
     # serialize in wave mode
+    covers: list[str] = Field(
+        default_factory=list,
+        description="FR ids from the requirements artifact this task implements",
+    )
     contract: ValidationContract | None = None  # frozen at planning
     role: Literal["dev", "test", "devops"] = "dev"
 
