@@ -12,8 +12,8 @@ Subject: ``sdlc.maintenance.incidents.step(state, curr) -> (state, events)``
 from __future__ import annotations
 
 import pytest
-from sdlc.maintenance.incidents import step
 
+from sdlc.maintenance.incidents import step
 from sdlc.maintenance.models import (
     DETECT_SIGNALS,
     MAX_PREV_FINDINGS,
@@ -101,8 +101,12 @@ def test_each_detect_kind_opens_exactly_one_incident(baselined, signal):
 
     opened = [i for i in state.incidents if i.kind == "finding"]
     assert len(opened) == len(findings)
-    for inc, f in zip(opened, findings, strict=True):
-        assert inc.key == f"{f.signal}:{f.rule}:{f.path}:{f.key}"
+    # Incidents open in sorted-identity order; pair by identity, not by
+    # the tuple order the fixture happened to use.
+    by_key = {inc.key: inc for inc in opened}
+    assert set(by_key) == {f"{f.signal}:{f.rule}:{f.path}:{f.key}" for f in findings}
+    for f in findings:
+        inc = by_key[f"{f.signal}:{f.rule}:{f.path}:{f.key}"]
         assert inc.commit_sha == "c" * 40  # pinned at the detecting cycle
         assert inc.first_seen_cycle == 2
         assert inc.last_seen_cycle == 2
@@ -150,7 +154,7 @@ def test_collected_disappearance_resolves_externally():
     second, events = step(first, make_triage())
     assert len(second.incidents) == 1
     assert second.incidents[0].state is IncidentState.RESOLVED_EXTERNALLY
-    assert second.incidents[0].last_seen_cycle == 2
+    assert second.incidents[0].last_seen_cycle == 3  # the resolving cycle
 
 
 def test_unverifiable_neither_opens_nor_resolves():
@@ -185,7 +189,9 @@ def test_signal_version_change_rebaselines_that_signal_and_records_the_event():
 
 
 def test_two_consecutive_not_collected_cycles_open_one_detect_escalation():
-    baselined = _with_baseline(_state(cycle=1), make_triage())
+    # advisory_source=osv so dependencies is configured ON: a not-collected
+    # report then reads as a fault, not as "not configured".
+    baselined = _with_baseline(_state(cycle=1, cfg=_cfg(advisory_source="osv")), make_triage())
     first, _ = step(baselined, make_triage(not_collected={"dependencies"}))
     assert first.not_collected_streak.get("dependencies") == 1
     assert first.incidents == []  # one missed cycle is never a fault
