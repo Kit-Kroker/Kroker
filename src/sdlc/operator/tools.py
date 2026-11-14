@@ -462,15 +462,24 @@ async def _handle(deps: OperatorDeps, run_id: str):
     return client.get_workflow_handle(run_id)
 
 
+def _check_kind(pending, want: str, run_id: str) -> None:
+    """The reply-kind gate _reply enforces, factored out (022 T008) so the
+    bridge's preview path refuses with the SAME sentence before a human is
+    bothered (T027). run_id is a parameter because PendingDecision carries
+    no run identity of its own; pending.key is the key resolve_key matched.
+    """
+    kind = default_render(pending).reply_kind
+    if kind != want:
+        right = "answer_question" if kind == "text" else "decide_gate"
+        raise ToolError(f"key {pending.key!r} on {run_id} takes a {kind} reply; use {right}")
+
+
 async def _reply(
     deps: OperatorDeps, run_id: str, key: str, reply: Reply, want: str
 ) -> ReplyReceipt:
     handle = await _handle(deps, run_id)
     pending = await resolve_key(handle, key)
-    kind = default_render(pending).reply_kind
-    if kind != want:
-        right = "answer_question" if kind == "text" else "decide_gate"
-        raise ToolError(f"key {key!r} on {run_id} takes a {kind} reply; use {right}")
+    _check_kind(pending, want, run_id)
     result = await submit(handle, pending, reply, channel=ActorChannel(actor=deps.actor))
     return ReplyReceipt(run_id=run_id, key=key, confirmed=result.confirmed, detail=result.message)
 
