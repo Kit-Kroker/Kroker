@@ -119,7 +119,7 @@ pythonpath = [".", "src"]
 #   pytest -m temporal              # integration tests only
 #   pytest -m "slow or temporal"    # everything
 #   pytest -m ""                    # truly everything (overrides addopts)
-addopts = "-q -m 'not slow and not temporal and not docker and not prompt_eval and not crew'"
+addopts = "-q -m 'not slow and not temporal and not docker and not prompt_eval and not crew and not mcp'"
 markers = [
     "slow: builds a venv or otherwise takes >10s",
     "temporal: spawns an ephemeral Temporal dev-server via WorkflowEnvironment",
@@ -127,5 +127,6 @@ markers = [
     "prompt_eval: A/B-scores a role prompt against a fixture; spends tokens; skipped unless SDLC_PROMPT_EVAL=1",
     "docker: requires a running Docker daemon; builds and runs real containers",
     "crew: needs a real coding CLI on PATH; drives one crew round end to end",
+    "mcp: spawns the built kroker-mcp binary (scripts/check_mcp.py builds it)",
     "clause: cites a numbered clause from a slice's <stage>.md contract",
 ]
