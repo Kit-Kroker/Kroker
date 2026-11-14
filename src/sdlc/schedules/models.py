@@ -1,36 +1,54 @@
-"""Schedule configuration and asset models (spec A §2.2).
+"""Schedule configuration and asset models (spec A §2.2, 023a R10).
 
-Owned by the horizontal schedules package.
+Owned by the horizontal schedules package. Since 023a the action is a
+discriminated union on ``workflow``: the nightly Reflect asset keeps its
+exact shape, and a maintenance-kick asset starts the loop's kicker. The
+union is closed — an unknown workflow name is a validation error, not an
+extension point.
 """
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import (
     BaseModel,
     Field,
     field_validator,
+    model_validator,
 )
 
-KNOWN_SCHEDULE_WORKFLOWS = {"ReflectWorkflow"}
+KNOWN_SCHEDULE_WORKFLOWS = {"ReflectWorkflow", "MaintenanceKickWorkflow"}
 
 
-class ScheduleAction(BaseModel):
-    """The start-workflow action of a schedule asset. Temporal Schedules can
-    only start workflows, never activities — hence ReflectWorkflow."""
+class ReflectAction(BaseModel):
+    """The nightly memory-consolidation asset (unchanged since E-12)."""
 
-    workflow: str
+    workflow: Literal["ReflectWorkflow"] = "ReflectWorkflow"
     banks: list[str] = Field(min_length=1)
     backend: Literal["fake", "hindsight"] = "fake"
     base_url: str = "http://localhost:8888"
 
-    @field_validator("workflow")
+
+class MaintenanceKickAction(BaseModel):
+    """The DAPER loop's schedule kicker (023a FR-003): starts
+    MaintenanceKickWorkflow, which signals the project's loop. The
+    project slug rule is the domain model's — reused, not restated."""
+
+    workflow: Literal["MaintenanceKickWorkflow"] = "MaintenanceKickWorkflow"
+    project: str
+
+    @field_validator("project")
     @classmethod
-    def _known_workflow(cls, v: str) -> str:
-        if v not in KNOWN_SCHEDULE_WORKFLOWS:
-            raise ValueError(f"unknown workflow {v!r}; known: {sorted(KNOWN_SCHEDULE_WORKFLOWS)}")
+    def _project_is_a_valid_slug(cls, v: str) -> str:
+        from ..maintenance.models import MaintenanceKickInput
+
+        MaintenanceKickInput(project=v)  # raises on a bad slug
         return v
+
+
+#: Discriminated on `workflow`: one union, closed by the Literal fields.
+ScheduleAction = Annotated[ReflectAction | MaintenanceKickAction, Field(discriminator="workflow")]
 
 
 class ScheduleSpecAsset(BaseModel):
@@ -54,3 +72,20 @@ class ScheduleAsset(BaseModel):
     id: str
     spec: ScheduleSpecAsset
     action: ScheduleAction
+
+    @model_validator(mode="after")
+    def _kick_assets_are_hourly_or_slower(self) -> ScheduleAsset:
+        """FR-003's cadence bound: the kick runs the maintenance loop, whose
+        cycle is dominated by a 40-minute build probe — a sub-hourly cadence
+        would only queue overlapping nudges. Reflect assets keep any 5-field
+        cron: their cadence rule is untouched."""
+        if not isinstance(self.action, MaintenanceKickAction):
+            return self
+        minute = self.spec.cron.split()[0]
+        if not (minute.isdigit() and 0 <= int(minute) <= 59):
+            raise ValueError(
+                f"maintenance-kick schedule {self.id!r} must run hourly or slower: "
+                f"the cron minute field must be a single integer, got {minute!r} "
+                f"in {self.spec.cron!r}"
+            )
+        return self

@@ -4,7 +4,7 @@ a function of desired vs existing, so every reconcile rule is testable here."""
 from __future__ import annotations
 
 from sdlc.schedules.models import (
-    ScheduleAction,
+    ReflectAction,
     ScheduleAsset,
     ScheduleSpecAsset,
 )
@@ -17,7 +17,7 @@ def asset(
     return ScheduleAsset(
         id=sid,
         spec=ScheduleSpecAsset(cron=cron),
-        action=ScheduleAction(workflow="ReflectWorkflow", banks=banks or ["project:default"]),
+        action=ReflectAction(banks=banks or ["project:default"]),
     )
 
 

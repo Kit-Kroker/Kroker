@@ -17,9 +17,12 @@ from temporalio.client import (
     ScheduleUpdate,
 )
 
+from ..maintenance.models import MaintenanceKickInput
 from ..workflows.reflect import ReflectScheduleInput
 from .models import (
     KNOWN_SCHEDULE_WORKFLOWS,
+    MaintenanceKickAction,
+    ReflectAction,
     ScheduleAction,
     ScheduleAsset,
     ScheduleSpecAsset,
@@ -41,14 +44,20 @@ def _workflow_id(sid: str) -> str:
 def to_temporal(a: ScheduleAsset) -> Schedule:
     from ..worker import TASK_QUEUE
 
+    # Per-type dispatch (R10): the schedule starts the workflow whose input
+    # matches the action; the discriminator already fixed which one.
+    if isinstance(a.action, MaintenanceKickAction):
+        args: list = [MaintenanceKickInput(project=a.action.project)]
+    else:
+        args = [
+            ReflectScheduleInput(
+                banks=a.action.banks, backend=a.action.backend, base_url=a.action.base_url
+            )
+        ]
     return Schedule(
         action=ScheduleActionStartWorkflow(
             a.action.workflow,
-            args=[
-                ReflectScheduleInput(
-                    banks=a.action.banks, backend=a.action.backend, base_url=a.action.base_url
-                )
-            ],
+            args=args,
             id=_workflow_id(a.id),
             task_queue=TASK_QUEUE,
         ),
@@ -68,23 +77,29 @@ def from_temporal(sid: str, sched: Schedule) -> ScheduleAsset | None:
         return None
     if not sched.spec.cron_expressions:
         return None
-    # Tolerates both a decoded ReflectScheduleInput and the plain dict the
-    # default converter can hand back for an untyped arg.
-    inp = ReflectScheduleInput.model_validate(action.args[0])
+    if action.workflow == "MaintenanceKickWorkflow":
+        # Tolerates both a decoded MaintenanceKickInput and the plain dict
+        # the default converter can hand back for an untyped arg.
+        kinp = MaintenanceKickInput.model_validate(action.args[0])
+        asset_action: ScheduleAction = MaintenanceKickAction(project=kinp.project)
+    else:
+        # Tolerates both a decoded ReflectScheduleInput and the plain dict
+        # the default converter can hand back for an untyped arg.
+        rinp = ReflectScheduleInput.model_validate(action.args[0])
+        asset_action = ReflectAction(
+            banks=rinp.banks,
+            # ReflectScheduleInput.backend is a plain str; ReflectAction
+            # re-validates the literal at construction.
+            backend=cast(Literal["fake", "hindsight"], rinp.backend),
+            base_url=rinp.base_url,
+        )
     return ScheduleAsset(
         id=sid,
         spec=ScheduleSpecAsset(
             cron=sched.spec.cron_expressions[0],
             timezone=sched.spec.time_zone_name or "UTC",
         ),
-        action=ScheduleAction(
-            workflow=action.workflow,
-            banks=inp.banks,
-            # ReflectScheduleInput.backend is a plain str; ScheduleAction
-            # re-validates the literal at construction.
-            backend=cast(Literal["fake", "hindsight"], inp.backend),
-            base_url=inp.base_url,
-        ),
+        action=asset_action,
     )
 
 

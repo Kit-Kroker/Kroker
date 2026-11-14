@@ -40,12 +40,12 @@ def test_nightly_reflect_to_temporal_is_pinned():
     assert sched.action.workflow == "ReflectWorkflow"
     assert sched.action.id == "sched-nightly-reflect"
     assert sched.action.task_queue == "ai-sdlc"
+    from sdlc.workflows.reflect import ReflectScheduleInput
+
     assert sched.action.args == [
-        {
-            "banks": ["project:default"],
-            "backend": "hindsight",
-            "base_url": "http://localhost:8888",
-        }
+        ReflectScheduleInput(
+            banks=["project:default"], backend="hindsight", base_url="http://localhost:8888"
+        )
     ]
     assert sched.spec.cron_expressions == ["0 3 * * *"]
     assert sched.spec.time_zone_name == "UTC"
@@ -75,7 +75,9 @@ def test_kick_asset_converts_and_round_trips():
     sched = to_temporal(asset)
     assert sched.action.workflow == "MaintenanceKickWorkflow"
     assert sched.action.id == "sched-maint-demo"
-    assert sched.action.args == [{"project": "demo"}]
+    from sdlc.maintenance.models import MaintenanceKickInput
+
+    assert sched.action.args == [MaintenanceKickInput(project="demo")]
     assert sched.spec.cron_expressions == ["0 4 * * *"]
     again = from_temporal(asset.id, sched)
     assert again == asset
@@ -122,7 +124,10 @@ def test_reflect_assets_keep_any_five_field_cron():
 
 
 def test_unknown_workflow_is_still_refused():
-    with pytest.raises(ValueError, match="unknown workflow"):
+    # Refused by the closed union: the tag error names the workflow and the
+    # expected tags (T027's mechanism — a discriminated union rather than a
+    # name-list validator).
+    with pytest.raises(ValueError, match="SomeOtherWorkflow"):
         ScheduleAsset(
             id="x",
             spec=ScheduleSpecAsset(cron="0 3 * * *"),

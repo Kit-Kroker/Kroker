@@ -14,7 +14,7 @@ from sdlc.schedules.apply import (
     to_temporal,
 )
 from sdlc.schedules.models import (
-    ScheduleAction,
+    ReflectAction,
     ScheduleAsset,
     ScheduleSpecAsset,
 )
@@ -25,7 +25,7 @@ def asset(sid: str = "nightly-reflect") -> ScheduleAsset:
     return ScheduleAsset(
         id=sid,
         spec=ScheduleSpecAsset(cron="0 3 * * *", timezone="UTC"),
-        action=ScheduleAction(
+        action=ReflectAction(
             workflow="ReflectWorkflow",
             banks=["project:default"],
             backend="hindsight",

@@ -641,9 +641,14 @@ async def main() -> None:
                 print("no schedule assets found")
                 return
             for a in desired:
+                # 023a: kick assets carry a project, reflect assets a bank
+                # list — render whichever half the action owns.
+                if a.action.workflow == "MaintenanceKickWorkflow":
+                    detail = f"project={a.action.project}"
+                else:
+                    detail = f"banks={a.action.banks}"
                 print(
-                    f"{a.id:<24} {a.spec.cron!r} {a.spec.timezone} "
-                    f"-> {a.action.workflow} banks={a.action.banks}"
+                    f"{a.id:<24} {a.spec.cron!r} {a.spec.timezone} -> {a.action.workflow} {detail}"
                 )
             return
         assert client is not None
