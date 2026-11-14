@@ -156,6 +156,7 @@ def test_optional_roles_contains_research_and_deep_review():
             "risk",
             "constitution",
             "product",
+            "maintainer",
         }
     )
     assert KNOWN_ROLES == REQUIRED_ROLES | OPTIONAL_ROLES

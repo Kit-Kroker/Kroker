@@ -1,0 +1,3 @@
+kind: proposer
+model: zai:glm-5.3
+validation_retries: 2

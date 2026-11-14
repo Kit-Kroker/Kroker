@@ -132,6 +132,10 @@ discover_agent = AGENTS.get("discover")
 # Optional risk proposer (E-49 RD7). Present iff agents/risk/ ships.
 risk_agent = AGENTS.get("risk")
 
+# Optional maintainer proposer (023a R8): the DAPER maintenance loop's
+# repair planner, called directly by MaintenanceWorkflow (never a stage).
+maintainer_agent = AGENTS.get("maintainer")
+
 # Optional constitution drafter (FR-112). Present iff agents/constitution/
 # ships; the STAGE runs only when the run enables the flag (feature.py).
 constitution_agent = AGENTS.get("constitution")
@@ -226,6 +230,7 @@ STAGE_ROLES: dict[str, str] = {
     "risk": "risk",  # optional; present iff the folder ships
     "constitution": "constitution",  # optional; present iff the folder ships
     "requirements": "product",  # optional; present iff the folder ships
+    "maintenance": "maintainer",  # optional; 023a loop's proposer, not a stage
 }
 
 # Both maps are keyed by stage and looked up together in _cached_stage. Keep
@@ -313,6 +318,8 @@ t_constitution = constitution_agent
 
 t_product = product_agent
 
+t_maintainer = maintainer_agent
+
 ALL_TEMPORAL_AGENTS = [
     t_clarify,
     t_clarify_route,
@@ -341,3 +348,5 @@ if t_constitution is not None:
     ALL_TEMPORAL_AGENTS.append(t_constitution)
 if t_product is not None:
     ALL_TEMPORAL_AGENTS.append(t_product)
+if t_maintainer is not None:
+    ALL_TEMPORAL_AGENTS.append(t_maintainer)

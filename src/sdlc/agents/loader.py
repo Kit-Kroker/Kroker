@@ -84,6 +84,9 @@ OPTIONAL_ROLES: frozenset[str] = frozenset(
         "risk",
         "constitution",
         "product",
+        # 023a: the DAPER maintenance loop's repair proposer (R8). A
+        # proposer, never a judge; present iff agents/maintainer/ ships.
+        "maintainer",
     }
 )
 

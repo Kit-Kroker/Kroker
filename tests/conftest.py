@@ -352,6 +352,17 @@ def write_registry_dir(root, version=1):
         b"    return Agent(model, name='product_agent',\n"
         b"                 system_prompt=instructions, capabilities=list(capabilities))\n"
     )
+    # Optional maintainer proposer (023a R8): the DAPER repair planner.
+    mnt = root / "maintainer"
+    mnt.mkdir(exist_ok=True)
+    (mnt / "agent.yaml").write_bytes(b"kind: proposer\nmodel: anthropic:glm-5.2\n")
+    (mnt / "instructions.md").write_bytes(b"propose the repair plan")
+    (mnt / "agent.py").write_bytes(
+        b"from pydantic_ai import Agent\n"
+        b"def build(model, instructions, model_settings, *, capabilities=()):\n"
+        b"    return Agent(model, name='maintainer_agent',\n"
+        b"                 system_prompt=instructions, capabilities=list(capabilities))\n"
+    )
     return root
 
 
