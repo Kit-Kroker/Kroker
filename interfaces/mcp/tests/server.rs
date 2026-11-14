@@ -17,6 +17,7 @@ use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ClientConfig, ContentBlock,
     ElicitRequestParams, ElicitResult, ElicitationAction, ElicitationCapability,
     FormElicitationCapability, Implementation, ProgressNotificationParam, ProtocolVersion,
+    RequestMetaObject, RequestParamsMeta,
 };
 use rmcp::service::NotificationContext;
 use rmcp::service::{RequestContext, RoleClient};
@@ -425,6 +426,23 @@ fn with_args(tool: &str, args: Value) -> CallToolRequestParams {
         .with_arguments(args.as_object().cloned().unwrap_or_default())
 }
 
+/// Mark a tools/call request as protocol 2026-07-28 (SEP-2567 per-request
+/// `_meta`): the server answers such requests with MRTR input requests
+/// instead of server-to-client elicitation, whatever the session negotiated.
+/// The draft schema marks protocolVersion and clientCapabilities as
+/// required in that _meta, so both ride along.
+fn as_mrtr(mut params: CallToolRequestParams) -> CallToolRequestParams {
+    let mut meta = RequestMetaObject::default();
+    meta.set_protocol_version(ProtocolVersion::V_2026_07_28);
+    let mut caps = rmcp::model::ClientCapabilities::default();
+    let mut elic = ElicitationCapability::default();
+    elic.form = Some(FormElicitationCapability::default());
+    caps.elicitation = Some(elic);
+    meta.set_client_capabilities(caps);
+    params.set_meta(meta);
+    params
+}
+
 /// The MRTR retry: same tool and args, the confirm response, and the
 /// echoed (or tampered) requestState.
 fn confirm_retry(tool: &str, args: Value, state: Option<String>) -> CallToolRequestParams {
@@ -434,7 +452,7 @@ fn confirm_retry(tool: &str, args: Value, state: Option<String>) -> CallToolRequ
     if let Some(state) = state {
         params = params.with_request_state(state);
     }
-    params
+    as_mrtr(params)
 }
 
 async fn call_args(
@@ -451,14 +469,30 @@ async fn call_args(
     .expect("call_tool protocol error")
 }
 
-async fn call_once_args(
+/// One MRTR-marked round; the driven helper answers the input request
+/// through the client's scripted elicitation handler.
+async fn call_mrtr(
+    client: &rmcp::service::RunningService<RoleClient, TestClient>,
+    tool: &str,
+    args: Value,
+) -> CallToolResult {
+    tokio::time::timeout(
+        Duration::from_secs(15),
+        client.call_tool(as_mrtr(with_args(tool, args))),
+    )
+    .await
+    .expect("call timed out")
+    .expect("call_tool protocol error")
+}
+
+async fn call_once_mrtr(
     client: &rmcp::service::RunningService<RoleClient, TestClient>,
     tool: &str,
     args: Value,
 ) -> CallToolResponse {
     tokio::time::timeout(
         Duration::from_secs(15),
-        client.call_tool_once(with_args(tool, args)),
+        client.call_tool_once(as_mrtr(with_args(tool, args))),
     )
     .await
     .expect("call timed out")
@@ -624,7 +658,7 @@ async fn confirm_e2_accept_on_retry_sends_exactly_one_call() {
 
     // call_tool drives the input_required round itself through the
     // client's elicitation handler (scripted Accept(true)).
-    let result = call_args(&h.client, "decide_gate", gate_args()).await;
+    let result = call_mrtr(&h.client, "decide_gate", gate_args()).await;
     assert_ne!(result.is_error, Some(true));
     assert_eq!(single_text(&result), "canned result");
 
@@ -636,7 +670,7 @@ async fn confirm_e2_accept_on_retry_sends_exactly_one_call() {
 #[tokio::test]
 async fn confirm_e2_tampered_request_state_is_invalid() {
     let h = start("confirm-e2-tampered", json!({})).await;
-    let state = input_required_state(call_once_args(&h.client, "decide_gate", gate_args()).await);
+    let state = input_required_state(call_once_mrtr(&h.client, "decide_gate", gate_args()).await);
     let last = state.chars().last().expect("non-empty state");
     let tampered = format!(
         "{}{}",
@@ -653,7 +687,7 @@ async fn confirm_e2_tampered_request_state_is_invalid() {
 #[tokio::test]
 async fn confirm_e2_replayed_request_state_is_invalid_and_still_one_call() {
     let h = start("confirm-e2-replay", json!({})).await;
-    let state = input_required_state(call_once_args(&h.client, "decide_gate", gate_args()).await);
+    let state = input_required_state(call_once_mrtr(&h.client, "decide_gate", gate_args()).await);
 
     let first = call_retry(&h.client, "decide_gate", gate_args(), Some(state.clone())).await;
     assert_ne!(first.is_error, Some(true), "the first use is valid");
@@ -667,7 +701,7 @@ async fn confirm_e2_replayed_request_state_is_invalid_and_still_one_call() {
 #[tokio::test]
 async fn confirm_e2_swapped_args_retry_is_invalid() {
     let h = start("confirm-e2-args-swap", json!({})).await;
-    let state = input_required_state(call_once_args(&h.client, "decide_gate", gate_args()).await);
+    let state = input_required_state(call_once_mrtr(&h.client, "decide_gate", gate_args()).await);
     let swapped =
         json!({"run_id": "feature-add-sso", "key": "architecture#2", "outcome": "reject"});
 
@@ -698,7 +732,7 @@ async fn confirm_e2_expired_request_state_is_invalid() {
     )
     .await;
 
-    let state = input_required_state(call_once_args(&h.client, "decide_gate", gate_args()).await);
+    let state = input_required_state(call_once_mrtr(&h.client, "decide_gate", gate_args()).await);
     *offset.lock().unwrap() = 301;
     let result = call_retry(&h.client, "decide_gate", gate_args(), Some(state)).await;
 

@@ -13,8 +13,8 @@ use std::time::Duration;
 
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ClientCapabilities, ContentBlock,
-    InitializeResult, ListToolsResult, PaginatedRequestParams, ServerCapabilities, Tool,
-    ToolAnnotations,
+    InitializeResult, ListToolsResult, PaginatedRequestParams, ProtocolVersion, ServerCapabilities,
+    Tool, ToolAnnotations,
 };
 use rmcp::service::{NotificationContext, RequestContext, RoleServer};
 use rmcp::{ErrorData as McpError, ServerHandler};
@@ -35,6 +35,10 @@ pub const MRTR_PROTOCOL_VERSION: &str = "2026-07-28";
 /// confirmation machinery lands and whenever a session cannot elicit.
 pub const NO_CONFIRMATION_SENTENCE: &str = "this write needs a human confirmation that this MCP client did not provide; nothing was changed. Use the dashboard or `python -m sdlc.cli` instead.";
 
+/// Test seam for the unix-seconds clock (T029 SealedState expiry);
+/// None = the system clock.
+pub type Clock = Arc<dyn Fn() -> u64 + Send + Sync>;
+
 /// How this binary was launched (main.rs parses; tests construct directly).
 /// Not `Debug`: the clock seam is a closure.
 #[derive(Clone)]
@@ -45,10 +49,9 @@ pub struct ServerConfig {
     pub bridge_cmd: Option<Vec<String>>,
     /// Validated `SDLC_MCP_ACTOR` override.
     pub actor_override: Option<String>,
-    /// Unix-seconds clock for SealedState expiry (T029). None = the
-    /// system clock; tests inject an advancing clock to age a state past
-    /// its `exp` without sleeping.
-    pub now: Option<Arc<dyn Fn() -> u64 + Send + Sync>>,
+    /// Injected unix-seconds clock for SealedState expiry tests; tests
+    /// advance an offset between rounds instead of sleeping.
+    pub now: Option<Clock>,
 }
 
 /// Which elicitation path this session negotiated (data-model.md).
@@ -68,6 +71,7 @@ pub struct SessionState {
     pub tools: Option<Arc<Vec<ToolDescriptor>>>,
     pub protocol_version: Option<String>,
     pub elicit_mode: ElicitMode,
+    pub(crate) confirm: Option<Arc<confirm::ConfirmGate>>,
     tools_rx: Option<oneshot::Receiver<Arc<Vec<ToolDescriptor>>>>,
 }
 
@@ -85,6 +89,7 @@ impl Server {
                 tools: None,
                 protocol_version: None,
                 elicit_mode: ElicitMode::None,
+                confirm: None,
                 tools_rx: None,
             })),
         }
@@ -199,6 +204,10 @@ impl ServerHandler for Server {
     }
 
     async fn on_initialized(&self, _context: NotificationContext<RoleServer>) {
+        // The confirmation gate owns its secrets per session: the sealing
+        // key never outlives the process that drew it.
+        let gate = Arc::new(confirm::ConfirmGate::new(self.cfg.now.clone()));
+        self.state.lock().await.confirm = Some(gate);
         let actor = self
             .cfg
             .actor_override
@@ -252,7 +261,7 @@ impl ServerHandler for Server {
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
         let tools = self.tools().await?;
         let Some(descriptor) = tools.iter().find(|d| d.name == request.name) else {
@@ -267,7 +276,36 @@ impl ServerHandler for Server {
         if descriptor.confirm != "none" {
             // FR-005: no write verb runs unconfirmed. The gate owns every
             // confirm value; zero per-verb logic here (research R3).
-            return confirm::confirm_and_call().await;
+            let gate =
+                self.state.lock().await.confirm.clone().ok_or_else(|| {
+                    McpError::internal_error("the session is not initialised", None)
+                })?;
+            // The elicitation mechanism is PER REQUEST (SEP-2567): a
+            // request naming 2026-07-28 in _meta gets MRTR input requests
+            // even in a session initialized on an older revision — the
+            // same version source rmcp's own outbound-request gate uses.
+            let mode = if context
+                .protocol_version()
+                .is_some_and(|v| v >= ProtocolVersion::V_2026_07_28)
+            {
+                ElicitMode::E2
+            } else {
+                self.state.lock().await.elicit_mode
+            };
+            let session = confirm::ConfirmSession {
+                gate: &gate,
+                bridge: &bridge,
+                mode,
+                peer: &context.peer,
+            };
+            return confirm::confirm_and_call(
+                &session,
+                &descriptor.name,
+                &args,
+                request.request_state.as_deref(),
+                request.input_responses.as_ref(),
+            )
+            .await;
         }
         let id = bridge.next_id();
         let result = bridge.call(&id, &descriptor.name, &args, None).await;
