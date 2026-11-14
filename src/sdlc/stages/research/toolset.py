@@ -96,7 +96,7 @@ async def research_subquery_reported(
         run_kwargs["retries"] = {"output": n}
     # 004 T033 (D7/FR-001 path c): under a research override the deps carry
     # it; forward it so the model that answers is the override. Without an
-    # override the call is made exactly as before, bar the two new kwargs.
+    # override the call is made exactly as before, bar the kwargs above.
     try:
         if deps.research_model is not None:
             result = await t_research.run(

@@ -37,7 +37,8 @@ file carries only what is true *here*.
   research tool receives the run's forwarded `research` override on
   `ResearchDeps.research_model` (populated by the architecture slice only
   under an override; omitted from serialization while None) and passes it
-  as `model=` — no-override deps and calls are byte-identical to before.
+  as `model=` — no-override deps and model handling are byte-identical
+  to before.
   The tool also bounds its inner run with `ResearchDeps.max_requests` (the
   architecture slice passes `cfg.research.max_requests`; omitted from
   serialization at the default) and returns the inner run's usage beside

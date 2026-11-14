@@ -41,7 +41,7 @@ def build(
         system_prompt=instructions,
         capabilities=[*capabilities, *own_capabilities],
         # Same shape as the planner's and research's (agents/planner/
-        # agent.py:40, agents/research/agent.py:79): a malformed final
+        # agent.py's FR-202 note, agents/research/agent.py:79): a malformed final
         # draft re-prompts with the exact validation error, so a budget
         # of 1 spends its only retry on the uncorrected attempt; 3 gives
         # the self-correction loop room. Scoped to `output` only —

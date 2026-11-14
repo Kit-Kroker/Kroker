@@ -131,7 +131,10 @@ defaults:
 `RoleConfig` (`core/models.py:185`) gains
 `validation_retries: int | None = Field(default=None, ge=1, le=5)`; a
 role's `agent.yaml` sets it to override the default. `None` means "inherit
-the default" and never survives parsing: `_parse`
+the default" and never survives parsing — unless `registry.yaml` has no
+`defaults:` block at all, in which case `_parse` is a no-op and the
+fallback inside `effective_validation_retries` (1) is the safety net:
+`_parse`
 (`agents/loader.py:151`) reads the `defaults:` block, validates
 `validation_retries` is an int in 1..5, and applies it to every role whose
 own `agent.yaml` omits the key. An unknown key inside `defaults:` is a
