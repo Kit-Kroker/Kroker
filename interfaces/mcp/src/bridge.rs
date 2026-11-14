@@ -306,6 +306,12 @@ impl Bridge {
         rx
     }
 
+    /// Drop `id`'s progress sink once the call is done, so the forwarding
+    /// task's receiver ends instead of leaking for the session's life.
+    pub async fn drop_progress_sink(&self, id: &str) {
+        self.state.lock().await.progress.remove(id);
+    }
+
     /// Cancel an in-flight request by bridge id.
     pub async fn cancel(&self, id: &str) {
         let frame = json!({"op": "cancel", "id": id});

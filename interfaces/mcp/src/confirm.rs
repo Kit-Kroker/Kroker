@@ -158,12 +158,15 @@ fn to_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// What one confirmed call needs, handed over by server.rs.
+/// What one confirmed call needs, handed over by server.rs. `bridge_id`
+/// is the call's bridge id — server.rs pre-allocated it so a client
+/// cancellation can be forwarded while the write is in flight (T036).
 pub struct ConfirmSession<'a> {
     pub gate: &'a Arc<ConfirmGate>,
     pub bridge: &'a Arc<Bridge>,
     pub mode: ElicitMode,
     pub peer: &'a Peer<RoleServer>,
+    pub bridge_id: String,
 }
 
 /// The whole write-confirmation flow (T029). Returns the client-facing
@@ -214,7 +217,7 @@ pub async fn confirm_and_call(
                 .await;
             match answer {
                 Ok(Some(form)) if form.confirm => {
-                    call_confirmed(session.bridge, tool, args, &preview.digest).await
+                    call_confirmed(session, tool, args, &preview.digest).await
                 }
                 _ => Ok(error_result(DID_NOT_CONFIRM_SENTENCE)),
             }
@@ -249,7 +252,7 @@ pub async fn confirm_and_call(
             if !response_confirms(input_responses.and_then(|r| r.get("confirm"))) {
                 return Ok(error_result(DID_NOT_CONFIRM_SENTENCE));
             }
-            call_confirmed(session.bridge, tool, args, &digest).await
+            call_confirmed(session, tool, args, &digest).await
         }
     }
 }
@@ -258,13 +261,16 @@ pub async fn confirm_and_call(
 /// human approved. The bridge re-checks it against a freshly computed
 /// preview and answers `changed` if the world moved (FR-006).
 async fn call_confirmed(
-    bridge: &Arc<Bridge>,
+    session: &ConfirmSession<'_>,
     tool: &str,
     args: &Value,
     digest: &str,
 ) -> Result<CallToolResponse, McpError> {
-    let id = bridge.next_id();
-    Ok(match bridge.call(&id, tool, args, Some(digest)).await {
+    let bridge = session.bridge;
+    Ok(match bridge
+        .call(&session.bridge_id, tool, args, Some(digest))
+        .await
+    {
         Ok(value) => map_result(value),
         Err(e) => map_error(e),
     }

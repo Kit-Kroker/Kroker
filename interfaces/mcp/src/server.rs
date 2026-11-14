@@ -7,14 +7,15 @@
 //! enforces it). Confirm tools fail closed until `confirm.rs` lands
 //! (T028/T029): FR-005, no unconfirmed path, ever.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ClientCapabilities, ContentBlock,
-    InitializeResult, ListToolsResult, PaginatedRequestParams, ProtocolVersion, ServerCapabilities,
-    Tool, ToolAnnotations,
+    InitializeResult, ListToolsResult, PaginatedRequestParams, ProgressNotificationParam,
+    ProtocolVersion, ServerCapabilities, Tool, ToolAnnotations,
 };
 use rmcp::service::{NotificationContext, RequestContext, RoleServer};
 use rmcp::{ErrorData as McpError, ServerHandler};
@@ -85,6 +86,9 @@ pub struct SessionState {
     pub protocol_version: Option<String>,
     pub elicit_mode: ElicitMode,
     pub(crate) confirm: Option<Arc<confirm::ConfirmGate>>,
+    /// MCP request id -> the bridge id of that in-flight call, so a client
+    /// cancellation can be forwarded to the child (T036).
+    pub(crate) inflight: HashMap<rmcp::model::RequestId, String>,
     handshake: (watch::Sender<Handshake>, watch::Receiver<Handshake>),
 }
 
@@ -97,6 +101,7 @@ impl SessionState {
             protocol_version: None,
             elicit_mode: ElicitMode::None,
             confirm: None,
+            inflight: HashMap::new(),
             handshake: (tx, rx),
         }
     }
@@ -293,6 +298,7 @@ impl ServerHandler for Server {
         };
         let args = Value::Object(request.arguments.clone().unwrap_or_default());
         let bridge = self.bridge().await?;
+        let bridge_id = bridge.next_id();
         if descriptor.confirm != "none" {
             // FR-005: no write verb runs unconfirmed. The gate owns every
             // confirm value; zero per-verb logic here (research R3).
@@ -317,8 +323,14 @@ impl ServerHandler for Server {
                 bridge: &bridge,
                 mode,
                 peer: &context.peer,
+                bridge_id: bridge_id.clone(),
             };
-            return confirm::confirm_and_call(
+            self.state
+                .lock()
+                .await
+                .inflight
+                .insert(context.id.clone(), bridge_id.clone());
+            let response = confirm::confirm_and_call(
                 &session,
                 &descriptor.name,
                 &args,
@@ -326,13 +338,68 @@ impl ServerHandler for Server {
                 request.input_responses.as_ref(),
             )
             .await;
+            self.state.lock().await.inflight.remove(&context.id);
+            return response;
         }
-        let id = bridge.next_id();
-        let result = bridge.call(&id, &descriptor.name, &args, None).await;
+        // them to a client that asked with a progressToken. No token, no
+        // notifications — and no sink at all. The token lives on the
+        // RequestContext's meta: rmcp moves the request's _meta there
+        // before the handler runs (the same place protocol_version() reads).
+        if let Some(token) = context.meta.get_progress_token() {
+            let mut sink = bridge.progress_sink(&bridge_id).await;
+            let peer = context.peer.clone();
+            tokio::spawn(async move {
+                while let Some(frame) = sink.recv().await {
+                    let mut param = ProgressNotificationParam::new(
+                        token.clone(),
+                        frame
+                            .get("elapsed_s")
+                            .and_then(Value::as_f64)
+                            .unwrap_or(0.0),
+                    );
+                    if let Some(message) = frame
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                    {
+                        param = param.with_message(message);
+                    }
+                    let _ = peer.notify_progress(param).await;
+                }
+            });
+        }
+        self.state
+            .lock()
+            .await
+            .inflight
+            .insert(context.id.clone(), bridge_id.clone());
+        let result = bridge.call(&bridge_id, &descriptor.name, &args, None).await;
+        self.state.lock().await.inflight.remove(&context.id);
+        // Dropping the sink (if one was registered) ends the forwarder task.
+        bridge.drop_progress_sink(&bridge_id).await;
         Ok(match result {
             Ok(value) => map_result(value),
             Err(e) => map_error(e),
         }
         .into())
+    }
+
+    async fn on_cancelled(
+        &self,
+        notification: rmcp::model::CancelledNotificationParam,
+        _context: NotificationContext<RoleServer>,
+    ) {
+        // Forward the cancellation to the child by bridge id (T036); a
+        // cancel for an unknown/finished request is silently dropped.
+        let Some(rid) = notification.request_id else {
+            return;
+        };
+        let Some(bridge_id) = self.state.lock().await.inflight.get(&rid).cloned() else {
+            return;
+        };
+        let Some(bridge) = self.state.lock().await.bridge.clone() else {
+            return;
+        };
+        bridge.cancel(&bridge_id).await;
     }
 }
