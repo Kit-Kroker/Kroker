@@ -55,9 +55,15 @@ from ..core.models import (
 from ..core.models import (
     ProjectMode as ProjectMode,
 )
-from . import render, tools
+from . import render
 from .deps import OperatorDeps
 from .errors import ToolError
+from .tools import (
+    READ_TOOLS as READ_TOOLS,
+)
+from .tools import (
+    WRITE_TOOLS as WRITE_TOOLS,
+)
 from .tools import (
     ArtifactRead as ArtifactRead,
 )
@@ -81,20 +87,6 @@ _REPO_ASSETS = Path(__file__).resolve().parents[3] / "interfaces" / "chat"
 def asset_dir() -> Path:
     env = os.environ.get(ASSETS_ENV)
     return Path(env) if env else _REPO_ASSETS
-
-
-READ_TOOLS = (
-    tools.list_runs,
-    tools.get_run,
-    tools.follow,
-    tools.inbox,
-    tools.list_projects,
-    tools.get_project,
-    tools.list_tasks,
-    tools.project_events,
-    tools.read_artifact,
-)
-WRITE_TOOLS = (tools.start_run, tools.answer_question, tools.decide_gate)
 
 
 class ChatConfigError(Exception):

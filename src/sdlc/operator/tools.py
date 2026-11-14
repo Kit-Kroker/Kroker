@@ -552,3 +552,22 @@ async def start_run(
     # actually assigned. Returning the locally computed one would quietly
     # diverge the moment a starter dedupes or decorates the id.
     return started or wf_id
+
+
+# The tool-surface membership (022 T007 / research R3): it lives HERE, not
+# in agent.py, so chat, the MCP bridge and the parity tests read ONE
+# definition (FR-002 by construction). Order is load-bearing: describe
+# publishes this order and the membership test asserts it. agent.py
+# re-imports the names to keep its own importers unchanged.
+READ_TOOLS = (
+    list_runs,
+    get_run,
+    follow,
+    inbox,
+    list_projects,
+    get_project,
+    list_tasks,
+    project_events,
+    read_artifact,
+)
+WRITE_TOOLS = (start_run, answer_question, decide_gate)
