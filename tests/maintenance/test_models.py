@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
+
 from sdlc.maintenance.models import (
     DETECT_SIGNALS,
     MAX_PREV_FINDINGS,
@@ -25,7 +26,6 @@ from sdlc.maintenance.models import (
     RepairPlan,
     RepairProposal,
 )
-
 from tests.maintenance.conftest import env_file_findings, make_triage
 
 # --------------------------------------------------------------------------- #
