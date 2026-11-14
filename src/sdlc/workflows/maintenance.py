@@ -157,6 +157,40 @@ class MaintenanceWorkflow(GateHost):
                 await self._plan(inc)
             elif inc.state is IncidentState.OPEN and inc.kind == "detect_escalation":
                 self._open_escalation_gate(inc)
+            elif inc.state is IncidentState.AWAITING_DECISION and inc.plan is not None:
+                # T025: reproduction evidence can arrive AFTER the gate
+                # opened — the floor is a fact about the world, so a
+                # recurrence recomputes it (US2 AC4's "reproduced on two
+                # consecutive cycles" path).
+                self._reprice(inc)
+
+    def _reprice(self, inc: Incident) -> None:
+        """Recompute floor/effective from current facts; if the recomputed
+        effective now clears the threshold, policy resolves the pending
+        gate (R8: only reproduced mechanical findings clear the default)."""
+        assert self._state is not None
+        cfg = self._state.config
+        if inc.finding is None or inc.decision is not None:
+            return
+        floor = confidence_floor(
+            inc.finding,
+            reproduced=inc.seen_count >= 2,
+            reopens=0,
+            n_actions=len(inc.plan.actions) if inc.plan else 0,
+        )
+        if inc.plan is None or floor == inc.plan.floor:
+            return
+        inc.plan = inc.plan.model_copy(
+            update={"floor": floor, "effective": min(inc.plan.self_confidence, floor)}
+        )
+        if inc.plan.effective > cfg.threshold:
+            self.submit_gate_decision(
+                GateDecision(
+                    gate=f"repair:{inc.no}",
+                    outcome=GateOutcome.APPROVE,
+                    decided_by="policy",
+                )
+            )
 
     # ---------------------------- analyze + plan -------------------------- #
 
@@ -244,9 +278,13 @@ class MaintenanceWorkflow(GateHost):
         if inc is None or inc.plan is None:
             return
         name = f"repair:{no}"
+        # R8's binding consequence ("only mechanical findings reproduced on
+        # two consecutive cycles clear policy" at the default 0.8) makes the
+        # boundary strict: an unreproduced mechanical plan at exactly the
+        # threshold stays human-gated. effective == threshold does NOT clear.
         auto = (
             GateDecision(gate=name, outcome=GateOutcome.APPROVE, decided_by="policy")
-            if inc.plan.effective >= cfg.threshold
+            if inc.plan.effective > cfg.threshold
             else None
         )
         decision = await self._gate(

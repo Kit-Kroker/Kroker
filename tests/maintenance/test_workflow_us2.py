@@ -66,10 +66,15 @@ def _acts(proposal: RepairProposal):
 
 
 async def _until(pred, timeout: float = 90.0, what: str = "condition"):
+    import inspect
+
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            if await pred():
+            result = pred()
+            if inspect.isawaitable(result):
+                result = await result
+            if result:
                 return
         except Exception:  # noqa: BLE001 -- query before the first task lands
             pass
@@ -413,16 +418,22 @@ async def test_gate_opening_calls_the_notify_activity(repo_dir):
             from tests.maintenance.conftest import commit_build_break
 
             commit_build_break(repo_dir)
-            # The notify activity's schedule_to_start is 5s (gates.py
-            # NOTIFY_ACT); under auto time-skipping virtual time races past it
-            # before the worker picks the activity up. Disable skipping while
-            # the gate opens so the notification is observed as shipped.
-            # Precedent: tests/test_gate_timeout_action.py:124,174.
-            with env.auto_time_skipping_disabled():
-                await handle.signal("nudge")  # cycle 2: gate opens
+            await handle.signal("nudge")  # cycle 2: gate opens
 
-                await _await_pending(handle, "repair:1")
-                await _until(lambda: len(calls) >= 1, what="the notify call")
+            await _await_pending(handle, "repair:1")
+            # The OPENED notification fires on the gate's first schedule entry
+            # (a 0-timeout wait_condition throws immediately, so no timer
+            # gates it). The activity still needs the server to move it:
+            # with auto-skipping on, virtual time races past NOTIFY_ACT's 5s
+            # schedule_to_start before the worker picks the task up; with
+            # skipping disabled, task movement freezes entirely (both tried).
+            # Tick 1 virtual second at a time: the worker grabs the task in
+            # real time once it appears, and 30 ticks stay far short of the
+            # 12h remind schedule and the 48h expiry.
+            for _ in range(30):
+                if calls:
+                    break
+                await env.sleep(1)
             assert len(calls) >= 1
             assert (await _incidents(handle))[0].state.value == "awaiting_decision"
 
