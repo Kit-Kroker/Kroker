@@ -14,9 +14,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, ClientConfig, ContentBlock, ElicitRequestParams,
-    ElicitResult, ElicitationAction, ElicitationCapability, FormElicitationCapability,
-    Implementation, ProgressNotificationParam, ProtocolVersion,
+    CallToolRequestParams, CallToolResponse, CallToolResult, ClientConfig, ContentBlock,
+    ElicitRequestParams, ElicitResult, ElicitationAction, ElicitationCapability,
+    FormElicitationCapability, Implementation, ProgressNotificationParam, ProtocolVersion,
 };
 use rmcp::service::NotificationContext;
 use rmcp::service::{RequestContext, RoleClient};
@@ -29,10 +29,8 @@ static DIR_SEQ: AtomicUsize = AtomicUsize::new(0);
 
 // ---- the scripted client -------------------------------------------------
 
-/// What the client answers when the server elicits.
-/// (T028's confirm tests script every variant; until then the linter
-/// would flag the unused ones.)
-#[allow(dead_code)]
+/// What the client answers when the server elicits (T028's confirm tests
+/// script every variant).
 #[derive(Clone, Debug, PartialEq)]
 enum ElicitAnswer {
     /// accept, carrying `confirm`.
@@ -40,11 +38,20 @@ enum ElicitAnswer {
     Decline,
     /// The request dies (as a client-side cancel would).
     Abort,
+    /// Never answers: the server's elicitation timeout is the only way out.
+    /// Used with `tokio::time::pause` so 300 s costs nothing.
+    Hang,
 }
+
+/// A test clock: unix seconds with a mutable offset (T029 expiry).
+type Clock = Arc<dyn Fn() -> u64 + Send + Sync>;
 
 #[derive(Clone)]
 struct TestClient {
     elicitation: bool,
+    /// The protocol version this client proposes: LATEST negotiates E2
+    /// (>= 2026-07-28), V_2025_11_25 negotiates E1.
+    version: ProtocolVersion,
     answer: Arc<Mutex<ElicitAnswer>>,
     elicited: Arc<Mutex<Vec<ElicitRequestParams>>>,
     progress: Arc<Mutex<Vec<ProgressNotificationParam>>>,
@@ -53,8 +60,13 @@ struct TestClient {
 
 impl TestClient {
     fn new(elicitation: bool) -> Self {
+        Self::new_versioned(elicitation, ProtocolVersion::LATEST)
+    }
+
+    fn new_versioned(elicitation: bool, version: ProtocolVersion) -> Self {
         Self {
             elicitation,
+            version,
             answer: Arc::new(Mutex::new(ElicitAnswer::Accept(true))),
             elicited: Arc::new(Mutex::new(Vec::new())),
             progress: Arc::new(Mutex::new(Vec::new())),
@@ -62,7 +74,6 @@ impl TestClient {
         }
     }
 
-    #[allow(dead_code)] // T028 scripts decline/abort
     fn set_answer(&self, answer: ElicitAnswer) {
         *self.answer.lock().unwrap() = answer;
     }
@@ -72,7 +83,7 @@ impl ClientHandler for TestClient {
     fn get_info(&self) -> ClientConfig {
         let mut info = ClientConfig::default();
         info.client_info = Implementation::new("parity-client", "0.0.0");
-        info.protocol_version = ProtocolVersion::LATEST;
+        info.protocol_version = self.version.clone();
         if self.elicitation {
             let mut elic = ElicitationCapability::default();
             elic.form = Some(FormElicitationCapability::default());
@@ -87,7 +98,8 @@ impl ClientHandler for TestClient {
         _context: RequestContext<RoleClient>,
     ) -> Result<ElicitResult, McpError> {
         self.elicited.lock().unwrap().push(request);
-        match self.answer.lock().unwrap().clone() {
+        let answer = self.answer.lock().unwrap().clone();
+        match answer {
             ElicitAnswer::Accept(confirm) => Ok(ElicitResult::new(ElicitationAction::Accept)
                 .with_content(json!({ "confirm": confirm }))),
             ElicitAnswer::Decline => Ok(ElicitResult::new(ElicitationAction::Decline)),
@@ -96,6 +108,12 @@ impl ClientHandler for TestClient {
                 "elicitation aborted by test client",
                 None,
             )),
+            ElicitAnswer::Hang => {
+                // The server's elicitation timeout is the only way this
+                // resolves; paired with paused time so 300 s is instant.
+                std::future::pending::<()>().await;
+                unreachable!("a hanging elicitation never resolves")
+            }
         }
     }
 
@@ -144,7 +162,16 @@ fn temp_case(name: &str) -> PathBuf {
     dir
 }
 
-async fn start(name: &str, mut scenario: Value) -> Harness {
+async fn start(name: &str, scenario: Value) -> Harness {
+    start_cfg(name, scenario, TestClient::new(true), None).await
+}
+
+async fn start_cfg(
+    name: &str,
+    mut scenario: Value,
+    client: TestClient,
+    now: Option<Clock>,
+) -> Harness {
     let dir = temp_case(name);
     let record = dir.join("record.jsonl");
     scenario["record_path"] = json!(record.to_string_lossy());
@@ -164,6 +191,7 @@ async fn start(name: &str, mut scenario: Value) -> Harness {
         repo: manifest_dir.join("../.."),
         bridge_cmd: Some(bridge_cmd),
         actor_override: None,
+        now,
     };
 
     let (server_side, client_side) = tokio::io::duplex(64 * 1024);
@@ -171,10 +199,7 @@ async fn start(name: &str, mut scenario: Value) -> Harness {
         let svc = Server::new(cfg).serve(server_side).await.expect("serve");
         svc.waiting().await.expect("wait");
     });
-    let client = TestClient::new(true)
-        .serve(client_side)
-        .await
-        .expect("client");
+    let client = client.serve(client_side).await.expect("client");
     Harness {
         client,
         record,
@@ -374,6 +399,353 @@ async fn a_mid_call_exit_fails_with_internal_then_respawns() {
         .filter(|r| r["op"] == "init")
         .count();
     assert_eq!(inits, 2);
+}
+
+// ---- section: confirm (T028) ----------------------------------------------
+//
+// Every test name carries "confirm" so `cargo test confirm` selects the
+// section. RED state against the T028 stub: every case that needs the
+// elicitation handshake (accept, decline/cancel/timeout sentences, all of
+// E2, the bridge-error mappings) fails because the stub answers the
+// no-confirmation sentence and never reaches the bridge; the fail-closed
+// no-capability case passes from day one.
+
+use kroker_mcp::bridge::CHANGED_SENTENCE;
+use kroker_mcp::confirm::{DID_NOT_CONFIRM_SENTENCE, INVALID_SENTENCE};
+use kroker_mcp::server::NO_CONFIRMATION_SENTENCE;
+
+/// Decision-ish args for the confirm verbs; the fake bridge records them
+/// verbatim and answers the canned preview (digest "0" * 64).
+fn gate_args() -> Value {
+    json!({"run_id": "feature-add-sso", "key": "architecture#2", "outcome": "approve"})
+}
+
+fn with_args(tool: &str, args: Value) -> CallToolRequestParams {
+    CallToolRequestParams::new(tool.to_string())
+        .with_arguments(args.as_object().cloned().unwrap_or_default())
+}
+
+/// The MRTR retry: same tool and args, the confirm response, and the
+/// echoed (or tampered) requestState.
+fn confirm_retry(tool: &str, args: Value, state: Option<String>) -> CallToolRequestParams {
+    let mut responses = std::collections::BTreeMap::new();
+    responses.insert("confirm".to_string(), json!(true));
+    let mut params = with_args(tool, args).with_input_responses(responses);
+    if let Some(state) = state {
+        params = params.with_request_state(state);
+    }
+    params
+}
+
+async fn call_args(
+    client: &rmcp::service::RunningService<RoleClient, TestClient>,
+    tool: &str,
+    args: Value,
+) -> CallToolResult {
+    tokio::time::timeout(
+        Duration::from_secs(15),
+        client.call_tool(with_args(tool, args)),
+    )
+    .await
+    .expect("call timed out")
+    .expect("call_tool protocol error")
+}
+
+async fn call_once_args(
+    client: &rmcp::service::RunningService<RoleClient, TestClient>,
+    tool: &str,
+    args: Value,
+) -> CallToolResponse {
+    tokio::time::timeout(
+        Duration::from_secs(15),
+        client.call_tool_once(with_args(tool, args)),
+    )
+    .await
+    .expect("call timed out")
+    .expect("call_tool_once protocol error")
+}
+
+async fn call_retry(
+    client: &rmcp::service::RunningService<RoleClient, TestClient>,
+    tool: &str,
+    args: Value,
+    state: Option<String>,
+) -> CallToolResult {
+    let response = tokio::time::timeout(
+        Duration::from_secs(15),
+        client.call_tool_once(confirm_retry(tool, args, state)),
+    )
+    .await
+    .expect("call timed out")
+    .expect("retry protocol error");
+    match response {
+        CallToolResponse::Complete(result) => result,
+        other => panic!("retry must complete, got {other:?}"),
+    }
+}
+
+fn input_required_state(response: CallToolResponse) -> String {
+    match response {
+        CallToolResponse::InputRequired(result) => {
+            result.request_state.expect("input_required carries state")
+        }
+        other => panic!("expected input_required, got {other:?}"),
+    }
+}
+
+fn recorded_calls(path: &Path) -> Vec<Value> {
+    record_lines(path)
+        .into_iter()
+        .filter(|r| r["op"] == "call")
+        .collect()
+}
+
+fn elicited_messages(log: &Arc<Mutex<Vec<ElicitRequestParams>>>) -> Vec<String> {
+    log.lock()
+        .unwrap()
+        .iter()
+        .map(|p| match p {
+            ElicitRequestParams::FormElicitationParams { message, .. } => message.clone(),
+            ElicitRequestParams::UrlElicitationParams { message, .. } => message.clone(),
+            _ => String::new(),
+        })
+        .collect()
+}
+
+/// Poll (real time) until the fake bridge records one op — used by the
+/// timeout test to freeze the clock only after the preview roundtrip has
+/// completed, so no subprocess I/O is pending under paused time.
+async fn wait_for_recorded_op(path: &Path, op: &str) {
+    for _ in 0..1000 {
+        if record_lines(path).iter().any(|r| r["op"] == op) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("{op} never reached the bridge");
+}
+
+// E1: negotiated protocol < 2026-07-28, elicitation capability present.
+
+#[tokio::test]
+async fn confirm_e1_accept_forwards_call_with_expect_digest() {
+    let client = TestClient::new_versioned(true, ProtocolVersion::V_2025_11_25);
+    let elicited = client.elicited.clone();
+    let h = start_cfg("confirm-e1-accept", json!({}), client, None).await;
+
+    let result = call_args(&h.client, "decide_gate", gate_args()).await;
+    assert_ne!(result.is_error, Some(true));
+    assert_eq!(single_text(&result), "canned result");
+
+    // The elicitation carried the preview's message (FR-006).
+    let messages = elicited_messages(&elicited);
+    assert_eq!(messages.len(), 1, "exactly one elicitation");
+    assert!(messages[0].contains("canned preview"), "{}", messages[0]);
+
+    // The bridge received ONE call, carrying the preview's digest.
+    let calls = recorded_calls(&h.record);
+    assert_eq!(calls.len(), 1, "exactly one bridge call");
+    assert_eq!(calls[0]["tool"], "decide_gate");
+    assert_eq!(calls[0]["expect_digest"], "0".repeat(64));
+}
+
+#[tokio::test]
+async fn confirm_e1_decline_sends_no_call_with_did_not_confirm_sentence() {
+    let client = TestClient::new_versioned(true, ProtocolVersion::V_2025_11_25);
+    client.set_answer(ElicitAnswer::Decline);
+    let h = start_cfg("confirm-e1-decline", json!({}), client, None).await;
+
+    let result = call_args(&h.client, "decide_gate", gate_args()).await;
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(single_text(&result), DID_NOT_CONFIRM_SENTENCE);
+    assert!(recorded_calls(&h.record).is_empty(), "no call may be sent");
+}
+
+#[tokio::test]
+async fn confirm_e1_client_cancel_sends_no_call_with_did_not_confirm_sentence() {
+    let client = TestClient::new_versioned(true, ProtocolVersion::V_2025_11_25);
+    client.set_answer(ElicitAnswer::Abort);
+    let h = start_cfg("confirm-e1-cancel", json!({}), client, None).await;
+
+    let result = call_args(&h.client, "decide_gate", gate_args()).await;
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(single_text(&result), DID_NOT_CONFIRM_SENTENCE);
+    assert!(recorded_calls(&h.record).is_empty(), "no call may be sent");
+}
+
+#[tokio::test]
+async fn confirm_e1_timeout_sends_no_call_with_did_not_confirm_sentence() {
+    let client = TestClient::new_versioned(true, ProtocolVersion::V_2025_11_25);
+    client.set_answer(ElicitAnswer::Hang);
+    let h = start_cfg("confirm-e1-timeout", json!({}), client, None).await;
+    // Complete the handshake in real time first; the clock freezes only
+    // once the preview roundtrip is done and the elicitation timer armed.
+    let _ = tokio::time::timeout(Duration::from_secs(15), h.client.list_tools(None))
+        .await
+        .expect("list timed out");
+
+    let Harness { client, record, .. } = h;
+    let task = tokio::spawn(async move {
+        client
+            .call_tool(with_args("decide_gate", gate_args()))
+            .await
+    });
+    wait_for_recorded_op(&record, "preview").await;
+    tokio::time::sleep(Duration::from_millis(50)).await; // reply lands, timer arms
+    tokio::time::pause();
+
+    let result = tokio::time::timeout(Duration::from_secs(400), task)
+        .await
+        .expect("the 300 s elicitation timeout must end the call (not 400 s)")
+        .expect("join")
+        .expect("call_tool protocol error");
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(single_text(&result), DID_NOT_CONFIRM_SENTENCE);
+    assert!(recorded_calls(&record).is_empty(), "no call may be sent");
+}
+
+#[tokio::test]
+async fn confirm_e1_without_elicitation_capability_fails_closed() {
+    let client = TestClient::new_versioned(false, ProtocolVersion::V_2025_11_25);
+    let h = start_cfg("confirm-e1-nocap", json!({}), client, None).await;
+
+    let result = call_args(&h.client, "decide_gate", gate_args()).await;
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(single_text(&result), NO_CONFIRMATION_SENTENCE);
+    assert!(recorded_calls(&h.record).is_empty(), "no call may be sent");
+}
+
+// E2: negotiated protocol >= 2026-07-28 — MRTR input requests, sealed
+// requestState, single-use jti, args binding, expiry.
+
+#[tokio::test]
+async fn confirm_e2_accept_on_retry_sends_exactly_one_call() {
+    let h = start("confirm-e2-accept", json!({})).await;
+
+    // call_tool drives the input_required round itself through the
+    // client's elicitation handler (scripted Accept(true)).
+    let result = call_args(&h.client, "decide_gate", gate_args()).await;
+    assert_ne!(result.is_error, Some(true));
+    assert_eq!(single_text(&result), "canned result");
+
+    let calls = recorded_calls(&h.record);
+    assert_eq!(calls.len(), 1, "exactly one bridge call");
+    assert_eq!(calls[0]["expect_digest"], "0".repeat(64));
+}
+
+#[tokio::test]
+async fn confirm_e2_tampered_request_state_is_invalid() {
+    let h = start("confirm-e2-tampered", json!({})).await;
+    let state = input_required_state(call_once_args(&h.client, "decide_gate", gate_args()).await);
+    let last = state.chars().last().expect("non-empty state");
+    let tampered = format!(
+        "{}{}",
+        &state[..state.len() - 1],
+        if last == 'A' { 'B' } else { 'A' }
+    );
+
+    let result = call_retry(&h.client, "decide_gate", gate_args(), Some(tampered)).await;
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(single_text(&result), INVALID_SENTENCE);
+    assert!(recorded_calls(&h.record).is_empty(), "no call may be sent");
+}
+
+#[tokio::test]
+async fn confirm_e2_replayed_request_state_is_invalid_and_still_one_call() {
+    let h = start("confirm-e2-replay", json!({})).await;
+    let state = input_required_state(call_once_args(&h.client, "decide_gate", gate_args()).await);
+
+    let first = call_retry(&h.client, "decide_gate", gate_args(), Some(state.clone())).await;
+    assert_ne!(first.is_error, Some(true), "the first use is valid");
+
+    let replay = call_retry(&h.client, "decide_gate", gate_args(), Some(state)).await;
+    assert_eq!(replay.is_error, Some(true));
+    assert_eq!(single_text(&replay), INVALID_SENTENCE);
+    assert_eq!(recorded_calls(&h.record).len(), 1, "still exactly one call");
+}
+
+#[tokio::test]
+async fn confirm_e2_swapped_args_retry_is_invalid() {
+    let h = start("confirm-e2-args-swap", json!({})).await;
+    let state = input_required_state(call_once_args(&h.client, "decide_gate", gate_args()).await);
+    let swapped =
+        json!({"run_id": "feature-add-sso", "key": "architecture#2", "outcome": "reject"});
+
+    let result = call_retry(&h.client, "decide_gate", swapped, Some(state)).await;
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(single_text(&result), INVALID_SENTENCE);
+    assert!(recorded_calls(&h.record).is_empty(), "no call may be sent");
+}
+
+#[tokio::test]
+async fn confirm_e2_expired_request_state_is_invalid() {
+    // The injected clock ages the state past exp (= issue + 300 s) without
+    // sleeping: the offset is bumped between the two rounds.
+    let offset = Arc::new(Mutex::new(0u64));
+    let bumped = offset.clone();
+    let now: Clock = Arc::new(move || {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            + *bumped.lock().unwrap()
+    });
+    let h = start_cfg(
+        "confirm-e2-expired",
+        json!({}),
+        TestClient::new(true),
+        Some(now),
+    )
+    .await;
+
+    let state = input_required_state(call_once_args(&h.client, "decide_gate", gate_args()).await);
+    *offset.lock().unwrap() = 301;
+    let result = call_retry(&h.client, "decide_gate", gate_args(), Some(state)).await;
+
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(single_text(&result), INVALID_SENTENCE);
+    assert!(recorded_calls(&h.record).is_empty(), "no call may be sent");
+}
+
+// Bridge errors on the confirm path surface verbatim (SC-003).
+
+#[tokio::test]
+async fn confirm_bridge_changed_error_surfaces_verbatim_as_is_error() {
+    let client = TestClient::new_versioned(true, ProtocolVersion::V_2025_11_25);
+    let h = start_cfg(
+        "confirm-changed",
+        json!({"call": [{"frame": {"ok": false, "error": {"code": "changed", "message": "irrelevant — the fixed sentence wins"}}}]}),
+        client,
+        None,
+    )
+    .await;
+
+    let result = call_args(&h.client, "decide_gate", gate_args()).await;
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(single_text(&result), CHANGED_SENTENCE);
+}
+
+#[tokio::test]
+async fn confirm_preview_error_is_is_error_and_elicits_nothing() {
+    let client = TestClient::new_versioned(true, ProtocolVersion::V_2025_11_25);
+    let elicited = client.elicited.clone();
+    let sentence = "key 'Q1' on feature-fix-cache takes a text reply; use answer_question";
+    let h = start_cfg(
+        "confirm-preview-error",
+        json!({"preview": [{"frame": {"ok": false, "error": {"code": "tool_error", "message": sentence}}}]}),
+        client,
+        None,
+    )
+    .await;
+
+    let result = call_args(&h.client, "decide_gate", gate_args()).await;
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(single_text(&result), sentence, "verbatim tool error");
+    assert!(
+        elicited_messages(&elicited).is_empty(),
+        "no human is bothered"
+    );
+    assert!(recorded_calls(&h.record).is_empty(), "no call may be sent");
 }
 
 // ---- the grep test ----------------------------------------------------------

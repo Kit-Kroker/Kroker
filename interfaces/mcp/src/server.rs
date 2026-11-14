@@ -24,6 +24,7 @@ use tracing::warn;
 
 use crate::actor;
 use crate::bridge::{Bridge, BridgeError, ToolDescriptor};
+use crate::confirm;
 
 /// The protocol revision where server-to-client elicitation became MRTR
 /// input requests (research R1): below it E1 (`elicitation/create`),
@@ -35,7 +36,8 @@ pub const MRTR_PROTOCOL_VERSION: &str = "2026-07-28";
 pub const NO_CONFIRMATION_SENTENCE: &str = "this write needs a human confirmation that this MCP client did not provide; nothing was changed. Use the dashboard or `python -m sdlc.cli` instead.";
 
 /// How this binary was launched (main.rs parses; tests construct directly).
-#[derive(Debug, Clone)]
+/// Not `Debug`: the clock seam is a closure.
+#[derive(Clone)]
 pub struct ServerConfig {
     /// The repo root: the bridge child's cwd and the `.venv` home.
     pub repo: PathBuf,
@@ -43,6 +45,10 @@ pub struct ServerConfig {
     pub bridge_cmd: Option<Vec<String>>,
     /// Validated `SDLC_MCP_ACTOR` override.
     pub actor_override: Option<String>,
+    /// Unix-seconds clock for SealedState expiry (T029). None = the
+    /// system clock; tests inject an advancing clock to age a state past
+    /// its `exp` without sleeping.
+    pub now: Option<Arc<dyn Fn() -> u64 + Send + Sync>>,
 }
 
 /// Which elicitation path this session negotiated (data-model.md).
@@ -259,12 +265,9 @@ impl ServerHandler for Server {
         let args = Value::Object(request.arguments.clone().unwrap_or_default());
         let bridge = self.bridge().await?;
         if descriptor.confirm != "none" {
-            // T028/T029 route this through confirm_and_call; until then
-            // and in any session without an elicitation path, fail closed.
-            return Ok(CallToolResult::error(vec![ContentBlock::text(
-                NO_CONFIRMATION_SENTENCE.to_string(),
-            )])
-            .into());
+            // FR-005: no write verb runs unconfirmed. The gate owns every
+            // confirm value; zero per-verb logic here (research R3).
+            return confirm::confirm_and_call().await;
         }
         let id = bridge.next_id();
         let result = bridge.call(&id, &descriptor.name, &args, None).await;

@@ -47,6 +47,7 @@ fn parse_args() -> Result<ServerConfig, String> {
         repo: std::path::PathBuf::from(repo),
         bridge_cmd,
         actor_override,
+        now: None,
     })
 }
 

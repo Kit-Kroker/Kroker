@@ -5,4 +5,5 @@
 
 pub mod actor;
 pub mod bridge;
+pub mod confirm;
 pub mod server;
