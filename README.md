@@ -240,6 +240,12 @@ VITE_API=mock npm run dev    # in-memory data, no backend needed
 Checks never call `npm` directly: `python scripts/check_ui.py` runs
 install, typecheck, both Vitest suites and both Playwright tiers.
 
+**MCP.** The same twelve operator verbs are served to MCP clients (Claude
+Code, goose) by `interfaces/mcp/`, a Rust stdio server over the Python verb
+bridge; writes are approval-gated. Build, client config and the gate
+(`python scripts/check_mcp.py`) are in
+[`interfaces/mcp/README.md`](interfaces/mcp/README.md).
+
 **Bind to localhost** — there is no auth yet, and the `X-Actor` header
 identifying a writer is self-asserted (OQ-11,
 [`docs/roadmap/pipeline-as-data.md`](docs/roadmap/pipeline-as-data.md)).
