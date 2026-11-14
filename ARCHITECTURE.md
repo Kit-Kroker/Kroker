@@ -883,5 +883,7 @@ Kroker/
 
 **Not in this tree, and deliberately:** there is no `config/` directory (agent
 configuration lives in `agents/`, policy in `policy/`, and pipeline settings
-are `PipelineConfig` defaults overridden per run), no `interfaces/mcp/` (FR-602
-is open — E-11), and no maintenance package (§7 is P4, unbuilt).
+are `PipelineConfig` defaults overridden per run) and no maintenance package
+(§7 is P4, unbuilt). `interfaces/mcp/` now exists — the E-11 MCP channel
+adapter (FR-602, round 022): a Rust `rmcp` stdio server over the Python verb
+bridge `sdlc/operator/bridge.py`, which re-exports `sdlc/operator/tools.py`.

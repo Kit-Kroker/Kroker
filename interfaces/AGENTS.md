@@ -4,7 +4,7 @@ Router only. Deep context lives in each sub-package.
 
 ## Tree layout
 
-Two packages:
+Three packages:
 
 - **`ui/`** — the `@kroker/ui` design-system package. Presentation components
   that accept display primitives and know nothing of Kroker's domain. Source
@@ -14,6 +14,11 @@ Two packages:
   `src/features/<screen>/`); each screen's mapping module
   (`<screen>.adapter.ts`) is where `Run`/board wire shapes meet display
   primitives.
+- **`mcp/`** — the `kroker-mcp` Rust crate: the MCP channel adapter (E-11).
+  A stdio rmcp server over the Python verb bridge. It carries its own
+  `AGENTS.md` (no verb names in Rust, the bridge protocol's version lives on
+  both sides, stdout is MCP-only) and its gate is
+  `python scripts/check_mcp.py`, not the Node wrapper below.
 
 ## Screen locations (dashboard)
 

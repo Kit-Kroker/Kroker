@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-11-12 (requirements FR-113 landed — optional Product proposer, story-shaped `Requirements` with deterministic partial freeze feeding clarify only, off by default: 15 of 15 stages live; full history in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
+| Last verified | 2026-11-14 (requirements FR-602 landed — E-11's MCP channel adapter: a Rust rmcp stdio server over a Python verb bridge serving the twelve operator verbs with approval-gated writes; 15 of 15 stages live; full history in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -342,7 +342,7 @@
 
 ### Interfaces (FR-600)
 - [x] **FR-601** dashboard fleet/spine/inbox — **closed by the v5 console (round 018, 2026-10-29)**: six screens over the `@kroker/ui` library — Fleet (`/fleet/summary` read: arm, traversals, outcome, pending gates), the decision inbox (`interfaces/dashboard/frontend/src/features/inbox/`, spec 010 — resolves clarify answers, gate decisions, merge overrides and escalations), the run page as a tab host (Graph observe canvas, Board kanban, Cost in the run rail), the Graphs catalog + Design editor (`/graphs`, `/graphs/:sha`), Compare (`/compare`, benchmark arms × graphs + the rework heatmap over `$SDLC_RUNS_ROOT`) and Interfaces (`/interfaces`, the harness containment matrix). The old "Gates tab not built" residual is superseded: v5 retired the placeholder (ruling G7 of spec 002) and surfaces pending gates where the operator works — the run rail, the run header and the cross-run inbox. Vue 3 frontend over a FastAPI backend serving live Temporal state (E-10, 2026-08-18); closed runs render from `run_summary()` within Temporal's retention window; older history would need a store (OQ-13). The `http` provider is the default, `VITE_API=mock` selecting the in-memory one (E-89); the mock replays the recorded read fixtures (read-routes rule 4).
-- [ ] **FR-602** MCP server (list/detail/inbox/answer/decide/start) — no `interfaces/mcp/`.
+- [x] **FR-602** MCP server (list/detail/inbox/answer/decide/start) — **closed by E-11 (round 022, 2026-11-14)**: the Rust `rmcp` server under `interfaces/mcp/` over a Python verb bridge (`src/sdlc/operator/bridge.py`) that re-exports `sdlc/operator/tools.py` — the twelve verbs over stdio, writes approval-gated through E1 form elicitation or E2 MRTR `input_required` with a sealed single-use state, byte-parity pinned by the real-binary suite (`tests/test_operator_mcp_parity.py`). Spec: [`.specify/specs/022-mcp-channel-adapter/`](.specify/specs/022-mcp-channel-adapter/).
 - [x] **FR-603** CLI — `start/status/inbox/answer/approve/revise/reject/benchmark`
   live (`revise` landed with E-7; gate rounds are now derived from the pending item,
   not typed by the operator; the cross-run `inbox` verb is live — the earlier
@@ -502,7 +502,7 @@ as tracked rather than accidental.
 - [x] **US-4** per-project gate config (hard/soft + threshold) — `GateConfig`, no code change.
 - [x] **US-5** dev/reviewer different model family; registry rejects same-family — enforced at boot, against `dev` (the role that actually codes) since `2026-07-16-registry-drives-every-role`.
 - [x] **US-6** stakeholder one-screen fleet view — `GET /api/runs` plus the `/api/events` SSE stream (E-10).
-- [ ] ⚠️ **US-7** conversational gate approval — chat agent shipped (E-86, 2026-08-20); MCP server pending (E-11).
+- [x] **US-7** conversational gate approval — chat agent shipped (E-86, 2026-08-20); MCP server shipped (E-11, 2026-11-14: Rust `rmcp` server under `interfaces/mcp/` over a Python verb bridge re-exporting `sdlc/operator/tools.py`, approval-gated writes). Both halves live.
 - [x] **US-8** client connects a repo → readiness verdict + checkable hygiene list (E-41/E-42/E-43/E-44). *Both halves ship: the readiness verdict + `sdlc triage` (E-42), and the per-finding fix-backlog from `mechanical_backlog`, which lands on the `TidyUpReport` even when a repo is not admitted (E-44).*
 
 - [x] **US-9** client approves a tidy-up backlog → PR per item + before/after delta (E-44). `TidyUpWorkflow` opens a `tidy_up` gate with the backlog rendered, `select_items` narrows it, each accepted item becomes one governed fix run, and `compute_delta` records the before/after.

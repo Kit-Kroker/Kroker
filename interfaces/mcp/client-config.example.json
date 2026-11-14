@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "kroker": {
+      "command": "/absolute/path/to/Kroker/interfaces/mcp/target/release/kroker-mcp",
+      "args": ["--repo", "/absolute/path/to/Kroker"]
+    }
+  }
+}

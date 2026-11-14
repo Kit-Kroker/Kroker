@@ -106,9 +106,8 @@ def load_scenario(arg: str) -> dict:
 def main() -> None:
     scenario = load_scenario(sys.argv[1]) if len(sys.argv) > 1 else {}
     record_path = scenario.get("record_path")
-    cursor_path = (
-        scenario.get("cursor_path")
-        or ((record_path + ".cursor") if record_path else None)
+    cursor_path = scenario.get("cursor_path") or (
+        (record_path + ".cursor") if record_path else None
     )
     cursor = load_cursor(cursor_path) if cursor_path else {"preview": 0, "call": 0}
     proto = isolate_stdout()

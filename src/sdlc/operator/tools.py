@@ -1,9 +1,12 @@
 """The operator's twelve verbs (E-86).
 
 Plain async functions taking OperatorDeps first. No pydantic_ai, no fastapi:
-agent.py adapts these for the chat surface and E-11's MCP server will adapt
-the same functions, so anything framework-shaped belongs in the adapter and
-not here. tests/test_operator_layering.py enforces it.
+the consumers are agent.py (the chat surface) and bridge.py (the frame
+protocol the Rust MCP server under interfaces/mcp/ drives), so anything
+framework-shaped belongs in an adapter and not here. The membership tuples
+READ_TOOLS/WRITE_TOOLS live at the bottom of this module — one definition
+serving the chat agent, the MCP describe surface and the parity tests.
+tests/test_operator_layering.py enforces it.
 
 Reads return rendered ASCII text (render.py). read_artifact, follow, and the
 three writes return typed models, because their fields -- truncated,

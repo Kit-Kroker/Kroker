@@ -8,6 +8,26 @@ out of date order as inherited; left as-is.
 
 Trailing note carried by the old cell: (docs(benchmarks): the axis in the living docs (T010))
 
+## 2026-11-14
+
+**FR-602 closed — E-11, the MCP channel adapter (spec
+[`.specify/specs/022-mcp-channel-adapter/`](../../.specify/specs/022-mcp-channel-adapter/),
+round 022).** A Rust `rmcp` 3.10 stdio server (`interfaces/mcp/`) over a
+Python verb bridge (`src/sdlc/operator/bridge.py`) that re-exports
+`sdlc/operator/tools.py`: the twelve operator verbs over MCP, byte-parity
+with the CLI/dashboard pinned by a real-binary parity suite
+(`tests/test_operator_mcp_parity.py`, marker `mcp`). Writes are
+approval-gated end to end — preview + sha256 digest, then E1 form
+elicitation (< 2026-07-28) or E2 MRTR `input_required` with an
+HMAC-sealed single-use requestState (>= 2026-07-28, per-request `_meta`
+version), fail-closed when the client cannot elicit. `follow` streams
+progress notifications and honours cancellation; the per-session
+consecutive-wait brake survives. The gate is one entry point,
+`python scripts/check_mcp.py` (cargo fmt/clippy/test/release + parity),
+mirrored in `scripts/verify.py` and CI. US-7's MCP half closes with it
+(both halves now live). OQ-11 restated, not resolved: local, no socket,
+self-asserted actor.
+
 ## 2026-11-12
 
 2026-11-12 (requirements stage FR-113 landed — the optional `product` proposer (`product_agent`, read-only FileSystem with exactly `read_file`/`search_files`/`find_files`/`list_directory` + RepoContext, no walk-up; `output_type=DraftOutput`, `retries={"output": 3}`; `STAGE_ROLES["requirements"]="product"`, PROMPT_SHAS auto-derived) drafts story-shaped user stories in one bounded run (`max_stories=8`, `max_requests=6`) over a workspace resolved by ONE predicate (`stage._repo_workspace`: the repo dir when `repo_path` names one, else empty scratch at `$SDLC_RUNS_ROOT/<run_id>/requirements/`) that ALSO derives the prompt's mode line, so mode and readability never diverge while `deps.mode` stays the freeze contract; `freeze` applies the deterministic partial-freeze rules workflow-side in OPERATIONAL order — whitespace-narrative drop, brownfield missing/whitespace `source_ref` drop (`not (ref or "").strip()`) BEFORE the text rules so rejected stories' texts never enter the keyspace (pinned by the `len(dropped)==3` shape), whitespace-text drop + artifact-global exact-dedup with keyspace commits only for surviving stories, zero-functional story drop, US-n ids per story and FR-n/SC-n counters global across the artifact assigned in surviving order, `max_stories` cap keeping the first with `capped=True`, zero survivors degrade to the empty artifact with `outcome=fail` STAGE_ENDED and nothing retained — no gate, so the flag can never kill a run; completion is a STAGE_ENDED emitted directly via `ctx.emit` with cost carried on MODEL_USAGE (no benchmark row, no `duration_s`, `RoleUsage(role="product", cost_usd=None)` priced workflow-side fail-open; usage always handed back including the zero-spend refused-before-first-request case); the `requirements_digest` (sha256 over sorted `(narrative, sorted FR texts, sorted SC texts)` tuples, `""` sentinel) keeps flag-off runs byte-identical through clarify's prompt (`render_requirements`, composed via `clarify_prompt`'s `blocks` param in the order idea → constitution → requirements → map → recall) and memo key (`requirements_digest` omitted-while-""; clarify is the ONLY consumer); `requirements_enabled` is overlaid from graph presence at the single `project_cfg` call site whose `requirements_in_graph` kwarg is required; `default-requirements.graph.yaml` = default ⊕ node ⊕ 3 edges (2 triggers from intake, 1 to clarify's `requirements` in-port — E-72 port identity is (direction, name), so clarify legally carries in+out ports of that name) with the default graph's pinned sha untouched; `select_graph` precedence research > constitution > requirements, no explicit-pin mechanism; slice contract `src/sdlc/stages/requirements/requirements.md` + slice AGENTS.md written with one `@pytest.mark.clause` test citing REQUIREMENTS-1.4, FR-113 row added to PRD §6 and ROADMAP §2, SDLC-spec §1 row 3 annotated `(optional; off by default — FR-113)`, README roles table +1 proposer with the count prose reconciled to the registry's 3+8+8=19 — 15 of 15 stages live; spec `docs/superpowers/specs/2026-11-12-requirements-stage-design.md`)

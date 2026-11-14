@@ -1,8 +1,10 @@
 """The chat surface's Pydantic AI agent (E-86).
 
 The ONLY module in sdlc/operator that imports pydantic_ai. tools.py stays
-framework-free so E-11's MCP server can import the same functions; this file
-is the chat-shaped adapter, and mcp.py will be its sibling.
+framework-free so its other consumer -- E-11's MCP server, the Rust binary
+under interfaces/mcp/ driving sdlc/operator/bridge.py over a frame protocol
+-- can import the same functions; this file is the chat-shaped adapter and
+bridge.py is its sibling consumer of tools.py.
 
 Two things here are load-bearing and non-obvious:
 
