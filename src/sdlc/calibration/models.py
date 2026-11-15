@@ -51,4 +51,16 @@ class CalibrationVerdict(BaseModel):
     agreement_rate: float = 0.0
 
 
+class BucketSummary(BaseModel):
+    """One row of the operator's calibration table (FR-301): a bucket and
+    the verdict its window currently earns. Display-only -- the gate
+    recomputes its verdict live from the ledger, so nothing decides from
+    this model."""
+
+    gate: str
+    bucket_key: str
+    verdict: CalibrationVerdict
+    last_sample_at: str | None = None
+
+
 INSUFFICIENT: Final[CalibrationVerdict] = CalibrationVerdict(verdict="insufficient_data")

@@ -20,7 +20,8 @@ edges:
 - {source: intake, source_port: brownfield, target: requirements, target_port: trigger}
 - {source: requirements, source_port: requirements, target: clarify, target_port: requirements}
 # FR-205: the raw artifact also reaches the planner (prompt block + memo
-# digest) and plan_check (coverage halt) on the requirements_doc port.
+# digest) and plan_check (coverage check; a miss rides the FR-301 revise
+# loop) on the requirements_doc port.
 - {source: requirements, source_port: requirements, target: planner, target_port: requirements_doc}
 - {source: requirements, source_port: requirements, target: plan_check, target_port: requirements_doc}
 - {source: context, source_port: map, target: clarify, target_port: codebase_map}
@@ -31,12 +32,15 @@ edges:
 - {source: architecture, source_port: revise, target: architect, target_port: guidance, max_traversals: 2}
 - {source: architecture, source_port: approve, target: planner, target_port: spec}
 - {source: architecture, source_port: approve, target: merge, target_port: spec}
-- {source: planner, source_port: plan, target: plan, target_port: artifact}
+- {source: planner, source_port: plan, target: plan_check, target_port: plan}
+# FR-301 D2/D3: the validators feed the plan gate; a validator failure
+# revises the planner (bounded like the gate's own revise loop).
+- {source: plan_check, source_port: revise, target: planner, target_port: guidance, max_traversals: 2}
+- {source: plan_check, source_port: ok, target: plan, target_port: artifact}
 - {source: plan, source_port: revise, target: planner, target_port: guidance, max_traversals: 2}
-- {source: plan, source_port: approve, target: plan_check, target_port: plan}
-- {source: plan_check, source_port: ok, target: code, target_port: plan}
-- {source: plan_check, source_port: ok, target: analyze, target_port: plan}
-- {source: plan_check, source_port: ok, target: merge, target_port: plan}
+- {source: plan, source_port: approve, target: code, target_port: plan}
+- {source: plan, source_port: approve, target: analyze, target_port: plan}
+- {source: plan, source_port: approve, target: merge, target_port: plan}
 - {source: code, source_port: results, target: analyze, target_port: results}
 - {source: code, source_port: results, target: merge, target_port: results}
 - {source: analyze, source_port: analysis, target: merge, target_port: analysis}

@@ -1,9 +1,10 @@
 """Evidence schemas for ADR-24's verdict functions (FR-205 handoff).
 
-NO CONSUMERS YET: nothing in the pipeline constructs or reads these models
-this round -- that is deliberate, not an oversight. They exist so ADR-24
-("evidence before verdict; code computes the verdict", docs/adr.md) has a
-FIXED INPUT SHAPE for its future verdict functions -- `approve`,
+First consumer: `sdlc.validators.verdicts` (FR-301) -- `Verdict` carries
+`Finding`s and `plan_valid` builds them from the FR-205 checks' reasons.
+They landed consumer-free in FR-205 deliberately, so ADR-24
+("evidence before verdict; code computes the verdict", docs/adr.md) had a
+FIXED INPUT SHAPE before its verdict functions existed -- `approve`,
 `tests_passed`, `plan_valid` and their kin are meant to be pure functions
 over typed evidence, never a model's say-so -- and so artifact models can
 adopt them incrementally, one schema at a time.

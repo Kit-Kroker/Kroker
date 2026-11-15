@@ -15,7 +15,10 @@ Pins the edge behaviour the task specifies:
 - plan_check_node halts with "failed:plan-validation:<error>" for unknown
   dependency ids, two-task cycles and self-cycles (validate_task_graph's
   verbatim strings), and never syncs an invalid graph; a valid plan syncs
-  (version, task ids) and passes through as "ok"
+  (version, task ids) and passes through as "ok" -- on the PRE-reorder
+  topology (tests/graph/fixtures/pre_reorder.py: the gate already approved,
+  a published version exists). FR-301: on the reordered default graph the
+  same failures ride the revise port as synthesized GateDecision guidance
 - plan_check_node's FR-205 halt family runs in order -- duplicate ids are
   named even when a cycle is also present (ids_unique first: duplicates
   silently collapse into {t.id: t} and would hide every later fault),
@@ -41,8 +44,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from sdlc.core.models import PipelineConfig
-from sdlc.graph import NODE_TYPES
+from sdlc.core.models import PipelineConfig, RoleConfig
+from sdlc.graph import NODE_TYPES, validate
 from sdlc.graph.router import Activation
 from sdlc.stages.analyze.models import AnalysisReport
 from sdlc.stages.plan.models import DevTask, ImplementationPlan
@@ -57,6 +60,8 @@ from sdlc.workflows.graph_catalog import SHIPPED
 from sdlc.workflows.graph_nodes.base import NodeContext, RunFacts, StoredPayload
 from sdlc.workflows.models import AnalyzeResult, BuildResult, PullRequest, SeededWork
 from tests.fakes.canned import ARCH, PLAN, greenfield_idea
+from tests.graph.fixtures.pre_reorder import pre_reorder_default
+from tests.graph.fixtures.registries import roles
 
 
 def _postplan():
@@ -94,7 +99,16 @@ class _FakeDeploy:
         return "PLAN"
 
 
-def _nc(node_id, *, graph="default", payloads=None, host=None, seeded=None, with_integration=True):
+def _nc(
+    node_id,
+    *,
+    graph="default",
+    payloads=None,
+    host=None,
+    seeded=None,
+    with_integration=True,
+    topology=None,
+):
     g = SHIPPED[graph]
     node = next(n for n in g.nodes if n.id == node_id)
     facts = RunFacts(
@@ -108,7 +122,7 @@ def _nc(node_id, *, graph="default", payloads=None, host=None, seeded=None, with
         facts=facts,
         node=node,
         spec=NODE_TYPES[node.type],
-        topology=None,
+        topology=topology,
         payloads=payloads or {},
         carries={},
     )
@@ -122,6 +136,29 @@ def _act(node_id, inputs=None):
         inputs=inputs or {},
         unavailable_ports={},
     )
+
+
+def _topology_of(graph):
+    """A real Topology for plan_check's FR-301 connectivity branch. The
+    pre-reorder literal wires no revise edge (the in-flight shape); the
+    shipped default graph wires the revise loop.
+
+    `validate` is bound at collection time (module top): the replay tests
+    rebind sdlc.graph.validate to the SUBMODULE (the documented trap in
+    test_dashboard_fleet_summary), and a runtime import would not be
+    callable."""
+    extra = {"product": RoleConfig(kind="proposer", model="anthropic:glm-5.2")}
+    report = validate(graph, NODE_TYPES, roles=roles(**extra))
+    assert report.topology is not None, [p.message for p in report.problems]
+    return report.topology
+
+
+def _pre():
+    return _topology_of(pre_reorder_default())
+
+
+def _reordered():
+    return _topology_of(SHIPPED["default"])
 
 
 def _t(tid, deps=(), covers=()):
@@ -231,6 +268,7 @@ def test_plan_check_halts_on_invalid_graphs_without_syncing(tasks, error):
         "plan_check",
         payloads={"plan#1.approve": StoredPayload(model=bad, producer="plan#1")},
         host=host,
+        topology=_pre(),
     )
 
     out = asyncio.run(
@@ -248,6 +286,7 @@ def test_plan_check_syncs_a_valid_graph_and_passes_it_through():
         "plan_check",
         payloads={"plan#1.approve": StoredPayload(model=PLAN, producer="plan#1")},
         host=host,
+        topology=_pre(),
     )
 
     out = asyncio.run(
@@ -290,6 +329,7 @@ def test_plan_check_halts_on_duplicate_ids():
         "plan_check",
         payloads={"plan#1.approve": StoredPayload(model=bad, producer="plan#1")},
         host=host,
+        topology=_pre(),
     )
 
     out = asyncio.run(
@@ -308,7 +348,7 @@ def test_plan_check_halts_on_uncovered_requirements():
         "plan#1.approve": StoredPayload(model=plan, producer="plan#1"),
         "requirements#1.freeze": StoredPayload(model=_req_doc(), producer="requirements#1"),
     }
-    nc = _nc("plan_check", payloads=payloads, host=host)
+    nc = _nc("plan_check", payloads=payloads, host=host, topology=_pre())
     inputs = {"plan": "plan#1.approve", "requirements_doc": "requirements#1.freeze"}
 
     out = asyncio.run(pp.plan_check_node(nc, _act("plan_check", inputs), PipelineConfig()))
@@ -320,24 +360,28 @@ def test_plan_check_halts_on_uncovered_requirements():
     assert host.synced is None
 
 
-def test_plan_check_halt_order_duplicate_before_dag():
+def test_plan_check_revise_order_duplicate_before_dag():
     pp = _postplan()
     host = Host()
     # Both faults present -- duplicate ids AND a two-task cycle. The
     # duplicate is named: checked first, because the {t.id: t} collapse it
     # causes would silently drop tasks before the cycle check ever ran.
+    # FR-301: on the reordered graph the same ordered family rides the
+    # revise port, the reason verbatim in the synthesized guidance.
     bad = ImplementationPlan(tasks=[_t("T1"), _t("T1"), _t("C1", ["C2"]), _t("C2", ["C1"])])
     nc = _nc(
         "plan_check",
-        payloads={"plan#1.approve": StoredPayload(model=bad, producer="plan#1")},
+        payloads={"planner#1.plan": StoredPayload(model=bad, producer="planner#1")},
         host=host,
+        topology=_reordered(),
     )
 
     out = asyncio.run(
-        pp.plan_check_node(nc, _act("plan_check", {"plan": "plan#1.approve"}), PipelineConfig())
+        pp.plan_check_node(nc, _act("plan_check", {"plan": "planner#1.plan"}), PipelineConfig())
     )
 
-    assert (out.port, out.result) == ("halt", "failed:plan-validation:duplicate task id(s): ['T1']")
+    assert out.port == "revise"
+    assert out.payload.guidance == "duplicate task id(s): ['T1']"
     assert host.synced is None
 
 
@@ -356,6 +400,7 @@ def test_plan_check_halts_on_oversize_task():
         "plan_check",
         payloads={"plan#1.approve": StoredPayload(model=bad, producer="plan#1")},
         host=host,
+        topology=_pre(),
     )
 
     out = asyncio.run(
@@ -369,13 +414,14 @@ def test_plan_check_halts_on_oversize_task():
     assert host.synced is None
 
 
-def test_plan_check_halt_order_coverage_before_size():
+def test_plan_check_revise_order_coverage_before_size():
     pp = _postplan()
     host = Host()
     # Both faults present -- an uncovered FR AND an over-limit task. The
     # coverage reason is named: PLAN-1.8 runs covers_all before task_size,
-    # so a plan that breaches both halts on coverage (dropped requirements
-    # are the defect with a user-visible cost; size is a plan edit either way).
+    # so a plan that breaches both revises on coverage (dropped
+    # requirements are the defect with a user-visible cost; size is a plan
+    # edit either way). FR-301: the reordered graph rides the revise port.
     big = DevTask(
         id="T1",
         title="T1",
@@ -386,18 +432,16 @@ def test_plan_check_halt_order_coverage_before_size():
     )
     bad = ImplementationPlan(tasks=[big])
     payloads = {
-        "plan#1.approve": StoredPayload(model=bad, producer="plan#1"),
-        "requirements#1.freeze": StoredPayload(model=_req_doc(), producer="requirements#1"),
+        "planner#1.plan": StoredPayload(model=bad, producer="planner#1"),
+        "requirements#1.requirements": StoredPayload(model=_req_doc(), producer="requirements#1"),
     }
-    nc = _nc("plan_check", payloads=payloads, host=host)
-    inputs = {"plan": "plan#1.approve", "requirements_doc": "requirements#1.freeze"}
+    nc = _nc("plan_check", payloads=payloads, host=host, topology=_reordered())
+    inputs = {"plan": "planner#1.plan", "requirements_doc": "requirements#1.requirements"}
 
     out = asyncio.run(pp.plan_check_node(nc, _act("plan_check", inputs), PipelineConfig()))
 
-    assert (out.port, out.result) == (
-        "halt",
-        "failed:plan-validation:requirement(s) not covered by any task: ['FR-2', 'FR-3']",
-    )
+    assert out.port == "revise"
+    assert out.payload.guidance == ("requirement(s) not covered by any task: ['FR-2', 'FR-3']")
     assert host.synced is None
 
 
@@ -411,6 +455,7 @@ def test_plan_check_passes_without_requirements_doc():
         "plan_check",
         payloads={"plan#1.approve": StoredPayload(model=plan, producer="plan#1")},
         host=host,
+        topology=_pre(),
     )
 
     out = asyncio.run(
@@ -439,7 +484,7 @@ def test_plan_check_coverage_passes_vacuously_on_stories_without_functional():
         "plan#1.approve": StoredPayload(model=plan, producer="plan#1"),
         "requirements#1.freeze": StoredPayload(model=req_doc, producer="requirements#1"),
     }
-    nc = _nc("plan_check", payloads=payloads, host=host)
+    nc = _nc("plan_check", payloads=payloads, host=host, topology=_pre())
     inputs = {"plan": "plan#1.approve", "requirements_doc": "requirements#1.freeze"}
 
     out = asyncio.run(pp.plan_check_node(nc, _act("plan_check", inputs), PipelineConfig()))
@@ -458,6 +503,7 @@ def test_plan_check_passes_an_empty_task_list():
         "plan_check",
         payloads={"plan#1.approve": StoredPayload(model=plan, producer="plan#1")},
         host=host,
+        topology=_pre(),
     )
 
     out = asyncio.run(

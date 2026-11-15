@@ -226,6 +226,13 @@ _CATALOG: tuple[NodeTypeSpec, ...] = (
             # against its FR ids; absent on the default graph (vacuous then).
             _in("requirements_doc", "Requirements", required=False),
             _out("ok", "ImplementationPlan"),
+            # FR-301 D3: a validator failure rides revise — a synthesized
+            # GateDecision(REVISE) back to the planner's guidance input
+            # (the same port type the gate's revise loop already feeds) —
+            # on graphs that wire the loop. The halt port stays declared
+            # for graphs that wire no revise edge (in-flight pinned runs)
+            # and for an exhausted loop.
+            _out("revise", "GateDecision"),
             _halt(),
             _fail(),
         ),

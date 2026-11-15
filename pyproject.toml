@@ -102,6 +102,9 @@ select = ["E", "F", "I", "UP", "B"]
 "src/sdlc/board/api.py" = ["B008"]
 # embedded HTML/CSS/JS template strings — line length is meaningless there
 "scripts/aggregate_benchmarks.py" = ["E501"]
+# the embedded YAML literal is byte-identical to the pre-FR-301 shipped
+# default.graph.yaml (the in-flight-run pin) — reflowing it would break that.
+"tests/graph/fixtures/pre_reorder.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.13"

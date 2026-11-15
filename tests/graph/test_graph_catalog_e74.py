@@ -88,6 +88,11 @@ FAIL = ("NodeFailure", True, "failed")
                 # default graph, where coverage is vacuous.
                 ("in", "requirements_doc"): ("Requirements", False, None),
                 ("out", "ok"): ("ImplementationPlan", True, None),
+                # FR-301 D3: a validator failure rides revise -- a
+                # synthesized GateDecision(REVISE) back to the planner --
+                # on graphs that wire the loop; halt stays for graphs that
+                # don't (old pinned runs) and for an exhausted loop.
+                ("out", "revise"): ("GateDecision", True, None),
                 ("out", "halt"): (None, True, "failed"),
                 ("out", "fail"): FAIL,
             },

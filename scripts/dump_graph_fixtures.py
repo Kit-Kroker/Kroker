@@ -166,8 +166,10 @@ def _run_state() -> dict[str, Any]:
     for aid, port in (
         ("architecture#1", "approve"),
         ("planner#1", "plan"),
-        ("plan#1", "approve"),
+        # FR-301: the validators gate the plan -- plan_check runs before
+        # gate.plan and its ok port feeds the gate's artifact.
         ("plan_check#1", "ok"),
+        ("plan#1", "approve"),
         ("code#1", "results"),
         ("analyze#1", "analysis"),
         ("merge#1", "pr"),

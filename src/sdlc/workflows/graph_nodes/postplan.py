@@ -9,10 +9,10 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from ...agents.roles import STAGE_MODELS, resolve_role_model, t_analyst, t_merge_verdict
-    from ...core.models import PipelineConfig
+    from ...core.models import GateDecision, GateOutcome, PipelineConfig
     from ...graph.router import Activation
     from ...stages import analyze, deploy, merge
-    from ...validators import covers_all, dag_acyclic, deps_resolve, ids_unique, task_size
+    from ...validators.verdicts import plan_valid
     from ...vcs import DiffInput, get_task_diff
     from ..build import run_tasks
     from ..models import AnalyzeResult, BuildResult, PullRequest
@@ -24,32 +24,68 @@ ACT = workflow.ActivityConfig(
 
 
 async def plan_check_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> NodeResult:
+    """The plan validators (FR-301 D2/D3): gate.plan's deterministic input.
+
+    One composition, shared with the gate's ADR-24 conjunct: `plan_valid`
+    runs the ordered family (ids_unique -> deps_resolve -> dag_acyclic ->
+    covers_all -> task_size, the order part of the PLAN-1.8 contract --
+    duplicate ids are named before the graph checks because the downstream
+    {t.id: t} collapse would silently drop tasks and hide every later
+    fault) with this run's cfg.plan, so the gate can never contradict it.
+    """
     plan = input_model(nc, act, "plan")
     assert plan is not None
-    # FR-205 halt family, checked in order -- the order is part of the
-    # contract: duplicate ids are named before the graph checks, because the
-    # downstream {t.id: t} collapse would silently drop tasks and hide every
-    # later fault. Each reason rides the halt port verbatim.
-    halt = ids_unique(plan.tasks) or deps_resolve(plan.tasks) or dag_acyclic(plan.tasks)
-    if halt:
-        return NodeResult(port="halt", result=f"failed:plan-validation:{halt}")
-    # Coverage is vacuous without a requirements artifact (the default graph
-    # has no requirements_doc edge) or when it carries no stories.
     req_doc = input_model(nc, act, "requirements_doc")
-    if req_doc is not None and req_doc.stories:
-        uncovered = covers_all(plan.tasks, [fr.id for s in req_doc.stories for fr in s.functional])
-        if uncovered:
+    verdict = plan_valid(plan, req_doc, plan_cfg=cfg.plan)
+    if not verdict.ok:
+        reason = verdict.findings[0].evidence.evidence
+        # D3: a connected, unexhausted revise loop returns the validator
+        # text to the planner as REVISE guidance -- no human gate ever
+        # opens for a validator failure. Anything else keeps today's
+        # terminal halt: an old pinned graph wires no revise edge (the
+        # halt port has none by construction), and a max_traversals-exhausted
+        # loop must not escalate on an unavailable port.
+        if nc.connected("revise") and "revise" not in act.unavailable_ports:
             return NodeResult(
-                port="halt",
-                result=(
-                    f"failed:plan-validation:requirement(s) not covered by any task: {uncovered!r}"
+                port="revise",
+                payload=GateDecision(
+                    gate=nc.node.id,
+                    round=act.round,
+                    outcome=GateOutcome.REVISE,
+                    decided_by="policy",
+                    guidance=reason,
                 ),
             )
-    halt = task_size(plan.tasks, cfg.plan)
-    if halt:
-        return NodeResult(port="halt", result=f"failed:plan-validation:{halt}")
-    # Sync only after every check passes (feature.py:614-617).
-    await nc.host._board_sync_tasks(cfg, nc.host._plan_version, plan.tasks)
+        return NodeResult(port="halt", result=f"failed:plan-validation:{reason}")
+    # The gate's conjunct reads the producer stash (FR-301): the
+    # requirements doc this plan was validated against, None on graphs
+    # that wire no requirements_doc edge; "validated" tells the gate's
+    # publish that THIS node ok'd the artifact and deferred the board
+    # sync to the version it mints.
+    carry = nc.carry(nc.node.id)
+    carry["requirements_doc"] = req_doc
+    carry["validated"] = True
+    # The gate's finish reads its prep from the ARTIFACT PRODUCER's carry
+    # ("prep" is the plan stage's own state, stashed by the planner). This
+    # node now sits between the planner and the gate, so the ok path passes
+    # the prep through from the plan token's producer -- gate_node's
+    # carry(producer)["prep"] read keeps working unchanged. Tolerant by
+    # absence: on an old pinned graph this node's plan token comes from the
+    # GATE's approve emission (a producer with no prep), nothing downstream
+    # reads the pass-through there, and the run keeps its exact old shape.
+    plan_ref = act.inputs["plan"]
+    assert isinstance(plan_ref, str)  # multiplicity "one": a single payload ref
+    prep_producer = nc.payload(plan_ref).producer.rpartition("#")[0]
+    prep = nc.carry(prep_producer).get("prep")
+    if prep is not None:
+        carry["prep"] = prep
+    # The reorder runs this node BEFORE gate.plan mints a plan version
+    # (_plan_version is None), so the sync waits for the gate's publish.
+    # Old pinned graphs still gate first: their finalize has minted a
+    # version by the time this activation runs, and the sync fires here
+    # exactly as before -- the in-flight command stream is unchanged.
+    if nc.host._plan_version is not None:
+        await nc.host._board_sync_tasks(cfg, nc.host._plan_version, plan.tasks)
     return NodeResult(port="ok", payload=plan)
 
 

@@ -2,10 +2,11 @@
 
 The pins here are almost entirely about SHAPE, not behavior: ADR-24 (docs/adr.md)
 commits every output schema to listing evidence fields before status fields, and
-the future verdict functions consume exactly these models -- so field order is a
-contract, pinned via `model_fields`, not an implementation detail. The module
-deliberately has no consumers yet (ADR-24 handoff); the only behavior to test is
-construction, the defaults from the signatures, and purity (no temporalio, no I/O).
+the verdict functions consume exactly these models (`verdicts.py` since FR-301)
+-- so field order is a contract, pinned via `model_fields`, not an implementation
+detail. The pins predate that first consumer and stay shape-only; the behavior
+tested here is construction, the defaults from the signatures, and purity (no
+temporalio, no I/O).
 """
 
 from __future__ import annotations

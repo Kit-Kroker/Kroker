@@ -1,6 +1,6 @@
 {
   "kind": "graph",
-  "sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+  "sha": "2bfa5ac58df5454c6dff6a84e77a4b7d3950f49cc4e44187f2ad79505dc952e6",
   "graph": {
     "schema_version": 1,
     "nodes": [
@@ -142,7 +142,19 @@
       {
         "source": "plan",
         "source_port": "approve",
-        "target": "plan_check",
+        "target": "analyze",
+        "target_port": "plan"
+      },
+      {
+        "source": "plan",
+        "source_port": "approve",
+        "target": "code",
+        "target_port": "plan"
+      },
+      {
+        "source": "plan",
+        "source_port": "approve",
+        "target": "merge",
         "target_port": "plan"
       },
       {
@@ -155,26 +167,21 @@
       {
         "source": "plan_check",
         "source_port": "ok",
-        "target": "analyze",
-        "target_port": "plan"
+        "target": "plan",
+        "target_port": "artifact"
       },
       {
         "source": "plan_check",
-        "source_port": "ok",
-        "target": "code",
-        "target_port": "plan"
-      },
-      {
-        "source": "plan_check",
-        "source_port": "ok",
-        "target": "merge",
-        "target_port": "plan"
+        "source_port": "revise",
+        "target": "planner",
+        "target_port": "guidance",
+        "max_traversals": 2
       },
       {
         "source": "planner",
         "source_port": "plan",
-        "target": "plan",
-        "target_port": "artifact"
+        "target": "plan_check",
+        "target_port": "plan"
       }
     ]
   },
@@ -187,6 +194,12 @@
     },
     {
       "source": "plan",
+      "source_port": "revise",
+      "target": "planner",
+      "target_port": "guidance"
+    },
+    {
+      "source": "plan_check",
       "source_port": "revise",
       "target": "planner",
       "target_port": "guidance"

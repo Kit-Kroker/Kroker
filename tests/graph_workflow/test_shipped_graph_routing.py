@@ -13,7 +13,10 @@ def _run(name: str) -> Run:
 
 
 def _tail(run: Run) -> None:
+    # FR-301: the validators run before the gate; approve opens post-plan.
     run.emit("plan_check#1", "ok")
+    assert run.live() == ["plan#1"]
+    run.emit("plan#1", "approve")
     assert run.live() == ["code#1"]
     run.emit("code#1", "results")
     assert run.live() == ["analyze#1"]
@@ -39,7 +42,6 @@ def test_default_greenfield_with_architecture_revise_to_final_gate():
     run.emit("architecture#3", "approve")
     assert run.live() == ["planner#1"]
     run.emit("planner#1", "plan")
-    run.emit("plan#1", "approve")
     assert run.live() == ["plan_check#1"]
     _tail(run)
 

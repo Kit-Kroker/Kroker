@@ -8,6 +8,11 @@ This package exists because of audit row 8: a proposer's self-reported
 Do not give it a default. A default makes "no evidence was fetched"
 indistinguishable from "the evidence passed" — the same defect, one layer up.
 
+**The deterministic verdict is a required parameter too — same no-default
+rule.** A gate with no provider passes vacuously (`Verdict.vacuous()`); a
+provider that ran and failed never passes, whatever the confidence and the
+bucket say.
+
 **`insufficient_data` is not an error state.** Cold-start buckets, unknown
 models, and failed lookups all resolve to it, and it is treated exactly like
 `uncalibrated` at the decision. Never collapse it into either neighbour.

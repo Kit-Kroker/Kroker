@@ -145,7 +145,7 @@ def test_build_run_input_templates_bounds_and_keeps_cfg_identity():
         greenfield_idea(), cfg, registry_roles=roles(), handler_types=_handler_types()
     )
 
-    assert {e.max_traversals for e in inp.graph.edges if e.max_traversals} == {3}
+    assert {e.max_traversals for e in inp.graph.edges if e.max_traversals} == {3, 2}
     assert inp.cfg is cfg  # no copy: the run reads the caller's live config
     assert inp.seeded is None
     assert inp.roles == resolved_roles(cfg, roles())
@@ -231,11 +231,18 @@ def test_template_revise_bounds_hit_only_the_pre_code_revise_edges():
 
     out = template_revise_bounds(SHIPPED["default"], 4)
 
-    assert _bounds(out) == {("architecture", "revise"): 4, ("plan", "revise"): 4}
+    # FR-301: plan_check.revise is NOT a PRE_CODE_REVISE slot -- its
+    # authored bound survives templating untouched.
+    assert _bounds(out) == {
+        ("architecture", "revise"): 4,
+        ("plan", "revise"): 4,
+        ("plan_check", "revise"): 2,
+    }
     # the source graph is untouched: still the shipped 2-traversal edges
     assert _bounds(SHIPPED["default"]) == {
         ("architecture", "revise"): 2,
         ("plan", "revise"): 2,
+        ("plan_check", "revise"): 2,
     }
 
 
@@ -276,12 +283,17 @@ def test_template_revise_bounds_skip_unbounded_revise_edges_and_foreign_bounds()
 
 @pytest.mark.parametrize("bound", [0, -3], ids=["zero", "negative"])
 def test_template_revise_bounds_templates_sub_one_bounds_as_is(bound):
-    # the plan defines no guard: the bound flows into the two edges verbatim
+    # the plan defines no guard: the bound flows into the two PRE_CODE_REVISE
+    # edges verbatim; the FR-301 plan_check.revise bound rides along at 2
     from sdlc.workflows.graph_catalog import SHIPPED, template_revise_bounds
 
     out = template_revise_bounds(SHIPPED["default"], bound)
 
-    assert _bounds(out) == {("architecture", "revise"): bound, ("plan", "revise"): bound}
+    assert _bounds(out) == {
+        ("architecture", "revise"): bound,
+        ("plan", "revise"): bound,
+        ("plan_check", "revise"): 2,
+    }
 
 
 def test_template_revise_bounds_on_a_graph_without_revise_edges_is_a_fresh_equal_copy():

@@ -346,6 +346,12 @@ per `docs/documentation-rules.md`). ADR-22 was amended again on
   metric becomes reviewer–oracle agreement beside task pass rate. Every
   prompt or model change ships with a before/after on prompt-gate or the
   benchmark, one variable at a time, behind a per-role flag.
+  *Landed 2026-11-15 (FR-301):* the `plan_valid` half is built —
+  `sdlc/validators/verdicts.py`, the evidence schemas' first consumer,
+  computes the verdict over the FR-205 checks, and the plan gate's SOFT
+  auto-approve conjunct requires it (`calibration/decision.py`, where the
+  verdict is a required parameter with no default). `approve`/`tests_passed`
+  (reviewer/QA) remain AP-3; architect validators remain AP-4.4.
 - **ADR-25 One merged fix loop per dev task** *(decided 2026-11-11,
   ratifying shipped behaviour; amends FR-105 and supersedes the two-loop
   design of SDLC-spec v2 §1)*. Spec v2 prescribed two repair loops — a

@@ -20,7 +20,7 @@ from sdlc.core.models import RoleUsage
 from sdlc.stages.requirements.models import DraftOutput, DraftStory
 from sdlc.stages.requirements.stage import DraftInput, _DraftResult
 from sdlc.stages.requirements.verify import freeze
-from tests.fakes.canned import AGENT_SPECS, CLARIFIED, e2e_config, greenfield_idea
+from tests.fakes.canned import AGENT_SPECS, CLARIFIED, PLAN, e2e_config, greenfield_idea
 from tests.fakes.fake_activities import GIT_FAKES
 from tests.fakes.fake_agents import fake_agent_activities
 from tests.fakes.fake_deploy import DEPLOY_FAKES
@@ -51,6 +51,19 @@ _DRAFT = DraftOutput(
     ]
 )
 _EXPECTED = freeze(_DRAFT, mode="greenfield").frozen
+
+# The canned PLAN covers no FR ids, so on default-requirements it fails
+# FR-205 coverage against _EXPECTED (FR-1, FR-2) -- red on this scenario
+# since FR-205 wired the doc into plan_check. FR-301 moves that failure
+# BEFORE gate.plan (the planner gets two revise rounds, then the halt), so
+# the canned plan must cover the frozen artifact's ids for the happy path.
+_COVERING_PLAN = PLAN.model_copy(
+    update={"tasks": [PLAN.tasks[0].model_copy(update={"covers": ["FR-1", "FR-2"]})]}
+)
+_LOCAL_SPECS = [
+    (name, output_type, _COVERING_PLAN if name == "planner_agent" else value)
+    for name, output_type, value in AGENT_SPECS
+]
 
 
 @activity.defn(name="draft_requirements")
@@ -92,7 +105,7 @@ def _requirements_activities() -> list:
         cache_put,
         *GIT_FAKES,
         *DEPLOY_FAKES,
-        *fake_agent_activities(AGENT_SPECS),
+        *fake_agent_activities(_LOCAL_SPECS),
     ]
 
 

@@ -4,6 +4,7 @@ python -m sdlc.cli start   --title "Add SSO" --mode brownfield --repo <url>
 python -m sdlc.cli status  --id feature-add-sso
 python -m sdlc.cli inbox
 python -m sdlc.cli gates-list
+python -m sdlc.cli calibration [--db board.sqlite3]
 python -m sdlc.cli doctor
 python -m sdlc.cli doctor --json --strict
 python -m sdlc.cli answer  --id feature-add-sso --q Q1 --text "Use OIDC"
@@ -126,6 +127,7 @@ def _needs_temporal_client(args) -> bool:
         or args.cmd == "risk"
         or args.cmd == "doctor"
         or args.cmd == "gates-list"
+        or args.cmd == "calibration"
     )
     return not local_only
 
@@ -384,6 +386,14 @@ def build_parser() -> argparse.ArgumentParser:
     cal.add_argument("--epsilon", type=float, default=0.15)
     cal.add_argument("--threshold", type=float, default=0.75)
 
+    # FR-301: the C7 gate-calibration ledger's read surface -- a different
+    # verb from `calibrate` above, which scores rubric fixtures. The verb
+    # lives in the package, like maintain/capability, because cli.py sits
+    # near the 1000-line ceiling (023a T021, R12).
+    from .calibration.cli import add_calibration_parser
+
+    add_calibration_parser(sub)
+
     from .capability.cli import add_capability_parser
 
     add_capability_parser(sub)
@@ -485,6 +495,15 @@ async def main() -> None:
         from .doctor.cli import run_doctor
 
         raise SystemExit(await run_doctor(args))
+
+    if args.cmd == "calibration":
+        # Dispatched beside doctor, before the worker import below builds
+        # the agent registry: a read over the local ledger must answer on
+        # a keyless machine too -- exit 0 ALWAYS is the contract (FR-301).
+        from .calibration.cli import run_calibration
+
+        print(run_calibration(args))
+        return
 
     from .worker import TASK_QUEUE
     from .workflows.assessment import AssessmentInput, AssessmentWorkflow

@@ -26,12 +26,15 @@ edges:
 - {source: architecture, source_port: revise, target: architect, target_port: guidance, max_traversals: 2}
 - {source: architecture, source_port: approve, target: planner, target_port: spec}
 - {source: architecture, source_port: approve, target: merge, target_port: spec}
-- {source: planner, source_port: plan, target: plan, target_port: artifact}
+- {source: planner, source_port: plan, target: plan_check, target_port: plan}
+# FR-301 D2/D3: the validators feed the plan gate; a validator failure
+# revises the planner (bounded like the gate's own revise loop).
+- {source: plan_check, source_port: revise, target: planner, target_port: guidance, max_traversals: 2}
+- {source: plan_check, source_port: ok, target: plan, target_port: artifact}
 - {source: plan, source_port: revise, target: planner, target_port: guidance, max_traversals: 2}
-- {source: plan, source_port: approve, target: plan_check, target_port: plan}
-- {source: plan_check, source_port: ok, target: code, target_port: plan}
-- {source: plan_check, source_port: ok, target: analyze, target_port: plan}
-- {source: plan_check, source_port: ok, target: merge, target_port: plan}
+- {source: plan, source_port: approve, target: code, target_port: plan}
+- {source: plan, source_port: approve, target: analyze, target_port: plan}
+- {source: plan, source_port: approve, target: merge, target_port: plan}
 - {source: code, source_port: results, target: analyze, target_port: results}
 - {source: code, source_port: results, target: merge, target_port: results}
 - {source: analyze, source_port: analysis, target: merge, target_port: analysis}

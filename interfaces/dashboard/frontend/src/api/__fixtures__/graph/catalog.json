@@ -1101,6 +1101,13 @@
           "multiplicity": "one"
         },
         {
+          "name": "revise",
+          "direction": "out",
+          "payload": "GateDecision",
+          "required": true,
+          "multiplicity": "one"
+        },
+        {
           "name": "halt",
           "direction": "out",
           "payload": null,
@@ -1136,6 +1143,20 @@
           {
             "type": "plan_check",
             "port": "plan"
+          }
+        ],
+        "revise": [
+          {
+            "type": "architect",
+            "port": "guidance"
+          },
+          {
+            "type": "plan",
+            "port": "guidance"
+          },
+          {
+            "type": "research",
+            "port": "guidance"
           }
         ],
         "halt": [
