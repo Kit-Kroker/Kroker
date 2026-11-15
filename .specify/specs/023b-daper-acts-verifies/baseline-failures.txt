@@ -1,0 +1,29 @@
+# T001 baseline — fast tier (`uv run pytest -q`) on main @ a52a913c
+# (commit 0: 023b plan artifacts; code identical to the pre-commit tree),
+# 2026-11-15, in the throwaway worktree /tmp/opencode/023b-baseline.
+#
+# 4 pre-existing failures observed. Diff vs
+# .specify/specs/023-daper-maintenance-loop/baseline-failures.txt: every id
+# below is recorded there (its file documents the same throwaway-worktree
+# procedure and honestly lists 8 ids; the deveval-corpus and todo_api ids it
+# also lists no longer fail, fixed by f576d2f7 "shrink the fast-tier baseline
+# 8 -> 2"). NOVEL IDS: none — the observed set is a strict subset.
+#
+# Why 4 and not the "2 expected per f576d2f7": the two
+# tests/test_read_fixtures_fresh.py ids fail only in a throwaway worktree —
+# the committed fixture compare.json embeds the absolute 'root' path of the
+# checkout it was dumped from (/home/maksim/work/Kroker/...), so the
+# freshness check passes on the primary checkout (where f576d2f7's count of
+# 2 was taken and where both tests pass today, re-verified 2026-11-15) and
+# fails on any other path. Environment artifact of the worktree procedure,
+# not a regression: no code under test changed since eb2dd323's capture.
+#
+# Excluded from this list by construction: the QA-written RED test files for
+# this round (tests/maintenance/test_models_023b.py,
+# tests/test_memory_kinds_023b.py), untracked at T001 and landing per task;
+# they fail on the missing contract they specify until their tasks land.
+
+tests/test_benchmark_acceptance_stalled.py::test_sc003_recompute_stored_acceptance
+tests/test_prompt_migration.py::test_prompt_shas_did_not_move
+tests/test_read_fixtures_fresh.py::test_committed_recordings_equal_a_fresh_build
+tests/test_read_fixtures_fresh.py::test_pristine_copy_passes_the_record_check
