@@ -301,3 +301,182 @@ def test_incidents_on_a_not_enabled_project_is_refused_exit_1(capsys):
 
     assert _run(["incidents", "ghost"], _DeadClient(), capsys) == 1
     assert "not enabled" in capsys.readouterr().err
+
+
+# =========================================================================== #
+# ## T030 happy path (023a, qa-happy, RED): nudge / disable verbs and the
+# schedule sample. Every test here fails today: src/sdlc/maintenance/cli.py
+# has no nudge or disable verb, so argparse exits 2 before run_maintain runs.
+# Contract: contracts/cli.md (nudge / disable rows); FR-003/004/018.
+# =========================================================================== #
+
+
+class _SignalHandle:
+    """Records every signal name sent to a maint-<p> handle."""
+
+    def __init__(self, sink: list[tuple[str, str]], wid: str, error: Exception | None = None):
+        self._sink = sink
+        self._wid = wid
+        self._error = error
+
+    async def signal(self, name, *args, **kw):  # noqa: ANN001, ARG002
+        if self._error is not None:
+            raise self._error
+        self._sink.append((self._wid, name))
+
+
+class _SignalClient:
+    """get_workflow_handle(wid) returns a handle that records signals."""
+
+    def __init__(self, *, error: Exception | None = None):
+        self.signals: list[tuple[str, str]] = []
+        self._error = error
+
+    def get_workflow_handle(self, wid):  # noqa: ANN001
+        return _SignalHandle(self.signals, wid, self._error)
+
+
+def test_nudge_signals_the_maint_workflow_and_exits_0(capsys):
+    client = _SignalClient()
+    assert _run(["nudge", "demo"], client, capsys) == 0
+    assert client.signals == [("maint-demo", "nudge")]
+    assert "demo" in capsys.readouterr().out
+
+
+def test_disable_signals_the_maint_workflow_and_exits_0(capsys):
+    client = _SignalClient()
+    assert _run(["disable", "demo"], client, capsys) == 0
+    assert client.signals == [("maint-demo", "disable")]
+    assert "disabling maint-demo" in capsys.readouterr().out
+
+
+def test_nudge_on_a_not_enabled_project_exits_1_with_the_contract_message(capsys):
+    client = _SignalClient(error=RuntimeError("workflow not found: maint-ghost"))
+    assert _run(["nudge", "ghost"], client, capsys) == 1
+    assert "not enabled: ghost" in capsys.readouterr().err
+
+
+def test_disable_on_a_not_enabled_project_exits_1_with_the_contract_message(capsys):
+    client = _SignalClient(error=RuntimeError("workflow not found: maint-ghost"))
+    assert _run(["disable", "ghost"], client, capsys) == 1
+    assert "not enabled: ghost" in capsys.readouterr().err
+
+
+def test_maint_example_sample_exists_and_is_not_loaded_as_a_schedule():
+    from pathlib import Path
+
+    from sdlc.schedules.loader import load_schedules
+
+    schedules = Path(__file__).resolve().parents[2] / "schedules"
+    sample = schedules / "maint-example.yaml.sample"
+    assert sample.is_file(), "the maintenance schedule sample must ship with the repo"
+
+    # The loader globs *.yaml, so the .sample must never be parsed as an asset.
+    assets = load_schedules(schedules)
+    assert [a.id for a in assets] == ["nightly-reflect"]
+
+
+# =========================================================================== #
+# ## chaos: nudge/disable edges (023a T030, RED) -- qa-chaos
+#
+# Happy paths and the not-enabled substring live above (qa-happy). Everything
+# here is adversarial: signal-level failures, argument-shape refusals, the
+# one-line stderr contract on exit 1, the stateless-shell rule, and the
+# sample's content (not just its existence). Each test fails today because
+# the verbs are not registered (argparse exit 2) or the sample is absent.
+# =========================================================================== #
+
+
+class _StrictSignalClient(_SignalClient):
+    """A signal client that also records any start_workflow call, so a verb
+    that quietly STARTS a workflow instead of signalling one is caught."""
+
+    def __init__(self, *, error: Exception | None = None):
+        super().__init__(error=error)
+        self.start_workflow = _FakeStart()
+
+
+@pytest.mark.parametrize("verb", ["nudge", "disable"])
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(TimeoutError("signal timed out after 30s"), id="timeout"),
+        pytest.param(RuntimeError("connection reset by peer"), id="generic"),
+    ],
+)
+def test_signal_failure_exits_1_with_one_stderr_line_and_no_traceback(verb, error, capsys):
+    # contracts/cli.md: exit 1 is a refused operation with a ONE-LINE reason.
+    # A transport failure mid-signal must not escape as a traceback.
+    client = _StrictSignalClient(error=error)
+    code = _run([verb, "demo"], client, capsys)
+    assert code == 1
+    captured = capsys.readouterr()
+    assert "Traceback" not in captured.err
+    assert len(captured.err.strip().splitlines()) == 1
+    assert client.start_workflow.started == []
+
+
+@pytest.mark.parametrize("verb", ["nudge", "disable"])
+def test_a_failing_handle_lookup_exits_1_not_a_traceback(verb, capsys):
+    class _ExplodingClient:
+        start_workflow = _FakeStart()
+
+        def get_workflow_handle(self, wid):  # noqa: ANN001, ARG002
+            raise ConnectionError("temporal frontend unreachable")
+
+    code = _run([verb, "demo"], _ExplodingClient(), capsys)
+    assert code == 1
+    captured = capsys.readouterr()
+    assert "Traceback" not in captured.err
+    assert len(captured.err.strip().splitlines()) == 1
+
+
+@pytest.mark.parametrize("verb", ["nudge", "disable"])
+def test_signal_verbs_never_start_a_workflow(verb, capsys):
+    # contracts/cli.md + FR-604: every verb is a stateless shell over an
+    # EXISTING workflow. Only `enable` may start maint-<p>.
+    client = _StrictSignalClient()
+    assert _run([verb, "demo"], client, capsys) == 0
+    assert client.start_workflow.started == []
+
+
+@pytest.mark.parametrize("verb", ["nudge", "disable"])
+def test_not_enabled_refusal_is_exactly_one_stderr_line(verb, capsys):
+    # contracts/cli.md: the refusal carries a one-line reason. qa-happy pins
+    # the substring; this pins the single-line shape.
+    client = _SignalClient(error=RuntimeError("workflow not found: maint-ghost"))
+    assert _run([verb, "ghost"], client, capsys) == 1
+    err = capsys.readouterr().err
+    assert len(err.strip().splitlines()) == 1
+    assert "Traceback" not in err
+
+
+@pytest.mark.parametrize("verb", ["nudge", "disable"])
+def test_signal_verbs_take_exactly_one_project_argument(verb):
+    # contracts/cli.md: `<project>` is the single positional. The valid parse
+    # is asserted first, so this fails today (verb unregistered) rather than
+    # passing on argparse's generic "invalid choice" exit 2.
+    assert _args([verb, "demo"]).project == "demo"
+    for bad in (
+        [verb],  # no project
+        [verb, "demo", "extra"],  # a second positional
+        [verb, "demo", "--gate-policy", "off"],  # gate flags do not exist (R9)
+        [verb, "demo", "--on-timeout", "approve"],
+    ):
+        with pytest.raises(SystemExit) as exc:
+            _args(bad)
+        assert exc.value.code == 2, f"argv {bad!r} must be a usage error"
+
+
+def test_maint_example_sample_parses_as_yaml_and_kicks_maintenance():
+    # qa-happy checks the sample exists and is not loaded. The copy-paste
+    # promise is stronger: a human who uncomments or copies it gets valid
+    # YAML naming the kick workflow (T030, FR-003/R10).
+    from pathlib import Path
+
+    import yaml
+
+    sample = Path(__file__).resolve().parents[2] / "schedules" / "maint-example.yaml.sample"
+    data = yaml.safe_load(sample.read_text(encoding="utf-8"))
+    assert isinstance(data, dict), "the sample must parse to a mapping, not be all comments"
+    assert data["action"]["workflow"] == "MaintenanceKickWorkflow"
