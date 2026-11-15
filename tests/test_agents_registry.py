@@ -216,3 +216,152 @@ def test_adr6_still_bites_through_the_directory_loader(tmp_path):
     )  # dev's model id
     with pytest.raises(RegistryError, match="ADR-6"):
         load_registry(root)
+
+
+# =========================================================================== #
+# ## chaos: per-role unknown keys (FR-202 follow-up) -- qa-chaos, RED
+#
+# Happy paths are qa-happy's. Everything here is an edge: multiple surplus
+# keys, a present-but-empty surplus key, the `role:` bookkeeping key staying
+# legal, the actionability of the message, and non-mapping/non-string-key
+# files. Subject: loader._parse_role, which today builds RoleConfig(**data)
+# with pydantic's default extra=ignore, so every surplus key vanishes.
+# Subject files: .workspace/tasks/2026-11-14-fr202-per-role-unknown-keys.md.
+# =========================================================================== #
+
+
+def _append_agent_yaml(root, role: str, text: str) -> None:
+    p = root / role / "agent.yaml"
+    p.write_text(p.read_text(encoding="utf-8") + "\n" + text, encoding="utf-8")
+
+
+def test_multiple_unknown_keys_are_all_named_sorted_not_just_the_first(tmp_path):
+    # "not just the first": a fix that reports only one surplus key forces a
+    # fix-run-fix loop. Sorted order keeps the message deterministic.
+    root = _write_registry_dir(tmp_path / "agents")
+    _append_agent_yaml(root, "planner", "bogus_zeta: 1\nbogus_alpha: 2\nbogus_mid: 3")
+    with pytest.raises(RegistryError) as exc_info:
+        load_registry(root)
+    msg = str(exc_info.value)
+    for key in ("bogus_alpha", "bogus_mid", "bogus_zeta"):
+        assert key in msg, f"{key} must be named, got: {msg}"
+    assert msg.index("bogus_alpha") < msg.index("bogus_mid") < msg.index("bogus_zeta")
+
+
+def test_unknown_key_with_an_empty_value_still_refuses(tmp_path):
+    # A present-but-empty key is not an absent key. `bogus_key:` parses to
+    # None and must still be refused, not dropped as "nothing set".
+    root = _write_registry_dir(tmp_path / "agents")
+    _append_agent_yaml(root, "planner", "bogus_key:")
+    with pytest.raises(RegistryError, match="bogus_key"):
+        load_registry(root)
+
+
+def test_bookkeeping_role_key_stays_legal_with_known_keys(tmp_path):
+    # The filename-agreement check depends on `role:`. The unknown-key
+    # refusal must not swallow it: a file with a matching `role:` and only
+    # known keys still loads. (Passes today by design; the fix must keep it.)
+    root = _write_registry_dir(tmp_path / "agents")
+    p = root / "planner" / "agent.yaml"
+    p.write_text("role: planner\n" + p.read_text(encoding="utf-8"), encoding="utf-8")
+    roles = load_registry(root)
+    assert roles["planner"].kind == "proposer"
+
+
+def test_unknown_key_message_names_the_role_the_key_and_the_known_set(tmp_path):
+    # Actionable on the typo case the task names: validation_retry vs
+    # validation_retries. The message must say WHICH role, WHICH key, and
+    # hint a real known key so the fix is obvious.
+    root = _write_registry_dir(tmp_path / "agents")
+    _append_agent_yaml(root, "planner", "validation_retry: 3")
+    with pytest.raises(RegistryError) as exc_info:
+        load_registry(root)
+    msg = str(exc_info.value)
+    assert "planner" in msg
+    assert "validation_retry" in msg
+    assert "validation_retries" in msg  # the known set is hinted
+
+
+def test_unknown_key_is_refused_on_a_harness_role_too(tmp_path):
+    # The check must not be proposer-only: a harness role's agent.yaml carries
+    # the same surface. `dev` is the harness role in the registry tree.
+    root = _write_registry_dir(tmp_path / "agents")
+    _append_agent_yaml(root, "dev", "bogus_harness_key: yes")
+    with pytest.raises(RegistryError, match="bogus_harness_key"):
+        load_registry(root)
+
+
+def test_unknown_key_match_is_case_sensitive(tmp_path):
+    # `Model:` is not `model:`. A case-folding loader would silently accept
+    # the wrong spelling; the surplus check must refuse it.
+    root = _write_registry_dir(tmp_path / "agents")
+    _append_agent_yaml(root, "planner", "Model: anthropic:glm-5.2")
+    with pytest.raises(RegistryError, match="Model"):
+        load_registry(root)
+
+
+def test_non_string_yaml_key_is_a_registry_error_not_a_type_error(tmp_path):
+    # Subtlety: `42: x` is a valid YAML mapping with an int key. Splatting it
+    # into RoleConfig(**data) raises TypeError today. The contract is a
+    # RegistryError naming the bad key.
+    root = _write_registry_dir(tmp_path / "agents")
+    _append_agent_yaml(root, "planner", "42: x")
+    with pytest.raises(RegistryError, match="42"):
+        load_registry(root)
+
+
+def test_non_mapping_agent_yaml_is_a_registry_error_not_an_attribute_error(tmp_path):
+    # Subtlety: a top-level list parses fine but `data.pop("role", None)`
+    # raises TypeError today (list.pop takes one argument). A malformed file
+    # must be a RegistryError naming the role.
+    root = _write_registry_dir(tmp_path / "agents")
+    (root / "planner" / "agent.yaml").write_text("- a\n- b\n", encoding="utf-8")
+    with pytest.raises(RegistryError, match="planner"):
+        load_registry(root)
+
+
+def test_present_but_empty_known_key_is_legal_and_uses_the_default(tmp_path):
+    # Anti-overcorrection pin: `validation_retries:` (known, empty) must stay
+    # legal and materialise the registry default, while an EMPTY UNKNOWN key
+    # is refused. Guards a fix that rejects every None-valued key. (Passes
+    # today by design.)
+    root = _write_registry_dir(tmp_path / "agents")
+    _append_agent_yaml(root, "planner", "validation_retries:")
+    roles = load_registry(root)
+    assert roles["planner"].kind == "proposer"
+
+
+# =========================================================================== #
+# ## S-rider RED (.workspace/tasks/2026-11-14-fr202-per-role-unknown-keys.md)
+#
+# Per-role agent.yaml files parse into RoleConfig, which ignores unknown keys:
+# a typo'd `validation_retry:` silently runs the role on defaults. The defaults
+# block already fails closed on unknown keys (_defaults_validation_retries);
+# these tests pin the same rule for per-role files. Happy-path pair only.
+# =========================================================================== #
+
+
+def test_typoed_per_role_key_is_rejected_naming_the_role_and_the_key(tmp_path):
+    root = _write_registry_dir(tmp_path / "agents")
+    (root / "reviewer" / "agent.yaml").write_bytes(
+        b"kind: proposer\nmodel: anthropic:glm-5.2\nvalidation_retry: 2\n"
+    )  # typo: the key is validation_retries
+    with pytest.raises(RegistryError) as exc:
+        load_registry(root)
+    message = str(exc.value)
+    assert "reviewer" in message
+    assert "validation_retry" in message
+
+
+def test_clean_per_role_keys_still_load_with_the_bookkeeping_role_key(tmp_path):
+    root = _write_registry_dir(tmp_path / "agents")
+    (root / "reviewer" / "agent.yaml").write_bytes(
+        b"role: reviewer\n"
+        b"kind: proposer\n"
+        b"model: anthropic:glm-5.2\n"
+        b"validation_retries: 2\n"
+        b"context_budget_tokens: 20000\n"
+    )
+    roles = load_registry(root)
+    assert roles["reviewer"].validation_retries == 2
+    assert roles["reviewer"].context_budget_tokens == 20000
