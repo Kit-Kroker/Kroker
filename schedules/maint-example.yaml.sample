@@ -1,0 +1,18 @@
+# 023a FR-003 — the maintenance loop's schedule kicker, EXAMPLE COPY.
+#
+# This file is a sample on purpose: the loader (src/sdlc/schedules/loader.py)
+# globs `*.yaml`, so the `.yaml.sample` suffix keeps it OUT of every apply
+# run — `sdlc schedules list` must only ever show real assets. To schedule a
+# project's maintenance cycle, copy this file to `schedules/maint-<project>.yaml`,
+# set `project` below, then run `python -m sdlc.cli schedules apply --dry-run`.
+#
+# The kicker wakes the project's MaintenanceWorkflow at cadence; one cycle
+# runs per nudge (R2 coalescing), so an hourly-or-slower cron is enforced at
+# load time for kick assets — the cycle is probe-dominated and cannot run
+# faster anyway (see schedules/models.py).
+spec:
+  cron: "0 4 * * *"
+  timezone: UTC
+action:
+  workflow: MaintenanceKickWorkflow
+  project: demo

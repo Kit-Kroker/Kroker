@@ -50,6 +50,13 @@ def register_maintain_subparsers(msub: argparse._SubParsersAction) -> None:
     inc.add_argument("--all", action="store_true", help="include terminal incidents")
     inc.add_argument("--state", action="store_true", help="print the loop summary")
 
+    for verb, help_text in (
+        ("nudge", "trigger one maintenance cycle on an enabled project"),
+        ("disable", "withdraw open gates and end the project's loop"),
+    ):
+        v = msub.add_parser(verb, help=help_text)
+        v.add_argument("project")
+
 
 def _is_git_work_tree(repo: str) -> bool:
     # A checkout has .git as a directory; a linked worktree as a file
@@ -126,10 +133,34 @@ async def _incidents(args: argparse.Namespace, client) -> int:  # noqa: ANN001
     return 0
 
 
+async def _signal_verb(verb: str, args: argparse.Namespace, client) -> int:  # noqa: ANN001
+    """nudge/disable (FR-004/018): stateless shells that signal maint-<p> —
+    only enable starts a workflow (FR-604). A loop that is absent or already
+    finished is `not enabled`; any other failure is a one-line refusal."""
+    project = args.project
+    try:
+        handle = client.get_workflow_handle(f"maint-{project}")
+        await handle.signal(verb)
+    except Exception as e:  # noqa: BLE001 -- a refusal, never a traceback
+        reason = " ".join(str(e).split())
+        if "not found" in reason.lower() or "already completed" in reason.lower():
+            print(f"not enabled: {project}", file=sys.stderr)
+        else:
+            print(f"{verb} failed: {reason}"[:300], file=sys.stderr)
+        return 1
+    if verb == "disable":
+        print(f"disabling maint-{project}")
+    else:
+        print(f"nudged maint-{project}")
+    return 0
+
+
 async def run_maintain(args: argparse.Namespace, client) -> int:  # noqa: ANN001
     if args.maintain_cmd == "enable":
         return await _enable(args, client)
     if args.maintain_cmd == "incidents":
         return await _incidents(args, client)
+    if args.maintain_cmd in ("nudge", "disable"):
+        return await _signal_verb(args.maintain_cmd, args, client)
     print(f"unknown maintain command: {getattr(args, 'maintain_cmd', None)}", file=sys.stderr)
     return 2
