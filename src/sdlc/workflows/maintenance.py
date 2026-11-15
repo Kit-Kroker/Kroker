@@ -185,6 +185,13 @@ class MaintenanceWorkflow(GateHost):
         for inc in self._state.incidents:
             if inc.state is IncidentState.OPEN and inc.kind == "finding" and inc.plan is None:
                 await self._plan(inc)
+            elif inc.state is IncidentState.REOPENED and inc.plan is None:
+                # 023b T031: a dirty attempt re-plans next cycle through the
+                # same proposer path — apply_verdict already bumped
+                # gate_round and cleared the plan, so the gate this opens is
+                # human-only at the new round (data-model §transitions:
+                # reopened | next cycle | re-plan → awaiting_decision).
+                await self._plan(inc)
             elif inc.state is IncidentState.OPEN and inc.kind == "detect_escalation":
                 self._open_escalation_gate(inc)
             elif inc.state is IncidentState.AWAITING_DECISION and inc.plan is not None:

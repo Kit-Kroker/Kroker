@@ -246,10 +246,12 @@ async def test_policy_start_runs_exactly_one_child_and_the_cycle_never_waits(rep
             # Executing until the child reaches its merge gate, then verifying
             # (data-model). With US2's Report landed (T027), a parked no-fix
             # child is verified, found persisted, and REJECTED — so the
-            # incident may already be 'reopened' by these nudges. SC-B05's
+            # incident may already be 'reopened' by these nudges; with T031's
+            # re-plan wired, 'reopened' is transient and may already be
+            # 'awaiting_decision' at the human-only round-2 gate. SC-B05's
             # proof is the completed cycles and the single record above, not
             # the state: the loop never waited on the in-flight child.
-            assert inc1.state.value in {"executing", "verifying", "reopened"}
+            assert inc1.state.value in {"executing", "verifying", "reopened", "awaiting_decision"}
 
             # The judgement half of the same plan stays human-gated (effective
             # min(0.9, floor 0.6) = 0.6 does not clear the 0.8 threshold).

@@ -167,6 +167,20 @@ async def _only(handle):
     return incs[0]
 
 
+def _assert_reopened(inc) -> None:
+    """T031 wires the re-plan, which makes ``reopened`` TRANSIENT: the next
+    cycle re-plans the incident to ``awaiting_decision`` at the bumped gate
+    round (human-only). The durable reopen facts are what these cells pin —
+    the dirty verdict reopened exactly once, the gate round bumped, and the
+    state is reopened or already re-planned; the verification/outcome
+    assertions in each cell survive the re-plan unchanged."""
+    assert inc.reopens == 1, "the dirty verdict reopens exactly once"
+    assert inc.gate_round == 2, "the reopen bumps the gate round"
+    assert inc.state.value in {"reopened", "awaiting_decision"}, inc.state
+    if inc.state.value == "awaiting_decision":
+        assert inc.plan is not None, "the re-plan authored the next plan"
+
+
 def _record(inc):
     """The current attempt's ExecutionRecord (see the module's deviations)."""
     if inc.execution is not None:
@@ -338,7 +352,7 @@ async def test_nofix_gets_exactly_one_reject_and_the_incident_reopens(repo_dir):
             await _nudge(handle, 5)
 
             inc = await _only(handle)
-            assert inc.state.value == "reopened"
+            _assert_reopened(inc)
             assert inc.attempt == 1
             assert inc.verification is not None
             assert inc.verification.verdict == "persisted"
@@ -361,7 +375,7 @@ async def test_empty_diff_parks_dirty_and_the_incident_reopens(repo_dir):
             await _nudge(handle, 5)
 
             inc = await _only(handle)
-            assert inc.state.value == "reopened"
+            _assert_reopened(inc)
             assert inc.verification is not None
             assert inc.verification.verdict == "persisted"
             assert _record(inc).outcome == "rejected_by_loop"
@@ -386,7 +400,7 @@ async def test_a_child_that_fails_before_parking_reopens_with_no_merge_decision(
             await _nudge(handle, 5)  # the probe sees a failed child
 
             inc = await _only(handle)
-            assert inc.state.value == "reopened"
+            _assert_reopened(inc)
             assert _record(inc).outcome == "failed"
             assert (await child.describe()).status == WorkflowExecutionStatus.FAILED
 
@@ -434,7 +448,7 @@ async def test_a_missing_integration_branch_is_recorded_conflicted_and_rejected(
             inc = await _only(handle)
             assert inc.verification is not None
             assert inc.verification.verdict == "conflicted"
-            assert inc.state.value == "reopened"
+            _assert_reopened(inc)
 
             child = env.client.get_workflow_handle(child_id)
             assert await asyncio.wait_for(child.result(), timeout=60) == "rejected:merge"
@@ -460,7 +474,7 @@ async def test_a_child_that_never_parks_times_out_and_the_incident_reopens(repo_
                     break
 
             inc = await _only(handle)
-            assert inc.state.value == "reopened"
+            _assert_reopened(inc)
             assert _record(inc).outcome == "timed_out"
 
             child = env.client.get_workflow_handle(child_id)
@@ -494,7 +508,7 @@ async def test_nofix_history_replays_clean(repo_dir):
         async with _worker(env, "nofix"):
             handle, _ = await _drive_to_parked(env, repo_dir, "nofix")
             await _nudge(handle, 5)
-            assert (await _only(handle)).state.value == "reopened"
+            _assert_reopened(await _only(handle))
             history = await handle.fetch_history()
 
     result = await replayer(MaintenanceWorkflow, TriageWorkflow).replay_workflow(
@@ -545,5 +559,5 @@ async def test_the_verify_pass_leaves_refs_worktrees_and_head_exactly_as_it_foun
             before = _repo_fingerprint(repo_dir)
 
             await _nudge(handle, 5)
-            assert (await _only(handle)).state.value == "reopened"
+            _assert_reopened(await _only(handle))
             assert _repo_fingerprint(repo_dir) == before

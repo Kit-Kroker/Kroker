@@ -109,8 +109,10 @@ def apply_verdict(
     caller splices into its state (report_step's only write-back).
 
     Dirty verdicts (``_DIRTY_OUTCOME``'s keys) fail the attempt: under the
-    bound the incident reopens — ``reopens += 1``, plan cleared, re-planned
-    next cycle — and at ``max_reopens`` it escalates with no further
+    bound the incident reopens — ``reopens += 1``, ``gate_round += 1``
+    (T031: the reopen is a new gate round, and its gate is human-only),
+    plan cleared, re-planned next cycle — and at ``max_reopens`` it
+    escalates with no further
     reopen. A non-retryable configuration failure escalates at once on
     attempt 1. A collected ``resolved`` verifies (the merge stays human's,
     reopens and plan untouched); ``unverifiable`` changes nothing (the
@@ -141,6 +143,7 @@ def apply_verdict(
         if updated.reopens < cfg.max_reopens:
             updated.state = IncidentState.REOPENED
             updated.reopens += 1
+            updated.gate_round += 1  # T031: the reopen is a new gate round
             updated.plan = None  # the next plan is authored against the reopen
             updated.note = f"dirty verdict: {verdict}"
         else:

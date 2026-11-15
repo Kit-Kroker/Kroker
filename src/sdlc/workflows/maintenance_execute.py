@@ -68,6 +68,9 @@ with workflow.unsafe.imports_passed_through():
         MaintenanceState,
         VerificationResult,
     )
+    from ..notify.activities import notify
+    from ..notify.contract import NotifyInput, NotifyReason
+    from ..pending import TaskEscalationPending
     from ..tidyup.backlog import repair_work_for, seeded_work_for
     from ..triage.models import FixClass
     from ..vcs.integration import (
@@ -75,6 +78,7 @@ with workflow.unsafe.imports_passed_through():
         build_verification_branch,
         remove_verification_tree,
     )
+    from .gates import NOTIFY_ACT
     from .pipeline_child import start_repair_child
     from .triage import TriageInput, TriageWorkflow
     from .triage_child import triage_gates
@@ -254,6 +258,39 @@ def _splice(state: MaintenanceState, updated: Incident) -> None:
     state.incidents = [updated if i.no == updated.no else i for i in state.incidents]
 
 
+async def _decide(state: MaintenanceState, inc: Incident, verdict: str) -> None:
+    """One verdict's write-back (T031): apply_verdict is pure, the splice
+    is the durable record, and an ESCALATION notifies the operator exactly
+    once — the notify rides the transition itself, and an escalated
+    incident is terminal (never probed again), so there is no second one."""
+    updated = apply_verdict(inc, verdict, state.config)
+    _splice(state, updated)
+    if updated.state is not IncidentState.ESCALATED:
+        return
+    await workflow.execute_activity(
+        notify,
+        NotifyInput(
+            run_id=workflow.info().workflow_id,
+            pending=TaskEscalationPending(
+                key=f"maintenance:escalation:{updated.no}",
+                gate="maintenance_escalation",
+                round=updated.gate_round,
+                task_id=(
+                    updated.execution.child_id
+                    if updated.execution is not None
+                    else f"inc{updated.no}"
+                ),
+                analysis=updated.note,
+                attempts=updated.attempt,
+            ),
+            reason=NotifyReason.ESCALATE,
+            opened_at=workflow.now(),
+            now=workflow.now(),
+        ),
+        **NOTIFY_ACT,
+    )
+
+
 async def timeout_step(state: MaintenanceState, now: datetime) -> None:
     """Cancel and fail every child that has not reached its merge gate
     within ``child_timeout_hours`` (R7's bound): the cancel is the only
@@ -295,12 +332,12 @@ async def report_step(state: MaintenanceState, now: datetime) -> None:
             record.outcome = "awaiting_merge"
         elif probe.phase == "failed":
             if probe.non_retryable:
-                _splice(state, apply_verdict(inc, "config_failed", cfg))
+                await _decide(state, inc, "config_failed")
             else:
-                _splice(state, apply_verdict(inc, "failed", cfg))
+                await _decide(state, inc, "failed")
             continue
         elif probe.phase in ("cancelled", "timed_out", "terminated", "not_found"):
-            _splice(state, apply_verdict(inc, "timed_out", cfg))
+            await _decide(state, inc, "timed_out")
             continue
 
         # awaiting_merge (or completed-with-PR): the verify pass.
@@ -370,7 +407,7 @@ async def report_step(state: MaintenanceState, now: datetime) -> None:
                 "submit_gate_decision",
                 merge_reject_decision(probe.pending_merge_round, verdict),
             )
-        _splice(state, apply_verdict(inc, verdict, cfg))
+        await _decide(state, inc, verdict)
 
         if verdict != "unverifiable":
             # the attempt is decided: remove the verify worktree and ref.
