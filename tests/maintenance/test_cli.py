@@ -58,7 +58,13 @@ class _FakeClient:
 def _run(argv: list[str], client, capsys) -> int:
     import asyncio
 
-    args = _args(argv)
+    # 023b (T047): a probe argv can still exit at parse time (the
+    # mutually-exclusive group), so SystemExit is folded into the return
+    # code — the contract cares about the code, not the mechanism.
+    try:
+        args = _args(argv)
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else 2
     return asyncio.run(run_maintain(args, client))
 
 
@@ -110,9 +116,11 @@ def test_enable_refuses_a_non_git_path_exit_1(tmp_path, capsys):
     ],
 )
 def test_enable_requires_exactly_one_probe_flag_exit_2(argv, capsys):
-    with pytest.raises(SystemExit) as exc:
-        _args(argv)
-    assert exc.value.code == 2
+    # 023b (T047): the probe check moved from argparse's required group into
+    # _enable so the --execute refusals can name their own missing flag; the
+    # contract behavior is unchanged — exit 2, usage error.
+    client = _FakeClient()
+    assert _run(argv, client, capsys) == 2
 
 
 @pytest.mark.parametrize(

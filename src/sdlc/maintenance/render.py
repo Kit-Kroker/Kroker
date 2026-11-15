@@ -9,13 +9,22 @@ from .models import TERMINAL_INCIDENT_STATES, Incident, IncidentState
 
 NO_EXECUTE_LINE = "approval does NOT execute in 023a — an approved plan is recorded, nothing runs"
 
-_HEADER = f"{'INC-n':<8}  {'state':<22}  {'key':<44}  {'seen':>4}  {'eff.conf':>8}  gate"
+_HEADER = (
+    f"{'INC-n':<8}  {'state':<22}  {'key':<44}  {'seen':>4}  {'attempt':>7}  "
+    f"{'reopens':>7}  {'eff.conf':>8}  gate  child"
+)
 
 
 def _conf(incident: Incident) -> str:
     if incident.plan is None:
         return "-"
     return f"{incident.plan.effective:.2f}"
+
+
+def _child(incident: Incident) -> str:
+    if incident.execution is None:
+        return "-"
+    return incident.execution.child_id
 
 
 def _gate(incident: Incident) -> str:
@@ -54,11 +63,13 @@ def gate_context_text(incident: Incident) -> str:
 
 
 def incidents_table(incidents: list[Incident], *, include_terminal: bool = False) -> str:
-    """The `sdlc maintain incidents` table: INC-n  state  key  seen
-    eff.conf  gate. Terminal incidents only under --all (contracts/cli.md)."""
+    """The `sdlc maintain incidents` table: INC-n  state  key  seen  attempt
+    reopens  eff.conf  gate  child (023b adds attempt/reopens/child — the
+    operator finds a verified incident's merge gate by its child id).
+    Terminal incidents only under --all (contracts/cli.md)."""
     rows = [
         f"INC-{i.no:<7}  {i.state.value:<22}  {i.key:<44.44}  {i.seen_count:>4}  "
-        f"{_conf(i):>8}  {_gate(i)}"
+        f"{i.attempt:>7}  {i.reopens:>7}  {_conf(i):>8}  {_gate(i)}  {_child(i)}"
         for i in incidents
         if include_terminal or i.state not in TERMINAL_INCIDENT_STATES
     ]
