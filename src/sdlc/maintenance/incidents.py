@@ -168,6 +168,8 @@ def step(state: MaintenanceState, curr: RepoTriage) -> tuple[MaintenanceState, C
                 # previous cap): attach, do not double-open.
                 inc.last_seen_cycle = cycle
                 inc.seen_count += 1
+                if cfg.execute:
+                    inc.consecutive_seen = 1  # a NEW is a fresh sighting (R9)
                 if inc.state is IncidentState.DEFERRED:
                     inc.state = IncidentState.OPEN
                     inc.note = ""
@@ -203,6 +205,16 @@ def step(state: MaintenanceState, curr: RepoTriage) -> tuple[MaintenanceState, C
                 continue  # around but neither baselined nor incidented
             inc.last_seen_cycle = cycle
             inc.seen_count += 1
+            if cfg.execute:
+                # R9: the incident stays current with the fault, and the
+                # Execute guard (R6) reads consecutive reproduction. Both
+                # are execute-only: an execute-off loop is byte-identical
+                # to 023a.
+                cur_f = f_from_identity(cur, d.identity)
+                if cur_f is not None:
+                    inc.finding = cur_f
+                inc.commit_sha = cur.commit_sha
+                inc.consecutive_seen += 1
             if inc.state is IncidentState.DEFERRED:
                 inc.state = IncidentState.OPEN  # picked up next cycle
                 inc.note = ""
@@ -212,6 +224,14 @@ def step(state: MaintenanceState, curr: RepoTriage) -> tuple[MaintenanceState, C
             # on BOTH sides — an absence caused by not-collected arrives as
             # UNVERIFIABLE and never reaches here.
             if inc is None:
+                continue
+            if inc.state in (
+                IncidentState.EXECUTING,
+                IncidentState.VERIFYING,
+                IncidentState.VERIFIED,
+            ):
+                # 023b R8 guard: an in-flight or verified repair is Report's
+                # to close (via the ancestry check) — Detect never pre-empts.
                 continue
             inc.state = IncidentState.RESOLVED_EXTERNALLY
             inc.last_seen_cycle = cycle
@@ -231,6 +251,15 @@ def step(state: MaintenanceState, curr: RepoTriage) -> tuple[MaintenanceState, C
             streak.pop(sig, None)
             continue
         streak[sig] = streak.get(sig, 0) + 1
+        if cfg.execute:
+            # R9: a not-collected cycle for the identity's signal resets its
+            # consecutive-reproduction count -- reproduction must be
+            # CONSECUTIVE (R6), and a blind cycle breaks the chain.
+            for inc in incidents:
+                if inc.state in TERMINAL_INCIDENT_STATES or inc.finding is None:
+                    continue
+                if inc.finding.signal == sig:
+                    inc.consecutive_seen = 0
         key = f"{sig}:{esc_key}"
         if streak[sig] >= 2 and key not in by_key:
             incidents.append(
