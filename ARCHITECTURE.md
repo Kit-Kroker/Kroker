@@ -536,14 +536,21 @@ tuning.
 
 ## 7. Maintenance loop (DAPER)
 
-> ⚠️ **Status: designed, not built (P4).** `MaintenanceWorkflow` does not
-> exist —
-> `grep -rniE "MaintenanceWorkflow|DetectionReport|RepairPlan|DAPER" src/ --include=*.py`
-> returns nothing, and FR-501/502/503 are open. The section below is a
-> *design*, written in present tense; read every sentence in it as "will".
-> ROADMAP E-14 (the DAPER timer as a schedule asset) is explicitly blocked on
-> this workflow existing at all, and three external-idea candidates (A4, B2,
-> D1 in `docs/reports/external-ideas-2026-09.md`) land on it and are blocked with it.
+> ⚠️ **Status: half built (023a, landed 2026-11-15).** The loop exists and is
+> gated: `MaintenanceWorkflow` (`maint-<project>`, `src/sdlc/workflows/maintenance.py`)
+> runs baseline → Detect (the triage signal set) → Analyze/Plan (the maintainer
+> proposer, confidence floor) → confidence gate (SOFT `repair:<n>`, HARD
+> detect-escalation), bounded by nudge coalescing (R2), the per-history
+> `continue_as_new` roll-over (FR-013) and the schedule kicker
+> (`MaintenanceKickWorkflow`, E-14). Ops actions are **proposal-only, never
+> executed** (023a GATE 2 ruling). **Deliberate narrowing of Detect**: CI,
+> quarantined tasks and error budgets are *not* built — Detect today is the
+> triage signals (build probe, secrets, packages…); deploy liveness is pending
+> 023b. **Execute and Report (re-verification, incident closing) are 023b** —
+> the section's Execute/Report paragraphs below remain design, read as
+> "will". FR-501/503 record the halves; FR-502 is untouched. The three
+> external-idea candidates (A4, B2, D1 in `docs/reports/external-ideas-2026-09.md`)
+> still land on Execute/Report and stay blocked with 023b.
 
 Per-project proactive workflow: wake on timer or `nudge` signal →
 **Detect** (deterministic signal collection — CI, deploy health, quarantined
