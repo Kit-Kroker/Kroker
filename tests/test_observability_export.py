@@ -97,3 +97,47 @@ def test_report_html_renders_role_table():
     assert "architect" in html
     assert "$1.2500" in html
     assert "budget" in html.lower()
+
+
+# --- FR-304 (RED): the gates table shows the full decision record --------------
+
+
+def test_report_html_gates_table_shows_full_record():
+    """One full-field row (reject, distinguishable from revise) and one
+    pre-change row (None fields render as '-'), comments truncated at 80."""
+    from sdlc.core.models import GateOutcome
+
+    s = _summary()
+    s.gates = [
+        GateOutcomeSummary(
+            gate="merge",
+            round=2,
+            policy="hard",
+            decided_by="human",
+            approved=False,
+            outcome=GateOutcome.REJECT,
+            reviewer="maksim & co",
+            comments="not ready; " + "x" * 100,
+            decided_at=datetime(2026, 11, 15, 9, 0, tzinfo=UTC),
+        ),
+        GateOutcomeSummary(
+            gate="architecture", round=1, policy="hard", decided_by="human", approved=True
+        ),
+    ]
+    html = render_report_html(s)
+    flat = html.replace("\n", "")
+    # the header row names every FR-304 column in order
+    header = "<tr><th>gate</th><th>round</th><th>policy</th><th>decided_by</th>" \
+        "<th>reviewer</th><th>outcome</th><th>confidence</th><th>overrides</th>" \
+        "<th>decided_at</th><th>comments</th></tr>"
+    assert header in flat
+    # full-field row: escaped reviewer, the three-valued outcome, short-form
+    # timestamp, truncated comments (80 + ellipsis marker)
+    assert "maksim &amp; co" in html
+    assert "<td>reject</td>" in html
+    assert "<td>2026-11-15 09:00</td>" in html
+    assert f"not ready; {'x' * 78}…" in html
+    assert "x" * 79 not in html  # nothing past the truncation point
+    # pre-change row renders '-' for every absent FR-304 field
+    assert "<td>architecture</td><td>1</td><td>hard</td><td>human</td>" \
+        "<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>" in html

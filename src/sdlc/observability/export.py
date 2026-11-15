@@ -6,6 +6,7 @@ retro stage is `(deterministic + reflect)`, no LLM (SDLC-spec §58)."""
 
 from __future__ import annotations
 
+from datetime import datetime
 from html import escape
 
 from ..core.models import (
@@ -21,6 +22,19 @@ def render_events_jsonl(trace: list[RunEvent]) -> str:
 
 def _row(cells: list[str]) -> str:
     return "<tr>" + "".join(f"<td>{escape(c)}</td>" for c in cells) + "</tr>"
+
+
+def _stamp(d: datetime | None) -> str:
+    """FR-304: per-decision timestamp, short form for the human view."""
+    return d.strftime("%Y-%m-%d %H:%M") if d is not None else "-"
+
+
+def _cell(text: str | None, width: int = 80) -> str:
+    """A free-text cell ('-' when absent), truncated past `width` chars with
+    an ellipsis marker — comments can be long, the table must not sprawl."""
+    if not text:
+        return "-"
+    return text if len(text) <= width else text[:width] + "…"
 
 
 def render_report_html(s: RunSummary) -> str:
@@ -44,9 +58,14 @@ def render_report_html(s: RunSummary) -> str:
                 str(g.round),
                 g.policy,
                 g.decided_by,
-                "yes" if g.approved else "no",
+                g.reviewer or "-",
+                # FR-304: the three-valued outcome; '-' on pre-change records
+                # where approved is all that survived.
+                g.outcome.value if g.outcome is not None else "-",
                 "-" if g.confidence is None else f"{g.confidence:.2f}",
                 ", ".join(g.overrides) or "-",
+                _stamp(g.decided_at),
+                _cell(g.comments),
             ]
         )
         for g in s.gates
@@ -85,7 +104,8 @@ th{{background:#f3f3f3}} .meta{{color:#555}}
 <th>cost</th><th>fix_attempts</th></tr>{stage_rows}</table>
 <h2>Gates</h2>
 <table><tr><th>gate</th><th>round</th><th>policy</th><th>decided_by</th>
-<th>approved</th><th>confidence</th><th>overrides</th></tr>{gate_rows}</table>
+<th>reviewer</th><th>outcome</th><th>confidence</th><th>overrides</th>
+<th>decided_at</th><th>comments</th></tr>{gate_rows}</table>
 <h2>Clarifications</h2>
 <table><tr><th>id</th><th>question</th><th>answered_by</th></tr>{clar_rows}</table>
 <h2>Cost by role</h2>
