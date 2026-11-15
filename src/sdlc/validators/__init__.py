@@ -1,9 +1,11 @@
-"""Shared validators library (FR-205): pure checks, evidence schemas, plus
-the tree-reading activity.
+"""Shared validators library (FR-205): pure checks, evidence schemas, the
+ADR-24 verdict functions, plus the tree-reading activity.
 
 The pure functions import eagerly -- workflow code can take them from here
 or from `sdlc.validators.pure` directly -- and so do the evidence schemas
-(evidence.py, the ADR-24 handoff): plain Pydantic, nothing behind them.
+(evidence.py, the ADR-24 handoff): plain Pydantic, nothing behind them. The
+verdict functions (verdicts.py, evidence.py's first consumers) are eager
+too, same shape.
 ACTIVITIES is a lazy export (PEP 562): its home, activities.py, imports
 temporalio at top level, so fetching it only when a registration site asks
 keeps `import sdlc.validators.pure` free of temporalio (the purity pin in
@@ -39,6 +41,7 @@ from .pure import (
     task_size,
     validate_task_graph,
 )
+from .verdicts import GATE_PROVIDERS, Verdict, plan_valid
 
 if TYPE_CHECKING:
     from .activities import ACTIVITIES
@@ -48,11 +51,14 @@ __all__ = [
     "AssertionEvidence",
     "Coverage",
     "Finding",
+    "GATE_PROVIDERS",
+    "Verdict",
     "covers_all",
     "dag_acyclic",
     "deps_resolve",
     "ids_unique",
     "path_like_tokens",
+    "plan_valid",
     "task_size",
     "validate_task_graph",
 ]
