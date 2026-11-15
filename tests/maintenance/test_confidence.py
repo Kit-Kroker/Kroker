@@ -170,3 +170,23 @@ def test_garbage_penalty_inputs_never_lift_the_floor_above_its_ceiling(reopens, 
         assert v == pytest.approx(
             confidence_floor(finding, reproduced=True, reopens=0, n_actions=1)
         )
+
+
+# --------------------------------------------------------------------------- #
+# T028 (023b): the human-only reopen gate.
+#
+# PRE-GREEN REGRESSION PIN, not RED: confidence_floor already prices
+# PENALTY_PER_REOPEN (0.2 per reopen), so a reopened mechanical plan floors at
+# 0.95 - 0.2 = 0.75, which is below the default threshold 0.8. The 023a
+# parametrized test above already pins this row (reopens=1 -> 0.75). This test
+# states the B-FR-009 consequence, so a change to the table cannot quietly let a
+# once-reopened plan clear policy.
+# --------------------------------------------------------------------------- #
+
+
+def test_reopened_mechanical_floor_is_human_gated():
+    """A mechanical plan that has been reopened once can never clear policy at
+    the default threshold 0.8 (B-FR-009, R11)."""
+    floor = confidence_floor(_mechanical(), reproduced=True, reopens=1, n_actions=1)
+    assert floor == pytest.approx(0.75)
+    assert floor < 0.8

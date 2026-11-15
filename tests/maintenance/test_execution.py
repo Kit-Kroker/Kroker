@@ -580,3 +580,133 @@ def test_conflicted_overrides_a_not_collected_shape_to_conflicted():
 
     base_t, verify_t, identity = _triage_pair(base=True, verify=False, verify_nc=("secrets",))
     assert classify_verification(base_t, verify_t, identity, True) == "conflicted"
+
+
+# =========================================================================== #
+# T028 (023b, RED): the verdict -> incident transition (apply_verdict).
+#
+# Subject: ``apply_verdict(incident, verdict, cfg) -> Incident`` in
+# ``sdlc.maintenance.execution`` (B-FR-009, R11; data-model transitions).
+# SHAPE CHOSEN: pure. It returns a NEW incident and never mutates the input.
+# ``verdict`` is either a VerificationResult.verdict or an attempt outcome
+# (failed / timed_out / empty_diff / config_failed).
+#
+# Each test imports ``apply_verdict`` inside its body, so before T029 each case
+# fails per test on ImportError.
+# =========================================================================== #
+
+DIRTY_VERDICTS = ["persisted", "new", "conflicted", "failed", "timed_out", "empty_diff"]
+# The ExecutionRecord.outcome recorded for each dirty verdict (data-model, T026 choices).
+DIRTY_OUTCOME = {
+    "persisted": "rejected_by_loop",
+    "new": "rejected_by_loop",
+    "conflicted": "rejected_by_loop",
+    "failed": "failed",
+    "timed_out": "timed_out",
+    "empty_diff": "empty_diff",
+}
+
+
+def _live_incident(state: str, *, reopens: int = 0):
+    """An in-flight incident with a plan and one running attempt, for verdicts to act on."""
+    from datetime import UTC, datetime
+
+    from sdlc.maintenance.models import ExecutionRecord, IncidentState
+
+    inc = _incident(FixClass.MECHANICAL, reopens=reopens)
+    record = ExecutionRecord(
+        attempt=1,
+        child_id="maint-demo-abcd1234-inc1-a1",
+        base_sha="a" * 40,
+        started_at=datetime(2026, 11, 15, tzinfo=UTC),
+        outcome="awaiting_merge",
+        detail="parked at merge",
+    )
+    return inc.model_copy(
+        update={
+            "state": IncidentState(state),
+            "plan": _plan([_code()], floor=0.95),
+            "execution": record,
+            "attempt": 1,
+        }
+    )
+
+
+@pytest.mark.parametrize("verdict", DIRTY_VERDICTS)
+def test_dirty_verdict_with_budget_left_reopens_and_clears_the_plan(verdict):
+    from sdlc.maintenance.execution import apply_verdict
+
+    out = apply_verdict(_live_incident("verifying", reopens=0), verdict, _cfg())
+    assert out.state.value == "reopened"
+    assert out.reopens == 1
+    assert out.plan is None
+
+
+def test_dirty_again_with_one_reopen_reopens_a_second_time():
+    from sdlc.maintenance.execution import apply_verdict
+
+    out = apply_verdict(_live_incident("verifying", reopens=1), "persisted", _cfg())
+    assert out.state.value == "reopened"
+    assert out.reopens == 2
+
+
+@pytest.mark.parametrize("verdict", DIRTY_VERDICTS)
+def test_dirty_with_the_reopen_budget_spent_escalates(verdict):
+    from sdlc.maintenance.execution import apply_verdict
+
+    out = apply_verdict(_live_incident("verifying", reopens=2), verdict, _cfg())
+    assert out.state.value == "escalated"
+    assert out.reopens == 2, "no further reopen once the bound is reached"
+
+
+def test_config_failed_escalates_on_attempt_one_without_a_reopen():
+    from sdlc.maintenance.execution import apply_verdict
+
+    out = apply_verdict(_live_incident("executing", reopens=0), "config_failed", _cfg())
+    assert out.state.value == "escalated"
+    assert out.reopens == 0
+    assert out.attempt == 1
+
+
+def test_resolved_verifies_and_keeps_the_reopen_count_and_the_plan():
+    from sdlc.maintenance.execution import apply_verdict
+
+    out = apply_verdict(_live_incident("verifying", reopens=1), "resolved", _cfg())
+    assert out.state.value == "verified"
+    assert out.reopens == 1
+    assert out.plan is not None
+
+
+def test_unverifiable_leaves_the_state_unchanged():
+    from sdlc.maintenance.execution import apply_verdict
+
+    before = _live_incident("verifying", reopens=0)
+    out = apply_verdict(before, "unverifiable", _cfg())
+    assert out.state.value == "verifying"
+    assert out.reopens == 0
+
+
+def test_absent_at_base_resolves_externally():
+    """data-model: verifying + absent_at_base -> resolved_externally."""
+    from sdlc.maintenance.execution import apply_verdict
+
+    out = apply_verdict(_live_incident("verifying", reopens=0), "absent_at_base", _cfg())
+    assert out.state.value == "resolved_externally"
+
+
+@pytest.mark.parametrize("verdict", DIRTY_VERDICTS)
+def test_the_attempt_outcome_is_recorded_on_the_execution(verdict):
+    from sdlc.maintenance.execution import apply_verdict
+
+    out = apply_verdict(_live_incident("verifying", reopens=0), verdict, _cfg())
+    assert out.execution is not None
+    assert out.execution.outcome == DIRTY_OUTCOME[verdict]
+
+
+def test_apply_verdict_is_pure_and_never_mutates_the_input():
+    from sdlc.maintenance.execution import apply_verdict
+
+    before = _live_incident("verifying", reopens=0)
+    snapshot = before.model_dump_json()
+    apply_verdict(before, "persisted", _cfg())
+    assert before.model_dump_json() == snapshot
