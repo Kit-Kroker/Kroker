@@ -46,7 +46,13 @@ with workflow.unsafe.imports_passed_through():
     from ..maintenance.render import gate_context_text
     from ..pending import GateContext
     from .gates import GateHost, GateWithdrawnError
-    from .maintenance_execute import closure_step, execute_step, report_step, timeout_step
+    from .maintenance_execute import (
+        closure_step,
+        execute_step,
+        report_step,
+        retain_step,
+        timeout_step,
+    )
     from .tidyup import _default_fix_cfg
     from .triage import TriageInput, TriageWorkflow
     from .triage_child import triage_gates
@@ -222,6 +228,11 @@ class MaintenanceWorkflow(GateHost):
             # verify the ones still standing.
             await timeout_step(self._state, workflow.now())
             await report_step(self._state, workflow.now())
+            # 023b Retention (B-FR-012, R13), last in the cycle so every
+            # terminal entry THIS cycle made — verdicts, closure, gates —
+            # is retained in the same cycle. A state check: terminal
+            # incidents with retained False are retained once.
+            await retain_step(self._state)
 
     def _reprice(self, inc: Incident) -> None:
         """Recompute floor/effective from current facts; if the recomputed

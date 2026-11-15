@@ -69,7 +69,10 @@ with workflow.unsafe.imports_passed_through():
         MaintenanceState,
         VerificationResult,
     )
+    from ..maintenance.render import render_retention, retention_kind
     from ..measurement import CollectionState
+    from ..memory.activities import RetainInput, retain
+    from ..memory.models import RetainItem
     from ..notify.activities import notify
     from ..notify.contract import NotifyInput, NotifyReason
     from ..pending import StageGatePending, TaskEscalationPending
@@ -82,7 +85,9 @@ with workflow.unsafe.imports_passed_through():
         remove_verification_tree,
     )
     from .gates import NOTIFY_ACT
+    from .memory_host import MEM_ACT
     from .pipeline_child import start_repair_child
+    from .tidyup import _default_fix_cfg
     from .triage import TriageInput, TriageWorkflow
     from .triage_child import triage_gates
 
@@ -367,6 +372,44 @@ async def closure_step(state: MaintenanceState, triage: RepoTriage) -> None:
 
 def _signal_by(triage: RepoTriage, signal: str) -> SignalResult | None:
     return next((s for s in triage.signals if s.signal == signal), None)
+
+
+async def retain_step(state: MaintenanceState) -> None:
+    """One scrubbed memory record per terminal incident (023b T043,
+    B-FR-012, R13). A state check, like closure: every terminal incident
+    with ``retained`` False is retained once — the flag is set in the
+    same step as the activity, only on success, so a failed retention
+    retries next cycle (deduplicated by the backend's text hash) and a
+    failed backend can never fail the cycle. Memory settings come from
+    ``_default_fix_cfg().memory`` (R13: the same settings the repair
+    children run with; no new configuration surface); the retain
+    activity runs under ``MEM_ACT`` inside the memory host's swallow
+    pattern. Text and kind come from the pure renderer (T041)."""
+    memory = _default_fix_cfg().memory
+    if not memory.enabled:
+        return
+    for inc in sorted(state.incidents, key=lambda i: i.no):
+        kind = retention_kind(inc)
+        if kind is None or inc.retained:
+            continue
+        try:
+            await workflow.execute_activity(
+                retain,
+                RetainInput(
+                    item=RetainItem(
+                        kind=kind,
+                        bank=memory.project_bank,
+                        text=render_retention(inc),
+                        metadata={"incident_no": str(inc.no), "key": inc.key},
+                    ),
+                    backend=memory.backend,
+                    base_url=memory.base_url,
+                ),
+                **MEM_ACT,
+            )
+        except Exception:  # noqa: BLE001 — the swallow (R13): an outage
+            continue  # never fails the cycle; the flag stays False
+        inc.retained = True
 
 
 async def timeout_step(state: MaintenanceState, now: datetime) -> None:
