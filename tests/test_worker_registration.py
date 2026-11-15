@@ -68,7 +68,8 @@ def test_worker_registers_research_verify_activity():
 
 def test_worker_registers_the_post_020_workflow_set():
     """020 T025 (plan T050, FR-003): FeatureWorkflow is deleted with its
-    registration; the worker's workflow set is the remaining eight."""
+    registration. 023a T019/T029 add the maintenance pair — the loop and
+    its schedule kicker — so the set is ten."""
     import ast
     import inspect
 
@@ -91,4 +92,6 @@ def test_worker_registers_the_post_020_workflow_set():
         "TidyUpWorkflow",
         "AssessmentWorkflow",
         "CrewTaskWorkflow",
+        "MaintenanceWorkflow",
+        "MaintenanceKickWorkflow",
     }
