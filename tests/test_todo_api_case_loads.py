@@ -12,7 +12,7 @@ def test_todo_api_case_file_exists_and_loads():
     spec = load_case_spec(str(CASE))
     assert spec.case_id == "todo-api-greenfield"
     cells = expand_matrix(spec)
-    assert len(cells) == 1  # opencode × 1 model
+    assert len(cells) == 2  # opencode × 2 models (glm-5.3 + flash; 5.2 dropped 2026-10-26)
 
 
 def test_todo_api_rubric_files_exist():

@@ -51,10 +51,15 @@ def test_committed_cases_are_not_quarantined(case_dir):
 
 @pytest.mark.parametrize("case_dir", DEVEVAL, ids=lambda p: p.name)
 def test_imported_cases_state_role_and_visibility(case_dir):
-    from sdlc.benchmarks.models import CaseRole, CaseVisibility
+    from sdlc.benchmarks.models import CaseVisibility
 
     spec = load_case_spec(str(case_dir / "case.yaml"))
-    assert spec.role == CaseRole.CORPUS
+    # Role is screening state, not a constant: the R1 screen legitimately
+    # parked hone/stocktrends (saturated/degenerate) and pso (lost ×2 at
+    # plan-validation) — the per-case role expectations live where the
+    # screening decision is recorded (test_benchmark_corpus, T020 role
+    # moves). Here we assert only the import invariant: imported deveval
+    # cases are PUBLIC.
     assert spec.visibility == CaseVisibility.PUBLIC
 
 

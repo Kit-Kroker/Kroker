@@ -19,6 +19,24 @@
       "edges": 22
     },
     {
+      "name": "default-constitution",
+      "sha": "b8bfa35dba1a0958dc90391b3dae28523c3b66ff687988b7c6490c016de06a46",
+      "description": null,
+      "when": null,
+      "nodes": 13,
+      "gates": 2,
+      "edges": 25
+    },
+    {
+      "name": "default-requirements",
+      "sha": "b133de903d2e682456b70273215d58427933a61852a1c79699153239d8d0b0fb",
+      "description": null,
+      "when": null,
+      "nodes": 13,
+      "gates": 2,
+      "edges": 25
+    },
+    {
       "name": "seeded",
       "sha": "c1bbef2d33379ca4252d8971ed4b65934dd54e7d4c306a887698df0f0520c5ab",
       "description": null,
@@ -32,7 +50,7 @@
     {
       "name": "validate_run_roles",
       "state": "pass",
-      "text": "pass: dev zai-coding-plan/glm-5.3, reviewer zai:glm-5.3 \u2014 families differ, the adversary is its own model (a shared model_id would read same weights)"
+      "text": "pass: dev zai-coding-plan/glm-5.3, reviewer zai:glm-5.3-flash \u2014 families differ, the adversary is its own model (a shared model_id would read same weights)"
     },
     {
       "name": "check_node_types",
@@ -52,7 +70,7 @@
       "rows": [
         {
           "k": "adversary",
-          "v": "api \u00d7 zai:glm-5.3-flash"
+          "v": "api \u00d7 anthropic:claude-sonnet-5"
         },
         {
           "k": "analyst",
@@ -67,8 +85,12 @@
           "v": "api \u00d7 zai:glm-5.3"
         },
         {
-          "k": "deep_review",
+          "k": "constitution",
           "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "deep_review",
+          "v": "api \u00d7 zai:glm-5.3-flash"
         },
         {
           "k": "dev",
@@ -91,16 +113,24 @@
           "v": "api \u00d7 zai:glm-5.3"
         },
         {
-          "k": "merge_verdict",
+          "k": "maintainer",
           "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "merge_verdict",
+          "v": "api \u00d7 zai:glm-5.3-flash"
         },
         {
           "k": "planner",
           "v": "api \u00d7 zai:glm-5.3"
         },
         {
-          "k": "qa",
+          "k": "product",
           "v": "api \u00d7 zai:glm-5.3"
+        },
+        {
+          "k": "qa",
+          "v": "api \u00d7 zai:glm-5.3-flash"
         },
         {
           "k": "research",
@@ -108,7 +138,7 @@
         },
         {
           "k": "reviewer",
-          "v": "api \u00d7 zai:glm-5.3"
+          "v": "api \u00d7 zai:glm-5.3-flash"
         },
         {
           "k": "risk",
@@ -116,7 +146,7 @@
         },
         {
           "k": "test",
-          "v": "opencode \u00d7 zai-coding-plan/glm-5.2"
+          "v": "opencode \u00d7 zai-coding-plan/glm-5.3"
         }
       ]
     },
@@ -142,7 +172,7 @@
         },
         {
           "k": "merge_verdict",
-          "v": "zai:glm-5.3"
+          "v": "zai:glm-5.3-flash"
         },
         {
           "k": "planner",
@@ -150,11 +180,11 @@
         },
         {
           "k": "qa",
-          "v": "zai:glm-5.3"
+          "v": "zai:glm-5.3-flash"
         },
         {
           "k": "reviewer",
-          "v": "zai:glm-5.3"
+          "v": "zai:glm-5.3-flash"
         }
       ]
     },
@@ -231,12 +261,8 @@
       "note": "the harness arms a default run executes on, and the roles each carries",
       "rows": [
         {
-          "k": "opencode \u00d7 zai-coding-plan/glm-5.2",
-          "v": "test"
-        },
-        {
           "k": "opencode \u00d7 zai-coding-plan/glm-5.3",
-          "v": "dev, devops"
+          "v": "dev, devops, test"
         }
       ]
     }
