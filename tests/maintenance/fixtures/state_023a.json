@@ -1,0 +1,323 @@
+{
+  "config": {
+    "project": "demo",
+    "repo_dir": "/srv/repos/demo",
+    "default_branch": "main",
+    "build_probe": true,
+    "ack_unattended_build_probe": true,
+    "advisory_source": "none",
+    "threshold": 0.8,
+    "gate_timeout_hours": 48,
+    "max_plan_attempts": 2,
+    "max_new_incidents_per_cycle": 10,
+    "max_cycles_per_history": 50
+  },
+  "cycle": 4,
+  "baseline": {
+    "identities": [
+      "secrets:env-file:.env"
+    ],
+    "signal_versions": {
+      "build_probe": 1,
+      "dependencies": 2,
+      "secrets": 3
+    },
+    "recorded_cycle": 1,
+    "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "prev": {
+    "repo_dir": "/fixture/repo",
+    "commit_sha": "dddddddddddddddddddddddddddddddddddddddd",
+    "toolchain": "python",
+    "readiness": {
+      "buildable": {
+        "state": "measured",
+        "value": 1.0,
+        "reason": ""
+      },
+      "runnable": {
+        "state": "measured",
+        "value": 1.0,
+        "reason": ""
+      },
+      "tests_present": {
+        "state": "measured",
+        "value": 1.0,
+        "reason": ""
+      },
+      "structure_discernible": {
+        "state": "measured",
+        "value": 1.0,
+        "reason": ""
+      },
+      "verdict": "ready"
+    },
+    "override": null,
+    "signals": [
+      {
+        "signal": "build_probe",
+        "version": 1,
+        "collected": {
+          "state": "measured",
+          "value": 0.0,
+          "reason": ""
+        },
+        "findings": [],
+        "metrics": {}
+      },
+      {
+        "signal": "dependencies",
+        "version": 2,
+        "collected": {
+          "state": "measured",
+          "value": 0.0,
+          "reason": ""
+        },
+        "findings": [],
+        "metrics": {}
+      },
+      {
+        "signal": "secrets",
+        "version": 3,
+        "collected": {
+          "state": "measured",
+          "value": 2.0,
+          "reason": ""
+        },
+        "findings": [
+          {
+            "signal": "secrets",
+            "rule": "secret_committed",
+            "severity": "critical",
+            "detail": ".env is committed. Every value in it must be treated as disclosed and rotated.",
+            "path": ".env",
+            "line": null,
+            "evidence": "",
+            "fix_class": "judgement",
+            "key": ""
+          },
+          {
+            "signal": "secrets",
+            "rule": "env_file_tracked",
+            "severity": "high",
+            "detail": ".env is tracked; add it to .gitignore and remove it from the index.",
+            "path": ".gitignore",
+            "line": null,
+            "evidence": "",
+            "fix_class": "mechanical",
+            "key": ""
+          }
+        ],
+        "metrics": {}
+      }
+    ]
+  },
+  "incidents": [
+    {
+      "no": 1,
+      "key": "build_probe:build_failed::",
+      "kind": "finding",
+      "finding": {
+        "signal": "build_probe",
+        "rule": "build_failed",
+        "severity": "critical",
+        "detail": "Build failed (exit 1). fixture: syntax error.",
+        "path": "",
+        "line": null,
+        "evidence": "",
+        "fix_class": "judgement",
+        "key": ""
+      },
+      "commit_sha": "cccccccccccccccccccccccccccccccccccccccc",
+      "first_seen_cycle": 1,
+      "last_seen_cycle": 3,
+      "seen_count": 1,
+      "state": "open",
+      "plan": null,
+      "plan_attempts": 0,
+      "decision": null,
+      "note": ""
+    },
+    {
+      "no": 2,
+      "key": "secrets:env-file:.env",
+      "kind": "finding",
+      "finding": {
+        "signal": "secrets",
+        "rule": "secret_committed",
+        "severity": "critical",
+        "detail": ".env is committed. Every value in it must be treated as disclosed and rotated.",
+        "path": ".env",
+        "line": null,
+        "evidence": "",
+        "fix_class": "judgement",
+        "key": ""
+      },
+      "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "first_seen_cycle": 1,
+      "last_seen_cycle": 3,
+      "seen_count": 2,
+      "state": "awaiting_decision",
+      "plan": {
+        "analysis": "The .env file is tracked and holds a live token.",
+        "actions": [
+          {
+            "kind": "code_fix",
+            "summary": "untrack .env",
+            "target_paths": [
+              ".env"
+            ],
+            "ops_action": null
+          }
+        ],
+        "self_confidence": 0.9,
+        "floor": 0.6,
+        "effective": 0.6,
+        "author_model": "claude-sonnet-5-5"
+      },
+      "plan_attempts": 0,
+      "decision": {
+        "gate": "repair:1",
+        "round": 1,
+        "outcome": "approve",
+        "decided_by": "policy",
+        "reviewer": null,
+        "comments": "mechanical plan above the floor (023a R9)",
+        "guidance": null,
+        "thaw_tests": false,
+        "decided_at": null
+      },
+      "note": ""
+    },
+    {
+      "no": 3,
+      "key": "build_probe:not_collected::",
+      "kind": "detect_escalation",
+      "finding": null,
+      "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "first_seen_cycle": 1,
+      "last_seen_cycle": 3,
+      "seen_count": 2,
+      "state": "deferred",
+      "plan": null,
+      "plan_attempts": 0,
+      "decision": null,
+      "note": "not collected twice"
+    },
+    {
+      "no": 4,
+      "key": "secrets:env-file:.env",
+      "kind": "finding",
+      "finding": {
+        "signal": "secrets",
+        "rule": "env_file_tracked",
+        "severity": "high",
+        "detail": ".env is tracked; add it to .gitignore and remove it from the index.",
+        "path": ".gitignore",
+        "line": null,
+        "evidence": "",
+        "fix_class": "mechanical",
+        "key": ""
+      },
+      "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "first_seen_cycle": 1,
+      "last_seen_cycle": 3,
+      "seen_count": 2,
+      "state": "approved_not_executed",
+      "plan": null,
+      "plan_attempts": 0,
+      "decision": null,
+      "note": "approved with execute off"
+    },
+    {
+      "no": 5,
+      "key": "secrets:aws-access-key-id:config/settings.ini",
+      "kind": "finding",
+      "finding": {
+        "signal": "secrets",
+        "rule": "aws_access_key_id",
+        "severity": "critical",
+        "detail": "AWS access key id committed to the repository. Rotate the credential; deleting the file does not revoke it.",
+        "path": "config/settings.ini",
+        "line": 2,
+        "evidence": "aws_access_key_id = AKIAIOSFODNN7EXAMPLE",
+        "fix_class": "judgement",
+        "key": "d4a3a2b1"
+      },
+      "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "first_seen_cycle": 1,
+      "last_seen_cycle": 3,
+      "seen_count": 2,
+      "state": "rejected",
+      "plan": null,
+      "plan_attempts": 0,
+      "decision": null,
+      "note": "human rejected"
+    },
+    {
+      "no": 6,
+      "key": "build_probe:build_failed::",
+      "kind": "finding",
+      "finding": null,
+      "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "first_seen_cycle": 1,
+      "last_seen_cycle": 3,
+      "seen_count": 2,
+      "state": "timed_out",
+      "plan": null,
+      "plan_attempts": 0,
+      "decision": null,
+      "note": "gate timed out"
+    },
+    {
+      "no": 7,
+      "key": "secrets:env-file:.env",
+      "kind": "finding",
+      "finding": null,
+      "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "first_seen_cycle": 1,
+      "last_seen_cycle": 3,
+      "seen_count": 2,
+      "state": "resolved_externally",
+      "plan": null,
+      "plan_attempts": 0,
+      "decision": null,
+      "note": "fixed on the default branch by hand"
+    },
+    {
+      "no": 8,
+      "key": "secrets:aws-access-key-id:config/settings.ini",
+      "kind": "finding",
+      "finding": null,
+      "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "first_seen_cycle": 1,
+      "last_seen_cycle": 3,
+      "seen_count": 2,
+      "state": "escalated",
+      "plan": null,
+      "plan_attempts": 0,
+      "decision": null,
+      "note": "two plan attempts failed"
+    },
+    {
+      "no": 9,
+      "key": "build_probe:build_failed::",
+      "kind": "finding",
+      "finding": null,
+      "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "first_seen_cycle": 1,
+      "last_seen_cycle": 3,
+      "seen_count": 2,
+      "state": "withdrawn",
+      "plan": null,
+      "plan_attempts": 0,
+      "decision": null,
+      "note": "project disabled"
+    }
+  ],
+  "not_collected_streak": {
+    "dependencies": 2
+  },
+  "next_incident_no": 10,
+  "nudged": false
+}
