@@ -41,9 +41,15 @@ def _two_runs(tmp_path: Path) -> Path:
         "run-a",
         [
             {
-                "gate": "merge", "round": 1, "policy": "hard", "decided_by": "human",
-                "approved": True, "outcome": "approve", "reviewer": "maksim",
-                "comments": "ok", "decided_at": "2026-11-15T09:10:00+00:00",
+                "gate": "merge",
+                "round": 1,
+                "policy": "hard",
+                "decided_by": "human",
+                "approved": True,
+                "outcome": "approve",
+                "reviewer": "maksim",
+                "comments": "ok",
+                "decided_at": "2026-11-15T09:10:00+00:00",
             }
         ],
     )
@@ -52,8 +58,12 @@ def _two_runs(tmp_path: Path) -> Path:
         "run-b",
         [
             {
-                "gate": "deploy", "round": 1, "policy": "hard", "decided_by": "timeout",
-                "approved": False, "outcome": "reject",
+                "gate": "deploy",
+                "round": 1,
+                "policy": "hard",
+                "decided_by": "timeout",
+                "approved": False,
+                "outcome": "reject",
                 "decided_at": "2026-11-15T09:30:00+00:00",
             }
         ],
@@ -69,12 +79,27 @@ def _run_main(capsys, monkeypatch, *argv: str) -> str:
 
 def test_parser_accepts_decisions_with_its_flags():
     args = build_parser().parse_args(
-        ["decisions", "--run", "r1", "--gate", "merge", "--decided-by", "human",
-         "--limit", "5", "--exports", "/tmp/x"]
+        [
+            "decisions",
+            "--run",
+            "r1",
+            "--gate",
+            "merge",
+            "--decided-by",
+            "human",
+            "--limit",
+            "5",
+            "--exports",
+            "/tmp/x",
+        ]
     )
     assert args.cmd == "decisions"
     assert (args.run, args.gate, args.decided_by, args.limit, args.exports) == (
-        "r1", "merge", "human", 5, "/tmp/x"
+        "r1",
+        "merge",
+        "human",
+        5,
+        "/tmp/x",
     )
 
 
@@ -91,7 +116,9 @@ def test_decisions_prints_the_log_over_fixture_exports(capsys, monkeypatch, tmp_
 
 
 def test_decided_by_filter_narrows_the_log(capsys, monkeypatch, tmp_path):
-    out = _run_main(capsys, monkeypatch, "--exports", str(_two_runs(tmp_path)), "--decided-by", "human")
+    out = _run_main(
+        capsys, monkeypatch, "--exports", str(_two_runs(tmp_path)), "--decided-by", "human"
+    )
     assert "merge" in out
     assert "deploy" not in out
 

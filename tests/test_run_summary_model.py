@@ -174,4 +174,3 @@ def test_gate_outcome_summary_round_trips_full_fields():
         decided_at=datetime(2026, 11, 15, 10, 0, tzinfo=UTC),
     )
     assert GateOutcomeSummary.model_validate_json(g.model_dump_json()) == g
-

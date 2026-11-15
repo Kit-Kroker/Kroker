@@ -127,9 +127,11 @@ def test_report_html_gates_table_shows_full_record():
     html = render_report_html(s)
     flat = html.replace("\n", "")
     # the header row names every FR-304 column in order
-    header = "<tr><th>gate</th><th>round</th><th>policy</th><th>decided_by</th>" \
-        "<th>reviewer</th><th>outcome</th><th>confidence</th><th>overrides</th>" \
+    header = (
+        "<tr><th>gate</th><th>round</th><th>policy</th><th>decided_by</th>"
+        "<th>reviewer</th><th>outcome</th><th>confidence</th><th>overrides</th>"
         "<th>decided_at</th><th>comments</th></tr>"
+    )
     assert header in flat
     # full-field row: escaped reviewer, the three-valued outcome, short-form
     # timestamp, truncated comments (80 + ellipsis marker)
@@ -139,5 +141,7 @@ def test_report_html_gates_table_shows_full_record():
     assert f"not ready; {'x' * 69}…" in html  # 11-char prefix + 69 = the 80 cut
     assert "x" * 79 not in html  # nothing past the truncation point
     # pre-change row renders '-' for every absent FR-304 field
-    assert "<td>architecture</td><td>1</td><td>hard</td><td>human</td>" \
+    assert (
+        "<td>architecture</td><td>1</td><td>hard</td><td>human</td>"
         "<td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>" in html
+    )

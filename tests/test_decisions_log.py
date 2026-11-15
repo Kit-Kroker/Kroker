@@ -43,16 +43,45 @@ def _write_run(root: Path, run_id: str, content: str) -> None:
 
 
 TWO_RUNS = [
-    ("run-a", _summary_json("run-a", [
-        _gate_row("merge", outcome="approve", reviewer="maksim",
-                  comments="ok", decided_at="2026-11-15T09:10:00+00:00"),
-    ], title="Alpha", project_key="kroker")),
-    ("run-b", _summary_json("run-b", [
-        _gate_row("architecture", outcome="revise", decided_by="policy",
-                  decided_at="2026-11-15T09:20:00+00:00"),
-        _gate_row("deploy", outcome="reject", decided_by="timeout",
-                  decided_at="2026-11-15T09:30:00+00:00"),
-    ], title="Beta", project_key="kroker")),
+    (
+        "run-a",
+        _summary_json(
+            "run-a",
+            [
+                _gate_row(
+                    "merge",
+                    outcome="approve",
+                    reviewer="maksim",
+                    comments="ok",
+                    decided_at="2026-11-15T09:10:00+00:00",
+                ),
+            ],
+            title="Alpha",
+            project_key="kroker",
+        ),
+    ),
+    (
+        "run-b",
+        _summary_json(
+            "run-b",
+            [
+                _gate_row(
+                    "architecture",
+                    outcome="revise",
+                    decided_by="policy",
+                    decided_at="2026-11-15T09:20:00+00:00",
+                ),
+                _gate_row(
+                    "deploy",
+                    outcome="reject",
+                    decided_by="timeout",
+                    decided_at="2026-11-15T09:30:00+00:00",
+                ),
+            ],
+            title="Beta",
+            project_key="kroker",
+        ),
+    ),
 ]
 
 
@@ -102,9 +131,10 @@ def test_malformed_summary_is_skipped(tmp_path):
 
 def test_old_style_summary_yields_rows_with_none_fields(tmp_path):
     """A pre-FR-304 summary.json: gates rows carry none of the new keys."""
-    content = _summary_json("run-old", [
-        {"gate": "merge", "round": 1, "policy": "soft", "decided_by": "human", "approved": True}
-    ])
+    content = _summary_json(
+        "run-old",
+        [{"gate": "merge", "round": 1, "policy": "soft", "decided_by": "human", "approved": True}],
+    )
     _write_run(tmp_path, "run-old", content)
     (row,) = decisions_from_exports(tmp_path)
     assert row.outcome is None and row.comments is None
@@ -124,9 +154,17 @@ def test_render_is_deterministic_table_with_empty_state(tmp_path):
     # non-empty render: header + one line per row, stable across calls
     sample = [
         DecisionLogRow(
-            run_id="run-a", title="Alpha", project_key="kroker", gate="merge", round=1,
-            policy="hard", decided_by="human", outcome=GateOutcome.APPROVE, reviewer="maksim",
-            comments="ok", decided_at=datetime(2026, 11, 15, 9, 10, tzinfo=UTC),
+            run_id="run-a",
+            title="Alpha",
+            project_key="kroker",
+            gate="merge",
+            round=1,
+            policy="hard",
+            decided_by="human",
+            outcome=GateOutcome.APPROVE,
+            reviewer="maksim",
+            comments="ok",
+            decided_at=datetime(2026, 11, 15, 9, 10, tzinfo=UTC),
         )
     ]
     first, second = render_decisions(sample), render_decisions(sample)

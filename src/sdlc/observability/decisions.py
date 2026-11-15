@@ -17,6 +17,7 @@ the exports.
 
 from __future__ import annotations
 
+import argparse
 import os
 from collections.abc import Sequence
 from datetime import datetime
@@ -148,8 +149,6 @@ def add_decisions_parser(sub) -> None:
     """`sdlc decisions` — the FR-304 read surface. Package-local, like
     calibration/capability/dispositions, because cli.py sits near the
     1000-line ceiling."""
-    import argparse
-
     d = sub.add_parser("decisions")
     d.add_argument("--run", default=None, help="filter: run id (exact match)")
     d.add_argument("--gate", default=None, help="filter: gate name (exact match)")

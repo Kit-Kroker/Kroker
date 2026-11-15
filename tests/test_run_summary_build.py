@@ -339,7 +339,11 @@ def test_gate_decided_full_fields_reach_summary():
         _ev(1, RunEventKind.RUN_FINISHED),
     ]
     s = build_run_summary(
-        run_id="r", mode="greenfield", outcome="rejected", trace=trace, memory_enabled=False,
+        run_id="r",
+        mode="greenfield",
+        outcome="rejected",
+        trace=trace,
+        memory_enabled=False,
         memory_watermark=None,
     )
     g = s.gates[0]
@@ -381,7 +385,11 @@ def test_gate_dedup_enriches_instead_of_replacing():
         _ev(2, RunEventKind.RUN_FINISHED),
     ]
     s = build_run_summary(
-        run_id="r", mode="greenfield", outcome="deployed", trace=trace, memory_enabled=False,
+        run_id="r",
+        mode="greenfield",
+        outcome="deployed",
+        trace=trace,
+        memory_enabled=False,
         memory_watermark=None,
     )
     g = s.gates[0]
@@ -406,7 +414,11 @@ def test_pre_change_events_parse_to_none_fields():
         _ev(1, RunEventKind.RUN_FINISHED),
     ]
     s = build_run_summary(
-        run_id="r", mode="greenfield", outcome="deployed", trace=trace, memory_enabled=False,
+        run_id="r",
+        mode="greenfield",
+        outcome="deployed",
+        trace=trace,
+        memory_enabled=False,
         memory_watermark=None,
     )
     g = s.gates[0]
