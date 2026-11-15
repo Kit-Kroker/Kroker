@@ -20,7 +20,7 @@ file carries only what is true *here*.
 - `ACTIVITIES = []`.
 - Rule 3 passthrough set: `core/models.py`, `workflows/models.py`, `architecture`, `clarify`, `constitution`, `requirements`.
 - Memoization key incorporates prompt salt via `prompt_digest(cfg)`; the cache key itself concatenates `constitution_digest` and `requirements_doc.digest` under the omitted-while-`""` rule (PLAN-1.7) — a flag-off run keys byte-identically to a run without those artifacts.
-- The graph's `plan_check` node owns the halt family (PLAN-1.8, order is contract) and the post-pass board sync; this slice schedules no validation of its own.
+- The graph's `plan_check` node owns the ordered check family (PLAN-1.8, order is contract; FR-301: failures revise the planner before `gate.plan`, halting only on an exhausted loop or a pre-FR-301 pinned graph) and the post-pass board sync (on reordered graphs the sync waits for the gate's publish); this slice schedules no validation of its own.
 - Lazy exports in `__init__.py` break circular imports with benchmarks models.
 
 ## State

@@ -22,7 +22,9 @@ from tests.graph.fixtures.registries import roles
 # Pinned on purpose (E-72 identity discipline): FR-112 adds a SEPARATE graph
 # and must not re-identify the default one. If this fails, default.graph.yaml
 # changed -- a schema decision, not a test to update blindly.
-DEFAULT_GRAPH_SHA = "fec96d09f7813dfb48597f6f6ab52c0f29b5440e6efe359d7bb90fe240ab4684"
+# Re-pinned for FR-301 Task 3 (deliberate): planner -> plan_check (ok) ->
+# gate.plan, plan_check.revise -> planner.guidance.
+DEFAULT_GRAPH_SHA = "6ab5abec7bfa708247c6bcdc57d8183996f9e4200c8e3384a86affc474778a7e"
 
 CONSTITUTION_EDGES = {
     ("intake", "ok", "constitution", "trigger"),

@@ -51,6 +51,8 @@ def test_graph_response_carries_sha_graph_and_sorted_back_edges():
     assert [(e.source, e.source_port) for e in r.back_edges] == [
         ("architecture", "revise"),
         ("plan", "revise"),
+        # FR-301 D3: the validator revise loop back into the planner.
+        ("plan_check", "revise"),
     ]
 
 

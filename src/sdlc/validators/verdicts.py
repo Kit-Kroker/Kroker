@@ -4,12 +4,14 @@ First consumer of the evidence.py schemas. A verdict function composes the
 FR-205 pure checks over a stored artifact and returns a `Verdict` -- the
 envelope the SOFT auto-approve conjunct (`calibration/decision.py`) requires,
 so a gate's deterministic AND-clause is computed in code, never a model's
-say-so ("evidence before verdict"; docs/adr.md ADR-24). `plan_valid` mirrors
-plan_check's halt order exactly (ids_unique -> deps_resolve -> dag_acyclic ->
-covers_all -> task_size), first failure wins, and each Finding carries the
-failing check's reason verbatim -- the same wire text plan_check rides on its
-halt port, minus the `failed:plan-validation:` prefix -- so the ledger and
-the halt port disagree about nothing but the port name.
+say-so ("evidence before verdict"; docs/adr.md ADR-24). `plan_valid` IS the
+ordered family (FR-301 D3: plan_check calls it with its run's PlanConfig, so
+the halt port and the conjunct share one composition, ids_unique ->
+deps_resolve -> dag_acyclic -> covers_all -> task_size), first failure wins,
+and each Finding carries the failing check's reason verbatim -- the same
+wire text plan_check rides on its halt port, minus the
+`failed:plan-validation:` prefix -- so the ledger and the halt port disagree
+about nothing but the port name.
 
 Pure module: no I/O, no temporalio -- importable inside the workflow sandbox
 and from plain tests alike.
@@ -70,20 +72,26 @@ def _failed(check: str, claim: str, reason: str) -> Verdict:
     )
 
 
-def plan_valid(plan: ImplementationPlan, requirements: Requirements | None) -> Verdict:
+def plan_valid(
+    plan: ImplementationPlan,
+    requirements: Requirements | None,
+    *,
+    plan_cfg: PlanConfig | None = None,
+) -> Verdict:
     """The plan gate's deterministic AND-clause over the stored plan.
 
     plan_check's halt family in plan_check's order -- ids_unique, then the
     graph checks (deps_resolve before dag_acyclic; the graph check needs
     resolved ids), then coverage, then task_size -- first failure wins, and
     the winner's reason rides the Finding verbatim. Coverage is skipped
-    entirely when `requirements` is None (vacuous, the FR-205 precedent: the
-    default graph has no requirements_doc edge, so there is nothing to
-    cover). task_size runs at the default PlanConfig limits: this function
-    is a verdict over the stored artifact where no PipelineConfig is at
-    hand, and the defaults are deliberately generous (FR-205), so it can
-    only pass where a tightened plan_check also passed -- never contradict
-    it.
+    entirely when `requirements` is None (vacuous, the FR-205 precedent: a
+    graph without the requirements_doc edge has nothing to cover).
+    task_size defaults to the PlanConfig limits: a verdict over a stored
+    artifact where no PipelineConfig is at hand. plan_check (FR-301 D3)
+    passes its run's `plan_cfg` so it computes the SAME composition here
+    instead of duplicating the family -- the defaults are deliberately
+    generous (FR-205), so the gate never contradicts a plan_check that
+    passed under them.
     """
     tasks = plan.tasks
 
@@ -108,7 +116,7 @@ def plan_valid(plan: ImplementationPlan, requirements: Requirements | None) -> V
                 f"requirement(s) not covered by any task: {uncovered!r}",
             )
 
-    halt = task_size(tasks, PlanConfig())
+    halt = task_size(tasks, plan_cfg or PlanConfig())
     if halt:
         return _failed("task_size", "every task fits the plan limits", halt)
 

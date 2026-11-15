@@ -117,7 +117,13 @@ def test_select_graph():
 def test_template_revise_bounds_sets_only_pre_code_revise_edges():
     graph = template_revise_bounds(SHIPPED["default"], 4)
     bounded = {(e.source, e.source_port): e.max_traversals for e in graph.edges if e.max_traversals}
-    assert bounded == {("architecture", "revise"): 4, ("plan", "revise"): 4}
+    # FR-301: templating rewrites ONLY the PRE_CODE_REVISE edges; the
+    # plan_check.revise loop keeps its authored bound of 2.
+    assert bounded == {
+        ("architecture", "revise"): 4,
+        ("plan", "revise"): 4,
+        ("plan_check", "revise"): 2,
+    }
     assert template_revise_bounds(SHIPPED["seeded"], 4) == SHIPPED["seeded"]
 
 
@@ -164,7 +170,7 @@ def test_build_run_input_templates_validates_and_strips():
     cfg = e2e_config()
     cfg.max_gate_rounds = 3
     inp = build_run_input(greenfield_idea(), cfg, registry_roles=roles(), handler_types=ALL_TYPES)
-    assert {e.max_traversals for e in inp.graph.edges if e.max_traversals} == {3}
+    assert {e.max_traversals for e in inp.graph.edges if e.max_traversals} == {3, 2}
     assert inp.seeded is None and inp.cfg is cfg
 
 

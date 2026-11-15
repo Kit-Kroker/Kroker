@@ -143,14 +143,16 @@ def test_calibration_lookup_failure_is_insufficient_on_the_live_path():
 def test_gate_node_computes_the_verdict_from_the_provider_registry():
     """The lookup is by gate name through GATE_PROVIDERS (subscript: an
     unknown gate resolves to the vacuous provider), it runs inside the SOFT
-    predicate block, and it feeds the shared rule. Requirements are not
-    wired to a gate node (node_types pins a gate to exactly one in-port,
-    'artifact'), so coverage passes None -- plan_check's no-req-doc
-    semantics -- until the graph grows the edge."""
+    predicate block, and it feeds the shared rule. FR-301 Task 3: the
+    requirements doc rides the artifact producer's carry -- plan_check
+    stashes it on its ok port -- so coverage runs for real on graphs that
+    wire the requirements_doc edge and stays vacuous for a planner-fed
+    gate (old pinned graphs: no stash, None by construction)."""
     body = _gate_node_body()
-    lookup = "verdict = GATE_PROVIDERS[name](artifact, None)"
+    lookup = "verdict = GATE_PROVIDERS[name](artifact, requirements)"
     assert lookup in body
     assert body.index(lookup) < body.index("auto_decision_for(")
+    assert 'requirements = nc.carry(producer_node).get("requirements_doc")' in body
 
 
 def test_revisable_stage_computes_the_verdict_from_the_provider_registry():
