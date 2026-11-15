@@ -165,6 +165,7 @@ async def clarify_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
         route_agent=t_clarify_route,
         probe_agent=t_clarify_probe,
         clarify_model=resolve_role_model(cfg, "clarify"),
+        repo_path=nc.facts.repo_path,
     )
     await nc.host._board_publish(cfg, "requirements", reqs.model_dump_json())
     await nc.ctx.retain(
@@ -226,6 +227,9 @@ async def plan_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> No
         cfg=cfg,
         architecture=arch,
         requirements=input_model(nc, act, "requirements"),
+        # FR-205: the raw Requirements artifact rides the requirements_doc
+        # edge (default graph: no such edge -> None -> byte-identical run).
+        requirements_doc=input_model(nc, act, "requirements_doc"),
         constitution=constitution,
         constitution_digest=constitution.digest if constitution is not None else "",
         planner_agent=t_planner,

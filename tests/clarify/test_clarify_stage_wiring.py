@@ -7,8 +7,11 @@ clarifier that cannot ask about data semantics is degraded, not broken."""
 import ast
 import json
 from dataclasses import dataclass
+from datetime import timedelta
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from temporalio.common import RetryPolicy
 
 from sdlc.core.models import (
     ClarificationDimension as CD,
@@ -24,9 +27,12 @@ from sdlc.stages.clarify.models import (
     ProbeResult,
 )
 from sdlc.stages.clarify.step import (
+    CLARIFY_EVIDENCE_PATCH,
     _clarify_fanout,
+    _evidence_paths_enabled,
     _probe_results_from,
 )
+from sdlc.validators.activities import paths_exist
 
 C3, C4, C6 = (CD.TECHNICAL_CONTEXT, CD.INTERFACE_SPEC, CD.DATA_SEMANTICS)
 
@@ -132,7 +138,7 @@ def _route(dims, questions=()) -> ClarifyRoute:
     )
 
 
-async def _fanout(egress, dims, *, mode=ProjectMode.BROWNFIELD, cap=5):
+async def _fanout(egress, dims, *, mode=ProjectMode.BROWNFIELD, cap=5, repo_path=None):
     return await _clarify_fanout(
         egress,
         route_agent="route",
@@ -142,6 +148,7 @@ async def _fanout(egress, dims, *, mode=ProjectMode.BROWNFIELD, cap=5):
         grounding="CodebaseMap at commit abc\n- src/a.py",
         mode=mode,
         cap=cap,
+        repo_path=repo_path,
     )
 
 
@@ -252,6 +259,132 @@ async def test_the_cap_is_honoured_and_the_overflow_is_recorded_as_dropped():
     out = await _fanout(eg, [C4], cap=2)
     assert len(out.open_questions) == 2
     assert len(out.dropped) == 2
+
+
+# ---------------------------------------------------------------------
+# 023/FR-205: the evidence-path check. In the fan-out branch only, behind
+# `_evidence_paths_enabled()` AND brownfield AND a repo path, the path-like
+# tokens every question's evidence cites are settled against the repo in ONE
+# batched read; grounded questions citing a missing path are DISCARDed at
+# merge. Every skipped condition leaves missing_paths empty -- zero new
+# commands, byte-identical to the pre-023 fan-out.
+# ---------------------------------------------------------------------
+
+
+def _question(qid, dim, evidence):
+    return OpenQuestion(
+        id=qid,
+        question="q?",
+        why_it_matters="w",
+        dimension=dim,
+        materiality=0.8,
+        evidence=evidence,
+    )
+
+
+def test_evidence_paths_patch_helper_semantics():
+    """Mirror of plan's test_drift_v2_direct_call_and_patched_workflow with
+    one deliberate inversion: OUTSIDE a workflow the answer is False, because
+    the check's only action is a real activity call and a unit test must
+    never schedule one (017's helper returns True there because its check is
+    pure). Inside, the wire-name patch id decides."""
+    assert CLARIFY_EVIDENCE_PATCH == "023-clarify-evidence-paths"
+    assert _evidence_paths_enabled() is False
+
+    with (
+        patch("temporalio.workflow.in_workflow", return_value=True),
+        patch("temporalio.workflow.patched", return_value=False) as mock_patched,
+    ):
+        assert _evidence_paths_enabled() is False
+        mock_patched.assert_called_once_with("023-clarify-evidence-paths")
+
+
+@pytest.mark.asyncio
+async def test_brownfield_fanout_discards_grounded_question_citing_missing_path():
+    route_q = _question("c1-1", CD.FUNCTIONAL_INTENT, "see configs/prod.yaml")
+    probe_q = _question("C4-1", C4, "see src/gone.py")
+    eg = _Egress(
+        _route([C4], questions=[route_q]), [ProbeResult(dimension=C4, questions=[probe_q])]
+    )
+    with (
+        patch("sdlc.stages.clarify.step._evidence_paths_enabled", return_value=True),
+        patch("temporalio.workflow.execute_activity", new_callable=AsyncMock) as mock_act,
+    ):
+        mock_act.return_value = {"configs/prod.yaml": False, "src/gone.py": False}
+        out = await _fanout(eg, [C4], repo_path="/repo")
+
+    # ONE batched call, tokens deduped and sorted so the wire arg is stable
+    # across replays; a read, so no retry.
+    mock_act.assert_awaited_once()
+    args, kwargs = mock_act.call_args
+    assert args[0] is paths_exist
+    assert kwargs["args"] == ["/repo", ["configs/prod.yaml", "src/gone.py"]]
+    assert kwargs["start_to_close_timeout"] == timedelta(minutes=1)
+    assert kwargs["retry_policy"] == RetryPolicy(maximum_attempts=1)
+
+    # The grounded probe question citing the missing path is DISCARDed --
+    # neither asked nor recorded as a cap drop. The supervisor's C1 question
+    # survives: only grounded dimensions are held to the standard.
+    assert [q.id for q in out.open_questions] == ["c1-1"]
+    assert out.dropped == []
+
+
+@pytest.mark.asyncio
+async def test_greenfield_mode_never_issues_the_evidence_activity_call():
+    """The mode gate: greenfield has no tree to check against, so even an
+    enabled patch and a repo path must not spend the call."""
+    probe_q = _question("C4-1", C4, "see src/gone.py")
+    eg = _Egress(_route([C4]), [ProbeResult(dimension=C4, questions=[probe_q])])
+    with (
+        patch("sdlc.stages.clarify.step._evidence_paths_enabled", return_value=True),
+        patch("temporalio.workflow.execute_activity", new_callable=AsyncMock) as mock_act,
+    ):
+        out = await _fanout(eg, [C4], mode=ProjectMode.GREENFIELD, repo_path="/repo")
+    mock_act.assert_not_called()
+    assert [q.id for q in out.open_questions] == ["C4-1"]
+
+
+@pytest.mark.asyncio
+async def test_fanout_without_repo_path_never_issues_the_activity_call():
+    """No repo, nothing to check against: the gate stays off and nothing is
+    discarded."""
+    probe_q = _question("C4-1", C4, "see src/gone.py")
+    eg = _Egress(_route([C4]), [ProbeResult(dimension=C4, questions=[probe_q])])
+    with (
+        patch("sdlc.stages.clarify.step._evidence_paths_enabled", return_value=True),
+        patch("temporalio.workflow.execute_activity", new_callable=AsyncMock) as mock_act,
+    ):
+        out = await _fanout(eg, [C4])
+    mock_act.assert_not_called()
+    assert [q.id for q in out.open_questions] == ["C4-1"]
+
+
+@pytest.mark.asyncio
+async def test_zero_path_tokens_issue_no_activity_call():
+    """Symbol evidence ("module.attr") tokenizes to nothing: zero tokens,
+    zero new commands -- the gate's short-circuit."""
+    probe_q = _question("C4-1", C4, "module.attr")
+    eg = _Egress(_route([C4]), [ProbeResult(dimension=C4, questions=[probe_q])])
+    with (
+        patch("sdlc.stages.clarify.step._evidence_paths_enabled", return_value=True),
+        patch("temporalio.workflow.execute_activity", new_callable=AsyncMock) as mock_act,
+    ):
+        out = await _fanout(eg, [C4], repo_path="/repo")
+    mock_act.assert_not_called()
+    assert [q.id for q in out.open_questions] == ["C4-1"]
+
+
+@pytest.mark.asyncio
+async def test_outside_a_workflow_no_activity_call_ever_fires():
+    """_evidence_paths_enabled is False outside a workflow: the plain
+    unit-test fan-out (real helper, no patching) must never schedule a real
+    activity even with every other gate condition true."""
+    probe_q = _question("C4-1", C4, "see src/gone.py")
+    eg = _Egress(_route([C4]), [ProbeResult(dimension=C4, questions=[probe_q])])
+    with patch("temporalio.workflow.execute_activity", new_callable=AsyncMock) as mock_act:
+        out = await _fanout(eg, [C4], repo_path="/repo")
+    mock_act.assert_not_called()
+    assert [q.id for q in out.open_questions] == ["C4-1"]
 
 
 # ---------------------------------------------------------------------

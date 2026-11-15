@@ -60,6 +60,10 @@ _OMITTED: dict[str, set[str]] = {
     "ArchitectureSpec": {"spec_ref"},
     "ImplementationPlan": {"plan_ref"},
     "ValidationContract": {"task_id", "frozen"},
+    # FR-205: planner->validator metadata (covers_all reads it right after
+    # the plan gate); the gate-facing signal is the validator's breach list,
+    # not the per-task claim list. Rendering it is a later product decision.
+    "DevTask": {"covers"},
 }
 
 

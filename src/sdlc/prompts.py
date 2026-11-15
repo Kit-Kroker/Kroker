@@ -36,15 +36,20 @@ def planner_prompt(
     memory: Sequence[str],
     guidance: str | None,
     constitution_block: str = "",
+    requirements_block: str = "",
 ) -> str:
     """feature.py:2040-2044. `constitution_block` (FR-112) is the bounded
     constitution render ("" when absent — see stages/constitution/
     prompts.py), inserted between the architecture and recall per the spec
     hierarchy; at the default the output is byte-identical to the three-arg
-    form."""
+    form. `requirements_block` (FR-205) rides the same pattern: the bounded
+    requirements render plus the covers instruction ("" when absent or
+    empty — see stages/requirements/prompts.py), inserted after the
+    constitution block; at the default the output is byte-identical."""
     return (
         arch_json
         + (f"\n\n{constitution_block}" if constitution_block else "")
+        + (f"\n\n{requirements_block}" if requirements_block else "")
         + _memory_block(memory)
         + (f"\nRevision guidance from reviewer:\n{guidance}" if guidance else "")
     )

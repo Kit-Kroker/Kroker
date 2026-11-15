@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from temporalio import workflow
+from temporalio.common import RetryPolicy
 
 # This module executes inside the workflow sandbox (feature.py's
 # pipeline calls clarify.step) and shares model classes with it — without
@@ -36,6 +37,8 @@ with workflow.unsafe.imports_passed_through():
         RoleUsage,
     )
     from ...observability.trace import RunEventKind
+    from ...validators import path_like_tokens
+    from ...validators.activities import paths_exist
     from ..constitution.models import Constitution
     from ..constitution.prompts import render_constitution
     from ..requirements.models import Requirements
@@ -49,6 +52,24 @@ with workflow.unsafe.imports_passed_through():
         prompt_digest,
     )
     from .routing import grounded_dimensions, live_dimensions
+
+
+# 023/FR-205: a wire name recorded in histories -- never renamed after deploy.
+CLARIFY_EVIDENCE_PATCH = "023-clarify-evidence-paths"
+
+
+def _evidence_paths_enabled() -> bool:
+    """Whether the brownfield evidence-path check may run.
+
+    The inverse of plan's `_DRIFT_V2` on purpose: OUTSIDE a workflow it is
+    False, because the check's only action is a real activity call and a
+    unit test must never schedule one (017's helper returns True there
+    because its check is pure). Inside a workflow the patch id decides:
+    histories recorded before 023 replay with the check off.
+    """
+    if not workflow.in_workflow():
+        return False
+    return workflow.patched(CLARIFY_EVIDENCE_PATCH)
 
 
 def _probe_results_from(
@@ -83,6 +104,7 @@ async def _clarify_fanout(
     grounding: str,
     mode: ProjectMode,
     cap: int,
+    repo_path: str | None = None,
 ) -> ClarifiedRequirements:
     """The E-85 clarify orchestration: route, fan out, merge."""
     route = (await run_role(route_agent, route_prompt)).output
@@ -105,8 +127,35 @@ async def _clarify_fanout(
     # result intact. _probe_results_from turns each captured exception into
     # a dropped dimension.
     results = await asyncio.gather(*[_probe(d) for d in dims], return_exceptions=True)
+    probes = _probe_results_from(dims, results)
+
+    # 023/FR-205: a grounded question must cite something checkable. When the
+    # patch is on, the project is brownfield and there is a repo, collect the
+    # path-like tokens every question's evidence cites (route + probes) and
+    # settle them against the repo in ONE batched read. Zero tokens -> zero
+    # new commands; every skipped gate condition leaves missing_paths empty,
+    # so merge behaves byte-identically to the pre-023 fan-out. The sorted
+    # token list pins the command's input, so a replay re-issues the
+    # identical call and the recorded result replays unchanged.
+    missing_paths: frozenset[str] = frozenset()
+    if _evidence_paths_enabled() and mode is ProjectMode.BROWNFIELD and repo_path:
+        tokens: set[str] = set()
+        for q in route.questions:
+            tokens.update(path_like_tokens(q.evidence or ""))
+        for probe in probes:
+            for q in probe.questions:
+                tokens.update(path_like_tokens(q.evidence or ""))
+        if tokens:
+            exists = await workflow.execute_activity(
+                paths_exist,
+                args=[repo_path, sorted(tokens)],
+                start_to_close_timeout=timedelta(minutes=1),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+            )
+            missing_paths = frozenset(p for p, ok in exists.items() if not ok)
+
     return merge_clarification(
-        route, _probe_results_from(dims, results), cap=cap, grounded=grounded_dimensions(mode)
+        route, probes, cap=cap, grounded=grounded_dimensions(mode), missing_paths=missing_paths
     )
 
 
@@ -132,6 +181,7 @@ async def step(
     route_agent: Any,
     probe_agent: Any,
     clarify_model: str = "",
+    repo_path: str | None = None,
 ) -> ClarifiedRequirements:
     ctx.stage("clarifying", "clarify")
     _started = _now()
@@ -213,6 +263,7 @@ async def step(
             grounding=(render_for_prompt(codebase_map) if codebase_map is not None else ""),
             mode=idea.mode,
             cap=cfg.clarify_question_cap,
+            repo_path=repo_path,
         )
 
     _clarify_key_extra = _clarify_memo_extra(cfg, codebase_map)

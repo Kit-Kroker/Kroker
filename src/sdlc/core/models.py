@@ -341,6 +341,16 @@ class RequirementsConfig(BaseModel):
     max_requests: int = 6
 
 
+class PlanConfig(BaseModel):
+    """FR-205 limits on one task's shape. Defaults are deliberately
+    generous -- above every golden-case task shape -- so a breach flags a
+    genuinely oversized task and the plan gate halts legibly instead of
+    letting the scheduler wedge on it mid-execution."""
+
+    max_files_hint: int = 24
+    max_criteria: int = 12
+
+
 class DeployConfig(BaseModel):
     """FR-1105: the hosting target is an adapter resolved from configuration,
     not a choice an agent makes. Off by default (D-9)."""
@@ -421,6 +431,9 @@ class PipelineConfig(BaseModel):
     # `research` sits here plainly and the graph presence flag
     # (requirements_enabled) is the only gate that matters.
     requirements: RequirementsConfig = Field(default_factory=RequirementsConfig)
+    # FR-205: per-task shape limits, consumed by validators.task_size at the
+    # plan gate -- generous defaults so only oversized tasks trip them.
+    plan: PlanConfig = Field(default_factory=PlanConfig)
     deploy: DeployConfig = Field(default_factory=DeployConfig)
     research_enabled: bool = False  # FR-107: off by default; the
     # default pipeline is unchanged

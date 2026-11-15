@@ -1011,6 +1011,13 @@
           "multiplicity": "one"
         },
         {
+          "name": "requirements_doc",
+          "direction": "in",
+          "payload": "Requirements",
+          "required": false,
+          "multiplicity": "one"
+        },
+        {
           "name": "guidance",
           "direction": "in",
           "payload": "GateDecision",
@@ -1077,6 +1084,13 @@
           "direction": "in",
           "payload": "ImplementationPlan",
           "required": true,
+          "multiplicity": "one"
+        },
+        {
+          "name": "requirements_doc",
+          "direction": "in",
+          "payload": "Requirements",
+          "required": false,
           "multiplicity": "one"
         },
         {
@@ -1205,6 +1219,14 @@
           {
             "type": "clarify",
             "port": "requirements"
+          },
+          {
+            "type": "plan",
+            "port": "requirements_doc"
+          },
+          {
+            "type": "plan_check",
+            "port": "requirements_doc"
           }
         ],
         "fail": []

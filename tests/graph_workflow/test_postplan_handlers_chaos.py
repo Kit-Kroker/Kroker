@@ -16,6 +16,14 @@ Pins the edge behaviour the task specifies:
   dependency ids, two-task cycles and self-cycles (validate_task_graph's
   verbatim strings), and never syncs an invalid graph; a valid plan syncs
   (version, task ids) and passes through as "ok"
+- plan_check_node's FR-205 halt family runs in order -- duplicate ids are
+  named even when a cycle is also present (ids_unique first: duplicates
+  silently collapse into {t.id: t} and would hide every later fault),
+  uncovered requirement ids halt only when a requirements_doc with stories
+  rides the activation (vacuous without it), coverage is named over size
+  when a plan breaches both (coverage precedes task_size, PLAN-1.8), an
+  over-limit task names the first breach, and the board sync still runs
+  only after every check passes
 - code_node: an exception from run_tasks propagates unchanged; a returned
   failure string becomes the halt result
 - merge_node: ANY result starting with "rejected:" rides the reject port
@@ -38,6 +46,12 @@ from sdlc.graph import NODE_TYPES
 from sdlc.graph.router import Activation
 from sdlc.stages.analyze.models import AnalysisReport
 from sdlc.stages.plan.models import DevTask, ImplementationPlan
+from sdlc.stages.requirements.models import (
+    FunctionalRequirement,
+    Requirements,
+    Story,
+    requirements_digest,
+)
 from sdlc.vcs import IntegrationHandle
 from sdlc.workflows.graph_catalog import SHIPPED
 from sdlc.workflows.graph_nodes.base import NodeContext, RunFacts, StoredPayload
@@ -110,9 +124,14 @@ def _act(node_id, inputs=None):
     )
 
 
-def _t(tid, deps=()):
+def _t(tid, deps=(), covers=()):
     return DevTask(
-        id=tid, title=tid, description=tid, acceptance_criteria=["x"], depends_on=list(deps)
+        id=tid,
+        title=tid,
+        description=tid,
+        acceptance_criteria=["x"],
+        depends_on=list(deps),
+        covers=list(covers),
     )
 
 
@@ -237,6 +256,216 @@ def test_plan_check_syncs_a_valid_graph_and_passes_it_through():
 
     assert (out.port, out.payload) == ("ok", PLAN)
     assert host.synced == (3, ["t1"])
+
+
+# ---- plan_check: the FR-205 extended halt family (ids/coverage/size) ------------
+
+
+def _req_doc():
+    stories = [
+        Story(
+            id="US-1",
+            narrative="As a user, I want a greeting, so that the service greets me.",
+            functional=[
+                FunctionalRequirement(id="FR-1", text="GET /hello returns 200"),
+                FunctionalRequirement(id="FR-2", text="GET /hello is rate limited"),
+            ],
+            success_criteria=[],
+        ),
+        Story(
+            id="US-2",
+            narrative="As an operator, I want metrics, so that I can watch the service.",
+            functional=[FunctionalRequirement(id="FR-3", text="metrics endpoint exists")],
+            success_criteria=[],
+        ),
+    ]
+    return Requirements(stories=stories, digest=requirements_digest(stories), drafted_by="agent")
+
+
+def test_plan_check_halts_on_duplicate_ids():
+    pp = _postplan()
+    host = Host()
+    bad = ImplementationPlan(tasks=[_t("T1"), _t("T1")])
+    nc = _nc(
+        "plan_check",
+        payloads={"plan#1.approve": StoredPayload(model=bad, producer="plan#1")},
+        host=host,
+    )
+
+    out = asyncio.run(
+        pp.plan_check_node(nc, _act("plan_check", {"plan": "plan#1.approve"}), PipelineConfig())
+    )
+
+    assert (out.port, out.result) == ("halt", "failed:plan-validation:duplicate task id(s): ['T1']")
+    assert host.synced is None  # duplicates would silently collapse downstream
+
+
+def test_plan_check_halts_on_uncovered_requirements():
+    pp = _postplan()
+    host = Host()
+    plan = ImplementationPlan(tasks=[_t("t1", covers=["FR-1"])])
+    payloads = {
+        "plan#1.approve": StoredPayload(model=plan, producer="plan#1"),
+        "requirements#1.freeze": StoredPayload(model=_req_doc(), producer="requirements#1"),
+    }
+    nc = _nc("plan_check", payloads=payloads, host=host)
+    inputs = {"plan": "plan#1.approve", "requirements_doc": "requirements#1.freeze"}
+
+    out = asyncio.run(pp.plan_check_node(nc, _act("plan_check", inputs), PipelineConfig()))
+
+    assert (out.port, out.result) == (
+        "halt",
+        "failed:plan-validation:requirement(s) not covered by any task: ['FR-2', 'FR-3']",
+    )
+    assert host.synced is None
+
+
+def test_plan_check_halt_order_duplicate_before_dag():
+    pp = _postplan()
+    host = Host()
+    # Both faults present -- duplicate ids AND a two-task cycle. The
+    # duplicate is named: checked first, because the {t.id: t} collapse it
+    # causes would silently drop tasks before the cycle check ever ran.
+    bad = ImplementationPlan(tasks=[_t("T1"), _t("T1"), _t("C1", ["C2"]), _t("C2", ["C1"])])
+    nc = _nc(
+        "plan_check",
+        payloads={"plan#1.approve": StoredPayload(model=bad, producer="plan#1")},
+        host=host,
+    )
+
+    out = asyncio.run(
+        pp.plan_check_node(nc, _act("plan_check", {"plan": "plan#1.approve"}), PipelineConfig())
+    )
+
+    assert (out.port, out.result) == ("halt", "failed:plan-validation:duplicate task id(s): ['T1']")
+    assert host.synced is None
+
+
+def test_plan_check_halts_on_oversize_task():
+    pp = _postplan()
+    host = Host()
+    big = DevTask(
+        id="T1",
+        title="T1",
+        description="T1",
+        acceptance_criteria=["x"],
+        files_hint=[f"f{i}.py" for i in range(25)],  # default limit is 24
+    )
+    bad = ImplementationPlan(tasks=[big])
+    nc = _nc(
+        "plan_check",
+        payloads={"plan#1.approve": StoredPayload(model=bad, producer="plan#1")},
+        host=host,
+    )
+
+    out = asyncio.run(
+        pp.plan_check_node(nc, _act("plan_check", {"plan": "plan#1.approve"}), PipelineConfig())
+    )
+
+    assert (out.port, out.result) == (
+        "halt",
+        "failed:plan-validation:task 'T1' exceeds plan limits: files_hint=25>24",
+    )
+    assert host.synced is None
+
+
+def test_plan_check_halt_order_coverage_before_size():
+    pp = _postplan()
+    host = Host()
+    # Both faults present -- an uncovered FR AND an over-limit task. The
+    # coverage reason is named: PLAN-1.8 runs covers_all before task_size,
+    # so a plan that breaches both halts on coverage (dropped requirements
+    # are the defect with a user-visible cost; size is a plan edit either way).
+    big = DevTask(
+        id="T1",
+        title="T1",
+        description="T1",
+        acceptance_criteria=["x"],
+        files_hint=[f"f{i}.py" for i in range(25)],  # default limit is 24
+        covers=["FR-1"],
+    )
+    bad = ImplementationPlan(tasks=[big])
+    payloads = {
+        "plan#1.approve": StoredPayload(model=bad, producer="plan#1"),
+        "requirements#1.freeze": StoredPayload(model=_req_doc(), producer="requirements#1"),
+    }
+    nc = _nc("plan_check", payloads=payloads, host=host)
+    inputs = {"plan": "plan#1.approve", "requirements_doc": "requirements#1.freeze"}
+
+    out = asyncio.run(pp.plan_check_node(nc, _act("plan_check", inputs), PipelineConfig()))
+
+    assert (out.port, out.result) == (
+        "halt",
+        "failed:plan-validation:requirement(s) not covered by any task: ['FR-2', 'FR-3']",
+    )
+    assert host.synced is None
+
+
+def test_plan_check_passes_without_requirements_doc():
+    pp = _postplan()
+    host = Host()
+    # covers names an FR no artifact defines -- without a requirements_doc
+    # on the activation, coverage is vacuous and the plan still rides "ok".
+    plan = ImplementationPlan(tasks=[_t("t1", covers=["FR-1"])])
+    nc = _nc(
+        "plan_check",
+        payloads={"plan#1.approve": StoredPayload(model=plan, producer="plan#1")},
+        host=host,
+    )
+
+    out = asyncio.run(
+        pp.plan_check_node(nc, _act("plan_check", {"plan": "plan#1.approve"}), PipelineConfig())
+    )
+
+    assert (out.port, out.payload) == ("ok", plan)
+    assert host.synced == (3, ["t1"])  # the clean pass still syncs
+
+
+def test_plan_check_coverage_passes_vacuously_on_stories_without_functional():
+    pp = _postplan()
+    host = Host()
+    # A requirements_doc whose stories carry NO functional requirements
+    # defines zero requirement ids -- covers_all has nothing to demand, so
+    # a taskless `covers` list still rides "ok".
+    story = Story(
+        id="US-1",
+        narrative="As a user, I want a vibe, so that the product vibes.",
+        functional=[],
+        success_criteria=[],
+    )
+    req_doc = Requirements(stories=[story], digest=requirements_digest([story]), drafted_by="agent")
+    plan = ImplementationPlan(tasks=[_t("t1")])
+    payloads = {
+        "plan#1.approve": StoredPayload(model=plan, producer="plan#1"),
+        "requirements#1.freeze": StoredPayload(model=req_doc, producer="requirements#1"),
+    }
+    nc = _nc("plan_check", payloads=payloads, host=host)
+    inputs = {"plan": "plan#1.approve", "requirements_doc": "requirements#1.freeze"}
+
+    out = asyncio.run(pp.plan_check_node(nc, _act("plan_check", inputs), PipelineConfig()))
+
+    assert (out.port, out.payload) == ("ok", plan)
+    assert host.synced == (3, ["t1"])
+
+
+def test_plan_check_passes_an_empty_task_list():
+    pp = _postplan()
+    host = Host()
+    # Zero tasks: ids_unique/deps_resolve/dag_acyclic/task_size are all
+    # vacuously true and, without a requirements_doc, coverage never runs.
+    plan = ImplementationPlan(tasks=[])
+    nc = _nc(
+        "plan_check",
+        payloads={"plan#1.approve": StoredPayload(model=plan, producer="plan#1")},
+        host=host,
+    )
+
+    out = asyncio.run(
+        pp.plan_check_node(nc, _act("plan_check", {"plan": "plan#1.approve"}), PipelineConfig())
+    )
+
+    assert (out.port, out.payload) == ("ok", plan)
+    assert host.synced == (3, [])
 
 
 # ---- code_node: run_tasks exceptions and failure strings --------------------------

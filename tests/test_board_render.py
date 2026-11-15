@@ -498,10 +498,12 @@ def test_omission_set_names_only_real_fields():
             )
 
 
-def test_the_omission_set_is_exactly_the_five_documented_entries():
-    # Spec section 4.3. Growing this is a decision that belongs in the spec,
-    # so it is pinned here rather than left to drift.
-    assert sum(len(v) for v in _OMITTED.values()) == 5
+def test_the_omission_set_is_exactly_the_six_documented_entries():
+    # Spec section 4.3 names the first five; FR-205 added DevTask.covers
+    # (planner->validator metadata, not gate-facing substance). Growing this
+    # is a decision that belongs in the spec, so it is pinned here rather
+    # than left to drift.
+    assert sum(len(v) for v in _OMITTED.values()) == 6
 
 
 def test_the_walk_reaches_exactly_the_eight_artifact_models():

@@ -260,10 +260,16 @@ same parts, so a new role is configuration plus a prompt.
 | `RoleSpec` (in `agent.yaml`) | model id and family, thinking budget, max tokens, step and tool-call budget, retries, task queue, SDK |
 | `RepoReadTools(root, commit)` | `read_file`, `grep`, `list_dir`, `git_show`, `find_tests` — read-only, commit-pinned, truncated with paging |
 | `SandboxTools` | `run_command`, `run_single_test` in an isolated worktree, budgeted and allowlisted |
-| Validators library | `paths_exist`, `quote_in_file`, `ids_unique`, `dag_acyclic`, `covers_all`, `fragment_was_fetched` |
-| Evidence schemas | `AssertionEvidence`, `Finding`, `Coverage` — evidence fields before status fields |
+| Evidence schemas | `AssertionEvidence`, `Finding`, `Coverage` — evidence fields before status fields *(built, FR-205: `sdlc.validators.evidence`, no consumers yet)* |
 | Verdict functions | pure, unit-tested: `review_verdict`, `plan_verdict`, `task_verdict` |
 | `ModelRouter` + family check | resolves role to model; start-up fails when a judge shares dev's model (ADR-6) |
+
+**Built (FR-205):** the validators library exists as `src/sdlc/validators/` —
+pure checks over the proposal alone (`ids_unique`, `deps_resolve`/`dag_acyclic`,
+`covers_all`, `task_size`), the `path_like_tokens` tokenizer, and the
+tree-reading `paths_exist` activity; `quote_in_file` and
+`fragment_was_fetched` remain future. The plan gate's `plan_check` node and
+clarify's evidence-path discard are the first consumers.
 
 The class table above changes with it: architect, planner, QA, reviewer
 lenses, clarify probes and analyst move from *one LLM call* to a bounded
@@ -276,7 +282,8 @@ One constraint shapes the validators: a role's loop runs in workflow code
 (`workflows/role_host.py`), where file access is not allowed. A validator
 that reads the tree (`paths_exist`, `quote_in_file`) therefore runs in an
 activity and returns its failure to the conversation; only validators over
-the output alone (`ids_unique`, `dag_acyclic`, `covers_all`) run inline.
+the output alone (`ids_unique`, `deps_resolve`, `dag_acyclic`, `covers_all`,
+`task_size`) run inline.
 
 **Target (plan, not built) — tools and hooks per role.** Every role gets the
 smallest toolset that lets it check its own claims, and the runtime — not
@@ -863,6 +870,8 @@ Kroker/
 │   ├── context/               # brownfield: classify, CodebaseMap, delta, render
 │   ├── clarify/               # MAC-style probe fan-out + deterministic merge (E-85)
 │   ├── research/              # grounded briefs: toolset, tavily, verify, budget (FR-107)
+│   ├── validators/            # FR-205: pure validators (ids/dag/coverage/size) + path_like_tokens,
+│   │                          #   the paths_exist activity, ADR-24 evidence schemas
 │   ├── channels/              # contract.py, transport.py, inbox.py — one channel
 │   │                          #   abstraction behind every surface (E-6/E-7/E-8, ADR-8)
 │   ├── dashboard/             # fleet poller, REST + SSE api, channel adapter (E-10); graph_wire + graph routes (E-76); run graph/state routes, run_graph source (E-75); graph store + save/load routes (E-77)

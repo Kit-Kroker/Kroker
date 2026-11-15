@@ -202,6 +202,9 @@ _CATALOG: tuple[NodeTypeSpec, ...] = (
         ports=(
             _in("spec", "ArchitectureSpec"),
             _in("requirements", "ClarifiedRequirements", required=False),
+            # FR-205: the raw Requirements artifact on its own slot (prompt
+            # block + memo digest); clarify's output stays ClarifiedRequirements.
+            _in("requirements_doc", "Requirements", required=False),
             _in("guidance", "GateDecision", required=False),
             _in("constitution", "Constitution", required=False),
             _out("plan", "ImplementationPlan"),
@@ -219,6 +222,9 @@ _CATALOG: tuple[NodeTypeSpec, ...] = (
         canonical_stage="planning",
         ports=(
             _in("plan", "ImplementationPlan"),
+            # FR-205: the raw Requirements artifact — coverage is checked
+            # against its FR ids; absent on the default graph (vacuous then).
+            _in("requirements_doc", "Requirements", required=False),
             _out("ok", "ImplementationPlan"),
             _halt(),
             _fail(),

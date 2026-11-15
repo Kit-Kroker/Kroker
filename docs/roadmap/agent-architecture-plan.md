@@ -36,7 +36,7 @@ flag in `agent.yaml`.
 
 - [ ] **AP-2.1** `make_agent` factory, `RoleSpec` in `agent.yaml`, `ModelRouter`.
 - [ ] **AP-2.2** `RepoReadTools` with commit pinning, truncation and paging.
-- [ ] **AP-2.3** Validators library and evidence schemas (FR-205). Validators that read the tree run in an activity; the role loop runs in workflow code.
+- [x] **AP-2.3** Validators library and evidence schemas (FR-205). Validators that read the tree run in an activity; the role loop runs in workflow code. *Delivered 2026-11-14: `src/sdlc/validators/` — pure checks + `path_like_tokens`, the `paths_exist` activity (the activity/inline split as specified), and the ADR-24 evidence schemas; plan_check and clarify are the first consumers. Factory integration (`make_agent`) remains AP-2.1's.*
 - [ ] **AP-2.4** Dev-harness wrapper that refuses hand-off unless the contract's commands exit 0.
 - [ ] **AP-2.5** Per-role task queues and worker pools, routed from `RoleSpec` (NFR-2, ADR-9).
 - [ ] **AP-2.6** Worker-specific task queue for worktree affinity, with recreate-on-loss; task branches pushed to shared storage at each checkpoint.

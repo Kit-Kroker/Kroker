@@ -107,6 +107,7 @@ from .triage.activities import (
     triage_scaffold,
     triage_secrets,
 )
+from .validators.activities import paths_exist
 from .vcs import (
     build_verification_branch,
     cleanup_run_worktrees,
@@ -178,6 +179,7 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         load_crew,
         read_committed_bytes,
         get_task_diff,
+        paths_exist,
         record_benchmark,
         judge_artifact,
         load_case_assets,

@@ -323,3 +323,85 @@ def test_question_ids_are_unique_after_merge():
     out = _merge(_route(), probes)
     ids = [q.id for q in out.open_questions]
     assert len(ids) == len(set(ids)), "collided ids break answer_question"
+
+
+# ---- 023/FR-205: evidence citing a path that does not exist -----------
+# A grounded question that points at a path absent from the repo points at
+# nothing checkable -- speculation by another route. The discard mirrors the
+# no-evidence rule above: DISCARD semantics, never recorded on `dropped`
+# ("material but lost the cap" would become unreadable).
+
+
+def test_merge_discards_grounded_question_citing_missing_path():
+    probe = ProbeResult(
+        dimension=CD.INTERFACE_SPEC,
+        questions=[_q("P1", dim=CD.INTERFACE_SPEC, mat=0.9, ev="see src/gone.py")],
+    )
+    out = merge_clarification(
+        _route(), [probe], cap=5, grounded=GROUNDED, missing_paths=frozenset({"src/gone.py"})
+    )
+    assert out.open_questions == []
+    assert out.dropped == [], "a missing-path citation is DISCARDed, not recorded as cut"
+
+
+def test_merge_keeps_question_when_path_exists_or_symbol_cited():
+    # A symbol ("module.attr") tokenizes to no paths at all, so it intersects
+    # nothing and survives a non-empty missing set...
+    sym = ProbeResult(
+        dimension=CD.INTERFACE_SPEC,
+        questions=[_q("P1", dim=CD.INTERFACE_SPEC, mat=0.9, ev="module.attr")],
+    )
+    out = merge_clarification(
+        _route(), [sym], cap=5, grounded=GROUNDED, missing_paths=frozenset({"src/gone.py"})
+    )
+    assert [q.id for q in out.open_questions] == ["P1"]
+    # ...and a path that exists (absent from missing_paths) never discards.
+    real = ProbeResult(
+        dimension=CD.INTERFACE_SPEC,
+        questions=[_q("P2", dim=CD.INTERFACE_SPEC, mat=0.9, ev="see src/app.py")],
+    )
+    out2 = merge_clarification(
+        _route(), [real], cap=5, grounded=GROUNDED, missing_paths=frozenset({"src/gone.py"})
+    )
+    assert [q.id for q in out2.open_questions] == ["P2"]
+
+
+def test_merge_keeps_dotfile_evidence_when_the_file_exists():
+    """023 carry-over pin: a dotfile citation must survive. The old local
+    normalizer `lstrip("./")`-ed every leading dot and slash, so
+    `.github/workflows/ci.yaml` tokenized as `github/...` and even a PRESENT
+    file was reported missing -- the question vanished for citing a file that
+    is right there. One `./` prefix is removed, never bare dot characters."""
+    probe = ProbeResult(
+        dimension=CD.CODE_STRUCTURE,
+        questions=[_q("P1", dim=CD.CODE_STRUCTURE, mat=0.9, ev="see .github/workflows/ci.yaml")],
+    )
+    out = merge_clarification(
+        _route(), [probe], cap=5, grounded=GROUNDED, missing_paths=frozenset({"src/gone.py"})
+    )
+    assert [q.id for q in out.open_questions] == ["P1"]
+    # The stale, corrupted spelling a pre-fix activity once reported must not
+    # match either: the fixed tokenizer keeps the dot, so it cannot intersect.
+    out2 = merge_clarification(
+        _route(),
+        [probe],
+        cap=5,
+        grounded=GROUNDED,
+        missing_paths=frozenset({"github/workflows/ci.yaml"}),
+    )
+    assert [q.id for q in out2.open_questions] == ["P1"]
+
+
+def test_merge_default_missing_paths_unchanged_behavior():
+    """The default (empty frozenset) must reproduce today's merge exactly.
+    Every pre-existing test above runs with it; this one makes the default
+    itself explicit -- grounded survives on evidence, ungrounded never needs
+    it, and the tokenizer is not consulted at all."""
+    sup = _q("S1", "sup?", dim=CD.FUNCTIONAL_INTENT, mat=0.8, asked_by="supervisor")
+    probe = ProbeResult(
+        dimension=CD.INTERFACE_SPEC,
+        questions=[_q("P1", "probe?", dim=CD.INTERFACE_SPEC, mat=0.9, ev="a.py")],
+    )
+    out = _merge(_route(sup), [probe])
+    assert [q.id for q in out.open_questions] == ["P1", "S1"]  # materiality-descending
+    assert out.dropped == []

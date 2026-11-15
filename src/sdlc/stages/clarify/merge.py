@@ -6,8 +6,9 @@ the cap testable without a model.
 
 Two different removals happen here and they mean different things:
   - DISCARD: a question that was never a real candidate -- a grounded
-    question with no evidence, or one scored below MATERIALITY_FLOOR. Not
-    recorded anywhere.
+    question with no evidence, one citing a repo path that does not exist
+    (023/FR-205), or one scored below MATERIALITY_FLOOR. Not recorded
+    anywhere.
   - DROP: a real question that lost the ranking cut. It IS recorded, on
     `dropped`, so the benchmark can score "material question never asked".
 """
@@ -20,6 +21,7 @@ from collections.abc import Sequence
 from ...core.models import (
     ClarificationDimension,
 )
+from ...validators import path_like_tokens
 from .models import (
     ClarifiedRequirements,
     ClarifyRoute,
@@ -71,8 +73,15 @@ def merge_clarification(
     *,
     cap: int,
     grounded: frozenset[ClarificationDimension],
+    missing_paths: frozenset[str] = frozenset(),
 ) -> ClarifiedRequirements:
-    """Fold the supervisor's body and every question into one artifact."""
+    """Fold the supervisor's body and every question into one artifact.
+
+    `missing_paths` (023/FR-205) is the repo-checked complement of the
+    evidence paths the fan-out collected; empty by default, which makes the
+    merge behave exactly as it did before 023 -- the tokenizer is not
+    consulted at all.
+    """
     # The supervisor owns C1/C2 and nothing else, so CLAMP its self-reported
     # dimension exactly as a probe's is clamped below. Without this a
     # supervisor question mislabelled into a grounded dimension (C3-C6) --
@@ -97,6 +106,18 @@ def merge_clarification(
     # DISCARD ungrounded speculation before anything else, so it cannot win a
     # slot or pollute the dedup.
     candidates = [q for q in candidates if q.dimension not in grounded or q.evidence]
+
+    # DISCARD (023/FR-205) a grounded question whose evidence cites a path
+    # the repo does not have: it points at nothing checkable, so it is
+    # speculation by another route -- never recorded on `dropped`, which
+    # means "material but lost the cap". The empty-default short-circuit
+    # skips the tokenizer entirely, keeping pre-023 merges byte-identical.
+    candidates = [
+        q
+        for q in candidates
+        if q.dimension not in grounded
+        or not (q.evidence and missing_paths and set(path_like_tokens(q.evidence)) & missing_paths)
+    ]
 
     # DISCARD anything below the bar both prompts already state. A sub-floor
     # question was never material, so it is NOT recorded on `dropped` --
