@@ -28,9 +28,8 @@ finish writing their outcome before the walk reads incident states.
 Without it the walk would race the one-yield-late recording and miss
 approvals that already happened.
 
-Caps arrive in US5: ``choose_starts`` here is the interim — the first
-``max_starts_per_cycle`` candidates. T037 replaces it with the full
-window/eligibility policy in ``S/maintenance/execution.py``.
+Caps arrive in US5: ``choose_starts`` (the full eligibility policy,
+R10) classifies admissions BEFORE the walk; this module applies it.
 """
 
 from __future__ import annotations
@@ -57,6 +56,7 @@ with workflow.unsafe.imports_passed_through():
         OPS_REFUSAL_OUTCOME,
         UNMERGED_HINT,
         apply_verdict,
+        choose_starts,
         classify_verification,
         closure_outcome,
         may_execute,
@@ -66,7 +66,6 @@ with workflow.unsafe.imports_passed_through():
         ExecutionRecord,
         Incident,
         IncidentState,
-        MaintenanceConfig,
         MaintenanceState,
         VerificationResult,
     )
@@ -115,19 +114,6 @@ ANCESTRY_ACT = workflow.ActivityConfig(
     start_to_close_timeout=timedelta(seconds=60),
     retry_policy=RetryPolicy(maximum_attempts=2),
 )
-
-
-def choose_starts(
-    candidates: list[Incident],
-    exec_starts: list[datetime],
-    cfg: MaintenanceConfig,
-    now: datetime,
-) -> list[Incident]:
-    """INTERIM (T022): the first ``max_starts_per_cycle`` candidates, in
-    number order. T037 replaces this with the full eligibility policy
-    (window cap, path overlap); this module's caller is its only user
-    until then."""
-    return candidates[: cfg.max_starts_per_cycle]
 
 
 def _signal_version(state: MaintenanceState, incident: Incident) -> int:
@@ -186,7 +172,11 @@ async def execute_step(
         (i for i in state.incidents if i.state in (IncidentState.APPROVED, IncidentState.QUEUED)),
         key=lambda i: i.no,
     )
-    chosen = {i.no for i in choose_starts(candidates, state.exec_starts, loop_cfg, now)}
+    # The FULL policy (T037, R10): classify once, walk the admitted starts,
+    # carry the pruned window back — the stamps for this pass's starts are
+    # appended below so the NEXT call's window sees them.
+    admissions = choose_starts(candidates, state.exec_starts, loop_cfg, now)
+    chosen = set(admissions.starts)
     records: list[ExecutionRecord] = []
     refusals: list[Incident] = []
     for inc in candidates:
@@ -228,7 +218,6 @@ async def execute_step(
         # the durable attempt history the operator reads.
         record.detail = OPS_REFUSAL_OUTCOME if has_ops else ""
         inc.note = record.detail
-        state.exec_starts.append(now)
         records.append(record)
         await start_repair_child(
             child_id=record.child_id,
@@ -243,6 +232,8 @@ async def execute_step(
             seeded=work,
             task_queue=workflow.info().task_queue,
         )
+    # R10: the window is pruned at each Execute; this pass's stamps join it.
+    state.exec_starts = [*admissions.exec_starts, *([now] * len(records))]
     return records, refusals
 
 

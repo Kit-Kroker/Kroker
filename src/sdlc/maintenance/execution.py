@@ -9,6 +9,9 @@ the loop records them as proposals, whatever decided the gate.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+
 from pydantic import BaseModel, ConfigDict
 
 from ..core.models import GateDecision, GateOutcome
@@ -91,6 +94,90 @@ def classify_verification(
 #: `render` (T047) shows in `sdlc maintain incidents`. Recorded residual: the
 #: operator resolves it by merging, rejecting the child, or disabling.
 UNMERGED_HINT = "fix not on default branch"
+
+
+#: The rolling execution window (R10): a start stamp is inside it iff
+#: ``now - stamp <= 7 days`` — inclusive at exactly 7 days, out at 7 days
+#: plus a microsecond (the convention qa pinned in T036).
+_WINDOW = timedelta(days=7)
+
+
+@dataclass(frozen=True)
+class StartPlan:
+    """One Execute pass's admission decision (023b T037, B-FR-010/011,
+    R10) — PURE: inputs are never mutated, the caller applies.
+
+    ``starts`` and ``queued`` are incident NUMBERS in walk order (the
+    caller resolves them against its own candidates); ``exec_starts`` is
+    the window PRUNED to the rolling 7 days, for the caller to carry back
+    into the loop state (it rides continue_as_new); ``notice`` is ONE
+    string per call when anything was held — the operator is notified
+    once per cycle, never once per incident (None when nothing was)."""
+
+    starts: tuple[int, ...]
+    queued: tuple[int, ...]
+    exec_starts: tuple[datetime, ...]
+    notice: str | None
+
+
+def _plan_paths(incident: Incident) -> set[str]:
+    """Every path the incident's plan touches — the overlap key (R10:
+    no two in-flight incidents on one path)."""
+    paths: set[str] = set()
+    if incident.plan is not None:
+        for action in incident.plan.actions:
+            paths.update(action.target_paths)
+    return paths
+
+
+def choose_starts(
+    incidents: list[Incident],
+    exec_starts: list[datetime],
+    cfg: MaintenanceConfig,
+    now: datetime,
+) -> StartPlan:
+    """The full cap policy (R10's gate order at Execute): walk the
+    approved/queued candidates in incident-number order and admit a start
+    only past (1) the path-overlap check — no two in-flight incidents on
+    one path, the candidates started THIS pass joining the live set at
+    once — then (2) the per-cycle cap, then (3) the rolling 7-day window
+    cap, which counts both the carried stamps and the starts chosen
+    earlier in this same pass. Everything held is QUEUED, recorded in one
+    per-call notice; ``exec_starts`` older than the window is pruned from
+    the returned plan. ``may_execute`` is NOT this function (T022: its
+    refusals are awaiting_decision with a gate-round bump, applied by
+    execute_step before classification)."""
+    window = tuple(sorted(s for s in exec_starts if now - s <= _WINDOW))
+    ordered = sorted(incidents, key=lambda i: i.no)
+    live_paths: set[str] = set()
+    for inc in ordered:
+        if inc.state in (IncidentState.EXECUTING, IncidentState.VERIFYING):
+            live_paths |= _plan_paths(inc)
+    starts: list[int] = []
+    queued: list[int] = []
+    for inc in ordered:
+        if inc.state not in (IncidentState.APPROVED, IncidentState.QUEUED):
+            continue
+        paths = _plan_paths(inc)
+        if paths & live_paths:
+            queued.append(inc.no)  # overlap: held without consuming a start
+            continue
+        if len(starts) >= cfg.max_starts_per_cycle:
+            queued.append(inc.no)
+            continue
+        if len(window) + len(starts) >= cfg.max_starts_per_window:
+            queued.append(inc.no)
+            continue
+        starts.append(inc.no)
+        live_paths |= paths
+    notice = (
+        f"{len(queued)} incident(s) held queued: per-cycle cap "
+        f"{cfg.max_starts_per_cycle}, window cap {cfg.max_starts_per_window} "
+        "over 7 days, or a path overlap with an in-flight attempt"
+        if queued
+        else None
+    )
+    return StartPlan(tuple(starts), tuple(queued), window, notice)
 
 
 def closure_outcome(
