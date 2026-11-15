@@ -6,6 +6,8 @@ store.summary() must report the same windowed verdict the gate's decision
 path computes (never a second statistic), and the render must answer the
 operator's actual question -- why is nothing auto-approving -- with one
 row per bucket and the effectively-HARD flag on anything not calibrated.
+The SC-6 line extends the same surface: the override rate over the run
+exports the retro stage already retains, one line, never a gate.
 Exit code is pinned by construction: run_calibration returns a string and
 main() returns without SystemExit, so the verb can never gate anyone.
 """
@@ -14,15 +16,18 @@ import argparse
 import asyncio
 import inspect
 import re
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from sdlc import cli
 from sdlc.calibration.cli import add_calibration_parser, render_calibration, run_calibration
+from sdlc.calibration.metrics import GateDecisionRecord, soft_gate_override_rate
 from sdlc.calibration.models import CalibrationSample, LabelSource
-from sdlc.calibration.store import CalibrationLedger
+from sdlc.calibration.store import CalibrationLedger, gate_decisions_from_exports
 from sdlc.calibration.verdict import MIN_SAMPLES, WINDOW, bucket_key
+from sdlc.core.models import GateOutcomeSummary, RunSummary
 
 BK = bucket_key("some/model", LabelSource.PRODUCTION_PROXY)
 OTHER = bucket_key("other/model", LabelSource.PRODUCTION_PROXY)
@@ -53,8 +58,38 @@ def _seed(tmp_path, batches) -> Path:
     return db
 
 
-def _ns(db) -> argparse.Namespace:
-    return argparse.Namespace(db=str(db))
+def _ns(db, exports) -> argparse.Namespace:
+    return argparse.Namespace(db=str(db), exports=str(exports))
+
+
+def _gate(policy: str = "soft", decided_by: str = "policy", gate: str = "architecture"):
+    return GateOutcomeSummary(
+        gate=gate, round=1, policy=policy, decided_by=decided_by, approved=True
+    )
+
+
+def _run_summary(run_id: str, gates: list[GateOutcomeSummary]) -> RunSummary:
+    start = datetime(2026, 11, 15, 12, 0, 0, tzinfo=UTC)
+    return RunSummary(
+        run_id=run_id,
+        mode="feature",
+        outcome="done",
+        terminal_stage="retro",
+        started_at=start,
+        ended_at=start + timedelta(minutes=5),
+        duration_s=300.0,
+        gates=gates,
+    )
+
+
+def _export_run(exports: Path, run_id: str, gates: list[GateOutcomeSummary]) -> None:
+    """Write one closed run's summary.json exactly where the retro export
+    activity puts it: <root>/<run_id>/summary.json (RunSummary as data)."""
+    run_dir = exports / run_id
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text(
+        _run_summary(run_id, gates).model_dump_json(), encoding="utf-8"
+    )
 
 
 def _bucket_cell(bucket_key: str) -> str:
@@ -141,12 +176,15 @@ def test_the_store_never_imports_cli_code():
 # --- the verb: parser wiring, empty-ledger line, the table -----------------
 
 
-def test_parser_accepts_the_calibration_verb_and_its_db_flag():
+def test_parser_accepts_the_calibration_verb_and_its_flags():
     args = cli.build_parser().parse_args(["calibration"])
     assert args.cmd == "calibration"
     assert args.db is None  # default: the env-resolved board DB
+    assert args.exports is None  # default: the env-resolved export root
     args = cli.build_parser().parse_args(["calibration", "--db", "/tmp/x.sqlite3"])
     assert args.db == "/tmp/x.sqlite3"
+    args = cli.build_parser().parse_args(["calibration", "--exports", "/tmp/runs"])
+    assert args.exports == "/tmp/runs"
 
 
 def test_the_calibration_subparser_is_registered_by_the_package_hook():
@@ -174,15 +212,33 @@ def test_main_dispatches_calibration_before_the_worker_import():
 
 
 def test_run_calibration_on_an_empty_ledger_is_the_friendly_line(tmp_path):
-    assert run_calibration(_ns(tmp_path / "empty.sqlite3")) == "no samples recorded"
+    """Empty ledger, no decisions recorded: both friendly lines, exit 0."""
+    out = run_calibration(_ns(tmp_path / "empty.sqlite3", tmp_path / "exports"))
+    assert out == (
+        "no samples recorded\n"
+        "\n"
+        "SC-6 soft-gate override rate: no SOFT gate decisions recorded (target <5%)"
+    )
 
 
 def test_main_invocation_prints_the_friendly_line_and_exits_clean(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(
-        "sys.argv", ["sdlc", "calibration", "--db", str(tmp_path / "board.sqlite3")]
+        "sys.argv",
+        [
+            "sdlc",
+            "calibration",
+            "--db",
+            str(tmp_path / "board.sqlite3"),
+            "--exports",
+            str(tmp_path / "exports"),
+        ],
     )
     asyncio.run(cli.main())  # returning normally == exit code 0
-    assert capsys.readouterr().out == "no samples recorded\n"
+    assert capsys.readouterr().out == (
+        "no samples recorded\n"
+        "\n"
+        "SC-6 soft-gate override rate: no SOFT gate decisions recorded (target <5%)\n"
+    )
 
 
 def test_the_seeded_table_answers_the_operators_question(tmp_path):
@@ -198,7 +254,7 @@ def test_the_seeded_table_answers_the_operators_question(tmp_path):
             [_sample(0.9, 0.1, bk=OTHER) for _ in range(MIN_SAMPLES)],  # uncalibrated
         ],
     )
-    lines = run_calibration(_ns(db)).splitlines()
+    lines = run_calibration(_ns(db, tmp_path / "exports")).split("\n\n")[0].splitlines()
     header = [cell.strip() for cell in lines[0].split("|")]
     assert header == ["gate", "bucket", "verdict", "n", "agreement", "effectively-HARD?"]
 
@@ -232,7 +288,7 @@ def test_the_agreement_cell_of_an_uncomputed_verdict_is_not_a_zero(tmp_path):
     0.000 would state an agreement the data cannot support -- the same lie
     insufficient_data exists to prevent. It renders as '--' instead."""
     db = _seed(tmp_path, [[_sample(0.9, 0.9) for _ in range(3)]])
-    assert "--" in run_calibration(_ns(db))
+    assert "--" in run_calibration(_ns(db, tmp_path / "exports"))
 
 
 def test_render_is_byte_identical_across_invocations(ledger):
@@ -250,5 +306,124 @@ def test_the_rendered_table_has_one_row_per_bucket(tmp_path):
             [_sample(0.9, 0.9, gate="plan") for _ in range(2)],
         ],
     )
-    lines = run_calibration(_ns(db)).splitlines()
-    assert len(lines) == 3  # header + two buckets
+    out = run_calibration(_ns(db, tmp_path / "exports"))
+    lines = out.split("\n\n")[0].splitlines()
+    assert len(lines) == 3  # header + two buckets; the SC-6 line follows below
+
+
+# --- SC-6: the pure override-rate metric ------------------------------------
+
+
+def _record(policy: str = "soft", decided_by: str = "policy") -> GateDecisionRecord:
+    return GateDecisionRecord(gate="architecture", policy=policy, decided_by=decided_by)
+
+
+def test_no_records_is_the_empty_state_never_a_divergent_zero():
+    """0 decisions -> the metric is undefined, not 0%; computing it would
+    divide by zero and a 0.0% would claim the policy is perfect."""
+    rate = soft_gate_override_rate([])
+    assert rate.human == 0
+    assert rate.total == 0
+    assert rate.rate is None
+
+
+def test_the_rate_is_human_decisions_over_all_soft_decisions():
+    records = [_record(decided_by="human") for _ in range(3)]
+    records += [_record() for _ in range(21)]
+    assert soft_gate_override_rate(records) == (3, 24)
+    assert soft_gate_override_rate(records).rate == 0.125
+
+
+def test_a_fully_trusted_policy_reads_zero():
+    records = [_record() for _ in range(24)]
+    assert soft_gate_override_rate(records) == (0, 24)
+    assert soft_gate_override_rate(records).rate == 0.0
+
+
+def test_hard_and_off_gates_never_enter_the_denominator():
+    """HARD is always human and OFF always synthesizes decided_by="policy";
+    neither population says anything about whether the SOFT policy earned
+    trust, so only policy=="soft" rows count."""
+    records = [
+        _record(),  # soft, policy
+        _record(decided_by="human"),  # soft, human
+        _record(policy="hard", decided_by="human"),  # must not count
+        _record(policy="off", decided_by="policy"),  # the OFF approve: not soft
+    ]
+    assert soft_gate_override_rate(records) == (1, 2)
+
+
+def test_a_timed_out_soft_gate_counts_as_an_override():
+    """The pinned rule is decided_by != "policy": a timeout means no human
+    arrived AND the policy did not decide -- the policy still failed to
+    earn the gate, which is exactly what SC-6 measures."""
+    assert soft_gate_override_rate([_record(decided_by="timeout")]) == (1, 1)
+
+
+def test_a_human_revise_counts_as_a_human_decision():
+    """REVISE with a human hand on it is an override of the auto-approve
+    path just as much as a REJECT is."""
+    assert soft_gate_override_rate([_record(decided_by="human")]) == (1, 1)
+
+
+# --- SC-6: aggregating the retained run exports ------------------------------
+
+
+def test_gate_decisions_read_every_summary_under_the_export_root(tmp_path):
+    exports = tmp_path / "exports"
+    _export_run(exports, "run-2", [_gate(decided_by="human")])
+    _export_run(exports, "run-1", [_gate(), _gate(policy="hard", decided_by="human")])
+    records = gate_decisions_from_exports(exports)
+    assert records == [
+        GateDecisionRecord("architecture", "soft", "policy"),  # run-1, in summary order
+        GateDecisionRecord("architecture", "hard", "human"),  # run-1
+        GateDecisionRecord("architecture", "soft", "human"),  # run-2
+    ]
+
+
+def test_a_missing_export_root_reads_as_no_decisions(tmp_path):
+    """No runs closed here yet is an empty state, not an I/O error -- the
+    verb must answer on a fresh checkout."""
+    assert gate_decisions_from_exports(tmp_path / "never-created") == []
+
+
+def test_a_corrupt_summary_is_skipped_not_fatal(tmp_path):
+    """A truncated export (crashed run, half-written file) must not hide
+    every other run's decisions behind a parse error."""
+    exports = tmp_path / "exports"
+    _export_run(exports, "run-1", [_gate()])
+    bad = exports / "run-0"
+    bad.mkdir()
+    (bad / "summary.json").write_text("{ not json", encoding="utf-8")
+    assert gate_decisions_from_exports(exports) == [
+        GateDecisionRecord("architecture", "soft", "policy")
+    ]
+
+
+# --- SC-6: the verb's one line -----------------------------------------------
+
+
+def test_the_sc6_line_appends_under_the_seeded_table(tmp_path):
+    """The operator reads the bucket table, then one line: rate,
+    numerator/denominator, and the <5% target -- enough to tell
+    rubber-stamping from earned trust."""
+    db = _seed(tmp_path, [[_sample(0.9, 0.9) for _ in range(MIN_SAMPLES)]])
+    exports = tmp_path / "exports"
+    _export_run(exports, "run-1", [_gate(decided_by="human") for _ in range(3)])
+    _export_run(exports, "run-2", [_gate() for _ in range(21)])
+    out = run_calibration(_ns(db, exports))
+    assert out.endswith(
+        "SC-6 soft-gate override rate: 12.5% (3/24 human decisions on SOFT gates; target <5%)"
+    )
+    # The table is still there, intact, above the line.
+    assert out.split("\n\n")[0].splitlines()[0].startswith("gate")
+
+
+def test_the_sc6_line_reads_zero_point_zero_when_the_policy_decides_all(tmp_path):
+    db = _seed(tmp_path, [[_sample(0.9, 0.9) for _ in range(MIN_SAMPLES)]])
+    exports = tmp_path / "exports"
+    _export_run(exports, "run-1", [_gate() for _ in range(4)])
+    out = run_calibration(_ns(db, exports))
+    assert out.endswith(
+        "SC-6 soft-gate override rate: 0.0% (0/4 human decisions on SOFT gates; target <5%)"
+    )

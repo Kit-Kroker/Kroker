@@ -11,8 +11,13 @@ from __future__ import annotations
 import os
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from pathlib import Path
+
+from pydantic import ValidationError
 
 from ..board.schema import apply_schema, connect, db_path
+from ..core.models import RunSummary
+from .metrics import GateDecisionRecord
 from .models import BucketSummary, CalibrationSample
 from .verdict import WINDOW, verdict_for
 
@@ -76,3 +81,35 @@ class CalibrationLedger:
                 )
             )
         return out
+
+
+def gate_decisions_from_exports(
+    root: str | os.PathLike | None = None,
+) -> list[GateDecisionRecord]:
+    """Every gate decision every closed run exported, as SC-6 reads them.
+
+    The retained source is the retro export (observability/activities.py):
+    each run closes with `<root>/<run_id>/summary.json`, RunSummary as
+    data, whose `gates` list `GateOutcomeSummary` documents as the SC-6
+    signal -- already deduped per (gate, round) by build_run_summary. No
+    second store is built beside it.
+
+    Root defaults to SDLC_EXPORT_ROOT or ./runs/pipeline, mirroring the
+    export activity's own resolution. A missing root reads as no decisions
+    (empty state, not an error -- a fresh checkout must answer); a
+    summary that fails to parse or read is skipped, because a truncated
+    export from a crashed run must not hide every other run's decisions.
+    Sorted glob so the read never depends on directory order.
+    """
+    base = root if root is not None else os.environ.get("SDLC_EXPORT_ROOT", "./runs/pipeline")
+    records: list[GateDecisionRecord] = []
+    for path in sorted(Path(base).glob("*/summary.json")):
+        try:
+            summary = RunSummary.model_validate_json(path.read_text(encoding="utf-8"))
+        except (OSError, ValidationError):
+            continue
+        records.extend(
+            GateDecisionRecord(gate=g.gate, policy=g.policy, decided_by=g.decided_by)
+            for g in summary.gates
+        )
+    return records
