@@ -41,18 +41,18 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Capture the fast-tier baseline. Run `uv run pytest -q` on HEAD in a throwaway `git worktree` (for example `/tmp/opencode/024-baseline`). Write the sorted FAILED ids to `.specify/specs/024-two-worker-pools/baseline-failures.txt`, with a header naming the commit and the procedure. Diff against `.specify/specs/023b-daper-acts-verifies/baseline-failures.txt` and report any novel id rather than proceeding. The `tests/test_read_fixtures_fresh.py` ids are expected in a throwaway worktree, per 023b's note. (plan A1; quickstart §0) **(S)**
+- [x] T001 Capture the fast-tier baseline. Run `uv run pytest -q` on HEAD in a throwaway `git worktree` (for example `/tmp/opencode/024-baseline`). Write the sorted FAILED ids to `.specify/specs/024-two-worker-pools/baseline-failures.txt`, with a header naming the commit and the procedure. Diff against `.specify/specs/023b-daper-acts-verifies/baseline-failures.txt` and report any novel id rather than proceeding. The `tests/test_read_fixtures_fresh.py` ids are expected in a throwaway worktree, per 023b's note. (plan A1; quickstart §0) **(S)**
 
 ## Phase 2: Foundational — the class authority (blocks every story)
 
-- [ ] T002 RED: write `T/test_pools.py` for `S/pools.py`'s pure surface (data-model §pools).
+- [x] T002 RED: write `T/test_pools.py` for `S/pools.py`'s pure surface (data-model §pools).
   - `PoolMode` values.
   - `HARNESS_QUEUE_DEFAULT == "ai-sdlc-harness"`.
   - `on_harness(opts, None)` and `on_harness(opts, "")` return a dict equal to `opts`, without a `task_queue` key, and do not mutate `opts`. `on_harness(opts, "q")` adds `task_queue="q"`.
   - `resolve_harness_queue`: unset → `None`; blank → `None`; `"default"` → `HARNESS_QUEUE_DEFAULT`; `"my.q-1"` → itself; `"bad q"` and a 201-character name → `ValueError`.
   - `S/pools.py` imports nothing from `sdlc` beyond leaf modules (the test asserts that `import sdlc.pools` does not import `sdlc.worker`).
   (R2, R3) **(S)**
-- [ ] T003 Create `S/pools.py` with `HARNESS_QUEUE_DEFAULT`, `PoolMode` (`StrEnum`), `on_harness`, `resolve_harness_queue` (name regex `^[A-Za-z0-9._-]{1,200}$`), and `HARNESS_ACTIVITIES`, the 28 names in research R2's harness rows. Write a module docstring citing ADR-9, rule A.1(a–c) as amended in R2, and the "prefer harness when unsure" rule. Make T002 green. **(S)**
+- [x] T003 Create `S/pools.py` with `HARNESS_QUEUE_DEFAULT`, `PoolMode` (`StrEnum`), `on_harness`, `resolve_harness_queue` (name regex `^[A-Za-z0-9._-]{1,200}$`), and `HARNESS_ACTIVITIES`, the 28 names in research R2's harness rows. Write a module docstring citing ADR-9, rule A.1(a–c) as amended in R2, and the "prefer harness when unsure" rule. Make T002 green. **(S)**
 - [ ] T004 RED: write `T/test_pools_classification.py`. Build `names = {a.__temporal_activity_definition.name for a in get_worker_activities()}` from `S/worker.py`. Assert:
   - `HARNESS_ACTIVITIES ⊆ names`, so every harness name is registered;
   - `"check_test_drift" in names`;
