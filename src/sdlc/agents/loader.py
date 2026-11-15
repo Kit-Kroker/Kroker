@@ -218,12 +218,32 @@ def _parse_role(name: str, d: Path, default_retries: int | None = None) -> RoleC
     if not f.is_file():
         raise RegistryError(f"role '{name}': missing {f}")
     data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise RegistryError(
+            f"role '{name}': {f} must be a YAML mapping of keys to values, "
+            f"got {type(data).__name__}"
+        )
     declared = data.pop("role", None)
     if declared is not None and declared != name:
         raise RegistryError(
             f"role directory '{name}' contains an agent.yaml declaring role "
             f"'{declared}': the filename is the API and must agree with its "
             f"contents"
+        )
+    # S-rider (FR-202 follow-up, 2026-11-14): per-role files fail closed on
+    # unknown keys, the same rule the defaults: block already applies. A
+    # typo'd key (validation_retry vs validation_retries) would otherwise be
+    # silently dropped by RoleConfig's extra=ignore and the role would run on
+    # the default as if the config never existed — the silent-dead-config
+    # outcome VR-1 rejects. Non-string keys (YAML allows `42: x`) are unknown
+    # by construction and once crashed the splat below with a TypeError.
+    known = set(RoleConfig.model_fields)
+    surplus = sorted(str(key) for key in data if not isinstance(key, str) or key not in known)
+    if surplus:
+        raise RegistryError(
+            f"role '{name}': unknown key(s) in {f.name}: {', '.join(surplus)} — "
+            f"a typo'd key is silently dead config (the value never loads). "
+            f"Known keys: {', '.join(sorted(known))}"
         )
     cfg = RoleConfig(**data)
     # FR-202 (VR-1b): the knob is legal only on roles that emit validated
