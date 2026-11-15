@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from sdlc.core.models import (
     ClarificationOutcome,
+    GateOutcome,
     GateOutcomeSummary,
     RunSummary,
     StageOutcome,
@@ -135,3 +136,42 @@ def test_run_summary_budget_counted_usd_round_trips():
     RunSummary.budget_counted_usd survives a model_dump_json round-trip."""
     s = _summary(budget_counted_usd=2.5)
     assert RunSummary.model_validate_json(s.model_dump_json()) == s
+
+
+# --- FR-304 (RED): GateOutcomeSummary full decision field set ------------------
+
+
+def test_gate_outcome_summary_new_fields_default_none():
+    """The FR-304 fields are additive: absent means a pre-FR-304 record,
+    never a fabricated value."""
+    g = GateOutcomeSummary(gate="merge", round=1, policy="soft", decided_by="human", approved=True)
+    assert g.outcome is None
+    assert g.comments is None
+    assert g.reviewer is None
+    assert g.decided_at is None
+
+
+def test_gate_outcome_summary_parses_pre_change_json():
+    """A summary.json written before this change has no new keys on its
+    gates rows; they parse unchanged, reading the fields as not recorded."""
+    g = GateOutcomeSummary.model_validate(
+        {"gate": "merge", "round": 1, "policy": "soft", "decided_by": "human", "approved": True}
+    )
+    assert g.outcome is None
+
+
+def test_gate_outcome_summary_round_trips_full_fields():
+    """The full FR-304 record survives a model_dump_json round-trip."""
+    g = GateOutcomeSummary(
+        gate="merge",
+        round=2,
+        policy="hard",
+        decided_by="human",
+        approved=False,
+        outcome=GateOutcome.REVISE,
+        comments="narrow the scope",
+        reviewer="maksim",
+        decided_at=datetime(2026, 11, 15, 10, 0, tzinfo=UTC),
+    )
+    assert GateOutcomeSummary.model_validate_json(g.model_dump_json()) == g
+
