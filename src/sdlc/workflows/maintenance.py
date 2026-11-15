@@ -220,7 +220,7 @@ class MaintenanceWorkflow(GateHost):
         floor = confidence_floor(
             inc.finding,
             reproduced=inc.seen_count >= 2,
-            reopens=0,
+            reopens=inc.reopens,
             n_actions=len(inc.plan.actions) if inc.plan else 0,
         )
         if inc.plan is None or floor == inc.plan.floor:
@@ -274,7 +274,7 @@ class MaintenanceWorkflow(GateHost):
         floor = confidence_floor(
             inc.finding,
             reproduced=inc.seen_count >= 2,
-            reopens=0,  # reopen is a 023b state; priced in the floor already
+            reopens=inc.reopens,
             n_actions=len(proposal.actions),
         )
         inc.plan = RepairPlan(

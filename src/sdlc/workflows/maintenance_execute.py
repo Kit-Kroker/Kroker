@@ -55,6 +55,7 @@ with workflow.unsafe.imports_passed_through():
     from ..maintenance.activities import probe_repair_child
     from ..maintenance.execution import (
         OPS_REFUSAL_OUTCOME,
+        apply_verdict,
         classify_verification,
         may_execute,
         merge_reject_decision,
@@ -247,22 +248,10 @@ def _live_attempt_incidents(state: MaintenanceState) -> list[Incident]:
     )
 
 
-def _dirty_mapped(inc: Incident, state: MaintenanceState, outcome: str, detail: str) -> None:
-    """The dirty mapping (data-model §transitions): under the bound the
-    attempt is a failure — the incident reopens with ``reopens += 1`` and a
-    cleared plan (re-planned next cycle); at the bound it escalates.
-    NOTE: extracted into the pure ``apply_verdict`` in T029; this inline
-    shape is the pre-US3 form, reviewed against the same clauses."""
-    assert inc.execution is not None
-    inc.execution.outcome = outcome  # type: ignore[assignment]
-    if inc.reopens < state.config.max_reopens:
-        inc.state = IncidentState.REOPENED
-        inc.reopens += 1
-        inc.plan = None  # the next plan is authored fresh against the reopen
-        inc.note = detail[:300]
-    else:
-        inc.state = IncidentState.ESCALATED
-        inc.note = f"escalated: {detail}"[:300]
+def _splice(state: MaintenanceState, updated: Incident) -> None:
+    """``apply_verdict`` is pure: the verdict result replaces the incident
+    in the loop's durable list (continue_as_new carries the list)."""
+    state.incidents = [updated if i.no == updated.no else i for i in state.incidents]
 
 
 async def timeout_step(state: MaintenanceState, now: datetime) -> None:
@@ -306,15 +295,12 @@ async def report_step(state: MaintenanceState, now: datetime) -> None:
             record.outcome = "awaiting_merge"
         elif probe.phase == "failed":
             if probe.non_retryable:
-                assert inc.execution is not None
-                inc.execution.outcome = "config_failed"
-                inc.state = IncidentState.ESCALATED
-                inc.note = f"configuration failure: {probe.failure}"[:300]
+                _splice(state, apply_verdict(inc, "config_failed", cfg))
             else:
-                _dirty_mapped(inc, state, "failed", probe.failure or "child failed")
+                _splice(state, apply_verdict(inc, "failed", cfg))
             continue
         elif probe.phase in ("cancelled", "timed_out", "terminated", "not_found"):
-            _dirty_mapped(inc, state, "timed_out", f"child {probe.phase}")
+            _splice(state, apply_verdict(inc, "timed_out", cfg))
             continue
 
         # awaiting_merge (or completed-with-PR): the verify pass.
@@ -379,20 +365,12 @@ async def report_step(state: MaintenanceState, now: datetime) -> None:
             verdict=verdict,  # type: ignore[arg-type]
         )
 
-        if verdict == "resolved":
-            inc.state = IncidentState.VERIFIED  # the merge stays human's
-        elif verdict == "unverifiable":
-            pass  # stays verifying; retried next cycle, bounded by timeout
-        elif verdict == "absent_at_base":
-            inc.state = IncidentState.RESOLVED_EXTERNALLY
-            inc.note = "the fault does not exist at the verification base"
-        elif verdict in DIRTY_VERDICTS:
-            if probe.pending_merge_round is not None:
-                await workflow.get_external_workflow_handle(record.child_id).signal(
-                    "submit_gate_decision",
-                    merge_reject_decision(probe.pending_merge_round, verdict),
-                )
-            _dirty_mapped(inc, state, "rejected_by_loop", f"dirty verdict: {verdict}")
+        if verdict in DIRTY_VERDICTS and probe.pending_merge_round is not None:
+            await workflow.get_external_workflow_handle(record.child_id).signal(
+                "submit_gate_decision",
+                merge_reject_decision(probe.pending_merge_round, verdict),
+            )
+        _splice(state, apply_verdict(inc, verdict, cfg))
 
         if verdict != "unverifiable":
             # the attempt is decided: remove the verify worktree and ref.

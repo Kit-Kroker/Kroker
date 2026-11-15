@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from ..core.models import GateDecision, GateOutcome
 from ..triage.delta import FindingDelta, FindingState, compute_delta
 from ..triage.models import FixClass, RepoTriage
-from .models import Incident, MaintenanceConfig, RepairAction, RepairPlan
+from .models import Incident, IncidentState, MaintenanceConfig, RepairAction, RepairPlan
 
 #: The recorded outcome for any ops action, verbatim on the wire (SC-B03,
 #: GATE 1 Q6): ops proposals are never executed, by policy or by hand.
@@ -84,6 +84,70 @@ def classify_verification(
             return "persisted"
         return "new"  # FindingState.NEW
     return "absent_at_base"
+
+
+#: What each dirty verdict records on the attempt (data-model §outcome):
+#: loop-rejected verdicts are "rejected_by_loop"; probe-side failures keep
+#: their own outcome; "empty_diff" stays available for a probe-side finding.
+_DIRTY_OUTCOME: dict[str, str] = {
+    "persisted": "rejected_by_loop",
+    "new": "rejected_by_loop",
+    "conflicted": "rejected_by_loop",
+    "failed": "failed",
+    "timed_out": "timed_out",
+    "empty_diff": "empty_diff",
+}
+
+
+def apply_verdict(
+    incident: Incident,
+    verdict: str,
+    cfg: MaintenanceConfig,
+) -> Incident:
+    """One verdict's pure state mapping (023b T029, B-FR-009, R11): the
+    incident is never mutated — the verdict result is a NEW incident the
+    caller splices into its state (report_step's only write-back).
+
+    Dirty verdicts (``_DIRTY_OUTCOME``'s keys) fail the attempt: under the
+    bound the incident reopens — ``reopens += 1``, plan cleared, re-planned
+    next cycle — and at ``max_reopens`` it escalates with no further
+    reopen. A non-retryable configuration failure escalates at once on
+    attempt 1. A collected ``resolved`` verifies (the merge stays human's,
+    reopens and plan untouched); ``unverifiable`` changes nothing (the
+    attempt retries next cycle, bounded by the child timeout);
+    ``absent_at_base`` resolves the stale incident externally — the fault
+    the incident recorded does not exist at the verification base, so it
+    is stale, not proven fixed (data-model §transitions)."""
+    updated = incident.model_copy(deep=True)
+    if verdict == "config_failed":
+        updated.state = IncidentState.ESCALATED
+        updated.note = "escalated: configuration failure"
+        if updated.execution is not None:
+            updated.execution.outcome = "config_failed"
+        return updated
+    if verdict == "resolved":
+        updated.state = IncidentState.VERIFIED
+        updated.note = "verified on the verification branch; the merge stays human"
+        return updated
+    if verdict == "unverifiable":
+        return updated  # stays verifying; retried next cycle
+    if verdict == "absent_at_base":
+        updated.state = IncidentState.RESOLVED_EXTERNALLY
+        updated.note = "the fault does not exist at the verification base"
+        return updated
+    if verdict in _DIRTY_OUTCOME:
+        if updated.execution is not None:
+            updated.execution.outcome = _DIRTY_OUTCOME[verdict]  # type: ignore[assignment]
+        if updated.reopens < cfg.max_reopens:
+            updated.state = IncidentState.REOPENED
+            updated.reopens += 1
+            updated.plan = None  # the next plan is authored against the reopen
+            updated.note = f"dirty verdict: {verdict}"
+        else:
+            updated.state = IncidentState.ESCALATED
+            updated.note = f"escalated: dirty verdict {verdict} at the reopen bound"
+        return updated
+    raise ValueError(f"unknown verdict: {verdict!r}")
 
 
 def may_execute(
