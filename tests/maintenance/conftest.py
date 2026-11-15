@@ -20,12 +20,16 @@ here, which keeps every cycle seconds-long and hermetic.
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
+from temporalio import activity
 
+from sdlc.maintenance.models import RepairProposal
 from sdlc.measurement import Measurement
+from sdlc.notify.contract import NotifyInput, Results
 from sdlc.triage.models import (
     FixClass,
     Readiness,
@@ -265,3 +269,136 @@ def make_triage(
         readiness=_READY,
         signals=signals,
     )
+
+
+# --------------------------------------------------------------------------
+# 023b T003: fix builders for the stub repair child, and the worker helper
+# --------------------------------------------------------------------------
+
+# Same marker the build-probe fake keys on (fake_triage.BREAK_MARKER); kept
+# here so the fix builders stay a conftest-only concern.
+_BREAK_MARKER = "build break"
+
+_PASSING_INIT = "def add(a: int, b: int) -> int:\n    return a + b\n"
+
+
+def seeded_findings(repo: Path) -> list[TriageFinding]:
+    """The faults currently seeded in the fixture repo, as findings, in a
+    stable order (build break, .env pair, provider credential). The stub's
+    ``fix:`` script fixes exactly these."""
+    out: list[TriageFinding] = []
+    init = repo / "src" / "fixture_pkg" / "__init__.py"
+    if init.exists() and _BREAK_MARKER in init.read_text(encoding="utf-8"):
+        out.append(build_break_finding())
+    tracked = set(git(repo, "ls-files").split())
+    if ".env" in tracked:
+        out.extend(env_file_findings())
+    if "config/settings.ini" in tracked:
+        out.append(credential_finding())
+    return out
+
+
+def fix_commit(repo: Path, finding: TriageFinding) -> str:
+    """Commit THE fix for one seeded finding on ``repo`` (the integration
+    worktree). Returns the new head. No-op commit-free when already fixed."""
+    if finding.rule == "build_failed":
+        init = repo / "src" / "fixture_pkg" / "__init__.py"
+        if _BREAK_MARKER not in init.read_text(encoding="utf-8"):
+            return head_sha(repo)
+        init.write_text(_PASSING_INIT, encoding="utf-8")
+        git(repo, "add", "src")
+        git(repo, "commit", "-m", "fix: restore the return expression")
+    elif finding.rule in ("env_file_tracked", "secret_committed"):
+        tracked = set(git(repo, "ls-files").split())
+        if ".env" not in tracked:
+            return head_sha(repo)
+        gitignore = repo / ".gitignore"
+        ignore = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+        if ".env" not in ignore.split():
+            gitignore.write_text(ignore + ".env\n", encoding="utf-8")
+            git(repo, "add", ".gitignore")
+        git(repo, "rm", "--cached", "--quiet", ".env")
+        git(repo, "commit", "-m", "fix: untrack .env")
+    elif finding.rule == "aws_access_key_id":
+        tracked = set(git(repo, "ls-files").split())
+        if "config/settings.ini" not in tracked:
+            return head_sha(repo)
+        git(repo, "rm", "--quiet", "config/settings.ini")
+        git(repo, "commit", "-m", "fix: remove the committed provider credential")
+    else:  # pragma: no cover - the fixture seeds no other rule
+        raise AssertionError(f"no fix builder for rule {finding.rule!r}")
+    return head_sha(repo)
+
+
+def nonfix_commit(repo: Path) -> str:
+    """A real commit that fixes nothing: the ``nofix:`` script's payload."""
+    notes = repo / "NOTES.md"
+    notes.write_text(
+        (notes.read_text(encoding="utf-8") if notes.exists() else "") + "non-fix note\n",
+        encoding="utf-8",
+    )
+    git(repo, "add", "NOTES.md")
+    git(repo, "commit", "-m", "non-fix: touch notes")
+    return head_sha(repo)
+
+
+@activity.defn(name="notify")
+async def fake_notify(inp: NotifyInput) -> Results:
+    """Delivery-free notify: every route reports success-with-nothing."""
+    return Results(results=[])
+
+
+# The 023b maintenance activities, as they land: is_ancestor and
+# remove_verification_tree join at T012, probe_repair_child at T014.
+# (Extended by their tasks; never smuggled in from elsewhere.)
+MAINT_023B_ACTIVITIES: list = []
+
+
+@asynccontextmanager
+async def maint_worker(
+    env,
+    *,
+    task_queue: str,
+    proposal: RepairProposal,
+    extra_activities: Sequence[object] = (),
+    extra_workflows: Sequence[type] = (),
+    max_cached_workflows: int | None = None,
+):
+    """The 023b workflow-tier worker (T003): ``MaintenanceWorkflow``,
+    ``TriageWorkflow`` and the stub repair child registered under the real
+    ``GraphWorkflow`` wire name, plus every activity the execute paths
+    touch — triage fakes, the maintainer fake producing ``proposal``, the
+    notify fake, the vcs activities, the stub's own activities and the 023b
+    maintenance activities. ``extra_activities`` carries per-test fakes."""
+    from temporalio.worker import Worker
+
+    from sdlc.agents.runner import SdlcPydanticAIPlugin
+    from sdlc.vcs import build_verification_branch, setup_integration_branch
+    from sdlc.workflows.maintenance import MaintenanceWorkflow
+    from sdlc.workflows.triage import TriageWorkflow
+    from tests.fakes.fake_agents import fake_agent_activities
+
+    from .fake_triage import TRIAGE_ACTIVITIES
+    from .stub_child import STUB_ACTIVITIES, StubRepairChild
+
+    kwargs: dict = {}
+    if max_cached_workflows is not None:
+        kwargs["max_cached_workflows"] = max_cached_workflows
+    async with Worker(
+        env.client,
+        task_queue=task_queue,
+        workflows=[MaintenanceWorkflow, TriageWorkflow, StubRepairChild, *extra_workflows],
+        plugins=[SdlcPydanticAIPlugin()],
+        activities=[
+            *TRIAGE_ACTIVITIES,
+            *fake_agent_activities([("maintainer_agent", RepairProposal, proposal)]),
+            fake_notify,
+            setup_integration_branch,
+            build_verification_branch,
+            *STUB_ACTIVITIES,
+            *MAINT_023B_ACTIVITIES,
+            *extra_activities,
+        ],
+        **kwargs,
+    ):
+        yield
