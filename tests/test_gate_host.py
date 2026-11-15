@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import datetime as dt
 import inspect
+import pathlib
 
 import pytest
 
@@ -18,6 +19,8 @@ from sdlc.core.models import (
 from sdlc.pending import StageGatePending
 from sdlc.workflows.gates import GateHost
 from sdlc.workflows.graph import GraphWorkflow
+
+GATES_SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "sdlc" / "workflows" / "gates.py"
 
 
 def test_feature_workflow_inherits_the_shared_gate():
@@ -126,3 +129,15 @@ def test_gate_settings_reaches_the_host_unchanged():
     s = GateSettings(default_gate_policy=GatePolicy.OFF, gate_timeout_hours=1)
     assert s.default_gate_policy is GatePolicy.OFF
     assert s.gate_timeout_hours == 1
+
+
+def test_gate_stamps_decided_at_before_hook():
+    """FR-304: policy/timeout/SOFT-auto decisions get decided_at where they
+    are created; a human decision's signal-time stamp (submit_gate_decision)
+    must not be overwritten. `_gate` is the one choke point all four paths
+    pass, so the stamp lives there, guarded to preserve an existing stamp."""
+    src = GATES_SRC.read_text(encoding="utf-8")
+    stamp = "decision.decided_at = decision.decided_at or workflow.now()"
+    hook = "await self._on_gate_decided("
+    assert stamp in src
+    assert src.index(stamp) < src.index(hook)
