@@ -1,5 +1,5 @@
-"""The human-facing renders (023a T016): the gate context text and the
-CLI incidents table (contracts/cli.md).
+"""The human-facing renders (023a T016, 023b T041): the gate context text, the
+CLI incidents table (contracts/cli.md) and the retention text.
 """
 
 from __future__ import annotations

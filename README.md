@@ -106,20 +106,38 @@ Two round-012 notes for `benchmark run`:
   dirty tree); the image defaults to the literal `unknown`, which no
   success criterion accepts.
 
-### Maintenance loop (DAPER, 023a)
-`MaintenanceWorkflow` (`maint-<project>`) plans repairs for a repo and never
-acts: baseline → detect → plan → gate, and nothing writes to the repository.
+### Maintenance loop (DAPER, 023a + 023b)
+`MaintenanceWorkflow` (`maint-<project>`) runs baseline → detect → plan →
+gate → execute → report/verify → retain. Without `--execute` (the default)
+it plans repairs and never acts: nothing writes to the repository. With
+`--execute`, an approved `code_fix` plan runs as a capped brownfield repair
+child; an approved incident that cannot start yet (a cap, or a path overlap
+with a live incident) stays `queued`, is never re-gated, and starts on a
+later cycle. Report then probes the default branch and records the delta
+against the baseline: a fix absent at a commit containing the child's head
+closes the incident, a dirty or regressed verdict reopens it (bounded by
+`--max-reopens`, then escalates to a human), and every terminal incident is
+retained as a scrubbed memory record. Starts are bounded per cycle and per
+rolling 7-day window.
+
 Repair gates are soft (auto-approved only strictly above the `--threshold`);
 detection escalations are hard. Both appear in the cross-run inbox, so the
-existing decision verbs resolve them. A schedule can kick a cycle
-(`schedules/maint-example.yaml.sample`).
+existing decision verbs resolve them. The loop's only decision on a child's
+own merge gate is REJECT — it never approves a merge, and ops actions stay
+proposal-only: a plan that carries one is never executed. A schedule can
+kick a cycle (`schedules/maint-example.yaml.sample`).
 
 ```
 python -m sdlc.cli maintain enable <project> --repo <path> --ack-unattended-build-probe   # or --no-build-probe
+python -m sdlc.cli maintain enable <project> --repo <path> --ack-unattended-build-probe --execute [--max-starts-per-cycle 1-3] [--max-starts-per-window 1-10] [--max-reopens 0-2] [--child-timeout-hours 1-168]
 python -m sdlc.cli maintain incidents <project> [--all | --state]
 python -m sdlc.cli maintain nudge <project>      # run one cycle now
 python -m sdlc.cli maintain disable <project>    # withdraw open gates, end the loop
 ```
+
+`--execute` needs `--ack-unattended-build-probe` (not `--no-build-probe`),
+`gh` on `PATH`, an `origin` remote, and a resolvable default branch; the
+four cap flags are accepted only with `--execute`.
 
 ## Run
 

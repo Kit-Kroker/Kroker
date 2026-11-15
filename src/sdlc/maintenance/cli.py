@@ -1,4 +1,4 @@
-"""The `sdlc maintain` verbs (023a T021, contracts/cli.md).
+"""The `sdlc maintain` verbs (023a T021, 023b T047 --execute, contracts/cli.md).
 
 Stateless shells over Temporal (FR-604, ADR-8): enable IS the project's
 registration (FR-001) — it validates MaintenanceConfig, refuses a path

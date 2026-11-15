@@ -1,4 +1,5 @@
-"""MaintenanceWorkflow — the DAPER loop's long-lived host (023a T018).
+"""MaintenanceWorkflow — the DAPER loop's long-lived host (023a T018; 023b
+adds the execute/report/retain half).
 
 Wire contract (contracts/workflow-wire.md — the names are recorded in
 histories and live Schedules; never rename):
@@ -17,7 +18,8 @@ signal. Nudges during a cycle set the flag again and coalesce into exactly
 one follow-up (R2). Gates run as their own coroutines tracked in
 ``_gate_tasks`` and never block the next cycle (R3); each records its
 outcome on its incident. Nothing in this file writes to any repository
-(FR-016).
+(FR-016): the 023b execute half lives in ``maintenance_execute.py`` behind
+``cfg.execute`` and the ``maint-023b-execute`` patch.
 """
 
 from __future__ import annotations
