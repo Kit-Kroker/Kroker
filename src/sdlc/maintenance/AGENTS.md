@@ -18,3 +18,14 @@ This file carries only what is true *here*.
 - Maintenance imports triage **types** only (`TriageFinding`, `RepoTriage`,
   `FixClass`, `finding_identity`) — never calls triage code from here; the
   triage child workflow is started by `workflows/maintenance.py`.
+
+## Modules and verbs
+
+`models.py` (wire types), `incidents.py`, `confidence.py`, `gate.py`,
+`prompt.py` and `render.py` are the pure/domain modules; `cli.py` owns the
+`maintain` verbs: `enable` (NFR-9: requires exactly one of
+`--ack-unattended-build-probe` / `--no-build-probe`; no gate-policy flags),
+`incidents [--all|--state]`, `nudge`, `disable`. Maintenance gates join the
+cross-run inbox (R11), so the existing decision verbs resolve them — there
+is no maintain-specific decision verb. The workflows live in
+`workflows/maintenance.py` (`MaintenanceWorkflow`, `MaintenanceKickWorkflow`).

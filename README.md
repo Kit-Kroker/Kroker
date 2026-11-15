@@ -16,7 +16,7 @@ do (`claude -p`, `opencode run`) inside isolated git worktrees.
 ## Roles
 Governed by the versioned registry in `agents/` (`agents/registry.yaml` +
 one `agents/<role>/` folder per role) and validated at worker boot
-(`src/sdlc/agents/loader.py`) — 3 harness + 8 required proposer + 8 optional
+(`src/sdlc/agents/loader.py`) — 3 harness + 8 required proposer + 9 optional
 proposer roles.
 
 | Role | Kind | Runs as |
@@ -35,6 +35,7 @@ proposer roles.
 | adversary *(optional, `adversarial_review_enabled`)* | Pydantic AI, decorrelated second opinion (different model identity than dev+reviewer) on the approving path | activity via TemporalDurability, advisory, fail-open |
 | constitution *(optional, `constitution_enabled`, FR-112)* | Pydantic AI, one bounded draft of governing principles over a read-only repo workspace (FileSystem 4 read tools + RepoContext); frozen deterministically, no gate | activity via TemporalDurability; off by default (the run's graph opts in) |
 | product *(optional, `requirements_enabled`, FR-113)* | Pydantic AI, one bounded draft of story-shaped requirements (US/FR/SC, ids code-assigned at freeze) over a read-only repo workspace (FileSystem 4 read tools + RepoContext); frozen deterministically, no gate | activity via TemporalDurability; off by default (the run's graph opts in) |
+| maintainer *(optional, 023a)* | Pydantic AI, proposes one repair plan per maintenance incident (confidence floor applied in code); a proposer, never a judge, called by `MaintenanceWorkflow` rather than a stage | activity via TemporalDurability; proposal-only, nothing is written to the repo |
 
 ## Human-in-the-loop
 Gates: clarify, architecture, plan, merge, deploy — each `hard` / `soft` /
@@ -104,6 +105,21 @@ Two round-012 notes for `benchmark run`:
   with `KROKER_COMMIT=<sha>` (and `KROKER_TREE_DIRTY=0|1` for a clean or
   dirty tree); the image defaults to the literal `unknown`, which no
   success criterion accepts.
+
+### Maintenance loop (DAPER, 023a)
+`MaintenanceWorkflow` (`maint-<project>`) plans repairs for a repo and never
+acts: baseline → detect → plan → gate, and nothing writes to the repository.
+Repair gates are soft (auto-approved only strictly above the `--threshold`);
+detection escalations are hard. Both appear in the cross-run inbox, so the
+existing decision verbs resolve them. A schedule can kick a cycle
+(`schedules/maint-example.yaml.sample`).
+
+```
+python -m sdlc.cli maintain enable <project> --repo <path> --ack-unattended-build-probe   # or --no-build-probe
+python -m sdlc.cli maintain incidents <project> [--all | --state]
+python -m sdlc.cli maintain nudge <project>      # run one cycle now
+python -m sdlc.cli maintain disable <project>    # withdraw open gates, end the loop
+```
 
 ## Run
 

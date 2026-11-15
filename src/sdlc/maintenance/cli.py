@@ -23,7 +23,8 @@ from ..task_queue import TASK_QUEUE
 
 
 def register_maintain_subparsers(msub: argparse._SubParsersAction) -> None:
-    """The maintain subtree: enable + incidents here; nudge/disable in T031."""
+    """The maintain subtree: enable, incidents, nudge and disable
+    (contracts/cli.md)."""
     en = msub.add_parser("enable")
     en.add_argument("project")
     en.add_argument("--repo", required=True, help="the project repository (a git work tree)")
