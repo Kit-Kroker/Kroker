@@ -13,8 +13,11 @@ Removing the deprecated marker entirely is a standing item (020 bookkeeping).
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from typing import Literal
 
 from temporalio import workflow
+from temporalio.common import WorkflowIDReusePolicy
+from temporalio.exceptions import WorkflowAlreadyStartedError
 
 with workflow.unsafe.imports_passed_through():
     from ..agents import (
@@ -49,3 +52,37 @@ async def execute_pipeline_child(
     return await workflow.execute_child_workflow(
         GraphWorkflow.run, run_input, id=child_id, task_queue=task_queue
     )
+
+
+async def start_repair_child(
+    *,
+    child_id: str,
+    idea: IdeaBrief,
+    cfg: PipelineConfig,
+    seeded: SeededWork | None,
+    task_queue: str,
+) -> Literal["started", "attached"]:
+    """Start one NON-BLOCKING repair child (023b R1): returns once the start
+    is acknowledged and never awaits the child's result. REJECT_DUPLICATE
+    keeps a finished id from re-running; ABANDON lets the child outlive
+    this parent's continue_as_new and termination (the T008 proof). A
+    second start of a live or finished id maps WorkflowAlreadyStartedError
+    to "attached" -- the loop probes instead of restarting.
+
+    Deliberately NO deprecate_patch call: the e74-graph-child patch belongs
+    to tidyup and benchmark children's histories, not to this command. The
+    run input is built exactly as execute_pipeline_child builds it, so a
+    GraphStartError still propagates into the caller's failure branch."""
+    run_input = build_run_input(idea, cfg, seeded, registry_roles=REGISTRY, handler_types=HANDLERS)
+    try:
+        await workflow.start_child_workflow(
+            GraphWorkflow.run,
+            run_input,
+            id=child_id,
+            task_queue=task_queue,
+            id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
+            parent_close_policy=workflow.ParentClosePolicy.ABANDON,
+        )
+    except WorkflowAlreadyStartedError:
+        return "attached"
+    return "started"

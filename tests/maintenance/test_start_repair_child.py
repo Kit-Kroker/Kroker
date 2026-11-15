@@ -18,6 +18,7 @@ import asyncio
 import subprocess
 
 import pytest
+import temporalio.workflow as _workflow
 from pydantic import BaseModel
 from temporalio import workflow
 from temporalio.api.enums.v1 import EventType, ParentClosePolicy
@@ -25,14 +26,19 @@ from temporalio.client import WorkflowExecutionStatus
 from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 
-from sdlc.core.models import IdeaBrief, PipelineConfig
-from sdlc.maintenance.models import RepairProposal
-from sdlc.tidyup.backlog import seeded_work_for
-from sdlc.vcs.integration import IntegrationInput, setup_integration_branch
-from sdlc.workflows.graph_catalog import build_run_input
-from sdlc.workflows.models import GraphRunInput
-from sdlc.workflows.tidyup import _default_fix_cfg
-from tests.maintenance.conftest import commit_env_file, env_file_findings, maint_worker
+with _workflow.unsafe.imports_passed_through():
+    # Mark THIS module pass-through so the workflow sandbox reuses the real
+    # model classes instead of re-importing them (a sandbox-local IdeaBrief
+    # fails pydantic's model_type check against the real GraphRunInput --
+    # the same reason every src workflow module wraps its imports).
+    from sdlc.core.models import IdeaBrief, PipelineConfig
+    from sdlc.maintenance.models import RepairProposal
+    from sdlc.tidyup.backlog import seeded_work_for
+    from sdlc.vcs.integration import IntegrationInput, setup_integration_branch
+    from sdlc.workflows.graph_catalog import build_run_input
+    from sdlc.workflows.models import GraphRunInput
+    from sdlc.workflows.tidyup import _default_fix_cfg
+    from tests.maintenance.conftest import commit_env_file, env_file_findings, maint_worker
 
 TASK_QUEUE = "t009-repair-child"
 PARENT_ID = "t009-parent"
@@ -330,7 +336,8 @@ async def test_start_with_the_id_of_a_completed_child_returns_attached_not_resta
             child = env.client.get_workflow_handle(EDGE_CHILD_ID)
 
             async def _at_merge_gate():
-                return await child.query(StubRepairChild.pending_gate) == "merge"
+                # pending_gate returns the status verbatim ("awaiting:<gate>").
+                return await child.query(StubRepairChild.pending_gate) == "awaiting:merge"
 
             await _edge_until(_at_merge_gate, what="the merge gate to open")
             await child.signal(
