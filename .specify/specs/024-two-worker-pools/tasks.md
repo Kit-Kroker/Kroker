@@ -71,12 +71,12 @@
 
 **Independent test**: quickstart §1a (`T/test_worker_boot_plan.py`) and the §5 smoke refusals.
 
-- [ ] T006 [US2] RED: write `T/test_worker_boot_plan.py`.
+- [x] T006 [US2] RED: write `T/test_worker_boot_plan.py`.
   - **The truth table.** One parametrised case per row of the data-model `pool_boot_plan` truth table, including every **refuse** row. A refusal raises `ValueError`, and the message names the variable and the fix.
   - **Bad env values.** `KROKER_HARNESS_CAP="0"` and `"-1"` refuse in every mode; `KROKER_WORKER_POOL="bogus"` refuses.
   - **Filters.** `core_activities()` ∪ `harness_activities()` equals `get_worker_activities()` by name, and the two are disjoint.
   (P-FR-003, P-FR-004; R5) **(S)**
-- [ ] T007 [US2] Implement `PoolBootPlan` (frozen dataclass), `pool_boot_plan(mode, queue, cap)` and `boot_plan_from_env(env=os.environ)` in `S/pools.py`. Implement `core_activities()` and `harness_activities()` in `S/worker.py`, filtering `get_worker_activities()` by `activity.defn` name against `HARNESS_ACTIVITIES`. Make T006 green. **(S)**
+- [x] T007 [US2] Implement `PoolBootPlan` (frozen dataclass), `pool_boot_plan(mode, queue, cap)` and `boot_plan_from_env(env=os.environ)` in `S/pools.py`. Implement `core_activities()` and `harness_activities()` in `S/worker.py`, filtering `get_worker_activities()` by `activity.defn` name against `HARNESS_ACTIVITIES`. Make T006 green. **(S)**
 - [ ] T008 [US2] RED: write `T/test_worker_main_pools.py` (fast tier: monkeypatch `Client.connect`, `Worker` and `worktree_janitor` with recorders; no server).
   - **No vars set (G-1, G-5).** Exactly one `Worker(task_queue="ai-sdlc")` is built with all ten workflows and every activity; the janitor starts; the printed line is exactly `worker running on task queue 'ai-sdlc'`.
   - **`all` + queue + cap 2 (G-3, G-4).** Two workers: the harness one is built **first**, with `max_concurrent_activities=2`, no workflows, the harness set and identity `harness@…`. The core one keeps everything, with identity `core@…`.

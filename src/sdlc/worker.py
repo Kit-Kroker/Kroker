@@ -95,6 +95,7 @@ from .memory.activities import (
 )
 from .notify.activities import notify
 from .observability.activities import export_run_artifacts
+from .pools import HARNESS_ACTIVITIES
 from .pricing import price_usage
 from .stages import STAGE_MODULES
 from .task_queue import TASK_QUEUE  # noqa: F401 -- re-export
@@ -252,6 +253,33 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         risk_memo_store,
         verify_risk_refs,
         *agent_activities,
+    ]
+
+
+def core_activities() -> list[Callable[..., Any]]:
+    """The registered activities in the core class (024 T007).
+
+    Everything ``get_worker_activities()`` registers whose defn name is not
+    in ``pools.HARNESS_ACTIVITIES`` — order preserved.
+    """
+    return [
+        act
+        for act in get_worker_activities()
+        if getattr(act, "__temporal_activity_definition").name not in HARNESS_ACTIVITIES
+    ]
+
+
+def harness_activities() -> list[Callable[..., Any]]:
+    """The registered activities in the harness class (024 T007).
+
+    The ``HARNESS_ACTIVITIES`` subset of ``get_worker_activities()``,
+    order preserved — the classification test pins that every harness
+    name is registered, so this never silently drops one.
+    """
+    return [
+        act
+        for act in get_worker_activities()
+        if getattr(act, "__temporal_activity_definition").name in HARNESS_ACTIVITIES
     ]
 
 

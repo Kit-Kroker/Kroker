@@ -24,7 +24,9 @@ it freely (it must never import ``sdlc.worker`` or any stage).
 
 from __future__ import annotations
 
+import dataclasses
 import enum
+import logging
 import os
 import re
 from collections.abc import Mapping
@@ -122,3 +124,97 @@ def resolve_harness_queue(
             f"{HARNESS_QUEUE_DEFAULT!r})"
         )
     return raw
+
+
+# ----------------------------------------------------------------- boot plan
+#
+# The unit-testable core of ``worker.main``'s pool selection (research R5;
+# the truth table in data-model.md is normative).
+
+
+@dataclasses.dataclass(frozen=True)
+class PoolBootPlan:
+    """Which workers a process should build, per the R5 truth table."""
+
+    core_worker: bool
+    harness_worker: bool
+    janitor: bool
+    cap: int | None
+    queue: str | None
+
+
+def pool_boot_plan(
+    mode: PoolMode | str,
+    queue: str | None,
+    cap: int | None,
+) -> PoolBootPlan:
+    """Validate the R5 refusals and lay out the workers to build.
+
+    Refusals raise :class:`ValueError` naming the environment variable at
+    fault and the fix, mirroring worker-boot contract G-2 (the message is
+    what ``worker.main`` exits with, before connecting to Temporal).
+    """
+    if cap is not None and cap < 1:
+        raise ValueError(
+            f"KROKER_HARNESS_CAP must be an integer >= 1 (got {cap}); unset it for the SDK default"
+        )
+    m = PoolMode(mode)
+    if m is PoolMode.ALL:
+        if queue is None:
+            if cap is not None:
+                raise ValueError(
+                    "KROKER_HARNESS_CAP is set without KROKER_HARNESS_QUEUE; "
+                    "a cap only applies to the harness worker, which needs "
+                    "a queue — set KROKER_HARNESS_QUEUE or unset the cap"
+                )
+            # Today, exactly: one worker on the core queue, janitor on.
+            return PoolBootPlan(True, False, True, cap=None, queue=None)
+        return PoolBootPlan(True, True, True, cap=cap, queue=queue)
+    if queue is None:
+        raise ValueError(
+            f"KROKER_WORKER_POOL={m.value} needs KROKER_HARNESS_QUEUE to "
+            "name the harness queue — set it (or use "
+            f'{HARNESS_QUEUE_DEFAULT!r} via the sentinel "default")'
+        )
+    if m is PoolMode.CORE:
+        if cap is not None:
+            logging.getLogger(__name__).warning(
+                "KROKER_HARNESS_CAP=%s is ignored in core mode: the cap "
+                "limits the harness worker only (unset it to silence this)",
+                cap,
+            )
+        return PoolBootPlan(True, False, False, cap=None, queue=queue)
+    # PoolMode.HARNESS
+    return PoolBootPlan(False, True, True, cap=cap, queue=queue)
+
+
+def boot_plan_from_env(env: Mapping[str, str] | None = None) -> PoolBootPlan:
+    """Read the three pool variables from ``env`` (default: ``os.environ``).
+
+    An explicitly passed empty mapping means "no variables" and never
+    falls back to the process environment. Blank values mean unset
+    (``KROKER_WORKER_POOL=''`` is the default ``all``), consistent with
+    the queue variable's blank handling.
+    """
+    source = os.environ if env is None else env
+    raw_pool = source.get("KROKER_WORKER_POOL")
+    if raw_pool is None or raw_pool.strip() == "":
+        mode: PoolMode | str = PoolMode.ALL
+    else:
+        try:
+            mode = PoolMode(raw_pool)
+        except ValueError as exc:
+            raise ValueError(
+                f"KROKER_WORKER_POOL must be exactly one of all|core|harness (got {raw_pool!r})"
+            ) from exc
+    queue = resolve_harness_queue(source)
+    raw_cap = source.get("KROKER_HARNESS_CAP")
+    cap: int | None = None
+    if raw_cap is not None and raw_cap.strip() != "":
+        try:
+            cap = int(raw_cap)
+        except ValueError as exc:
+            raise ValueError(
+                f"KROKER_HARNESS_CAP must be an integer >= 1 (got {raw_cap!r})"
+            ) from exc
+    return pool_boot_plan(mode, queue, cap)
