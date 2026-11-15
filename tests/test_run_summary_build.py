@@ -314,3 +314,101 @@ def test_without_budget_counted_usd_the_field_is_none():
         memory_watermark=None,
     )
     assert s.budget_counted_usd is None
+
+
+# --- FR-304 (RED): full decision fields reach the summary; dedup enriches ------
+
+
+def test_gate_decided_full_fields_reach_summary():
+    from sdlc.core.models import GateOutcome
+
+    trace = [
+        _ev(
+            0,
+            RunEventKind.GATE_DECIDED,
+            gate="merge",
+            round=1,
+            policy="hard",
+            decided_by="human",
+            approved="false",
+            outcome="reject",
+            reviewer="maksim",
+            comments="not ready",
+            decided_at="2026-11-15T09:00:00+00:00",
+        ),
+        _ev(1, RunEventKind.RUN_FINISHED),
+    ]
+    s = build_run_summary(
+        run_id="r", mode="greenfield", outcome="rejected", trace=trace, memory_enabled=False,
+        memory_watermark=None,
+    )
+    g = s.gates[0]
+    assert g.outcome is GateOutcome.REJECT
+    assert g.reviewer == "maksim"
+    assert g.comments == "not ready"
+    assert g.decided_at == datetime(2026, 11, 15, 9, 0, tzinfo=UTC)
+
+
+def test_gate_dedup_enriches_instead_of_replacing():
+    """The merge-gate shape: RunHost's full emit, then merge's overrides-only
+    re-emit. Field-wise merge, not last-wins replace."""
+    from sdlc.core.models import GateOutcome
+
+    trace = [
+        _ev(
+            0,
+            RunEventKind.GATE_DECIDED,
+            gate="merge",
+            round=1,
+            policy="soft",
+            decided_by="human",
+            approved="true",
+            outcome="approve",
+            reviewer="maksim",
+            comments="accepted risk",
+            decided_at="2026-11-15T09:00:00+00:00",
+        ),
+        _ev(
+            1,
+            RunEventKind.GATE_DECIDED,
+            gate="merge",
+            round=1,
+            policy="soft",
+            decided_by="maksim",
+            approved="true",
+            overrides="coverage,lint",
+        ),
+        _ev(2, RunEventKind.RUN_FINISHED),
+    ]
+    s = build_run_summary(
+        run_id="r", mode="greenfield", outcome="deployed", trace=trace, memory_enabled=False,
+        memory_watermark=None,
+    )
+    g = s.gates[0]
+    assert g.outcome is GateOutcome.APPROVE and g.comments == "accepted risk"  # kept
+    assert g.decided_by == "maksim" and g.overrides == ["coverage", "lint"]  # later wins
+
+
+def test_pre_change_events_parse_to_none_fields():
+    """A GATE_DECIDED event emitted before this change carries none of the
+    new keys; its summary row reads them as not recorded."""
+    trace = [
+        _ev(
+            0,
+            RunEventKind.GATE_DECIDED,
+            gate="architecture",
+            round=1,
+            policy="hard",
+            decided_by="human",
+            approved="true",
+            confidence=0.9,
+        ),
+        _ev(1, RunEventKind.RUN_FINISHED),
+    ]
+    s = build_run_summary(
+        run_id="r", mode="greenfield", outcome="deployed", trace=trace, memory_enabled=False,
+        memory_watermark=None,
+    )
+    g = s.gates[0]
+    assert g.outcome is None and g.comments is None
+    assert g.reviewer is None and g.decided_at is None

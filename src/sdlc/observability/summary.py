@@ -3,11 +3,13 @@ testable outside the workflow, called once from the retro stage."""
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal, cast
 
 from ..core.models import (
     ClarificationDimension,
     ClarificationOutcome,
+    GateOutcome,
     GateOutcomeSummary,
     RoleUsage,
     RunSummary,
@@ -39,16 +41,50 @@ def _gate_outcome(ev: RunEvent) -> GateOutcomeSummary:
     d = ev.data
     conf = d.get("confidence")
     ov = d.get("overrides", "")
+    when = d.get("decided_at")
     return GateOutcomeSummary(
         gate=d.get("gate", "?"),
         round=int(d.get("round", "1")),
         policy=d.get("policy", "?"),
         decided_by=d.get("decided_by", "?"),
         approved=d.get("approved") == "true",
+        # FR-304 fields: absent on events emitted before this change.
+        outcome=GateOutcome(d["outcome"]) if d.get("outcome") else None,
+        comments=d.get("comments") or None,
+        reviewer=d.get("reviewer") or None,
+        decided_at=datetime.fromisoformat(when) if when else None,
         confidence=float(conf) if conf is not None else None,
         author_model=d.get("author_model") or None,
         overrides=[c for c in ov.split(",") if c],
     )
+
+
+# Optional (None-able) GateOutcomeSummary fields an enrich-merge fills from
+# the earlier record when a later emit omits them.
+_ENRICH_OPTIONALS = (
+    "outcome",
+    "comments",
+    "reviewer",
+    "decided_at",
+    "confidence",
+    "author_model",
+)
+
+
+def _enrich(prev: GateOutcomeSummary, new: GateOutcomeSummary) -> GateOutcomeSummary:
+    """FR-304: a repeated (gate, round) key enriches rather than replaces.
+    The merge stage emits a bare GATE_DECIDED from _gate and then an
+    enriched one carrying overrides; a replace would drop whichever half the
+    other emit carried. Always-present fields take the later event's value;
+    an optional the later event omits keeps the earlier value; so do earlier
+    overrides when the later emit carries none."""
+    update = {
+        f: getattr(new, f) if getattr(new, f) is not None else getattr(prev, f)
+        for f in _ENRICH_OPTIONALS
+    }
+    if not new.overrides and prev.overrides:
+        update["overrides"] = prev.overrides
+    return new.model_copy(update=update)
 
 
 def _role_rollup(trace: list[RunEvent]) -> list[RoleUsage]:
@@ -90,14 +126,15 @@ def build_run_summary(
 ) -> RunSummary:
     stages = [_stage_outcome(e) for e in trace if e.kind is RunEventKind.STAGE_ENDED]
 
-    # Dedup gates by (gate, round), last-wins: the merge stage emits a bare
-    # GATE_DECIDED from _gate and then an enriched one carrying overrides;
-    # distinct revision rounds keep distinct keys.
+    # Dedup gates by (gate, round), enriching on repeats: the merge stage
+    # emits a bare GATE_DECIDED from _gate and then an enriched one carrying
+    # overrides; distinct revision rounds keep distinct keys. See _enrich.
     gate_by_key: dict[tuple[str, int], GateOutcomeSummary] = {}
     for e in trace:
         if e.kind is RunEventKind.GATE_DECIDED:
             g = _gate_outcome(e)
-            gate_by_key[(g.gate, g.round)] = g
+            key = (g.gate, g.round)
+            gate_by_key[key] = _enrich(gate_by_key[key], g) if key in gate_by_key else g
     gates = list(gate_by_key.values())
 
     answered = {
