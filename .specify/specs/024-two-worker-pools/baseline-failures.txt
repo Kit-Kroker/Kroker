@@ -1,0 +1,26 @@
+# T001 baseline — fast tier (`uv run --frozen --extra dev pytest -q -p no:cacheprovider`)
+# on main @ 9806e781 (commit 0: 024 plan artifacts; no production code changed),
+# 2026-11-16, in the throwaway git worktree /tmp/opencode/024-baseline (detached at HEAD).
+#
+# 4 pre-existing failures observed. Diff vs
+# .specify/specs/023b-daper-acts-verifies/baseline-failures.txt: identical id set —
+# every id below is recorded there. NOVEL IDS: none.
+#
+# The two tests/test_read_fixtures_fresh.py ids fail only in a throwaway worktree
+# (the committed fixture compare.json embeds the absolute 'root' path of the
+# checkout it was dumped from), as 023b's baseline documents; they pass on the
+# primary checkout. Environment artifact of the worktree procedure, not a
+# regression: no code under test changed since 023b's capture.
+#
+# Note on the runner: plain `uv run pytest` in a fresh worktree fails with
+# "Failed to spawn: pytest" because the ephemeral .venv has no dev extra; the
+# procedure above (`--frozen --extra dev`) is what 024 uses for worktree runs.
+#
+# Excluded from this list by construction: the QA-written RED test files for
+# this round (tests/test_pools.py, untracked at T001 and landing per task);
+# they fail on the missing contract they specify until their tasks land.
+
+tests/test_benchmark_acceptance_stalled.py::test_sc003_recompute_stored_acceptance
+tests/test_prompt_migration.py::test_prompt_shas_did_not_move
+tests/test_read_fixtures_fresh.py::test_committed_recordings_equal_a_fresh_build
+tests/test_read_fixtures_fresh.py::test_pristine_copy_passes_the_record_check
