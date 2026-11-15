@@ -4,6 +4,7 @@ CLI incidents table (contracts/cli.md).
 
 from __future__ import annotations
 
+from ..memory.models import MemoryKind
 from .models import TERMINAL_INCIDENT_STATES, Incident, IncidentState
 
 NO_EXECUTE_LINE = "approval does NOT execute in 023a — an approved plan is recorded, nothing runs"
@@ -64,3 +65,53 @@ def incidents_table(incidents: list[Incident], *, include_terminal: bool = False
     if not rows:
         return _HEADER + "\n(no incidents)"
     return "\n".join([_HEADER, *rows])
+
+
+#: The retention text bound (023b T041, R13): a memory document, not a report.
+RETENTION_BOUND = 2000
+
+
+def retention_kind(incident: Incident) -> MemoryKind | None:
+    """What kind of memory this incident's retention is (023b T041,
+    B-FR-012, R13) — or None: retention fires ONLY on terminal entry.
+    A ``closed`` incident proved its provenance (R8's ancestry check), so
+    it is a LESSON; every other terminal state keeps an EXPERIENCE —
+    including ``resolved_externally`` (the squash-merge honesty: no
+    lesson is claimed without provable provenance) and the 023a
+    terminals."""
+    if incident.state not in TERMINAL_INCIDENT_STATES:
+        return None
+    if incident.state is IncidentState.CLOSED:
+        return MemoryKind.INCIDENT_LESSON
+    return MemoryKind.INCIDENT_EXPERIENCE
+
+
+def render_retention(incident: Incident) -> str:
+    """The scrubbed retention text (023b T041, B-FR-012, R13): symptom,
+    cause, fix, outcome, attempts and the source child id, bounded at
+    ``RETENTION_BOUND``. Pure and total — every terminal incident shape
+    renders (a reopen clears the plan, so the cause may be absent).
+
+    The finding's ``evidence`` is NEVER echoed: it is a verbatim quote
+    and can carry a live secret. The symptom is carried by rule, path,
+    severity and the prose ``detail``; the scrub hook still runs
+    activity-side (R13), but the renderer does its part."""
+    sections: list[str] = []
+    finding = incident.finding
+    if finding is not None:
+        sections.append(
+            f"symptom: {finding.rule} in {finding.path}"
+            f" (severity {finding.severity}) - {finding.detail}"
+        )
+    plan = incident.plan
+    if plan is not None:
+        sections.append(f"cause: {plan.analysis}")
+        fixes = [a for a in plan.actions if a.kind == "code_fix"]
+        if fixes:
+            rendered = "; ".join(f"{a.summary} ({', '.join(a.target_paths)})" for a in fixes)
+            sections.append(f"fix: {rendered}")
+    record = incident.execution or (incident.executions[-1] if incident.executions else None)
+    sections.append(f"outcome: {incident.state.value} after {incident.attempt} attempt(s)")
+    if record is not None:
+        sections.append(f"source child: {record.child_id}")
+    return "\n".join(sections)[:RETENTION_BOUND]

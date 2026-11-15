@@ -141,9 +141,13 @@ def test_an_escalated_incident_renders_without_crashing_plan_or_not(with_plan):
 def test_a_pathological_analysis_is_bounded_at_2000_characters():
     from sdlc.maintenance.render import render_retention
 
-    long_analysis = "analysis " * 600  # 5400 characters
-    assert len(long_analysis) >= 5000
-    inc = _incident("closed", plan=_plan(analysis=long_analysis))
+    # Executor adaptation: RepairPlan.analysis is Field(max_length=4000)
+    # (models.py) — a 5400-char analysis cannot be constructed, so the
+    # pathological input is the model's own ceiling. The bound still
+    # bites: a 4000-char cause alone exceeds the 2000-char document.
+    long_analysis = "analysis " * 500  # 4500 -> truncated to the 4000 ceiling
+    assert len(long_analysis) >= 4000
+    inc = _incident("closed", plan=_plan(analysis=long_analysis[:4000]))
     text = render_retention(inc)
     assert len(text) <= BOUND
 
