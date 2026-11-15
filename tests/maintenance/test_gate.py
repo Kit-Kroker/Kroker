@@ -18,10 +18,10 @@ import socket
 from typing import Any
 
 import pytest
-from sdlc.maintenance.gate import escalation_gate_settings, repair_gate_settings
-from sdlc.maintenance.models import MaintenanceConfig
 
 from sdlc.core.models import GateConfig, GatePolicy, GateSettings, TimeoutAction
+from sdlc.maintenance.gate import escalation_gate_settings, repair_gate_settings
+from sdlc.maintenance.models import MaintenanceConfig
 
 REPO_DIR = "/srv/example-repo"
 
