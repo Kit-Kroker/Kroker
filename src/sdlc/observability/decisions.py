@@ -127,8 +127,53 @@ def render_decisions(rows: Sequence[DecisionLogRow]) -> str:
         )
         for r in rows
     ]
-    heads = ("run", "gate", "round", "policy", "decided_by", "reviewer", "outcome", "decided_at", "comments")
+    heads = (
+        "run",
+        "gate",
+        "round",
+        "policy",
+        "decided_by",
+        "reviewer",
+        "outcome",
+        "decided_at",
+        "comments",
+    )
     widths = [max(len(h), max(len(c[i]) for c in cells)) for i, h in enumerate(heads)]
-    lines = [" | ".join(f"{h:<{w}}" for h, w in zip(heads, widths))]
+    lines = [" | ".join(f"{h:<{w}}" for h, w in zip(heads, widths, strict=True))]
     lines += [" | ".join(f"{c[i]:<{widths[i]}}" for i in range(len(heads))) for c in cells]
     return "\n".join(lines)
+
+
+def add_decisions_parser(sub) -> None:
+    """`sdlc decisions` — the FR-304 read surface. Package-local, like
+    calibration/capability/dispositions, because cli.py sits near the
+    1000-line ceiling."""
+    import argparse
+
+    d = sub.add_parser("decisions")
+    d.add_argument("--run", default=None, help="filter: run id (exact match)")
+    d.add_argument("--gate", default=None, help="filter: gate name (exact match)")
+    d.add_argument(
+        "--decided-by", default=None, help="filter: human | policy | timeout (exact match)"
+    )
+    d.add_argument("--limit", type=int, default=None, help="keep the most recent N decisions")
+    d.add_argument(
+        "--exports",
+        default=None,
+        help="run-export root holding <run_id>/summary.json "
+        "(default: SDLC_EXPORT_ROOT or runs/pipeline)",
+    )
+
+
+def run_decisions(args: argparse.Namespace) -> str:
+    """Returns the text to print. A read surface: exit 0 always, an empty
+    log is the friendly line, never a refusal."""
+    return render_decisions(
+        decisions_from_exports(
+            args.exports,
+            run=args.run,
+            gate=args.gate,
+            decided_by=args.decided_by,
+            limit=args.limit,
+        )
+    )
