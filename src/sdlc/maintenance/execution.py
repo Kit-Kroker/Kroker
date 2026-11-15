@@ -86,6 +86,43 @@ def classify_verification(
     return "absent_at_base"
 
 
+#: The hint an unmerged-but-verified fix renders (R8, data-model §transitions:
+#: 'verified' | identity present, not ancestor | 'verified' hint) — the text
+#: `render` (T047) shows in `sdlc maintain incidents`. Recorded residual: the
+#: operator resolves it by merging, rejecting the child, or disabling.
+UNMERGED_HINT = "fix not on default branch"
+
+
+def closure_outcome(
+    incident: Incident,
+    detect_collected: bool,
+    identity_present: bool,
+    child_head_is_ancestor: bool,
+) -> str | None:
+    """One verified incident's closure decision on a collected Detect
+    (023b T033, B-FR-008, R8) — PURE: a verdict for the caller's wire
+    (closure_step), never a mutation.
+
+    Not-collected → ``None``: a lost cycle cannot strand the incident (the
+    check is a state check, re-run on every collected cycle). The ancestry
+    question reads the CHILD's integration head (``execution.integration_
+    head``, recorded at awaiting_merge — R8's recorded-head ruling; the
+    caller passes the answer, this function stays git-free). Absent +
+    ancestor → ``closed``: the fix provably landed and holds. Absent +
+    not-ancestor → ``resolved_externally``: the squash-merge honesty —
+    ancestry is the provenance proof, so a squashed fix is retained as an
+    experience, not a lesson. Present + ancestor → ``dirty``: the fix is
+    on the default branch and did not hold. Present + not-ancestor →
+    ``fix_not_on_default_branch``: the PR is unmerged (or squashed and
+    regressed); the incident STAYS verified — it is live and blocks a
+    duplicate — and ``UNMERGED_HINT`` is what render shows."""
+    if not detect_collected:
+        return None
+    if identity_present:
+        return "dirty" if child_head_is_ancestor else "fix_not_on_default_branch"
+    return "closed" if child_head_is_ancestor else "resolved_externally"
+
+
 #: What each dirty verdict records on the attempt (data-model §outcome):
 #: loop-rejected verdicts are "rejected_by_loop"; probe-side failures keep
 #: their own outcome; "empty_diff" stays available for a probe-side finding.
