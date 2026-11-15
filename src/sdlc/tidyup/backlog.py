@@ -6,6 +6,7 @@ models.py: building pipeline contracts from triage findings is its whole job.
 
 from __future__ import annotations
 
+from ..maintenance.models import RepairAction
 from ..stages.architecture.models import (
     ArchitectureDecision,
     ArchitectureSpec,
@@ -117,6 +118,79 @@ def seeded_work_for(identity: str, f: TriageFinding, signal_version: int) -> See
             )
         ],
         affected_modules=[f.path] if f.path else [],
+    )
+
+    return SeededWork(arch=arch, plan=ImplementationPlan(tasks=[task]))
+
+
+def repair_work_for(
+    identity: str,
+    f: TriageFinding,
+    signal_version: int,
+    actions: list[RepairAction],
+) -> SeededWork:
+    """The deterministically-authored work for a PLAN's code_fix actions
+    (023b R12, B-FR-003): the shape maintenance hands a judgement or
+    multi-action repair child.
+
+    One task carrying every ``code_fix`` action's summary in order, and no
+    ops action -- ops proposals are never executed (B-FR-017). Unlike
+    ``seeded_work_for`` it omits the "Change nothing else" sentence: that
+    promise belongs to the one-PR-per-finding shape, and a multi-action
+    repair may legitimately touch several paths. The acceptance criterion
+    names the signal, rule and version exactly as its sibling does, so the
+    verification re-detect validates against the thing that produced the
+    finding. Total over any actions list (an ops-only plan yields work
+    whose description lists nothing -- the caller refuses such plans
+    before this is ever built)."""
+    where = f.path or "the repository"
+    title = f"{f.rule} in {where}"
+
+    evidence = f"\n\nThe line that triggered it:\n{f.evidence}" if f.evidence else ""
+    lines = [f"- {action.summary}" for action in actions if action.kind == "code_fix"]
+    action_list = ("\n\nApply, in order:\n" + "\n".join(lines)) if lines else ""
+    description = (
+        f"Triage finding `{identity}` (severity: {f.severity}).\n\n"
+        f"{f.detail}{evidence}{action_list}"
+    )
+
+    criterion = (
+        f"re-running triage signal `{f.signal}` v{signal_version} no "
+        f"longer reports `{f.rule}` for `{where}`"
+    )
+
+    task = DevTask(
+        id="T01",
+        role="dev",
+        title=title,
+        description=description,
+        acceptance_criteria=[criterion],
+        files_hint=[f.path] if f.path else [],
+        contract=ValidationContract(
+            task_id="T01",
+            assertions=[criterion],
+            frozen=True,
+        ),
+    )
+
+    arch = ArchitectureSpec(
+        overview=(
+            f"Repair: {title}\n\n{f.detail}\n\nOpened by a maintenance "
+            f"repair child for triage finding `{identity}`."
+        ),
+        decisions=[
+            ArchitectureDecision(
+                id="D1",
+                decision=f"Apply the repair plan for `{f.rule}`"
+                + (f", in {f.path}" if f.path else ""),
+                rationale="One child per attempt carries all code_fix actions "
+                "(023b R12); verification re-detects the same identity.",
+            )
+        ],
+        affected_modules=sorted(
+            {p for a in actions if a.kind == "code_fix" for p in a.target_paths}
+        )
+        or ([f.path] if f.path else []),
     )
 
     return SeededWork(arch=arch, plan=ImplementationPlan(tasks=[task]))
