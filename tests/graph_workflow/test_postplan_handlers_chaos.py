@@ -20,8 +20,10 @@ Pins the edge behaviour the task specifies:
   named even when a cycle is also present (ids_unique first: duplicates
   silently collapse into {t.id: t} and would hide every later fault),
   uncovered requirement ids halt only when a requirements_doc with stories
-  rides the activation (vacuous without it), an over-limit task names the
-  first breach, and the board sync still runs only after every check passes
+  rides the activation (vacuous without it), coverage is named over size
+  when a plan breaches both (coverage precedes task_size, PLAN-1.8), an
+  over-limit task names the first breach, and the board sync still runs
+  only after every check passes
 - code_node: an exception from run_tasks propagates unchanged; a returned
   failure string becomes the halt result
 - merge_node: ANY result starting with "rejected:" rides the reject port
@@ -363,6 +365,38 @@ def test_plan_check_halts_on_oversize_task():
     assert (out.port, out.result) == (
         "halt",
         "failed:plan-validation:task 'T1' exceeds plan limits: files_hint=25>24",
+    )
+    assert host.synced is None
+
+
+def test_plan_check_halt_order_coverage_before_size():
+    pp = _postplan()
+    host = Host()
+    # Both faults present -- an uncovered FR AND an over-limit task. The
+    # coverage reason is named: PLAN-1.8 runs covers_all before task_size,
+    # so a plan that breaches both halts on coverage (dropped requirements
+    # are the defect with a user-visible cost; size is a plan edit either way).
+    big = DevTask(
+        id="T1",
+        title="T1",
+        description="T1",
+        acceptance_criteria=["x"],
+        files_hint=[f"f{i}.py" for i in range(25)],  # default limit is 24
+        covers=["FR-1"],
+    )
+    bad = ImplementationPlan(tasks=[big])
+    payloads = {
+        "plan#1.approve": StoredPayload(model=bad, producer="plan#1"),
+        "requirements#1.freeze": StoredPayload(model=_req_doc(), producer="requirements#1"),
+    }
+    nc = _nc("plan_check", payloads=payloads, host=host)
+    inputs = {"plan": "plan#1.approve", "requirements_doc": "requirements#1.freeze"}
+
+    out = asyncio.run(pp.plan_check_node(nc, _act("plan_check", inputs), PipelineConfig()))
+
+    assert (out.port, out.result) == (
+        "halt",
+        "failed:plan-validation:requirement(s) not covered by any task: ['FR-2', 'FR-3']",
     )
     assert host.synced is None
 

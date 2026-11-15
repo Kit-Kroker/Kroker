@@ -20,8 +20,16 @@ def paths_exist(repo_path: str, paths: list[str]) -> dict[str, bool]:
 
     Each token is normalized first (`_norm_path`, the validators-local
     normalizer, which deliberately diverges from the plan/models.py twin on
-    dotfiles), so Windows separators and ``./``-prefixed hints resolve to the
-    same file as the POSIX form while a dotfile keeps its leading dot.
+    dotfiles and leading slashes), so Windows separators, ``./``-prefixed
+    hints and absolute-form tokens (``/src/app.py``) resolve to the same
+    repo-relative file while a dotfile keeps its leading dot -- without the
+    slash strip, pathlib's ``/`` operator would replace the repo root and
+    settle an absolute-form probe against the worker HOST filesystem.
+    A token whose normalized form still carries a ``..`` path segment is
+    UNSETTLED BY CONSTRUCTION: it is not checked and not mapped -- absent
+    from the result, so the consumer's missing set (built from falsy
+    entries) can never include it and it can never ground a question
+    discard. Traversal-shaped probes are noise, never repo findings.
     Missing and empty entries map to False rather
     than raising or collapsing into the repo root -- a validator that dies
     on the first absent path would hide every finding after it, and an
@@ -33,6 +41,8 @@ def paths_exist(repo_path: str, paths: list[str]) -> dict[str, bool]:
     out: dict[str, bool] = {}
     for p in paths:
         norm = _norm_path(p)
+        if ".." in norm.split("/"):
+            continue  # unsettled by construction: never checked, never reported missing
         out[p] = bool(norm) and (root / norm).exists()
     return out
 

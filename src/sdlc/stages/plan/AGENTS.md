@@ -18,7 +18,7 @@ file carries only what is true *here*.
 ## Temporal notes for this slice
 
 - `ACTIVITIES = []`.
-- Rule 3 passthrough set: `core/models.py`, `workflows/models.py`, `architecture`, `clarify`.
+- Rule 3 passthrough set: `core/models.py`, `workflows/models.py`, `architecture`, `clarify`, `constitution`, `requirements`.
 - Memoization key incorporates prompt salt via `prompt_digest(cfg)`; the cache key itself concatenates `constitution_digest` and `requirements_doc.digest` under the omitted-while-`""` rule (PLAN-1.7) — a flag-off run keys byte-identically to a run without those artifacts.
 - The graph's `plan_check` node owns the halt family (PLAN-1.8, order is contract) and the post-pass board sync; this slice schedules no validation of its own.
 - Lazy exports in `__init__.py` break circular imports with benchmarks models.

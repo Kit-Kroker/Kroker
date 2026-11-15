@@ -20,18 +20,27 @@ from ..stages.plan.models import DevTask
 def _norm_path(p: str) -> str:
     """Windows-authored hints and POSIX diff paths name the same file.
 
-    Deliberately DIVERGES from the stages/plan/models.py twin: that copy
-    ``lstrip("./")``-es every leading dot AND slash character, corrupting
-    dotfile paths (``.github/workflows/ci.yaml`` -> ``github/...``). The
-    drift comparison tolerates it because it normalizes both sides
+    Deliberately DIVERGES from the stages/plan/models.py twin on two rules;
+    that copy ``lstrip("./")``-es every leading dot AND slash character,
+    corrupting dotfile paths (``.github/workflows/ci.yaml`` -> ``github/...``).
+    The drift comparison tolerates it because it normalizes both sides
     identically -- self-consistent corruption. Here a corrupted token is a
     false-missing report and, downstream, a false DISCARD of a question
-    citing a file that exists, so this copy strips separators/whitespace and
-    then removes ONE leading ``./`` prefix, never bare dot characters. The
-    twin must stay byte-identical; change this one alone.
+    citing a file that exists, so this copy:
+
+    - strips separators/whitespace and removes ONE leading ``./`` prefix,
+      never bare dot characters -- ``.github/...`` keeps its leading dot;
+    - strips LEADING slashes -- pathlib's ``/`` operator would otherwise let
+      an absolute-form token (``/src/app.py``) REPLACE the repo root and
+      settle the probe against the worker HOST filesystem, false-missing
+      (and downstream false-DISCARDING) a real repo file.
+
+    The twin must stay byte-identical; change this one alone.
     """
     p = p.replace("\\", "/").strip()
-    return p[2:] if p.startswith("./") else p
+    if p.startswith("./"):
+        p = p[2:]
+    return p.lstrip("/")
 
 
 # A path-like token WITHOUT a separator still qualifies when it ends in a
@@ -53,9 +62,10 @@ def path_like_tokens(text: str) -> list[str]:
     A token qualifies when it contains a path separator (``/`` or ``\\``)
     or ends in a known source/config extension; each hit is normalized by
     the local `_norm_path` -- which deliberately diverges from the
-    plan/models.py twin on dotfiles -- so ``.\\src\\app.py`` and
-    ``src/app.py`` collapse to one entry while ``.github/workflows/ci.yaml``
-    keeps its leading dot. Symbols (`module.attr:26`) and bare prose yield
+    plan/models.py twin on dotfiles and leading slashes -- so
+    ``.\\src\\app.py``, ``/src/app.py`` and ``src/app.py`` collapse to one
+    entry while ``.github/workflows/ci.yaml`` keeps its leading dot.
+    Symbols (`module.attr:26`) and bare prose yield
     `[]`.
 
     Task 6's clarify validation feeds agent-written prose through this to

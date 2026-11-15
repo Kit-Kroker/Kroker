@@ -221,8 +221,10 @@ principle" so the surface is discoverable without churn.
   that misses an FR is exactly the defect FR-106's `untraced_criteria`
   catches late — this catches it before code exists. Requirements-artifact
   runs are off by default, so no existing run changes behavior.
-- **Task size**: limits config-gated, defaults set above every golden-case
-  plan's real tasks (verified in tests against `benchmarks/cases` fixtures);
+- **Task size**: limits config-gated, defaults generous and pinned by test
+  (`PlanConfig()` wire values locked — §9's reality: the golden cases hold
+  oracle task ids, not `DevTask` plans, so no in-repo plan corpus existed
+  to sweep; confirmed 2026-11-14);
   breach halts legibly, not silently.
 - **Evidence paths**: discards only when a token *looks* like a path, was
   checked, and is missing — and only in brownfield runs. Symbols pass.

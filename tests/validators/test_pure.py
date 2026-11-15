@@ -190,3 +190,14 @@ def test_path_like_tokens_keeps_dotfile_leading_dot():
     of a question citing a file that exists. The local normalizer removes ONE
     `./` prefix and never bare dot characters."""
     assert path_like_tokens("see .github/workflows/ci.yaml") == [".github/workflows/ci.yaml"]
+
+
+def test_path_like_tokens_collapses_absolute_form_to_repo_relative():
+    """The leading-slash rule (final-review pin): pathlib's `/` operator would
+    let `/src/app.py` REPLACE the repo root and settle the probe against the
+    worker HOST filesystem -- false-missing, and downstream a false DISCARD,
+    for a real repo file cited in absolute form. The validators-local
+    normalizer strips leading slashes, so absolute and relative citations of
+    the same file collapse to one entry (the plan/models.py twin is
+    untouched)."""
+    assert path_like_tokens("see /src/app.py or src/app.py") == ["src/app.py"]
