@@ -360,3 +360,181 @@ def test_policy_accepts_effective_just_above_threshold():
         _cfg(threshold=0.8),
     )
     assert refusal is None
+
+
+# =========================================================================== #
+# T024 (023b, RED): the merge decision and the verification verdict.
+#
+# Subjects: ``merge_reject_decision`` and ``classify_verification`` in
+# ``sdlc.maintenance.execution`` (R4, R5, SC-B10). Both are deferred-imported
+# inside each test body, so each case is RED on its own ImportError.
+# =========================================================================== #
+
+
+def _triage_pair(*, base=None, verify=None, base_nc=(), verify_nc=()):
+    """Base and verify triages over one seeded identity (the .gitignore finding)."""
+    from tests.maintenance.conftest import env_file_findings, make_triage
+
+    f = env_file_findings()[1]
+    base_t = make_triage(
+        {"secrets": [f]} if base else None,
+        not_collected=base_nc,
+        commit_sha="a" * 40,
+    )
+    verify_t = make_triage(
+        {"secrets": [f]} if verify else None,
+        not_collected=verify_nc,
+        commit_sha="b" * 40,
+    )
+    identity = f"{f.signal}:{f.rule}:{f.path}:{f.key}"
+    return base_t, verify_t, identity
+
+
+# ------------------------------------------------------- subject 1: merge_reject_decision
+
+
+def test_merge_reject_decision_builds_a_reject_on_the_merge_gate():
+    from sdlc.maintenance.execution import merge_reject_decision
+
+    decision = merge_reject_decision(3, "persisted: the identity is still present")
+    assert isinstance(decision, GateDecision)
+    assert decision.gate == "merge"
+    assert decision.round == 3
+    assert decision.outcome is GateOutcome.REJECT
+    assert decision.decided_by == "policy"
+
+
+def test_merge_reject_decision_carries_the_verdict_verbatim_in_comments():
+    from sdlc.maintenance.execution import merge_reject_decision
+
+    verdict = "conflicted: fix branch failed to merge — see verify log"
+    decision = merge_reject_decision(1, verdict)
+    assert decision.comments == verdict
+
+
+def test_merge_reject_decision_is_reject_for_every_verdict_it_is_given():
+    from sdlc.maintenance.execution import merge_reject_decision
+
+    for verdict in ("persisted", "new", "conflicted", "unverifiable"):
+        assert merge_reject_decision(1, verdict).outcome is GateOutcome.REJECT
+
+
+# -------------------------------------------------------- subject 2: classify_verification
+
+
+def test_classify_identity_present_in_base_and_gone_in_verify_is_resolved():
+    from sdlc.maintenance.execution import classify_verification
+
+    base, verify, identity = _triage_pair(base=True, verify=False)
+    assert classify_verification(base, verify, identity, False) == "resolved"
+
+
+def test_classify_identity_present_in_both_is_persisted():
+    from sdlc.maintenance.execution import classify_verification
+
+    base, verify, identity = _triage_pair(base=True, verify=True)
+    assert classify_verification(base, verify, identity, False) == "persisted"
+
+
+def test_classify_identity_absent_in_base_and_present_in_verify_is_new():
+    from sdlc.maintenance.execution import classify_verification
+
+    base, verify, identity = _triage_pair(base=False, verify=True)
+    assert classify_verification(base, verify, identity, False) == "new"
+
+
+def test_classify_identity_whose_signal_is_not_collected_on_verify_is_unverifiable():
+    """R4: UNVERIFIABLE stays verifying. An absence caused by a not-collected
+    signal is not evidence that the fix worked."""
+    from sdlc.maintenance.execution import classify_verification
+
+    base, verify, identity = _triage_pair(base=True, verify=False, verify_nc=("secrets",))
+    assert classify_verification(base, verify, identity, False) == "unverifiable"
+
+
+def test_classify_identity_whose_signal_is_not_collected_on_base_is_unverifiable():
+    """Pins compute_delta's behaviour for a base-side gap: UNVERIFIABLE, so the
+    verdict cannot claim the identity is new or resolved."""
+    from sdlc.maintenance.execution import classify_verification
+
+    base, verify, identity = _triage_pair(base=False, verify=True, base_nc=("secrets",))
+    assert classify_verification(base, verify, identity, False) == "unverifiable"
+
+
+@pytest.mark.parametrize(
+    ("base_present", "verify_present"),
+    [(True, False), (True, True), (False, True)],
+    ids=["resolved-shape", "persisted-shape", "new-shape"],
+)
+def test_conflicted_overrides_every_delta_to_conflicted(base_present, verify_present):
+    """R4/R5: a fix branch that failed to merge is dirty whatever the triage says."""
+    from sdlc.maintenance.execution import classify_verification
+
+    base, verify, identity = _triage_pair(base=base_present, verify=verify_present)
+    assert classify_verification(base, verify, identity, True) == "conflicted"
+
+
+@pytest.mark.skip(
+    reason="absent_at_base trigger is undefined in R4/R5/data-model (only the verdict "
+    "literal and the verifying -> resolved_externally transition exist). Needs an owner "
+    "decision before this cell can be pinned; not guessed."
+)
+def test_identity_absent_from_both_triages_is_absent_at_base():
+    """Owner ruling (T025, in lieu of an explicit R4/R5 trigger): collected
+    on both sides but present in NEITHER triage means compute_delta has no
+    opinion — the fault the incident recorded does not exist at the
+    verification base, so nothing was verified. data-model §transitions
+    pins the consequence (verifying -> resolved_externally: stale, not
+    proven fixed); this pin fixes the trigger T026 builds on."""
+    from sdlc.maintenance.execution import classify_verification
+
+    base, verify, identity = _triage_pair(base=False, verify=False)
+    assert classify_verification(base, verify, identity, False) == "absent_at_base"
+
+
+# ------------------------------------------------- subject 3: SC-B10 outcome scan
+
+
+def _gatedecision_builders() -> dict[str, object]:
+    """Every public function in execution.py whose return annotation names
+    GateDecision. Discovered from annotations, so a new builder is found
+    automatically; nothing is hand-listed here."""
+    import inspect
+    import typing
+
+    from sdlc.maintenance import execution
+
+    found = {}
+    for name, fn in inspect.getmembers(execution, inspect.isfunction):
+        if name.startswith("_") or fn.__module__ != execution.__name__:
+            continue
+        hint = typing.get_type_hints(fn).get("return")
+        if hint is not None and "GateDecision" in repr(hint):
+            found[name] = fn
+    return found
+
+
+#: Sample arguments for each discovered builder. A new builder fails the set
+#: check below until it is added here with a sample, so the scan cannot rot.
+_SCAN_SAMPLES = {
+    "merge_reject_decision": lambda m: m.merge_reject_decision(2, "persisted"),
+}
+
+
+def test_every_gatedecision_builder_is_discovered_and_sampled():
+    """The discovered set equals the sampled set: a new builder cannot escape
+    the outcome scan below without also being sampled here."""
+    found = _gatedecision_builders()
+    assert found, "execution.py must expose at least one GateDecision builder"
+    assert set(found) == set(_SCAN_SAMPLES)
+
+
+def test_no_gatedecision_builder_ever_builds_an_outcome_other_than_reject():
+    """SC-B10: the loop only ever sends a child REJECT."""
+    from sdlc.maintenance import execution
+
+    found = _gatedecision_builders()
+    assert found, "an empty scan would pass vacuously: at least one builder must exist"
+    for name in found:
+        decision = _SCAN_SAMPLES[name](execution)
+        assert decision.outcome is GateOutcome.REJECT, f"{name} built {decision.outcome}"
