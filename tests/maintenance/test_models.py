@@ -122,7 +122,10 @@ def test_kick_input_carries_a_project_slug():
 
 
 def test_incident_state_has_exactly_the_nine_documented_members():
-    assert {member.value for member in IncidentState} == {
+    # 023a pinned exactly these nine members; 023b (R7) adds the six
+    # execute-side live states plus `closed`, and their values are pinned in
+    # test_models_023b.py. The 023a nine keep their values verbatim.
+    nine_023a = {
         "open",
         "awaiting_decision",
         "approved_not_executed",
@@ -133,7 +136,8 @@ def test_incident_state_has_exactly_the_nine_documented_members():
         "withdrawn",
         "deferred",
     }
-    assert len(list(IncidentState)) == 9
+    assert nine_023a <= {member.value for member in IncidentState}
+    assert len(list(IncidentState)) == 16
 
 
 # --------------------------------------------------------------------------- #

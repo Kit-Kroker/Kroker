@@ -16,6 +16,7 @@ named.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
@@ -54,6 +55,14 @@ class IncidentState(StrEnum):
     ESCALATED = "escalated"  # terminal
     WITHDRAWN = "withdrawn"  # terminal
     DEFERRED = "deferred"  # non-terminal: picked up next cycle
+    # 023b (R7): the execute-side live states, and the one new terminal.
+    APPROVED = "approved"  # gate approved with execute on; waits for Execute
+    QUEUED = "queued"  # approved, held by a cap or a path overlap
+    EXECUTING = "executing"  # a repair child has started
+    VERIFYING = "verifying"  # child at merge; Report is verifying
+    VERIFIED = "verified"  # a collected re-detect read RESOLVED
+    REOPENED = "reopened"  # dirty verdict under the bound
+    CLOSED = "closed"  # terminal: verified, absent, and the head is an ancestor
 
 
 #: States that never match the duplicate-key rule again (R7): a NEW of the
@@ -66,6 +75,8 @@ TERMINAL_INCIDENT_STATES: frozenset[IncidentState] = frozenset(
         IncidentState.RESOLVED_EXTERNALLY,
         IncidentState.ESCALATED,
         IncidentState.WITHDRAWN,
+        # 023b R7: `closed` is the only new terminal.
+        IncidentState.CLOSED,
     }
 )
 
@@ -95,6 +106,13 @@ class MaintenanceConfig(BaseModel):
     max_plan_attempts: int = Field(default=2, ge=1, le=3)
     max_new_incidents_per_cycle: int = Field(default=10, ge=1, le=50)
     max_cycles_per_history: int = Field(default=50, ge=1)
+    # 023b execution surface (R10/R14). Deliberately still NO gate, policy
+    # or on_timeout field (023a R9, B-FR-019).
+    execute: bool = False
+    max_starts_per_cycle: int = Field(default=1, ge=1, le=3)
+    max_starts_per_window: int = Field(default=3, ge=1, le=10)  # rolling 7 days
+    max_reopens: int = Field(default=2, ge=0, le=2)  # code ceiling (GATE 1 Q3)
+    child_timeout_hours: int = Field(default=24, ge=1, le=168)
 
     @field_validator("project")
     @classmethod
@@ -124,6 +142,27 @@ class MaintenanceConfig(BaseModel):
                 "the probe runs the repository's own code unattended (NFR-9); "
                 "pass --ack-unattended-build-probe or use --no-build-probe"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _execute_needs_probe_and_ack(self) -> MaintenanceConfig:
+        # R14: execute starts children that run the repository's own build
+        # and tests unattended, so the probe is the precondition for a
+        # mechanical build verdict -- --no-build-probe with --execute is
+        # refused, and the unattended acknowledgement is mandatory.
+        if self.execute:
+            if not self.ack_unattended_build_probe:
+                raise ValueError(
+                    "execute=True requires ack_unattended_build_probe=True: "
+                    "children run the repository's own build unattended "
+                    "(NFR-9); pass --ack-unattended-build-probe"
+                )
+            if not self.build_probe:
+                raise ValueError(
+                    "execute=True requires build_probe=True: without the "
+                    "build probe a mechanical build verdict is unfounded; "
+                    "drop --no-build-probe"
+                )
         return self
 
 
@@ -207,6 +246,76 @@ class RepairPlan(BaseModel):
         return self
 
 
+class ExecutionRecord(BaseModel):
+    """One repair-child attempt (023b R1). Written in the same workflow step
+    as the start command, before its acknowledgement (B-FR-014)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    attempt: int  # 1-based
+    child_id: str  # maint-{project}-{run8}-inc{no}-a{attempt} (R1)
+    base_sha: str  # incident.commit_sha at start; the IdeaBrief.base_branch (R3)
+    started_at: datetime  # workflow.now()
+    integration_branch: str | None = None  # from the probe (R2)
+    integration_head: str | None = None  # probe, at awaiting_merge; closure (R8)
+    outcome: Literal[
+        "running",
+        "awaiting_merge",
+        "failed",
+        "config_failed",
+        "timed_out",
+        "empty_diff",
+        "rejected_by_loop",
+        "completed",
+    ] = "running"
+    detail: str = Field(default="", max_length=300)
+
+
+class VerificationResult(BaseModel):
+    """The latest attempt's verdict (023b R4): the collected re-detect on the
+    verification branch, classified for the incident's identity."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    child_id: str  # also the verify ref key: sdlc/tidyup-verify/<child_id>
+    base_sha: str
+    verify_head: str
+    collected: bool  # the identity's signal was collected on base and verify
+    verdict: Literal[
+        "resolved",
+        "persisted",
+        "new",
+        "unverifiable",
+        "conflicted",
+        "absent_at_base",
+    ]
+    delta_note: str = ""
+
+
+class ChildProbe(BaseModel):
+    """What the probe activity observed about one repair child (023b R2).
+    One describe plus two queries; no git mutation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    phase: Literal[
+        "running",
+        "awaiting_merge",
+        "completed",
+        "failed",
+        "cancelled",
+        "terminated",
+        "timed_out",
+        "not_found",
+    ]
+    pending_merge_round: int | None = None  # set at awaiting_merge
+    integration_branch: str | None = None  # sdlc/<child_id>/integration
+    integration_head: str | None = None  # set at awaiting_merge
+    result: str | None = None  # the outcome string, when completed
+    failure: str | None = None  # the failure reason, when failed
+    non_retryable: bool = False  # a configuration failure escalates at once
+
+
 class Incident(BaseModel):
     """One incident, keyed by a finding identity or the synthetic
     `<signal>:not_collected::` (FR-008)."""
@@ -226,6 +335,15 @@ class Incident(BaseModel):
     plan_attempts: int = 0
     decision: GateDecision | None = None  # carries decided_by (FR-012)
     note: str = ""  # reason text: analysis_failed / withdrawn / deferred / ...
+    # ---- 023b additions (data-model.md; every field defaulted, R7) ----
+    consecutive_seen: int = 1  # collected PERSISTED +1; NEW 1; not-collected 0
+    attempt: int = 0  # incremented in the same step as a child start (R1)
+    reopens: int = 0  # moved only by apply_verdict (R11); feeds the floor
+    gate_round: int = 1  # the round of the next repair:<n> gate (R6)
+    execution: ExecutionRecord | None = None  # the current attempt
+    executions: list[ExecutionRecord] = Field(default_factory=list)  # bounded by max_reopens+1
+    verification: VerificationResult | None = None  # the latest attempt's verdict
+    retained: bool = False  # set in the same step as the retention activity (R13)
 
 
 class MaintenanceState(BaseModel):
@@ -243,6 +361,9 @@ class MaintenanceState(BaseModel):
     not_collected_streak: dict[str, int] = Field(default_factory=dict)
     next_incident_no: int = 1  # code-assigned incident numbers, never reused
     nudged: bool = False  # carried so a boundary nudge is not lost
+    # 023b R10: child-start stamps, pruned to 7 days at Execute; rides
+    # continue_as_new (ADR-8).
+    exec_starts: list[datetime] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _unique_keys_among_non_terminal(self) -> MaintenanceState:
