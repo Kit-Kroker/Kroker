@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-11-14 (agents FR-202 landed — every proposer's output-validation retry count is registry-configured: `defaults.validation_retries` + per-role `agent.yaml` override, forwarded to `agent.run` per call only when set; same day as FR-602's MCP channel adapter — both in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
+| Last verified | 2026-11-15 (023a DAPER loop half — loop + kicker + maintain CLI + trust gates, verified on the temporal tier; full entry in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
