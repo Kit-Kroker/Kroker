@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from dataclasses import dataclass
 
 from temporalio import activity
@@ -259,3 +260,43 @@ async def prepare_base_worktree(inp: BaseWorktreeInput) -> BaseWorktree:
             return BaseWorktree(None, "base worktree HEAD does not match base_sha after reset")
         return BaseWorktree(cand)
     return BaseWorktree(None, f"could not clear or create a base worktree near {root}")
+
+
+@activity.defn
+async def is_ancestor(repo_path: str, ancestor: str, descendant: str) -> bool:
+    """Read-only ancestry check (023b R8): ``git merge-base --is-ancestor``,
+    exit codes mapped 0 → True, 1 → False, anything else raises. Mutates
+    nothing, so the loop's closure check (B-FR-008) stays inside the
+    S/vcs/ write boundary."""
+    proc = _git(["merge-base", "--is-ancestor", ancestor, descendant], repo_path)
+    if proc.returncode == 0:
+        return True
+    if proc.returncode == 1:
+        return False
+    raise RuntimeError(
+        f"git merge-base --is-ancestor {ancestor} {descendant} failed "
+        f"(rc={proc.returncode}): {proc.stderr.strip() or proc.stdout.strip()}"
+    )
+
+
+@activity.defn
+async def remove_verification_tree(repo_path: str, key: str) -> None:
+    """Remove one verification attempt's leftovers (023b R4): the verify
+    worktree ``<worktrees_root>/<key>/verify`` and the ref
+    ``sdlc/tidyup-verify/<key>``. Idempotent and never raises out: a
+    missing tree or ref is simply nothing to do, mirroring
+    cleanup_run_dir's tolerance (vcs/worktree.py)."""
+    path = os.path.join(_worktrees_root(), key, "verify")
+    if os.path.isdir(path):
+        try:
+            _clear_worktree_dir(repo_path, path)
+        except OSError:
+            pass  # as unremovable as cleanup_run_dir's tolerance allows
+    else:
+        subprocess.run(
+            ["git", "worktree", "prune"], cwd=repo_path, capture_output=True, check=False
+        )
+    ref = f"refs/heads/sdlc/tidyup-verify/{key}"
+    subprocess.run(
+        ["git", "update-ref", "-d", ref], cwd=repo_path, capture_output=True, check=False
+    )
