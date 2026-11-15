@@ -78,7 +78,7 @@ through its validated diff artifact.
 |---|---|---|
 | Temporal server | run state, event history, timers, signals, schedules, visibility | business logic |
 | GraphWorkflow (the legacy FeatureWorkflow was deleted in round 020) | stage sequencing, gate waits, fix-loop bounds, budget counters | I/O, subprocesses, memory, nondeterminism |
-| MaintenanceWorkflow **(P4 — designed, not built)** | DAPER cycle, repair gating, child factory runs | direct code patches |
+| MaintenanceWorkflow **(023a, 2026-11-15 — loop + gate half built; execute/report 023b)** | DAPER cycle (baseline → detect → plan → confidence gate), nudge coalescing, history roll-over, the schedule kicker (`MaintenanceKickWorkflow`); ops actions stay proposal-only | direct code patches (nothing in 023a executes a repair); CI/quarantined-task/error-budget Detect inputs (not built — see §7) |
 | Proposer agents | typed artifact proposals (Requirements … RepairPlan) | tool calls, file access. *Target (plan, not built):* owns typed evidence gathered with read-only repo tools; never writes, never runs unlisted commands, never computes its own verdict |
 | Harness runner activity | `claude -p` / `opencode run` execution, heartbeats, checkpoint commits, cost capture | leaving the worktree; choosing its own permissions |
 | CrewTaskWorkflow (E-88) | the code stage's round loop when a task runs as a crew: turn order, the four brakes, per-round checkpoints, its own `tool_approval` / `crew_question` gates | subprocesses and file I/O (every turn is an activity); writing repository files through any role but the lead |
