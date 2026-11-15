@@ -474,11 +474,6 @@ def test_conflicted_overrides_every_delta_to_conflicted(base_present, verify_pre
     assert classify_verification(base, verify, identity, True) == "conflicted"
 
 
-@pytest.mark.skip(
-    reason="absent_at_base trigger is undefined in R4/R5/data-model (only the verdict "
-    "literal and the verifying -> resolved_externally transition exist). Needs an owner "
-    "decision before this cell can be pinned; not guessed."
-)
 def test_identity_absent_from_both_triages_is_absent_at_base():
     """Owner ruling (T025, in lieu of an explicit R4/R5 trigger): collected
     on both sides but present in NEITHER triage means compute_delta has no

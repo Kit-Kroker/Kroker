@@ -11,8 +11,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from ..core.models import GateDecision
-from ..triage.models import FixClass
+from ..core.models import GateDecision, GateOutcome
+from ..triage.delta import FindingDelta, FindingState, compute_delta
+from ..triage.models import FixClass, RepoTriage
 from .models import Incident, MaintenanceConfig, RepairAction, RepairPlan
 
 #: The recorded outcome for any ops action, verbatim on the wire (SC-B03,
@@ -33,6 +34,56 @@ def executable_actions(plan: RepairPlan) -> list[RepairAction]:
     """The plan's ``code_fix`` actions, in order: everything a child may be
     seeded with."""
     return [action for action in plan.actions if action.kind == "code_fix"]
+
+
+def merge_reject_decision(round: int, verdict: str) -> GateDecision:
+    """The ONLY decision the loop ever sends a repair child (023b R5,
+    SC-B10): a merge-gate REJECT decided by policy, the verdict line in
+    comments. No other outcome is buildable in this module — the
+    annotation-driven scan in ``T/maintenance/test_execution.py`` keeps
+    that property load-bearing as later builders land (T029/T033)."""
+    return GateDecision(
+        gate="merge",
+        round=round,
+        outcome=GateOutcome.REJECT,
+        decided_by="policy",
+        comments=verdict,
+    )
+
+
+def classify_verification(
+    base_triage: RepoTriage,
+    verify_triage: RepoTriage,
+    identity: str,
+    conflicted: bool,
+) -> str:
+    """One identity's verification verdict (023b R4, B-FR-007): the
+    ``VerificationResult.verdict`` literal.
+
+    ``compute_delta(base, verify)`` is the single classifier — a
+    not-collected signal on either side arrives as UNVERIFIABLE already, so
+    an absence caused by a blind cycle can never masquerade as a resolved
+    fix. A conflicted merge overrides everything (R5: the branch did not
+    land, whatever the triage says). An identity the delta has no opinion
+    on — collected on both sides but present in NEITHER triage — is
+    ``absent_at_base``: the fault the incident recorded does not exist at
+    the verification base, so nothing was verified (data-model §transitions
+    sends such an incident to ``resolved_externally`` — stale, not proven
+    fixed)."""
+    if conflicted:
+        return "conflicted"
+    delta: list[FindingDelta] = compute_delta(base_triage, verify_triage)
+    for d in delta:
+        if d.identity != identity:
+            continue
+        if d.state is FindingState.UNVERIFIABLE:
+            return "unverifiable"
+        if d.state is FindingState.RESOLVED:
+            return "resolved"
+        if d.state is FindingState.PERSISTED:
+            return "persisted"
+        return "new"  # FindingState.NEW
+    return "absent_at_base"
 
 
 def may_execute(
