@@ -257,7 +257,12 @@ Teams adopting coding agents today face four gaps:
   project, with a confidence threshold for soft. A gate SHALL resolve to one
   of `approve | reject | revise`; `revise` SHALL re-enter the producing stage
   with the comments as input, bounded by `MAX_GATE_ROUNDS` (default 2) before
-  escalating to a hard human gate.
+  escalating to a hard human gate. Under soft policy, auto-approve SHALL
+  require confidence ≥ threshold AND a calibrated bucket AND the gate's
+  deterministic per-artifact verdict computed in code (`plan_valid` for the
+  plan gate; vacuous only where no deterministic provider exists yet);
+  deterministic validator failures SHALL re-enter the producing stage as
+  `revise` guidance and SHALL NOT open a human gate.
 - FR-302: Decisions SHALL arrive as idempotent signals from any surface (CLI,
   dashboard, MCP, Slack); gate identity SHALL be `(gate, round)` so the first
   decision per round wins and a signal for a superseded round is ignored.

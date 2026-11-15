@@ -260,7 +260,7 @@ same parts, so a new role is configuration plus a prompt.
 | `RoleSpec` (in `agent.yaml`) | model id and family, thinking budget, max tokens, step and tool-call budget, retries, task queue, SDK |
 | `RepoReadTools(root, commit)` | `read_file`, `grep`, `list_dir`, `git_show`, `find_tests` — read-only, commit-pinned, truncated with paging |
 | `SandboxTools` | `run_command`, `run_single_test` in an isolated worktree, budgeted and allowlisted |
-| Evidence schemas | `AssertionEvidence`, `Finding`, `Coverage` — evidence fields before status fields *(built, FR-205: `sdlc.validators.evidence`, no consumers yet)* |
+| Evidence schemas | `AssertionEvidence`, `Finding`, `Coverage` — evidence fields before status fields *(built, FR-205: `sdlc.validators.evidence`; first consumer since FR-301: `sdlc.validators.verdicts` — `plan_valid`)* |
 | Verdict functions | pure, unit-tested: `review_verdict`, `plan_verdict`, `task_verdict` |
 | `ModelRouter` + family check | resolves role to model; start-up fails when a judge shares dev's model (ADR-6) |
 

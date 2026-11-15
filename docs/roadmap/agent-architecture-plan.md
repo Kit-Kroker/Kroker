@@ -36,7 +36,7 @@ flag in `agent.yaml`.
 
 - [ ] **AP-2.1** `make_agent` factory, `RoleSpec` in `agent.yaml`, `ModelRouter`.
 - [ ] **AP-2.2** `RepoReadTools` with commit pinning, truncation and paging.
-- [x] **AP-2.3** Validators library and evidence schemas (FR-205). Validators that read the tree run in an activity; the role loop runs in workflow code. *Delivered 2026-11-14: `src/sdlc/validators/` — pure checks + `path_like_tokens`, the `paths_exist` activity (the activity/inline split as specified), and the ADR-24 evidence schemas; plan_check and clarify are the first consumers. Factory integration (`make_agent`) remains AP-2.1's.*
+- [x] **AP-2.3** Validators library and evidence schemas (FR-205). Validators that read the tree run in an activity; the role loop runs in workflow code. *Delivered 2026-11-14: `src/sdlc/validators/` — pure checks + `path_like_tokens`, the `paths_exist` activity (the activity/inline split as specified), and the ADR-24 evidence schemas (first consumer `plan_valid`, FR-301, 2026-11-15); plan_check and clarify are the first consumers. Factory integration (`make_agent`) remains AP-2.1's.*
 - [ ] **AP-2.4** Dev-harness wrapper that refuses hand-off unless the contract's commands exit 0.
 - [ ] **AP-2.5** Per-role task queues and worker pools, routed from `RoleSpec` (NFR-2, ADR-9).
 - [ ] **AP-2.6** Worker-specific task queue for worktree affinity, with recreate-on-loss; task branches pushed to shared storage at each checkpoint.
@@ -63,7 +63,7 @@ flag in `agent.yaml`.
 ## AP-4 — Planner and architect
 
 - [ ] **AP-4.1** Planner split: decompose with repo tools, then compile one contract per task.
-- [ ] **AP-4.2** Plan validators (DAG, coverage, size) and the contract dry-run activity. Addresses ROADMAP §0's P2 residuals on false-premise contracts and tests that never ran.
+- [ ] ⚠️ **AP-4.2** Plan validators (DAG, coverage, size) and the contract dry-run activity. Addresses ROADMAP §0's P2 residuals on false-premise contracts and tests that never ran. *The validator half landed with FR-205 (2026-11-14, delivered under AP-2.3) and since FR-301 (2026-11-15) also feeds the plan gate's SOFT auto-approve conjunct as `plan_valid` (`sdlc/validators/verdicts.py`, `planner → plan_check → gate.plan`); the contract dry-run activity remains open.*
 - [ ] **AP-4.3** `devops_planner` folded into decompose.
 - [ ] **AP-4.4** Architect with repo tools, delta check as a validator, `requirement_coverage`.
 - [ ] **AP-4.5** Architect and plan critics on another family; one revision round.
