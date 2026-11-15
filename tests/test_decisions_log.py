@@ -171,3 +171,16 @@ def test_render_is_deterministic_table_with_empty_state(tmp_path):
     assert first == second
     assert first.count("\n") == 1  # header + one row
     assert "merge" in first and "maksim" in first
+
+
+def test_truncated_multibyte_summary_is_skipped(tmp_path):
+    """Review finding 1: a crashed run's truncated write can cut a multi-byte
+    UTF-8 character mid-sequence. That run is skipped like any malformed
+    summary — UnicodeDecodeError must not escape the sweep."""
+    (tmp_path / "run-a" / "summary.json").parent.mkdir(parents=True)
+    (tmp_path / "run-a" / "summary.json").write_bytes(
+        b'{"run_id": "run-a", "gates": [{"gate": "merge\xc3"}'
+    )  # \xc3 opening a multi-byte sequence, then cut
+    _write_run(tmp_path, "run-b", TWO_RUNS[1][1])
+    rows = decisions_from_exports(tmp_path)
+    assert [r.run_id for r in rows] == ["run-b", "run-b"]

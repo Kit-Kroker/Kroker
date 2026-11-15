@@ -85,7 +85,10 @@ def decisions_from_exports(
     for path in sorted(Path(base).glob("*/summary.json")):
         try:
             summary = RunSummary.model_validate_json(path.read_text(encoding="utf-8"))
-        except (OSError, ValidationError):
+        # UnicodeDecodeError (a ValueError) is the truncated-write shape a
+        # crashed run leaves -- skipped like any malformed summary, never
+        # fatal to the sweep.
+        except (OSError, ValidationError, UnicodeDecodeError):
             continue
         records.extend(_rows_from_summary(summary))
     if run is not None:
