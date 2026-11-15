@@ -4,7 +4,7 @@
 |---|---|
 | From | FR-202 validation-retries branch (final review follow-up card, 2026-11-14) |
 | Size | S |
-| Status | open |
+| Status | done (2026-11-15, round 023a close-out; RED + fix commits on main) |
 
 **The hole.** A typo'd per-role key — e.g. `validation_retry` instead of
 `validation_retries` in `agents/<role>/agent.yaml` — is silently ignored:
