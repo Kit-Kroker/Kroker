@@ -533,3 +533,50 @@ def test_no_gatedecision_builder_ever_builds_an_outcome_other_than_reject():
     for name in found:
         decision = _SCAN_SAMPLES[name](execution)
         assert decision.outcome is GateOutcome.REJECT, f"{name} built {decision.outcome}"
+
+
+# ------------------------------------------------------------ EDGE (023b T024) -- qa-chaos
+
+
+def test_merge_reject_decision_pins_every_field_for_round_three_and_a_distinct_verdict():
+    """Edge: full-shape pin. Round 3 and a distinct verdict must come through
+    every field; the fields the builder leaves unset stay at their defaults."""
+    from sdlc.maintenance.execution import merge_reject_decision
+
+    verdict = "new: a second identity appeared on the verification branch"
+    decision = merge_reject_decision(3, verdict)
+    assert decision.model_dump(exclude={"decided_at"}) == {
+        "gate": "merge",
+        "round": 3,
+        "outcome": GateOutcome.REJECT,
+        "decided_by": "policy",
+        "reviewer": None,
+        "comments": verdict,
+        "guidance": None,
+        "thaw_tests": False,
+    }
+
+
+def test_classify_selects_the_given_identity_not_the_first_delta_row():
+    """Edge: with two identities in the delta, the wrapper picks by identity. The
+    given one persisted; the other was resolved. Order must not decide it."""
+    from sdlc.maintenance.execution import classify_verification
+    from tests.maintenance.conftest import env_file_findings, make_triage
+
+    keep, gone = env_file_findings()[0], env_file_findings()[1]
+    base_t = make_triage({"secrets": [keep, gone]}, commit_sha="a" * 40)
+    verify_t = make_triage({"secrets": [keep]}, commit_sha="b" * 40)
+    keep_id = f"{keep.signal}:{keep.rule}:{keep.path}:{keep.key}"
+    gone_id = f"{gone.signal}:{gone.rule}:{gone.path}:{gone.key}"
+
+    assert classify_verification(base_t, verify_t, keep_id, False) == "persisted"
+    assert classify_verification(base_t, verify_t, gone_id, False) == "resolved"
+
+
+def test_conflicted_overrides_a_not_collected_shape_to_conflicted():
+    """Edge: precedence. A conflicted merge is 'conflicted' even when the verify
+    side is not collected (which alone would read as unverifiable)."""
+    from sdlc.maintenance.execution import classify_verification
+
+    base_t, verify_t, identity = _triage_pair(base=True, verify=False, verify_nc=("secrets",))
+    assert classify_verification(base_t, verify_t, identity, True) == "conflicted"
