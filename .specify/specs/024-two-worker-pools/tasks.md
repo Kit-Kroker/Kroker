@@ -53,7 +53,7 @@
   - `S/pools.py` imports nothing from `sdlc` beyond leaf modules (the test asserts that `import sdlc.pools` does not import `sdlc.worker`).
   (R2, R3) **(S)**
 - [x] T003 Create `S/pools.py` with `HARNESS_QUEUE_DEFAULT`, `PoolMode` (`StrEnum`), `on_harness`, `resolve_harness_queue` (name regex `^[A-Za-z0-9._-]{1,200}$`), and `HARNESS_ACTIVITIES`, the 28 names in research R2's harness rows. Write a module docstring citing ADR-9, rule A.1(a–c) as amended in R2, and the "prefer harness when unsure" rule. Make T002 green. **(S)**
-- [ ] T004 RED: write `T/test_pools_classification.py`. Build `names = {a.__temporal_activity_definition.name for a in get_worker_activities()}` from `S/worker.py`. Assert:
+- [x] T004 RED: write `T/test_pools_classification.py`. Build `names = {a.__temporal_activity_definition.name for a in get_worker_activities()}` from `S/worker.py`. Assert:
   - `HARNESS_ACTIVITIES ⊆ names`, so every harness name is registered;
   - `"check_test_drift" in names`;
   - `CODING_ACTIVITIES` (`S/benchmarks/drift.py:80`) `⊆ HARNESS_ACTIVITIES`;
@@ -61,7 +61,7 @@
   - the janitor is not an activity name.
 
   This is RED today because of `check_test_drift` (R2 defect). (P-FR-002) **(S)**
-- [ ] T005 Register `check_test_drift` in `S/worker.py:get_worker_activities()`: add it to the `from .vcs import (...)` block and to the returned list beside `get_task_diff`. Make T004 green. Grep `T/` for tests that pin the registered-activity count or list (for example `T/test_vcs_activities.py:25`, `T/test_worker*.py`) and update only an exact-count assertion, naming the R2 fix in the test comment. (R2) **(S)**
+- [x] T005 Register `check_test_drift` in `S/worker.py:get_worker_activities()`: add it to the `from .vcs import (...)` block and to the returned list beside `get_task_diff`. Make T004 green. Grep `T/` for tests that pin the registered-activity count or list (for example `T/test_vcs_activities.py:25`, `T/test_worker*.py`) and update only an exact-count assertion, naming the R2 fix in the test comment. (R2) **(S)**
 
 ---
 

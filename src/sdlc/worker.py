@@ -111,6 +111,7 @@ from .triage.activities import (
 from .validators.activities import paths_exist
 from .vcs import (
     build_verification_branch,
+    check_test_drift,
     cleanup_run_worktrees,
     create_worktree,
     get_task_diff,
@@ -187,6 +188,11 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         load_crew,
         read_committed_bytes,
         get_task_diff,
+        # 024 T005 (R2 latent defect): vcs.ACTIVITIES has always listed
+        # check_test_drift and code/step.py schedules it, but it was never
+        # registered here — a containment-on repair attempt would schedule
+        # an activity no worker serves. Registered, in the harness class.
+        check_test_drift,
         paths_exist,
         record_benchmark,
         judge_artifact,
