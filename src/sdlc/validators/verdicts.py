@@ -90,8 +90,12 @@ def plan_valid(
     artifact where no PipelineConfig is at hand. plan_check (FR-301 D3)
     passes its run's `plan_cfg` so it computes the SAME composition here
     instead of duplicating the family -- the defaults are deliberately
-    generous (FR-205), so the gate never contradicts a plan_check that
-    passed under them.
+    generous (FR-205): under them the conjunct can only fail where a
+    plan_check run under the DEFAULTS would also have failed, so its only
+    effect is to suppress the auto-approve down to the human gate. Under
+    operator-loosened `cfg.plan` a plan may pass plan_check yet fail this
+    conjunct -- the fail-safe direction: a human gate, never a silent
+    admit.
     """
     tasks = plan.tasks
 
@@ -134,9 +138,11 @@ class _GateProviders(dict[str, Callable[[Any, Any], Verdict]]):
 
     Lookup is by gate node id; a gate with no provider yet (architecture)
     resolves to `_vacuous_provider` instead of raising -- every gate must be
-    answerable for the conjunct, known or not. Consumers may equally use
-    `.get(name, fallback)`; the registry carries the default so the
+    answerable for the conjunct, known or not, so the
     unknown-gate-passes-vacuously contract lives beside the providers.
+    Consume by SUBSCRIPT (`GATE_PROVIDERS[name]`) or with an explicit
+    fallback (`.get(name, fallback)`): a bare `.get(name)` bypasses
+    `__missing__`, returns None, and the call site then TypeErrors on it.
     """
 
     def __missing__(self, gate_id: str) -> Callable[[Any, Any], Verdict]:
