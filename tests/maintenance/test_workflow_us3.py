@@ -24,7 +24,7 @@ from temporalio.worker import Worker
 from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.maintenance.models import MaintenanceConfig, MaintenanceState, RepairProposal
 from sdlc.workflows.maintenance import MaintenanceKickWorkflow, MaintenanceWorkflow
-from sdlc.workflows.triage import TriageWorkflow
+from sdlc.workflows.triage import TriageProbeInput, TriageWorkflow
 from tests.fakes.fake_agents import fake_agent_activities
 from tests.maintenance.conftest import commit_build_break
 from tests.maintenance.fake_triage import TRIAGE_ACTIVITIES
@@ -48,6 +48,26 @@ def _state(repo, **kw) -> MaintenanceState:
 
 def _acts() -> list:
     return fake_agent_activities([("maintainer_agent", RepairProposal, PROPOSAL)])
+
+
+def _failing_maintainer_activities() -> list:
+    """A maintainer whose model call always raises — the FR-009 degrade path,
+    which leaves incidents OPEN with no plan and therefore no gate."""
+    from pydantic_ai.durable_exec.temporal import TemporalDurability
+    from pydantic_ai.models.function import FunctionModel
+
+    from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
+    from tests.fakes.fake_agents import failing_durable_agent
+
+    def _boom(ctx, messages):  # noqa: ANN001, ARG001
+        raise RuntimeError("proposer down")
+
+    agent = failing_durable_agent(
+        "maintainer_agent", RepairProposal, FunctionModel(_boom), AGENT_ACTIVITY_CONFIG
+    )
+    bound = TemporalDurability.from_agent(agent)
+    assert bound is not None
+    return bound.temporal_activities
 
 
 @activity.defn(name="notify")
@@ -113,6 +133,7 @@ async def test_kicker_nudges_a_running_loop_and_a_cycle_runs(repo_dir):
                 task_queue=TASK_QUEUE,
             )
             assert result == "nudged:demo"
+
             async def _kicked() -> bool:
                 return (await handle.query(MaintenanceWorkflow.maintenance_state)).cycle >= 3
 
@@ -181,6 +202,10 @@ async def test_three_nudges_during_a_cycle_coalesce_into_one_follow_up(repo_dir)
 
 
 async def test_history_rolls_over_at_idle_carrying_incidents_and_baseline(repo_dir):
+    # The carried incident must be OPEN but gate-free, or the pending gate
+    # correctly defers the roll-over: a failing proposer gives exactly that
+    # (analysis_failed, no plan, no gate).
+    failing = _failing_maintainer_activities()
     async with await WorkflowEnvironment.start_time_skipping(
         data_converter=pydantic_data_converter
     ) as env:
@@ -189,7 +214,7 @@ async def test_history_rolls_over_at_idle_carrying_incidents_and_baseline(repo_d
             task_queue=TASK_QUEUE,
             workflows=[MaintenanceWorkflow, TriageWorkflow],
             plugins=[SdlcPydanticAIPlugin()],
-            activities=[*TRIAGE_ACTIVITIES, *_acts(), fake_notify],
+            activities=[*TRIAGE_ACTIVITIES, *failing, fake_notify],
         ):
             handle = await env.client.start_workflow(
                 MaintenanceWorkflow.run,
@@ -197,34 +222,56 @@ async def test_history_rolls_over_at_idle_carrying_incidents_and_baseline(repo_d
                 id="maint-demo",
                 task_queue=TASK_QUEUE,
             )
+            run_before = (await handle.describe()).run_id
             await handle.signal("nudge")
             await _await_baseline(handle)  # cycle 1; the history's cap is 2
 
             commit_build_break(repo_dir)
-            await handle.signal("nudge")  # cycle 2: one incident opens
+            await handle.signal("nudge")  # cycle 2: one OPEN incident, no gate
 
             async def _incident() -> bool:
                 incs = await handle.query(MaintenanceWorkflow.incidents)
                 return bool(incs) and incs[0].key == "build_probe:build_failed::"
 
             await _until(_incident, what="the incident")
-            incs = await handle.query(MaintenanceWorkflow.incidents)
-            summary = await handle.query(MaintenanceWorkflow.maintenance_state)
 
-            # The next cycle crosses the cap -> continue_as_new at the idle
-            # boundary. The SAME handle keeps resolving to the new run, and
-            # open incidents + the baseline survive byte-equal.
+            # Cycle 2 must fully complete before the snapshot: wait for idle.
+            async def _cycle2_done() -> bool:
+                s = await handle.query(MaintenanceWorkflow.maintenance_state)
+                return not s.running_cycle and s.cycle == 3
+
+            await _until(_cycle2_done, what="cycle 2 to go idle")
+            incs = await handle.query(MaintenanceWorkflow.incidents)
+
+            # The cap is already reached at an idle boundary with no pending
+            # gate: continue_as_new fires on its own — no nudge is sent (one
+            # here would race the boundary check and run a third cycle on
+            # the old history instead). The run id changes; the SAME handle
+            # keeps resolving to the new run.
+
+            async def _rolled() -> bool:
+                try:
+                    return (await handle.describe()).run_id != run_before
+                except Exception:  # noqa: BLE001
+                    return False
+
+            await _until(_rolled, what="the continue_as_new roll-over")
+
+            # The carried state at the roll boundary: incidents byte-equal,
+            # the baseline still recorded.
+            after_roll = await handle.query(MaintenanceWorkflow.incidents)
+            summary_roll = await handle.query(MaintenanceWorkflow.maintenance_state)
+            assert [i.model_dump_json() for i in after_roll] == [i.model_dump_json() for i in incs]
+            assert summary_roll.baseline_recorded is True
+
+            # The rolled run serves the next nudge — the loop did not die
+            # with the old history.
             await handle.signal("nudge")
 
-            async def _after_roll() -> bool:
+            async def _after_roll_cycle() -> bool:
                 return (await handle.query(MaintenanceWorkflow.maintenance_state)).cycle >= 4
 
-            await _until(_after_roll, what="the post-roll-over cycle")
-            after = await handle.query(MaintenanceWorkflow.incidents)
-            summary_after = await handle.query(MaintenanceWorkflow.maintenance_state)
-            assert [i.model_dump_json() for i in after] == [i.model_dump_json() for i in incs]
-            assert summary_after.baseline_recorded is summary.baseline_recorded
-            assert summary_after.project == summary.project
+            await _until(_after_roll_cycle, what="the post-roll-over cycle")
 
 
 async def test_pending_gate_defers_the_roll_over(repo_dir):
@@ -349,29 +396,45 @@ async def test_re_enable_starts_fresh_with_a_new_baseline(repo_dir):
 
 
 async def test_worker_restart_mid_cycle_duplicates_nothing(repo_dir):
+    from contextlib import suppress
+    from pathlib import Path
+
+    from sdlc.measurement import Measurement
+    from sdlc.triage.models import SignalResult
+
+    attempts: dict[str, int] = {"n": 0}
     release = asyncio.Event()
 
     @activity.defn(name="triage_build_probe")
-    async def held_probe(inp):  # noqa: ANN001, ANN202
-        from sdlc.measurement import Measurement
-        from sdlc.triage.models import SignalResult
-        from tests.maintenance.conftest import build_break_finding
+    async def held_probe(inp: TriageProbeInput):  # noqa: ANN202
+        """fake_triage's probe logic, but every post-baseline attempt waits
+        on an event — the crash window. After the crash the event is set, so
+        the server-side retry sails through."""
+        attempts["n"] += 1
+        if attempts["n"] > 1:
+            await asyncio.to_thread(release.wait)
+        pkg = Path(inp.repo_dir) / "src" / "fixture_pkg" / "__init__.py"
+        broken = pkg.exists() and "build break" in pkg.read_text(encoding="utf-8")
+        findings = []
+        if broken:
+            from tests.maintenance.conftest import build_break_finding
 
-        await asyncio.to_thread(release.wait)  # held until the test releases
-        findings = [build_break_finding()] if inp.commit_sha else []
+            findings = [build_break_finding()]
+        ok = Measurement.measured(1.0 if not findings else 0.0)
         return SignalResult(
             signal="build_probe",
             version=1,
             collected=Measurement.measured(float(len(findings))),
             findings=findings,
-            metrics={
-                "buildable": Measurement.measured(1.0 if not findings else 0.0),
-                "runnable": Measurement.measured(1.0 if not findings else 0.0),
-            },
+            metrics={"buildable": ok, "runnable": ok},
         )
 
     acts = [
-        *[a for a in TRIAGE_ACTIVITIES if a.__temporal_activity["name"] != "triage_build_probe"],
+        *[
+            a
+            for a in TRIAGE_ACTIVITIES
+            if a.__temporal_activity_definition.name != "triage_build_probe"
+        ],
         held_probe,
         *_acts(),
         fake_notify,
@@ -379,75 +442,62 @@ async def test_worker_restart_mid_cycle_duplicates_nothing(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
         data_converter=pydantic_data_converter
     ) as env:
-        worker = Worker(
+        # max_cached_workflows=0 everywhere: without workflow caching there
+        # is no sticky task queue, so the in-flight run is never pinned to a
+        # dead worker — in this time-skipping env the sticky release timeout
+        # is virtual time, which never advances while the test just polls.
+        # Worker A: the baseline cycle (probe attempt 1 — clean, unheld).
+        async with Worker(
             env.client,
             task_queue=TASK_QUEUE,
             workflows=[MaintenanceWorkflow, TriageWorkflow],
             plugins=[SdlcPydanticAIPlugin()],
             activities=acts,
-        )
-        async with worker:
+            max_cached_workflows=0,
+        ):
             handle = await env.client.start_workflow(
                 MaintenanceWorkflow.run, _state(repo_dir), id="maint-demo", task_queue=TASK_QUEUE
             )
             await handle.signal("nudge")
-            await _await_baseline(handle)  # cycle 1 through the held probe? no:
-            # cycle 1 must COMPLETE for a baseline, so release it once.
-            release.set()
-            await asyncio.sleep(1)
+            await _await_baseline(handle)
 
-        # Restart the worker mid-cycle 2 (a NEW hold).
-        release2 = asyncio.Event()
-
-        @activity.defn(name="triage_build_probe")
-        async def held_probe2(inp):  # noqa: ANN001, ANN202
-            from sdlc.measurement import Measurement
-            from sdlc.triage.models import SignalResult
-
-            await asyncio.to_thread(release2.wait)
-            from pathlib import Path
-
-            pkg = Path(inp.repo_dir) / "src" / "fixture_pkg" / "__init__.py"
-            broken = pkg.exists() and "build break" in pkg.read_text()
-            findings = []
-            if broken:
-                from tests.maintenance.conftest import build_break_finding
-
-                findings = [build_break_finding()]
-            return SignalResult(
-                signal="build_probe",
-                version=1,
-                collected=Measurement.measured(float(len(findings))),
-                findings=findings,
-                metrics={
-                    "buildable": Measurement.measured(1.0),
-                    "runnable": Measurement.measured(1.0),
-                },
-            )
-
-        acts2 = [
-            *[a for a in acts if a.__temporal_activity["name"] != "triage_build_probe"],
-            held_probe2,
-        ]
+        # Worker B: cycle 2 starts, the probe is held mid-flight (attempt 2),
+        # then the worker CRASHES. The crash is a cancelled run task — a
+        # clean `async with` exit would wait for the held activity forever,
+        # which is a shutdown, not a crash. The workflow itself stays durable
+        # server-side.
         commit_build_break(repo_dir)
+        worker_b = Worker(
+            env.client,
+            task_queue=TASK_QUEUE,
+            workflows=[MaintenanceWorkflow, TriageWorkflow],
+            plugins=[SdlcPydanticAIPlugin()],
+            activities=acts,
+            max_cached_workflows=0,
+        )
+        run_b = asyncio.create_task(worker_b.run())
+        await handle.signal("nudge")  # cycle 2, held mid-probe
+
+        async def _attempt2_in_flight() -> bool:
+            return attempts["n"] >= 2
+
+        await _until(_attempt2_in_flight, what="cycle 2's probe to be in flight")
+        run_b.cancel()
+        with suppress(asyncio.CancelledError):
+            await run_b
+
+        # Worker C: the restart. The retry sails through the released event;
+        # the SAME run resumes from durable state — exactly one incident and
+        # the numbering never restarted (FR-014).
         async with Worker(
             env.client,
             task_queue=TASK_QUEUE,
             workflows=[MaintenanceWorkflow, TriageWorkflow],
             plugins=[SdlcPydanticAIPlugin()],
-            activities=acts2,
+            activities=acts,
+            max_cached_workflows=0,
         ):
-            await handle.signal("nudge")  # cycle 2, held mid-probe
-            await asyncio.sleep(2)
-        # A third worker instance resumes the SAME run (durable state).
-        async with Worker(
-            env.client,
-            task_queue=TASK_QUEUE,
-            workflows=[MaintenanceWorkflow, TriageWorkflow],
-            plugins=[SdlcPydanticAIPlugin()],
-            activities=acts2,
-        ):
-            release2.set()
+            release.set()
 
             async def _incident_once() -> bool:
                 incs = await handle.query(MaintenanceWorkflow.incidents)
