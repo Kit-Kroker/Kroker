@@ -23,6 +23,11 @@ class MemoryKind(StrEnum):
     GATE_FEEDBACK = "gate_feedback"
     RESEARCH_FINDING = "research_finding"  # verified grounded findings only
     RUN_SUMMARY = "run_summary"  # retro-stage per-run summary (E-32)
+    # 023b R13: the DAPER maintenance loop's terminal-incident records. A
+    # lesson is claimed only for `closed` (provenance provable); every other
+    # terminal incident is retained as an experience.
+    INCIDENT_LESSON = "incident_lesson"
+    INCIDENT_EXPERIENCE = "incident_experience"
 
 
 class RecallSnapshot(BaseModel):
