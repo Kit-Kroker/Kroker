@@ -161,7 +161,16 @@ class MaintenanceWorkflow(GateHost):
         if self._gate_tasks:
             await workflow.wait_condition(lambda: all(t.done() for t in self._gate_tasks))
         for inc in self._state.incidents:
-            if inc.state is IncidentState.AWAITING_DECISION:
+            # 023b (T045, data-model §transitions): the disable reaches the
+            # IN-FLIGHT attempts too — an executing/verifying incident is
+            # withdrawn like an awaiting one. The CHILD is never cancelled
+            # (a disable never cancels): it outlives this loop under
+            # ABANDON, its merge gate still pending for the operator.
+            if inc.state in (
+                IncidentState.AWAITING_DECISION,
+                IncidentState.EXECUTING,
+                IncidentState.VERIFYING,
+            ):
                 inc.state = IncidentState.WITHDRAWN
                 inc.note = "maintenance disabled"
         return f"disabled:{project}"
