@@ -6,8 +6,8 @@ rather than the policy auto-approving. Pure like labels.py/verdict.py --
 no I/O, no temporalio -- so the number is testable far from any store.
 
 The retained decision records live where the retro export already puts
-them (`RunSummary.gates`, written per run as summary.json); the store
-reader beside the ledger fetches them, this module only counts.
+them (`RunSummary.gates`, written per exported run as summary.json); the
+store reader beside the ledger fetches them, this module only counts.
 """
 
 from __future__ import annotations

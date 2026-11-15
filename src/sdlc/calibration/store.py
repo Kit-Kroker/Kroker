@@ -86,13 +86,19 @@ class CalibrationLedger:
 def gate_decisions_from_exports(
     root: str | os.PathLike | None = None,
 ) -> list[GateDecisionRecord]:
-    """Every gate decision every closed run exported, as SC-6 reads them.
+    """The gate decisions in the readable run exports, as SC-6 reads them.
 
     The retained source is the retro export (observability/activities.py):
-    each run closes with `<root>/<run_id>/summary.json`, RunSummary as
+    a closing run writes `<root>/<run_id>/summary.json`, RunSummary as
     data, whose `gates` list `GateOutcomeSummary` documents as the SC-6
     signal -- already deduped per (gate, round) by build_run_summary. No
     second store is built beside it.
+
+    Coverage is runs that closed AND exported -- not a fleet census. A
+    stored-failure run never reaches retro (workflows/graph.py re-raises
+    before it), and the export itself is best-effort (retro/step.py
+    swallows its errors), so the denominator can undercount -- plausibly
+    toward the worst runs, the ones that crashed while gate-troubled.
 
     Root defaults to SDLC_EXPORT_ROOT or ./runs/pipeline, mirroring the
     export activity's own resolution. A missing root reads as no decisions

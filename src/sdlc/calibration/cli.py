@@ -89,6 +89,10 @@ def render_override_line(rate: OverrideRate) -> str:
     target. Zero decisions is the friendly empty state -- the metric is
     undefined, not 0%, which would claim a perfection no data supports.
 
+    The denominator covers only runs that closed and exported
+    (gate_decisions_from_exports states the contract), so `0/4` is four
+    readable runs, not a fleet census.
+
     "Human decisions" follows the SC-6 definition decided_by != "policy":
     a timed-out SOFT gate is counted too, since the policy then failed to
     decide -- the exact failure SC-6 exists to surface."""
