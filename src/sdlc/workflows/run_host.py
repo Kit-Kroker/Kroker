@@ -60,6 +60,9 @@ class RunHost:
         author_model: str | None = None,
     ) -> None:
         conf = confidence
+        # FR-304: the full decision record on the event wire — outcome
+        # always; reviewer/comments/decided_at only-when-set (the
+        # confidence/author_model pattern). Read back by _gate_outcome.
         self._emit(  # type: ignore[attr-defined]
             RunEventKind.GATE_DECIDED,
             stage=name,
@@ -68,6 +71,14 @@ class RunHost:
             policy=policy.value,
             decided_by=decision.decided_by,
             approved=("true" if decision.approved else "false"),
+            outcome=decision.outcome.value,
+            **({"reviewer": decision.reviewer} if decision.reviewer else {}),
+            **({"comments": decision.comments} if decision.comments else {}),
+            **(
+                {"decided_at": decision.decided_at.isoformat()}
+                if decision.decided_at is not None
+                else {}
+            ),
             **({"confidence": str(conf)} if conf is not None else {}),
             **({"author_model": author_model} if author_model else {}),
         )
