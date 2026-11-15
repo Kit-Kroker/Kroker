@@ -117,7 +117,7 @@ def test_gate_node_consults_calibration_through_the_host_then_the_shared_rule():
     """
     body = _gate_node_body()
     consult = "await nc.host._calibration_verdict(cfg, name, author)"
-    rule = "auto_decision_for(name, cfg, confidence, calibration)"
+    rule = "auto_decision_for(name, cfg, confidence, calibration, verdict)"
     assert consult in body
     assert rule in body
     assert body.index(consult) < body.index(rule)
@@ -132,3 +132,42 @@ def test_calibration_lookup_failure_is_insufficient_on_the_live_path():
     window = src[idx : idx + 900]
     assert "except Exception" in window
     assert "return INSUFFICIENT" in window
+
+
+# ---------------------------------------------------------------------------
+# ADR-24 (FR-301): the deterministic conjunct's wiring at the three call
+# sites -- provider lookup by gate name, never a gate-name branch.
+# ---------------------------------------------------------------------------
+
+
+def test_gate_node_computes_the_verdict_from_the_provider_registry():
+    """The lookup is by gate name through GATE_PROVIDERS (subscript: an
+    unknown gate resolves to the vacuous provider), it runs inside the SOFT
+    predicate block, and it feeds the shared rule. Requirements are not
+    wired to a gate node (node_types pins a gate to exactly one in-port,
+    'artifact'), so coverage passes None -- plan_check's no-req-doc
+    semantics -- until the graph grows the edge."""
+    body = _gate_node_body()
+    lookup = "verdict = GATE_PROVIDERS[name](artifact, None)"
+    assert lookup in body
+    assert body.index(lookup) < body.index("auto_decision_for(")
+
+
+def test_revisable_stage_computes_the_verdict_from_the_provider_registry():
+    src = ROLE_HOST.read_text(encoding="utf-8")
+    idx = src.find("async def _revisable_stage")
+    assert idx != -1
+    body = src[idx : idx + 2400]
+    assert "verdict = GATE_PROVIDERS[name](artifact, None)" in body
+    assert body.index("GATE_PROVIDERS[name]") < body.index("auto_decision_for(")
+
+
+def test_merge_soft_path_hands_the_rule_a_clean_verdict_by_construction():
+    """5d runs only after the DeterministicQualityGate passed clean, so the
+    merge call site passes a ran-and-passed verdict; anything a provider
+    computed would re-run checks the gate already decided."""
+    src = MERGE.read_text(encoding="utf-8")
+    idx = src.rfind('"merge_verdict"')
+    assert idx != -1
+    tail = src[idx : idx + 1800]
+    assert "Verdict(checks_run=True, ok=True)" in tail

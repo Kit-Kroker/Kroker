@@ -6,15 +6,19 @@ import asyncio
 
 import pytest
 
+from sdlc.calibration.models import CalibrationVerdict
 from sdlc.core.models import GateDecision, GateOutcome, GatePolicy, PipelineConfig
 from sdlc.graph import NODE_TYPES, validate
 from sdlc.graph.router import Activation
 from sdlc.pending import GateContext
+from sdlc.stages.plan.models import DevTask, ImplementationPlan
 from sdlc.workflows.graph_catalog import SHIPPED
 from sdlc.workflows.graph_nodes import gate as gate_module
 from sdlc.workflows.graph_nodes.base import NodeContext, RunFacts, StoredPayload
 from tests.fakes.canned import ARCH, PLAN, greenfield_idea
 from tests.graph.fixtures.registries import roles
+
+CALIBRATED = CalibrationVerdict(verdict="calibrated", n=25, agreement_rate=0.9)
 
 
 class Recorder:
@@ -43,6 +47,15 @@ class Host:
     async def _board_publish(self, cfg, key, content_json, *, approved=True):
         self.published.append((key, approved))
         return 11
+
+
+class CalibratedHost(Host):
+    """A host whose ledger bucket is calibrated, so the calibration conjunct
+    clears and the deterministic verdict is the only blocker left."""
+
+    async def _calibration_verdict(self, cfg, gate, author_model):
+        await super()._calibration_verdict(cfg, gate, author_model)
+        return CALIBRATED
 
 
 def _nc(gate_id: str, producer: str, artifact, rec: Recorder, host: Host):
@@ -96,7 +109,9 @@ def finishes(monkeypatch):
         {"gate.architecture": make("architecture", False), "gate.plan": make("plan", True)},
     )
     monkeypatch.setattr(
-        gate_module, "auto_decision_for", lambda name, cfg, confidence, calibration: "AUTO"
+        gate_module,
+        "auto_decision_for",
+        lambda name, cfg, confidence, calibration, verdict: "AUTO",
     )
     return done
 
@@ -164,3 +179,52 @@ def test_final_round_skips_calibration_and_maps_revise_to_reject(finishes):
     assert out.port == "reject" and finishes == [("plan", "PREP", False)]
     asyncio.run(out.finalize())
     assert host.published == [("plan", False)]
+
+
+# ---------------------------------------------------------------------------
+# ADR-24 (FR-301): the deterministic conjunct on the live path, under the
+# REAL rule -- auto_decision_for and GATE_PROVIDERS unpatched.
+# ---------------------------------------------------------------------------
+
+
+def _bad_plan() -> ImplementationPlan:
+    """Duplicate task ids: plan_valid's first check (ids_unique) fails, so
+    the provider verdict is ran-and-failed."""
+    task = DevTask(
+        id="t1", title="t", description="d", acceptance_criteria=[], files_hint=[], covers=[]
+    )
+    again = task.model_copy()
+    return ImplementationPlan(tasks=[task, again], confidence=0.95)
+
+
+def _patch_finishes_only(monkeypatch):
+    async def fin(ctx, prep, *, cfg, artifact, gate):
+        pass
+
+    monkeypatch.setattr(
+        gate_module,
+        "GATE_FINISH",
+        {"gate.plan": gate_module.GateFinish(finish=fin, board_key="plan", sets_plan_version=True)},
+    )
+
+
+def test_a_failed_provider_verdict_blocks_the_auto_approve(monkeypatch):
+    """The plan's checks ran and failed, so no auto decision is synthesized
+    (auto=None reaches ctx.gate) however confident the proposer and however
+    calibrated the bucket -- the human wait happens."""
+    _patch_finishes_only(monkeypatch)
+    rec, host = Recorder(GateOutcome.APPROVE), CalibratedHost()
+    nc, ref = _nc("plan", "planner", _bad_plan(), rec, host)
+    asyncio.run(gate_module.gate_node(nc, _act("plan", ref, 1, final=False), PipelineConfig()))
+    assert host.calibration == [("plan", "m-author")]  # the read still happened
+    assert rec.gate_calls[0][1]["auto_decision"] is None
+
+
+def test_a_clean_provider_verdict_auto_approves_under_the_real_rule(monkeypatch):
+    _patch_finishes_only(monkeypatch)
+    rec, host = Recorder(GateOutcome.APPROVE), CalibratedHost()
+    nc, ref = _nc("plan", "planner", PLAN, rec, host)
+    asyncio.run(gate_module.gate_node(nc, _act("plan", ref, 1, final=False), PipelineConfig()))
+    auto = rec.gate_calls[0][1]["auto_decision"]
+    assert auto is not None and auto.outcome is GateOutcome.APPROVE
+    assert auto.decided_by == "policy"

@@ -24,6 +24,7 @@ with workflow.unsafe.imports_passed_through():
     from ...pending import GateContext
     from ...stages.architecture.step import finish as architecture_finish
     from ...stages.plan.step import finish as plan_finish
+    from ...validators.verdicts import GATE_PROVIDERS
     from ..role_host import _spec_summary
     from .base import NodeContext, NodeResult
 
@@ -58,7 +59,14 @@ async def gate_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> No
         auto = None
         if confidence is not None and cfg.gates.get(name, GateConfig()).policy is GatePolicy.SOFT:
             calibration = await nc.host._calibration_verdict(cfg, name, author)
-            auto = auto_decision_for(name, cfg, confidence, calibration)
+            # ADR-24's deterministic conjunct: the gate's provider verdict,
+            # a pure in-workflow call (no commands, replays unaffected).
+            # Requirements are not wired here -- a gate node carries exactly
+            # one in-port ('artifact', node_types pins it), so coverage runs
+            # vacuous, plan_check's no-req-doc semantics, until the graph
+            # grows the edge.
+            verdict = GATE_PROVIDERS[name](artifact, None)
+            auto = auto_decision_for(name, cfg, confidence, calibration, verdict)
         decision = await nc.ctx.gate(
             name,
             cfg.gate_settings(),

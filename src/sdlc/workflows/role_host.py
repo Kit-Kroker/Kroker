@@ -43,6 +43,7 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.usage import add_spend
     from ..pending import GateContext
     from ..pricing import PriceUsageInput, price_usage
+    from ..validators.verdicts import GATE_PROVIDERS
     from .memory_host import MEM_ACT
 
 # E-33: pricing is a deterministic local table lookup — retrying cannot
@@ -388,7 +389,12 @@ class RoleHost:
                 and cfg.gates.get(name, GateConfig()).policy is GatePolicy.SOFT
             ):
                 calibration = await self._calibration_verdict(cfg, name, author_model)
-                auto = auto_decision_for(name, cfg, confidence, calibration)
+                # ADR-24: the deterministic conjunct, the same provider
+                # lookup by gate name as the gate node. No requirements
+                # reach this legacy path, so coverage runs vacuous --
+                # plan_check's no-req-doc semantics.
+                verdict = GATE_PROVIDERS[name](artifact, None)
+                auto = auto_decision_for(name, cfg, confidence, calibration, verdict)
             decision = await self._gate(  # type: ignore[attr-defined]
                 name,
                 cfg.gate_settings(),

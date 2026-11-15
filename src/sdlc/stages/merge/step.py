@@ -45,6 +45,7 @@ with workflow.unsafe.imports_passed_through():
     from ...memory.models import MemoryKind
     from ...observability.trace import RunEventKind
     from ...pending import GateContext
+    from ...validators.verdicts import Verdict
     from ...vcs import BaseWorktree, BaseWorktreeInput, prepare_base_worktree
     from ..plan.models import PlanDrift
     from ..qa.activities import LintInput, ScopedSecurityScanInput, run_lint, scoped_security_scan
@@ -614,7 +615,12 @@ async def step(
                     )
                 except Exception:
                     calibration = INSUFFICIENT
-                auto = auto_decision_for("merge", cfg, confidence, calibration)
+                # ADR-24: this branch is 5d -- it runs only after the
+                # DeterministicQualityGate passed clean, so the conjunct's
+                # verdict is ran-and-passed by construction.
+                auto = auto_decision_for(
+                    "merge", cfg, confidence, calibration, Verdict(checks_run=True, ok=True)
+                )
             if auto is None:
                 gate = await ctx.gate(
                     "merge", cfg.gate_settings(), context=GateContext(checks=gate_report.checks)
