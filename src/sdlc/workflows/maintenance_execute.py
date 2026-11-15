@@ -72,7 +72,7 @@ with workflow.unsafe.imports_passed_through():
     from ..measurement import CollectionState
     from ..notify.activities import notify
     from ..notify.contract import NotifyInput, NotifyReason
-    from ..pending import TaskEscalationPending
+    from ..pending import StageGatePending, TaskEscalationPending
     from ..tidyup.backlog import repair_work_for, seeded_work_for
     from ..triage.models import FixClass, RepoTriage, SignalResult, finding_identity
     from ..vcs.integration import (
@@ -174,9 +174,31 @@ async def execute_step(
     )
     # The FULL policy (T037, R10): classify once, walk the admitted starts,
     # carry the pruned window back — the stamps for this pass's starts are
-    # appended below so the NEXT call's window sees them.
-    admissions = choose_starts(candidates, state.exec_starts, loop_cfg, now)
+    # appended below so the NEXT call's window sees them. The policy sees
+    # ALL incidents: the path-overlap gate reads the live executing/
+    # verifying attempts, which are never candidates themselves.
+    admissions = choose_starts(state.incidents, state.exec_starts, loop_cfg, now)
     chosen = set(admissions.starts)
+    # R10: the operator is notified ONCE PER CYCLE when anything was held —
+    # never once per incident. The notice rides the loop's only outbound
+    # channel; a hold is a remind, not an escalation (no fallback tier).
+    if admissions.notice is not None:
+        await workflow.execute_activity(
+            notify,
+            NotifyInput(
+                run_id=workflow.info().workflow_id,
+                pending=StageGatePending(
+                    key=f"maintenance:caps:{state.cycle}",
+                    gate="execution_caps",
+                    round=state.cycle,
+                    spec_summary=admissions.notice,
+                ),
+                reason=NotifyReason.REMIND,
+                opened_at=now,
+                now=now,
+            ),
+            **NOTIFY_ACT,
+        )
     records: list[ExecutionRecord] = []
     refusals: list[Incident] = []
     for inc in candidates:

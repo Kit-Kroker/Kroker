@@ -65,6 +65,8 @@ from tests.maintenance.stub_child import STUB_ACTIVITIES, StubRepairChild
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.notify.contract import NotifyInput, Results
+    from sdlc.workflows.gates import GateHost
+    from sdlc.workflows.models import GraphRunInput
 
 pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]
 
@@ -72,6 +74,28 @@ TASK_QUEUE = "maint-us5-caps"
 PATHS = ["config/a.ini", "config/b.ini", "config/c.ini", "config/d.ini"]
 RULE = "hang: env_file_tracked"
 CHILD_TIMEOUT_HOURS = 168  # nothing times out within a cell's cycles (see module doc)
+
+
+@workflow.defn(name="GraphWorkflow")
+class NoTimerHangChild(GateHost):
+    """The overlap cell's hold (executor adaptation, disclosed in T039's
+    commit): a hang child that NEVER advances the shared virtual clock.
+    The shared stub's hang sleeps 1h in a loop — the time-skipping env
+    fast-forwards those hours, the 168h child_timeout_hours legitimately
+    fires within a couple of nudges, the holder reopens and its path
+    frees, so the shared hang cannot hold a path for this cell's
+    duration. A condition with no timer blocks WITHOUT a timer, so
+    virtual time stays put and the hold is real for as long as the cell
+    nudges. Registered in _overlap_worker ONLY, under the same defn name
+    the loop starts; every other cell keeps the shared stub."""
+
+    @workflow.run
+    async def run(self, run_input: GraphRunInput) -> str:
+        assert run_input.idea.title.startswith("hang:"), (
+            "the local variant supports only the hang script"
+        )
+        await workflow.wait_condition(lambda: False)  # no timer: no time skip
+        raise AssertionError("unreachable")  # pragma: no cover
 
 
 def _proposer(messages, info):  # noqa: ANN001, ARG001
@@ -403,7 +427,7 @@ async def _overlap_worker(env, faults: dict, notifications: list[NotifyInput]):
     async with Worker(
         env.client,
         task_queue=TASK_QUEUE,
-        workflows=[MaintenanceWorkflow, TriageWorkflow, StubRepairChild],
+        workflows=[MaintenanceWorkflow, TriageWorkflow, NoTimerHangChild],
         plugins=[SdlcPydanticAIPlugin()],
         activities=[
             *triage,
