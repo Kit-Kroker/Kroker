@@ -2,11 +2,11 @@
 
 > **2026-11-14 — owner chose P4 first.** The owner's "finish all of needed"
 > ruling (Option B, spec
-> [`.specify/specs/023-daper-maintenance-loop/spec.md`](../.specify/specs/023-daper-maintenance-loop/spec.md) §A.0)
+> [`.specify/specs/023-daper-maintenance-loop/spec.md`](../../.specify/specs/023-daper-maintenance-loop/spec.md) §A.0)
 > makes the P4 row the active program: DAPER maintenance loop, two worker
 > pools, fleet runs to SC-1..3. This **supersedes** the 2026-11-11 swarm-first
 > banner below — swarm mode is parked
-> ([`.specify/specs/parked-swarm-mode-skeleton/spec.md`](../.specify/specs/parked-swarm-mode-skeleton/spec.md),
+> ([`.specify/specs/parked-swarm-mode-skeleton/spec.md`](../../.specify/specs/parked-swarm-mode-skeleton/spec.md),
 > standing rulings Q2/Q3 travel with it) — and it defers Tier 2 audit depth
 > (item 6, E-50…E-56) and the outcome loop (P8) exactly as before. Progress:
 > the DAPER **loop half landed 023a (2026-11-15)** — E-14, FR-501's

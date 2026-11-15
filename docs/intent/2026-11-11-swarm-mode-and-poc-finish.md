@@ -106,13 +106,13 @@ this addendum records what changed, it does not retrofit it.
 
 - **The owner chose Option B — finish the P4 row** (DAPER maintenance
   loop, two worker pools, fleet runs to put SC-1..3 at target). Recorded
-  in [`.specify/specs/023-daper-maintenance-loop/spec.md`](../.specify/specs/023-daper-maintenance-loop/spec.md) §A.0.
+  in [`.specify/specs/023-daper-maintenance-loop/spec.md`](../../.specify/specs/023-daper-maintenance-loop/spec.md) §A.0.
   This **reverses** this intent's swarm-first order and its "maintenance
   loop out of scope for now" entry above. It is the owner's call, made
   2026-11-14; the spec lead had recommended Option A.
 - **Swarm build and the platform-shell rounds are off this program's
   board.** The drafted swarm skeleton spec is parked, not deleted:
-  [`.specify/specs/parked-swarm-mode-skeleton/spec.md`](../.specify/specs/parked-swarm-mode-skeleton/spec.md).
+  [`.specify/specs/parked-swarm-mode-skeleton/spec.md`](../../.specify/specs/parked-swarm-mode-skeleton/spec.md).
 - **Standing rulings kept for whenever the swarm is picked up:**
   - **Q2** — whenever the platform shell is built, it proceeds regardless
     of any chain-vs-swarm comparison result.
