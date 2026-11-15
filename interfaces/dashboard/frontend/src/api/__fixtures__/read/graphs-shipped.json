@@ -2,39 +2,39 @@
   "graphs": [
     {
       "name": "default",
-      "sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+      "sha": "2bfa5ac58df5454c6dff6a84e77a4b7d3950f49cc4e44187f2ad79505dc952e6",
       "description": null,
       "when": null,
       "nodes": 12,
       "gates": 2,
-      "edges": 20
+      "edges": 21
     },
     {
       "name": "default-research",
-      "sha": "8897db11d9c19afad1fb19d8a08532a2958fd5fca5c9500cda90e34ae11cba9c",
+      "sha": "c8e7a2c9e2766d841032396ada293db340a4257bdaf59db429605e22b0045237",
       "description": null,
       "when": null,
       "nodes": 13,
       "gates": 2,
-      "edges": 22
+      "edges": 23
     },
     {
       "name": "default-constitution",
-      "sha": "b8bfa35dba1a0958dc90391b3dae28523c3b66ff687988b7c6490c016de06a46",
+      "sha": "8e240355d26b0a77f2e6b791bf60daa194be642705d90d8dac50323fb02a1ab1",
       "description": null,
       "when": null,
       "nodes": 13,
       "gates": 2,
-      "edges": 25
+      "edges": 26
     },
     {
       "name": "default-requirements",
-      "sha": "b133de903d2e682456b70273215d58427933a61852a1c79699153239d8d0b0fb",
+      "sha": "591db0a5b8b3d62984419098dcbdf632604739787f3b5f03bb4e367a4d6b5db6",
       "description": null,
       "when": null,
       "nodes": 13,
       "gates": 2,
-      "edges": 25
+      "edges": 26
     },
     {
       "name": "seeded",

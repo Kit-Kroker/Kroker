@@ -2,7 +2,7 @@
   "runs": [
     {
       "run_id": "graph-run",
-      "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+      "graph_sha": "2bfa5ac58df5454c6dff6a84e77a4b7d3950f49cc4e44187f2ad79505dc952e6",
       "graph_name": "default",
       "arm": {
         "harness": "opencode",
@@ -22,6 +22,16 @@
         {
           "edge": {
             "source": "plan",
+            "source_port": "revise",
+            "target": "planner",
+            "target_port": "guidance"
+          },
+          "used": 0,
+          "max": 2
+        },
+        {
+          "edge": {
+            "source": "plan_check",
             "source_port": "revise",
             "target": "planner",
             "target_port": "guidance"
@@ -63,7 +73,7 @@
     },
     {
       "run_id": "gated-run",
-      "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+      "graph_sha": "2bfa5ac58df5454c6dff6a84e77a4b7d3950f49cc4e44187f2ad79505dc952e6",
       "graph_name": "default",
       "arm": {
         "harness": "opencode",
@@ -83,6 +93,16 @@
         {
           "edge": {
             "source": "plan",
+            "source_port": "revise",
+            "target": "planner",
+            "target_port": "guidance"
+          },
+          "used": 0,
+          "max": 2
+        },
+        {
+          "edge": {
+            "source": "plan_check",
             "source_port": "revise",
             "target": "planner",
             "target_port": "guidance"
@@ -156,7 +176,7 @@
     },
     {
       "run_id": "closed-run",
-      "graph_sha": "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",
+      "graph_sha": "2bfa5ac58df5454c6dff6a84e77a4b7d3950f49cc4e44187f2ad79505dc952e6",
       "graph_name": "default",
       "arm": {
         "harness": "opencode",
@@ -176,6 +196,16 @@
         {
           "edge": {
             "source": "plan",
+            "source_port": "revise",
+            "target": "planner",
+            "target_port": "guidance"
+          },
+          "used": 0,
+          "max": 2
+        },
+        {
+          "edge": {
+            "source": "plan_check",
             "source_port": "revise",
             "target": "planner",
             "target_port": "guidance"
