@@ -13,6 +13,14 @@ are never executed (B-FR-017): a mixed plan starts with its
 ``code_fix`` subset and records the ops refusal verbatim; an ops-only
 plan is refused outright.
 
+A refusal sends the incident back to ``awaiting_decision`` with
+``gate_round += 1``; the caller opens that round's gate in the same
+step, and the gate's own OPENED notification is the operator's ONE
+notification (R6/data-model: "a fresh gate round opens, and the
+operator is notified once") — a separate refusal notice here would
+double it, and the gate-carried notice carries the deadline and stays
+silent if the gate is withdrawn by a disable.
+
 The one event-loop yield at the top (``asyncio.sleep(0)``, a bare
 coroutine yield — no Temporal command, replay-safe) lets gate tasks
 whose decision was recorded synchronously by ``submit_gate_decision``
@@ -42,11 +50,8 @@ with workflow.unsafe.imports_passed_through():
         MaintenanceConfig,
         MaintenanceState,
     )
-    from ..notify.activities import notify
-    from ..notify.contract import NotifyInput, NotifyReason
     from ..tidyup.backlog import repair_work_for, seeded_work_for
     from ..triage.models import FixClass
-    from .gates import NOTIFY_ACT, gate_pending
     from .pipeline_child import start_repair_child
 
 
@@ -97,23 +102,6 @@ def _child_id(state: MaintenanceState, incident: Incident, attempt: int) -> str:
     return f"maint-{state.config.project}-{run8}-inc{incident.no}-a{attempt}"
 
 
-async def _notify_refusal(state: MaintenanceState, incident: Incident, now: datetime) -> None:
-    """One operator notification per refusal (R6): the round-2 gate it
-    opens is the pending decision the operator owes."""
-    pending = gate_pending(f"repair:{incident.no}", incident.gate_round, None, opened_at=now)
-    await workflow.execute_activity(
-        notify,
-        NotifyInput(
-            run_id=workflow.info().workflow_id,
-            pending=pending,
-            reason=NotifyReason.OPENED,
-            opened_at=now,
-            now=now,
-        ),
-        **NOTIFY_ACT,
-    )
-
-
 async def execute_step(
     state: MaintenanceState,
     cfg: PipelineConfig,
@@ -153,7 +141,6 @@ async def execute_step(
             inc.gate_round += 1
             inc.note = refusal.outcome
             refusals.append(inc)
-            await _notify_refusal(state, inc, now)
             continue
         if inc.no not in chosen:
             inc.state = IncidentState.QUEUED  # admitted, held by the interim cap

@@ -23,6 +23,7 @@ outcome on its incident. Nothing in this file writes to any repository
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 
 from temporalio import workflow
 
@@ -45,6 +46,8 @@ with workflow.unsafe.imports_passed_through():
     from ..maintenance.render import gate_context_text
     from ..pending import GateContext
     from .gates import GateHost, GateWithdrawnError
+    from .maintenance_execute import execute_step
+    from .tidyup import _default_fix_cfg
     from .triage import TriageInput, TriageWorkflow
     from .triage_child import triage_gates
 
@@ -91,6 +94,7 @@ class MaintenanceWorkflow(GateHost):
                 ack_unattended_build_probe=False,
             )
         cfg = self._state.config
+        window_start = workflow.now() - timedelta(days=7)
         return MaintenanceSummary(
             project=cfg.project,
             cycle=self._state.cycle,
@@ -99,6 +103,12 @@ class MaintenanceWorkflow(GateHost):
             open_gates=len(self._pending),
             not_collected_streak=dict(self._state.not_collected_streak),
             ack_unattended_build_probe=cfg.ack_unattended_build_probe,
+            execute=cfg.execute,
+            starts_in_window=sum(t >= window_start for t in self._state.exec_starts),
+            in_flight=sum(
+                i.state in (IncidentState.EXECUTING, IncidentState.VERIFYING)
+                for i in self._state.incidents
+            ),
         )
 
     # ------------------------------- run --------------------------------- #
@@ -183,6 +193,16 @@ class MaintenanceWorkflow(GateHost):
                 # recurrence recomputes it (US2 AC4's "reproduced on two
                 # consecutive cycles" path).
                 self._reprice(inc)
+
+        # 023b Execute (R1/R6): the act phase, after plan/gate. Behind both
+        # the config and the patch marker (R15) — a pre-023b history replays
+        # with execute=False and never reaches this path. A refusal comes
+        # back with its gate_round already bumped; the round's gate opens
+        # here, human-only, and must not block the cycle's completion (R3).
+        if cfg.execute and workflow.patched("maint-023b-execute"):
+            _records, refusals = await execute_step(self._state, _default_fix_cfg(), workflow.now())
+            for inc in refusals:
+                self._start_gate(self._repair_gate(inc.no))
 
     def _reprice(self, inc: Incident) -> None:
         """Recompute floor/effective from current facts; if the recomputed
@@ -302,20 +322,25 @@ class MaintenanceWorkflow(GateHost):
         if inc is None or inc.plan is None:
             return
         name = f"repair:{no}"
-        # R8's binding consequence ("only mechanical findings reproduced on
-        # two consecutive cycles clear policy" at the default 0.8) makes the
-        # boundary strict: an unreproduced mechanical plan at exactly the
+        # R6/R8's binding consequence ("only mechanical findings reproduced
+        # on two consecutive cycles clear policy" at the default 0.8) makes
+        # the boundary strict: an unreproduced mechanical plan at exactly the
         # threshold stays human-gated. effective == threshold does NOT clear.
+        # 023b: the gate opens at the incident's CURRENT round, and every
+        # round past the first is human-only — a refusal must never be
+        # re-approved by policy (no auto-decision, no re-approve loop).
+        human_only = inc.gate_round > 1
         auto = (
             GateDecision(gate=name, outcome=GateOutcome.APPROVE, decided_by="policy")
-            if inc.plan.effective > cfg.threshold
+            if not human_only and inc.plan.effective > cfg.threshold
             else None
         )
         try:
             decision = await self._gate(
                 name,
-                repair_gate_settings(cfg, name),
+                repair_gate_settings(cfg, name, human_only=human_only),
                 auto_decision=auto,
+                round=inc.gate_round,
                 confidence=inc.plan.effective,
                 author_model=inc.plan.author_model,
                 context=GateContext(spec_summary=gate_context_text(inc)),
@@ -346,12 +371,19 @@ class MaintenanceWorkflow(GateHost):
         inc.note = f"escalated by {decision.decided_by}"
 
     def _record_repair_outcome(self, no: int, decision: GateDecision) -> None:
+        assert self._state is not None
+        cfg = self._state.config
         inc = self._incident(no)
         if inc is None:
             return
         inc.decision = decision
         if decision.outcome is GateOutcome.APPROVE:
-            inc.state = IncidentState.APPROVED_NOT_EXECUTED  # never executes in 023a
+            # 023a: approval NEVER executes (terminal approved_not_executed).
+            # 023b with execute on: approval hands the incident to Execute
+            # (a live state — execute_step starts the child next walk).
+            inc.state = (
+                IncidentState.APPROVED if cfg.execute else IncidentState.APPROVED_NOT_EXECUTED
+            )
             inc.note = ""
         elif decision.outcome is GateOutcome.REVISE:
             # workflow-wire.md: no REVISE path in 023a — treated as reject,

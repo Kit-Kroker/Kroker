@@ -78,7 +78,7 @@ def _corner_id(corner: tuple[float, int, bool, str]) -> str:
 def test_repair_gate_is_soft_reject_at_the_configured_threshold_under_exact_name() -> None:
     cfg = _cfg(threshold=0.65)
 
-    settings = repair_gate_settings(cfg, "repair:3")
+    settings = repair_gate_settings(cfg, "repair:3", human_only=False)
 
     assert isinstance(settings, GateSettings)
     assert settings.gates == {
@@ -93,7 +93,7 @@ def test_repair_gate_is_soft_reject_at_the_configured_threshold_under_exact_name
 
 @pytest.mark.parametrize("name", ["repair:1", "repair:10", "repair:999"])
 def test_repair_gate_has_exactly_one_key_equal_to_the_name_passed(name: str) -> None:
-    settings = repair_gate_settings(_cfg(), name)
+    settings = repair_gate_settings(_cfg(), name, human_only=False)
 
     assert list(settings.gates) == [name]
 
@@ -111,7 +111,7 @@ def test_repair_gate_has_exactly_one_key_equal_to_the_name_passed(name: str) -> 
 def test_repair_gate_key_is_never_normalised(name: str) -> None:
     # `_gate` looks names up exactly. A normalised key would silently detach
     # the gate from the incident that asked for it.
-    settings = repair_gate_settings(_cfg(), name)
+    settings = repair_gate_settings(_cfg(), name, human_only=False)
 
     assert list(settings.gates) == [name]
 
@@ -119,7 +119,7 @@ def test_repair_gate_key_is_never_normalised(name: str) -> None:
 def test_repair_gate_default_fallback_policy_is_never_off() -> None:
     # A gate whose name is not in `gates` falls back to default_gate_policy.
     # That fallback must not be OFF.
-    settings = repair_gate_settings(_cfg(), "repair:3")
+    settings = repair_gate_settings(_cfg(), "repair:3", human_only=False)
 
     assert settings.default_gate_policy in {GatePolicy.SOFT, GatePolicy.HARD}
 
@@ -162,7 +162,7 @@ def test_repair_gate_at_every_corner_is_soft_and_reject(
 ) -> None:
     cfg = _corner_cfg(corner)
 
-    gate = repair_gate_settings(cfg, "repair:1").gates["repair:1"]
+    gate = repair_gate_settings(cfg, "repair:1", human_only=False).gates["repair:1"]
 
     assert gate.policy is GatePolicy.SOFT
     assert gate.on_timeout is TimeoutAction.REJECT
@@ -187,7 +187,7 @@ def test_no_corner_reaches_off_approve_or_hold_on_either_kind(
 ) -> None:
     cfg = _corner_cfg(corner)
     names = ["repair:1", "repair:2"]
-    settings = [repair_gate_settings(cfg, n) for n in names]
+    settings = [repair_gate_settings(cfg, n, human_only=False) for n in names]
     settings.append(escalation_gate_settings(cfg, "escalation:secrets"))
 
     policies = {gate.policy for s in settings for gate in s.gates.values()} | {
@@ -207,7 +207,7 @@ def test_full_corner_sweep_reachable_policy_set_is_soft_and_hard_only() -> None:
     for corner in CORNERS:
         cfg = _corner_cfg(corner)
         for s in (
-            repair_gate_settings(cfg, "repair:7"),
+            repair_gate_settings(cfg, "repair:7", human_only=False),
             escalation_gate_settings(cfg, "escalation:7"),
         ):
             for gate in s.gates.values():
@@ -228,7 +228,7 @@ def test_repair_gate_does_not_mutate_the_config_it_is_handed() -> None:
     before: dict[str, Any] = cfg.model_dump()
     fields_set_before = set(cfg.model_fields_set)
 
-    repair_gate_settings(cfg, "repair:3")
+    repair_gate_settings(cfg, "repair:3", human_only=False)
 
     assert cfg.model_dump() == before
     assert set(cfg.model_fields_set) == fields_set_before
@@ -246,15 +246,17 @@ def test_escalation_gate_does_not_mutate_the_config_it_is_handed() -> None:
 def test_repair_gate_is_pure_across_repeated_calls() -> None:
     cfg = _cfg()
 
-    first = repair_gate_settings(cfg, "repair:3")
-    second = repair_gate_settings(cfg, "repair:3")
+    first = repair_gate_settings(cfg, "repair:3", human_only=False)
+    second = repair_gate_settings(cfg, "repair:3", human_only=False)
 
     assert first == second
     assert first is not second  # fresh object each call, no shared mutable state
 
 
 def test_equal_inputs_built_separately_give_equal_outputs() -> None:
-    assert repair_gate_settings(_cfg(), "repair:3") == repair_gate_settings(_cfg(), "repair:3")
+    assert repair_gate_settings(_cfg(), "repair:3", human_only=False) == (
+        repair_gate_settings(_cfg(), "repair:3", human_only=False)
+    )
     assert escalation_gate_settings(_cfg(), "escalation:x") == (
         escalation_gate_settings(_cfg(), "escalation:x")
     )
@@ -265,9 +267,9 @@ def test_call_order_does_not_leak_state_between_gates() -> None:
     # The repair result must be unchanged by the escalation call in between.
     cfg = _cfg()
 
-    before = repair_gate_settings(cfg, "repair:3")
+    before = repair_gate_settings(cfg, "repair:3", human_only=False)
     escalation_gate_settings(cfg, "escalation:3")
-    after = repair_gate_settings(cfg, "repair:3")
+    after = repair_gate_settings(cfg, "repair:3", human_only=False)
 
     assert before == after
     assert "escalation:3" not in after.gates
@@ -281,7 +283,7 @@ def test_gate_builders_perform_no_io(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("builtins.open", _forbidden)
     monkeypatch.setattr(socket, "socket", _forbidden)
 
-    repair_gate_settings(_cfg(), "repair:3")
+    repair_gate_settings(_cfg(), "repair:3", human_only=False)
     escalation_gate_settings(_cfg(), "escalation:3")
 
 
@@ -292,7 +294,7 @@ def test_gate_builders_perform_no_io(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_repair_gate_refuses_none_config() -> None:
     with pytest.raises((TypeError, AttributeError, ValueError)):
-        repair_gate_settings(None, "repair:3")  # type: ignore[arg-type]
+        repair_gate_settings(None, "repair:3", human_only=False)  # type: ignore[arg-type]
 
 
 def test_escalation_gate_refuses_none_config() -> None:
@@ -303,7 +305,7 @@ def test_escalation_gate_refuses_none_config() -> None:
 @pytest.mark.parametrize("bad_name", [None, 3, b"repair:3"])
 def test_repair_gate_refuses_non_string_name(bad_name: Any) -> None:
     with pytest.raises((TypeError, ValueError)):
-        repair_gate_settings(_cfg(), bad_name)
+        repair_gate_settings(_cfg(), bad_name, human_only=False)
 
 
 @pytest.mark.parametrize("bad_name", [None, 3, b"escalation:3"])
@@ -335,7 +337,7 @@ def test_config_cannot_smuggle_gate_policy_into_the_builder() -> None:
 def test_happy_repair_gate_default_config_pins_soft_reject_at_0_8_under_repair_1() -> None:
     cfg = _cfg()  # defaults: threshold 0.8, timeout 48
 
-    settings = repair_gate_settings(cfg, "repair:1")
+    settings = repair_gate_settings(cfg, "repair:1", human_only=False)
 
     assert settings.gates == {
         "repair:1": GateConfig(
@@ -349,14 +351,14 @@ def test_happy_repair_gate_default_config_pins_soft_reject_at_0_8_under_repair_1
 
 @pytest.mark.parametrize("threshold", [0.5, 0.75, 1.0])
 def test_happy_repair_gate_threshold_propagates_from_config(threshold: float) -> None:
-    settings = repair_gate_settings(_cfg(threshold=threshold), "repair:1")
+    settings = repair_gate_settings(_cfg(threshold=threshold), "repair:1", human_only=False)
 
     assert settings.gates["repair:1"].threshold == threshold
 
 
 @pytest.mark.parametrize("hours", [1, 24, 168])
 def test_happy_repair_gate_timeout_propagates_from_config(hours: int) -> None:
-    settings = repair_gate_settings(_cfg(gate_timeout_hours=hours), "repair:1")
+    settings = repair_gate_settings(_cfg(gate_timeout_hours=hours), "repair:1", human_only=False)
 
     assert settings.gate_timeout_hours == hours
 
@@ -390,7 +392,7 @@ def test_happy_shapes_hold_for_ack_build_probe_with_osv_advisory() -> None:
         gate_timeout_hours=12,
     )
 
-    repair = repair_gate_settings(cfg, "repair:2")
+    repair = repair_gate_settings(cfg, "repair:2", human_only=False)
     escalation = escalation_gate_settings(cfg, "escalation:dependencies")
 
     assert repair.gates == {

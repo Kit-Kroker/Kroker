@@ -396,3 +396,7 @@ class MaintenanceSummary(BaseModel):
     open_gates: int
     not_collected_streak: dict[str, int] = Field(default_factory=dict)
     ack_unattended_build_probe: bool
+    # ---- 023b additive (workflow-wire.md `maintenance_state` query) ----
+    execute: bool = False  # R10: the loop acts, not only plans
+    starts_in_window: int = 0  # R10: exec_starts inside the rolling 7 days
+    in_flight: int = 0  # incidents in executing or verifying

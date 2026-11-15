@@ -28,15 +28,17 @@ def _require_name(name: str) -> str:
     return name
 
 
-def repair_gate_settings(cfg: MaintenanceConfig, name: str) -> GateSettings:
+def repair_gate_settings(cfg: MaintenanceConfig, name: str, *, human_only: bool) -> GateSettings:
     """The repair-plan gate: SOFT at the configured threshold, REJECT on
     timeout. SOFT means an above-threshold effective confidence may be
     recorded approved by policy (``decided_by="policy"``); a timeout is
-    always inaction."""
+    always inaction. ``human_only`` (023b R6: every refusal round) builds
+    the gate HARD — policy can never resolve it, whatever the confidence,
+    so a refused plan cannot be re-approved without a human."""
     return GateSettings(
         gates={
             _require_name(name): GateConfig(
-                policy=GatePolicy.SOFT,
+                policy=GatePolicy.HARD if human_only else GatePolicy.SOFT,
                 threshold=cfg.threshold,
                 on_timeout=TimeoutAction.REJECT,
             )
