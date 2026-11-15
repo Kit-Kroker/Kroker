@@ -267,7 +267,16 @@ async def _drive_to_parked(env, repo, script: str, *, not_collect_verify: bool =
     child = env.client.get_workflow_handle(child_id)
 
     async def _parked() -> bool:
-        return bool(await child.query(StubRepairChild.pending_decisions))
+        # T027's Report may verify and REJECT the parked child between two
+        # polls — a parked child is then gone from pending_decisions and
+        # completed with rejected:merge. A finished empty:/nofix: child
+        # necessarily parked first, so finished counts as parked here; the
+        # fix: child never finishes and keeps its gate pending.
+        if await child.query(StubRepairChild.pending_decisions):
+            return True
+        desc = await child.describe()
+        status = desc.status.name if desc.status is not None else ""
+        return status in {"COMPLETED", "FAILED", "CANCELED"}
 
     await _until(_parked, what="the child to park at its merge gate")
     return handle, child_id

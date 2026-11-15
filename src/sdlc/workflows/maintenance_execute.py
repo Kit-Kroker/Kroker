@@ -41,18 +41,65 @@ from datetime import datetime
 from temporalio import workflow
 
 with workflow.unsafe.imports_passed_through():
-    from ..core.models import GateDecision, IdeaBrief, PipelineConfig, ProjectMode
-    from ..maintenance.execution import OPS_REFUSAL_OUTCOME, may_execute
+    from datetime import timedelta
+
+    from temporalio.common import RetryPolicy, WorkflowIDReusePolicy
+
+    from ..core.models import (
+        GateDecision,
+        GateSettings,
+        IdeaBrief,
+        PipelineConfig,
+        ProjectMode,
+    )
+    from ..maintenance.activities import probe_repair_child
+    from ..maintenance.execution import (
+        OPS_REFUSAL_OUTCOME,
+        classify_verification,
+        may_execute,
+        merge_reject_decision,
+    )
     from ..maintenance.models import (
         ExecutionRecord,
         Incident,
         IncidentState,
         MaintenanceConfig,
         MaintenanceState,
+        VerificationResult,
     )
     from ..tidyup.backlog import repair_work_for, seeded_work_for
     from ..triage.models import FixClass
+    from ..vcs.integration import (
+        VerifyBranchInput,
+        build_verification_branch,
+        remove_verification_tree,
+    )
     from .pipeline_child import start_repair_child
+    from .triage import TriageInput, TriageWorkflow
+    from .triage_child import triage_gates
+
+#: The probe: one describe + two queries against Temporal itself.
+PROBE_ACT = workflow.ActivityConfig(
+    start_to_close_timeout=timedelta(seconds=60),
+    retry_policy=RetryPolicy(maximum_attempts=2),
+)
+
+#: The verification build + cleanup: git plumbing in disposable worktrees,
+#: idempotent on retry (the build resets to base_sha before replaying merges).
+VCS_ACT = workflow.ActivityConfig(
+    start_to_close_timeout=timedelta(minutes=5),
+    retry_policy=RetryPolicy(maximum_attempts=2),
+)
+
+#: The per-attempt verify tree removal: idempotent, never raises out.
+CLEANUP_ACT = workflow.ActivityConfig(
+    start_to_close_timeout=timedelta(seconds=60),
+    retry_policy=RetryPolicy(maximum_attempts=1),
+)
+
+#: Verdicts that mean the fix did not hold (R5): the loop rejects the child's
+#: merge gate for exactly these, and never for anything else.
+DIRTY_VERDICTS = frozenset({"persisted", "new", "conflicted"})
 
 
 def choose_starts(
@@ -159,7 +206,13 @@ async def execute_step(
         inc.execution = record
         inc.executions.append(record)
         inc.state = IncidentState.EXECUTING
-        inc.note = OPS_REFUSAL_OUTCOME if any(a.kind == "ops" for a in plan.actions) else ""
+        has_ops = any(a.kind == "ops" for a in plan.actions)
+        # B-FR-017: the ops proposal is recorded verbatim on the ATTEMPT's
+        # record, not just the note — Report (T027) clears the plan and
+        # rewrites the note on a dirty verdict, and the executions list is
+        # the durable attempt history the operator reads.
+        record.detail = OPS_REFUSAL_OUTCOME if has_ops else ""
+        inc.note = record.detail
         state.exec_starts.append(now)
         records.append(record)
         await start_repair_child(
@@ -176,3 +229,175 @@ async def execute_step(
             task_queue=workflow.info().task_queue,
         )
     return records, refusals
+
+
+# --------------------------------------------------------------------------
+# Report (023b T027, R4/R5) and the timeout bound.
+# --------------------------------------------------------------------------
+
+
+def _live_attempt_incidents(state: MaintenanceState) -> list[Incident]:
+    return sorted(
+        (
+            i
+            for i in state.incidents
+            if i.state in (IncidentState.EXECUTING, IncidentState.VERIFYING)
+        ),
+        key=lambda i: i.no,
+    )
+
+
+def _dirty_mapped(inc: Incident, state: MaintenanceState, outcome: str, detail: str) -> None:
+    """The dirty mapping (data-model §transitions): under the bound the
+    attempt is a failure — the incident reopens with ``reopens += 1`` and a
+    cleared plan (re-planned next cycle); at the bound it escalates.
+    NOTE: extracted into the pure ``apply_verdict`` in T029; this inline
+    shape is the pre-US3 form, reviewed against the same clauses."""
+    assert inc.execution is not None
+    inc.execution.outcome = outcome  # type: ignore[assignment]
+    if inc.reopens < state.config.max_reopens:
+        inc.state = IncidentState.REOPENED
+        inc.reopens += 1
+        inc.plan = None  # the next plan is authored fresh against the reopen
+        inc.note = detail[:300]
+    else:
+        inc.state = IncidentState.ESCALATED
+        inc.note = f"escalated: {detail}"[:300]
+
+
+async def timeout_step(state: MaintenanceState, now: datetime) -> None:
+    """Cancel and fail every child that has not reached its merge gate
+    within ``child_timeout_hours`` (R7's bound): the cancel is the only
+    place the loop stops a child (data-model: a disable never cancels).
+    The mapping to dirty happens in report_step, which sees the cancelled
+    child on its next probe."""
+    cfg = state.config
+    deadline = timedelta(hours=cfg.child_timeout_hours)
+    for inc in _live_attempt_incidents(state):
+        record = inc.execution
+        if record is None or now - record.started_at < deadline:
+            continue
+        await workflow.get_external_workflow_handle(record.child_id).cancel()
+        record.outcome = "timed_out"  # type: ignore[assignment]
+        inc.note = "child exceeded child_timeout_hours"
+
+
+async def report_step(state: MaintenanceState, now: datetime) -> None:
+    """Probe every executing/verifying incident and act on what it shows
+    (R4/R5). ``awaiting_merge`` means the child parked: record the
+    integration branch and head, build the verification tree, re-detect at
+    it, classify, reject the child's merge on a dirty verdict — the ONLY
+    decision the loop ever sends — and clean the attempt's tree. A child
+    that failed, was cancelled, or changed nothing is a failed attempt; a
+    non-retryable failure escalates at once (data-model). A not-collected
+    re-detect leaves the incident ``verifying`` for the next cycle."""
+    cfg = state.config
+    for inc in _live_attempt_incidents(state):
+        record = inc.execution
+        if record is None:
+            continue  # impossible by construction; the walk stays total
+        probe = await workflow.execute_activity(probe_repair_child, record.child_id, **PROBE_ACT)
+        if probe.phase == "running":
+            continue  # still working; the timeout bound is timeout_step's
+        if probe.phase == "completed":
+            # merged-not-deployed: the PR is opened, not merged — the fault
+            # persists on the default branch and that is NOT dirty
+            # (data-model §present). The verify pass below still measures.
+            record.outcome = "awaiting_merge"
+        elif probe.phase == "failed":
+            if probe.non_retryable:
+                assert inc.execution is not None
+                inc.execution.outcome = "config_failed"
+                inc.state = IncidentState.ESCALATED
+                inc.note = f"configuration failure: {probe.failure}"[:300]
+            else:
+                _dirty_mapped(inc, state, "failed", probe.failure or "child failed")
+            continue
+        elif probe.phase in ("cancelled", "timed_out", "terminated", "not_found"):
+            _dirty_mapped(inc, state, "timed_out", f"child {probe.phase}")
+            continue
+
+        # awaiting_merge (or completed-with-PR): the verify pass.
+        if inc.state is IncidentState.EXECUTING:
+            record.integration_branch = probe.integration_branch
+            record.integration_head = probe.integration_head
+            record.outcome = "awaiting_merge"
+            inc.state = IncidentState.VERIFYING
+
+        conflicted = False
+        verify_head = record.base_sha
+        try:
+            result = await workflow.execute_activity(
+                build_verification_branch,
+                VerifyBranchInput(
+                    repo_path=cfg.repo_dir,
+                    base_sha=record.base_sha,
+                    tidyup_id=record.child_id,
+                    branches=[record.integration_branch or ""],
+                ),
+                **VCS_ACT,
+            )
+            conflicted = bool(result.conflicted)
+            verify_head = result.head_sha
+        except Exception as e:  # noqa: BLE001 — a non-conflict build failure
+            # is a RESULT (R4): conflicted, dirty.
+            conflicted = True
+            inc.note = f"verification build failed: {e}"[:300]
+
+        verify_triage = await workflow.execute_child_workflow(
+            TriageWorkflow.run,
+            TriageInput(
+                repo_dir=cfg.repo_dir,
+                commit=verify_head,
+                build_probe=cfg.build_probe,
+                advisory_source=cfg.advisory_source,
+                gates=triage_gates(GateSettings(), gating=False),
+            ),
+            id=f"{record.child_id}-verify",
+            id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
+        )
+        base_triage = state.prev
+        if base_triage is None or base_triage.commit_sha != record.base_sha:
+            base_triage = await workflow.execute_child_workflow(
+                TriageWorkflow.run,
+                TriageInput(
+                    repo_dir=cfg.repo_dir,
+                    commit=record.base_sha,
+                    build_probe=cfg.build_probe,
+                    advisory_source=cfg.advisory_source,
+                    gates=triage_gates(GateSettings(), gating=False),
+                ),
+                id=f"{record.child_id}-base",
+                id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
+            )
+        verdict = classify_verification(base_triage, verify_triage, inc.key, conflicted)
+        inc.verification = VerificationResult(
+            child_id=record.child_id,
+            base_sha=record.base_sha,
+            verify_head=verify_head,
+            collected=verdict != "unverifiable",
+            verdict=verdict,  # type: ignore[arg-type]
+        )
+
+        if verdict == "resolved":
+            inc.state = IncidentState.VERIFIED  # the merge stays human's
+        elif verdict == "unverifiable":
+            pass  # stays verifying; retried next cycle, bounded by timeout
+        elif verdict == "absent_at_base":
+            inc.state = IncidentState.RESOLVED_EXTERNALLY
+            inc.note = "the fault does not exist at the verification base"
+        elif verdict in DIRTY_VERDICTS:
+            if probe.pending_merge_round is not None:
+                await workflow.get_external_workflow_handle(record.child_id).signal(
+                    "submit_gate_decision",
+                    merge_reject_decision(probe.pending_merge_round, verdict),
+                )
+            _dirty_mapped(inc, state, "rejected_by_loop", f"dirty verdict: {verdict}")
+
+        if verdict != "unverifiable":
+            # the attempt is decided: remove the verify worktree and ref.
+            await workflow.execute_activity(
+                remove_verification_tree,
+                args=[cfg.repo_dir, record.child_id],
+                **CLEANUP_ACT,
+            )

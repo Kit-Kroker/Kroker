@@ -12,6 +12,7 @@ On replay the recorded results return, so the git reads execute once.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from temporalio import activity
@@ -46,15 +47,28 @@ def _ok(signal: str, version: int, findings=None, metrics=None) -> SignalResult:
     )
 
 
-def _tracked(repo_dir: str) -> set[str]:
-    out = git(Path(repo_dir), "ls-files")
+def _tracked(repo_dir: str, commit_sha: str) -> set[str]:
+    """Files tracked AT A COMMIT (023b: the verification tree is triaged at
+    its own head, never the checkout's working state)."""
+    out = git(Path(repo_dir), "ls-tree", "-r", "--name-only", commit_sha)
     return set(out.split())
+
+
+def _show(repo_dir: str, commit_sha: str, path: str) -> str | None:
+    """One file's committed content at a commit; None when absent there."""
+    proc = subprocess.run(
+        ["git", "-C", str(repo_dir), "show", f"{commit_sha}:{path}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return proc.stdout if proc.returncode == 0 else None
 
 
 @activity.defn(name="triage_resolve_commit")
 async def fake_pin(inp: TriagePinInput) -> TriagePin:
     return TriagePin(
-        commit_sha=git(Path(inp.repo_dir), "rev-parse", "HEAD").strip(), toolchain="python"
+        commit_sha=git(Path(inp.repo_dir), "rev-parse", inp.commit).strip(), toolchain="python"
     )
 
 
@@ -80,9 +94,11 @@ async def fake_outliers(inp: TriageSignalInput) -> SignalResult:
 
 @activity.defn(name="triage_build_probe")
 async def fake_probe(inp: TriageProbeInput) -> SignalResult:
-    """Broken iff the fixture's build-break marker is committed."""
-    pkg = Path(inp.repo_dir) / "src" / "fixture_pkg" / "__init__.py"
-    broken = pkg.exists() and BREAK_MARKER in pkg.read_text(encoding="utf-8")
+    """Broken iff the fixture's build-break marker is committed AT THE
+    TRIAGED COMMIT (023b: verification trees are measured at their own
+    head, never the checkout's working state)."""
+    src = _show(inp.repo_dir, inp.commit_sha, "src/fixture_pkg/__init__.py")
+    broken = src is not None and BREAK_MARKER in src
     metrics = {
         "buildable": Measurement.measured(0.0 if broken else 1.0),
         "runnable": Measurement.measured(0.0 if broken else 1.0),
@@ -92,7 +108,7 @@ async def fake_probe(inp: TriageProbeInput) -> SignalResult:
 
 @activity.defn(name="triage_secrets")
 async def fake_secrets(inp: TriageSignalInput) -> SignalResult:
-    tracked = _tracked(inp.repo_dir)
+    tracked = _tracked(inp.repo_dir, inp.commit_sha)
     findings = []
     if ".env" in tracked:
         findings.extend(env_file_findings())

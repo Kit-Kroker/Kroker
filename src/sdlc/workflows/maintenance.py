@@ -46,7 +46,7 @@ with workflow.unsafe.imports_passed_through():
     from ..maintenance.render import gate_context_text
     from ..pending import GateContext
     from .gates import GateHost, GateWithdrawnError
-    from .maintenance_execute import execute_step
+    from .maintenance_execute import execute_step, report_step, timeout_step
     from .tidyup import _default_fix_cfg
     from .triage import TriageInput, TriageWorkflow
     from .triage_child import triage_gates
@@ -203,6 +203,11 @@ class MaintenanceWorkflow(GateHost):
             _records, refusals = await execute_step(self._state, _default_fix_cfg(), workflow.now())
             for inc in refusals:
                 self._start_gate(self._repair_gate(inc.no))
+            # 023b Report (R4/R5) + the timeout bound, same patch guard:
+            # cancel children past child_timeout_hours, then probe and
+            # verify the ones still standing.
+            await timeout_step(self._state, workflow.now())
+            await report_step(self._state, workflow.now())
 
     def _reprice(self, inc: Incident) -> None:
         """Recompute floor/effective from current facts; if the recomputed
