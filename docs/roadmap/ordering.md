@@ -1,11 +1,18 @@
 # Suggested ordering across §§10–14
 
-> **2026-11-11 — swarm mode precedes this list.** The owner's intent
-> (`docs/intent/2026-11-11-swarm-mode-and-poc-finish.md`) puts swarm mode
-> and its chain-vs-swarm benchmark ahead of everything below, then the
-> platform shell (item 5). Tier 2 audit depth (item 6, E-50…E-56), the
-> outcome loop (P8) and the maintenance loop (P4) are out of scope for now.
-> See `ROADMAP.md` §8 item 5.
+> **2026-11-14 — owner chose P4 first.** The owner's "finish all of needed"
+> ruling (Option B, spec
+> [`.specify/specs/023-daper-maintenance-loop/spec.md`](../.specify/specs/023-daper-maintenance-loop/spec.md) §A.0)
+> makes the P4 row the active program: DAPER maintenance loop, two worker
+> pools, fleet runs to SC-1..3. This **supersedes** the 2026-11-11 swarm-first
+> banner below — swarm mode is parked
+> ([`.specify/specs/parked-swarm-mode-skeleton/spec.md`](../.specify/specs/parked-swarm-mode-skeleton/spec.md),
+> standing rulings Q2/Q3 travel with it) — and it defers Tier 2 audit depth
+> (item 6, E-50…E-56) and the outcome loop (P8) exactly as before. Progress:
+> the DAPER **loop half landed 023a (2026-11-15)** — E-14, FR-501's
+> loop/schedule/nudge/gate, FR-503's gate half; execute/report follow in
+> 023b, then two worker pools (NFR-2/AP-2.5) and the fleet runs. See
+> `ROADMAP.md` §8 item 1.
 
 Not a commitment. Ranked by what each item unblocks and by which invariants get
 harder to install later:

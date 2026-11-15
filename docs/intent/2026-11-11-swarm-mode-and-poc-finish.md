@@ -96,3 +96,30 @@ are open:
 - Does the PoC count as proven on the platform shell alone, or does the
   swarm have to match or beat the chain on the comparison first? The owner
   did not answer this directly.
+
+---
+
+## Addendum — 2026-11-14: owner override (P4 first)
+
+The body above is the 2026-11-11 snapshot and is deliberately unedited;
+this addendum records what changed, it does not retrofit it.
+
+- **The owner chose Option B — finish the P4 row** (DAPER maintenance
+  loop, two worker pools, fleet runs to put SC-1..3 at target). Recorded
+  in [`.specify/specs/023-daper-maintenance-loop/spec.md`](../.specify/specs/023-daper-maintenance-loop/spec.md) §A.0.
+  This **reverses** this intent's swarm-first order and its "maintenance
+  loop out of scope for now" entry above. It is the owner's call, made
+  2026-11-14; the spec lead had recommended Option A.
+- **Swarm build and the platform-shell rounds are off this program's
+  board.** The drafted swarm skeleton spec is parked, not deleted:
+  [`.specify/specs/parked-swarm-mode-skeleton/spec.md`](../.specify/specs/parked-swarm-mode-skeleton/spec.md).
+- **Standing rulings kept for whenever the swarm is picked up:**
+  - **Q2** — whenever the platform shell is built, it proceeds regardless
+    of any chain-vs-swarm comparison result.
+  - **Q3** — when deterministic checks cannot decide, a swarm agent
+    raises a human gate through FR-301/302 and waits. Parked with the
+    swarm spec (folded into its FR-009).
+- **Progress note, 2026-11-15:** the DAPER loop half landed in round 023a
+  (E-14; FR-501's loop/schedule/nudge/gate and FR-503's gate half — plans
+  gated, ops actions proposal-only, never executed). Execute/report follow
+  in round 023b.
