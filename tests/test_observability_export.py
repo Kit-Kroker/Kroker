@@ -136,7 +136,7 @@ def test_report_html_gates_table_shows_full_record():
     assert "maksim &amp; co" in html
     assert "<td>reject</td>" in html
     assert "<td>2026-11-15 09:00</td>" in html
-    assert f"not ready; {'x' * 78}…" in html
+    assert f"not ready; {'x' * 69}…" in html  # 11-char prefix + 69 = the 80 cut
     assert "x" * 79 not in html  # nothing past the truncation point
     # pre-change row renders '-' for every absent FR-304 field
     assert "<td>architecture</td><td>1</td><td>hard</td><td>human</td>" \
