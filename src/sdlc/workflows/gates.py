@@ -52,6 +52,17 @@ NOTIFY_ACT = workflow.ActivityConfig(
 )
 
 
+class GateWithdrawnError(Exception):
+    """Raised inside _wait_for_decision when the host withdrew its gates.
+
+    023a R15: a host that shuts down (MaintenanceWorkflow.disable) withdraws
+    open gates WITHOUT synthesising any decision. The gate coroutine must
+    unwind between awaits — cancelling it mid-_notify would cancel an
+    activity command that may not be server-acknowledged yet (observed as
+    the unsatisfiable `ACTIVITY_UNKNOWN` activation error), so the wait
+    itself offers this cooperative exit instead."""
+
+
 class GateHost:
     """Mixin. Subclasses must call super().__init__() and define their own
     @workflow.run."""
@@ -71,6 +82,11 @@ class GateHost:
         self._pending_activation: dict[str, str | None] = {}
 
     # ------------------------- hooks (no-op) ---------------------------
+
+    def _gates_withdrawn(self) -> bool:
+        """True once the host has withdrawn its gates (shutdown). Default
+        False everywhere: only a host with a disable path overrides this."""
+        return False
 
     async def _on_gate_awaited(self, name: str, round: int) -> None:
         """A gate has opened and is now waiting on a human."""
@@ -171,18 +187,27 @@ class GateHost:
         deadline passes. Returns the decision, or None when the gate expired
         undecided. Exits the instant the signal lands, so there is nothing to
         cancel -- the reason this is a loop rather than a detached
-        coroutine."""
+        coroutine. A withdrawn gate raises GateWithdrawnError instead: the
+        host is shutting down and no decision will ever exist."""
         opened_at = schedule[0][0]
-        decided = lambda: key in self._gate_decisions  # noqa: E731
+
+        def settled() -> bool:
+            return key in self._gate_decisions or self._gates_withdrawn()
+
         for at, reason in schedule:
             try:
-                await workflow.wait_condition(decided, timeout=at - workflow.now())
-                return self._gate_decisions[key]
+                await workflow.wait_condition(settled, timeout=at - workflow.now())
             except TimeoutError:
                 await self._notify(pending, reason, opened_at, expires)
+                continue
+            if key in self._gate_decisions:
+                return self._gate_decisions[key]
+            raise GateWithdrawnError(key)
         if expires is None:  # HOLD: wait without a deadline
-            await workflow.wait_condition(decided)
-            return self._gate_decisions[key]
+            await workflow.wait_condition(settled)
+            if key in self._gate_decisions:
+                return self._gate_decisions[key]
+            raise GateWithdrawnError(key)
         return None
 
     async def _gate(

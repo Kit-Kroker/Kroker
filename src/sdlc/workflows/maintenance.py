@@ -35,6 +35,7 @@ with workflow.unsafe.imports_passed_through():
     from ..maintenance.models import (
         Incident,
         IncidentState,
+        MaintenanceKickInput,
         MaintenanceState,
         MaintenanceSummary,
         RepairPlan,
@@ -43,7 +44,7 @@ with workflow.unsafe.imports_passed_through():
     from ..maintenance.prompt import render_repair_prompt
     from ..maintenance.render import gate_context_text
     from ..pending import GateContext
-    from .gates import GateHost
+    from .gates import GateHost, GateWithdrawnError
     from .triage import TriageInput, TriageWorkflow
     from .triage_child import triage_gates
 
@@ -106,6 +107,7 @@ class MaintenanceWorkflow(GateHost):
     async def run(self, state: MaintenanceState) -> str:
         self._state = state
         project = state.config.project
+        cycles_this_history = 0
         while not self._disabling:
             await workflow.wait_condition(lambda: self._nudged or self._disabling)
             if self._disabling:
@@ -114,16 +116,34 @@ class MaintenanceWorkflow(GateHost):
             self._running = True
             try:
                 await self._cycle()
+                cycles_this_history += 1
             finally:
                 self._running = False
+            # FR-013/R4: the history bound — continue in a fresh history
+            # ONLY at the idle boundary: no cycle running (we are between
+            # cycles), no pending gate, no undelivered signal, no nudge
+            # already queued.
+            if self._nudged or self._disabling:
+                continue
+            if not workflow.all_handlers_finished():
+                continue
+            if any(not t.done() for t in self._gate_tasks):
+                continue  # a pending gate defers the roll-over
+            cap = cycles_this_history >= state.config.max_cycles_per_history
+            if cap or workflow.info().is_continue_as_new_suggested():
+                # The carried state IS the durable record: config, baseline,
+                # prev, incidents, counters and the nudge flag ride along.
+                await workflow.continue_as_new(self._state)
 
         # Disable (R15): withdraw open gates without synthesising any
         # decision — GateDecision.decided_by has no "disable" value, and a
-        # disable is none of human/policy/timeout.
-        for task in self._gate_tasks:
-            task.cancel()
+        # disable is none of human/policy/timeout. The gates unwind
+        # themselves: _wait_for_decision raises GateWithdrawnError once
+        # _disabling is set (never a task cancel — a cancel landing on a
+        # gate mid-_notify would cancel an activity command the server has
+        # not acknowledged, an unsatisfiable ACTIVITY_UNKNOWN activation).
         if self._gate_tasks:
-            await asyncio.gather(*self._gate_tasks, return_exceptions=True)
+            await workflow.wait_condition(lambda: all(t.done() for t in self._gate_tasks))
         for inc in self._state.incidents:
             if inc.state is IncidentState.AWAITING_DECISION:
                 inc.state = IncidentState.WITHDRAWN
@@ -268,6 +288,10 @@ class MaintenanceWorkflow(GateHost):
         inc.state = IncidentState.AWAITING_DECISION
         self._start_gate(self._escalation_gate(inc.no, signal))
 
+    def _gates_withdrawn(self) -> bool:
+        # R15: the disable signal withdraws every open gate (see run()).
+        return self._disabling
+
     async def _repair_gate(self, no: int) -> None:
         """The SOFT repair gate. The auto-approve candidate is offered only
         when effective >= threshold; _gate decides whether policy clears it.
@@ -287,14 +311,17 @@ class MaintenanceWorkflow(GateHost):
             if inc.plan.effective > cfg.threshold
             else None
         )
-        decision = await self._gate(
-            name,
-            repair_gate_settings(cfg, name),
-            auto_decision=auto,
-            confidence=inc.plan.effective,
-            author_model=inc.plan.author_model,
-            context=GateContext(spec_summary=gate_context_text(inc)),
-        )
+        try:
+            decision = await self._gate(
+                name,
+                repair_gate_settings(cfg, name),
+                auto_decision=auto,
+                confidence=inc.plan.effective,
+                author_model=inc.plan.author_model,
+                context=GateContext(spec_summary=gate_context_text(inc)),
+            )
+        except GateWithdrawnError:
+            return  # disable: the incident is recorded withdrawn by run()
         self._record_repair_outcome(no, decision)
 
     async def _escalation_gate(self, no: int, signal: str) -> None:
@@ -306,11 +333,14 @@ class MaintenanceWorkflow(GateHost):
         if inc is None:
             return
         name = f"detect_escalation:{signal}:{no}"
-        decision = await self._gate(
-            name,
-            escalation_gate_settings(cfg, name),
-            context=GateContext(spec_summary=gate_context_text(inc)),
-        )
+        try:
+            decision = await self._gate(
+                name,
+                escalation_gate_settings(cfg, name),
+                context=GateContext(spec_summary=gate_context_text(inc)),
+            )
+        except GateWithdrawnError:
+            return  # disable: the incident is recorded withdrawn by run()
         inc.decision = decision
         inc.state = IncidentState.ESCALATED
         inc.note = f"escalated by {decision.decided_by}"
@@ -335,3 +365,26 @@ class MaintenanceWorkflow(GateHost):
                 else IncidentState.REJECTED
             )
             inc.note = decision.comments or ""
+
+
+@workflow.defn
+class MaintenanceKickWorkflow:
+    """The schedule kicker (R1, workflow-wire.md): started by a Temporal
+    Schedule at cadence, it signals the project's loop and finishes. Schedules
+    can only start workflows, which is why this tiny workflow exists — and why
+    signalling from workflow code (no client-in-activity) is the shape. An
+    absent loop is not an error: the kicker finishes not-enabled and never
+    retries (R1)."""
+
+    @workflow.run
+    async def run(self, inp: MaintenanceKickInput) -> str:
+        handle = workflow.get_external_workflow_handle_for(
+            MaintenanceWorkflow.run, f"maint-{inp.project}"
+        )
+        try:
+            await handle.signal(MaintenanceWorkflow.nudge)
+        except Exception as e:  # noqa: BLE001 -- not-found is a verdict, not a fault
+            if "not found" in str(e).lower() or "already completed" in str(e).lower():
+                return f"not-enabled:{inp.project}"
+            raise
+        return f"nudged:{inp.project}"
