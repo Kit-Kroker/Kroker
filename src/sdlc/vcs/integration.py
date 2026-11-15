@@ -34,6 +34,26 @@ class IntegrationHandle:
     worktree_path: str
 
 
+def integration_branch_for(run_id: str) -> str:
+    """The ONE canonical integration branch name (023b R2): the convention
+    lives here, beside the activity that creates it, and both
+    setup_integration_branch and the maintenance probe derive the name
+    through this helper."""
+    return f"sdlc/{run_id}/integration"
+
+
+def integration_branch_head(repo_path: str, run_id: str) -> str | None:
+    """Read-only: the integration branch's head sha, or None when the branch
+    does not exist (023b R2 -- the probe's integration_head, no mutation)."""
+    proc = _git(
+        ["rev-parse", "--verify", "--quiet", f"refs/heads/{integration_branch_for(run_id)}"],
+        repo_path,
+    )
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
 @activity.defn
 async def setup_integration_branch(inp: IntegrationInput) -> IntegrationHandle:
     """Create sdlc/<run>/integration from base in its own worktree;
@@ -45,7 +65,7 @@ async def setup_integration_branch(inp: IntegrationInput) -> IntegrationHandle:
     ``<root>/<run>/integration`` if a persistent Windows lock forced a
     fallback to ``<root>/<run>/integration.N``; the workflow treats the
     returned path as authoritative."""
-    branch = f"sdlc/{inp.run_id}/integration"
+    branch = integration_branch_for(inp.run_id)
     path = os.path.join(_worktrees_root(), inp.run_id, "integration")
     actual = _ensure_worktree(inp.repo_path, branch, path, inp.base_branch)
     head = _git(["rev-parse", "HEAD"], actual).stdout.strip()

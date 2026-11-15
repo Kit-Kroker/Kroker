@@ -27,6 +27,7 @@ from pathlib import Path
 import pytest
 from temporalio import activity
 
+from sdlc.maintenance.activities import probe_repair_child
 from sdlc.maintenance.models import RepairProposal
 from sdlc.measurement import Measurement
 from sdlc.notify.contract import NotifyInput, Results
@@ -39,6 +40,7 @@ from sdlc.triage.models import (
     Verdict,
 )
 from sdlc.triage.signals import build_probe, dependencies, secrets
+from sdlc.vcs import is_ancestor, remove_verification_tree
 
 # The three detect signals, in a stable order (identities sort anyway, but a
 # deterministic builder makes failures easier to eyeball).
@@ -349,9 +351,9 @@ async def fake_notify(inp: NotifyInput) -> Results:
 
 
 # The 023b maintenance activities, as they land: is_ancestor and
-# remove_verification_tree join at T012, probe_repair_child at T014.
-# (Extended by their tasks; never smuggled in from elsewhere.)
-MAINT_023B_ACTIVITIES: list = []
+# remove_verification_tree joined at T012's landing (registered with the
+# worker at T014); probe_repair_child at T014.
+MAINT_023B_ACTIVITIES: list = [probe_repair_child, is_ancestor, remove_verification_tree]
 
 
 @asynccontextmanager
@@ -373,7 +375,10 @@ async def maint_worker(
     from temporalio.worker import Worker
 
     from sdlc.agents.runner import SdlcPydanticAIPlugin
-    from sdlc.vcs import build_verification_branch, setup_integration_branch
+    from sdlc.vcs import (
+        build_verification_branch,
+        setup_integration_branch,
+    )
     from sdlc.workflows.maintenance import MaintenanceWorkflow
     from sdlc.workflows.triage import TriageWorkflow
     from tests.fakes.fake_agents import fake_agent_activities

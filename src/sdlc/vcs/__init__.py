@@ -24,8 +24,12 @@ from .integration import (
     VerifyBranchInput,
     VerifyResult,
     build_verification_branch,
+    integration_branch_for,
+    integration_branch_head,
+    is_ancestor,
     merge_into_integration,
     prepare_base_worktree,
+    remove_verification_tree,
     setup_integration_branch,
 )
 from .worktree import (
@@ -83,8 +87,12 @@ __all__ = [
     "cleanup_run_worktrees",
     "create_worktree",
     "get_task_diff",
+    "integration_branch_for",
+    "integration_branch_head",
+    "is_ancestor",
     "merge_into_integration",
     "prepare_base_worktree",
     "read_committed_bytes",
+    "remove_verification_tree",
     "setup_integration_branch",
 ]

@@ -114,25 +114,59 @@ def _representative_state() -> MaintenanceState:
 
     incidents = [
         # live states
-        inc(1, "build_probe:build_failed::", IncidentState.OPEN,
-            finding=build_break_finding(), commit="c" * 40, seen=1),
-        inc(2, "secrets:env-file:.env", IncidentState.AWAITING_DECISION,
-            finding=env_tracked, plan=plan, decision=policy_decision),
-        inc(3, "build_probe:not_collected::", IncidentState.DEFERRED,
-            kind="detect_escalation", finding=None, note="not collected twice"),
+        inc(
+            1,
+            "build_probe:build_failed::",
+            IncidentState.OPEN,
+            finding=build_break_finding(),
+            commit="c" * 40,
+            seen=1,
+        ),
+        inc(
+            2,
+            "secrets:env-file:.env",
+            IncidentState.AWAITING_DECISION,
+            finding=env_tracked,
+            plan=plan,
+            decision=policy_decision,
+        ),
+        inc(
+            3,
+            "build_probe:not_collected::",
+            IncidentState.DEFERRED,
+            kind="detect_escalation",
+            finding=None,
+            note="not collected twice",
+        ),
         # terminal states
-        inc(4, "secrets:env-file:.env", IncidentState.APPROVED_NOT_EXECUTED,
-            finding=env_secret, note="approved with execute off"),
-        inc(5, "secrets:aws-access-key-id:config/settings.ini", IncidentState.REJECTED,
-            finding=credential_finding(), note="human rejected"),
-        inc(6, "build_probe:build_failed::", IncidentState.TIMED_OUT,
-            note="gate timed out"),
-        inc(7, "secrets:env-file:.env", IncidentState.RESOLVED_EXTERNALLY,
-            note="fixed on the default branch by hand"),
-        inc(8, "secrets:aws-access-key-id:config/settings.ini",
-            IncidentState.ESCALATED, note="two plan attempts failed"),
-        inc(9, "build_probe:build_failed::", IncidentState.WITHDRAWN,
-            note="project disabled"),
+        inc(
+            4,
+            "secrets:env-file:.env",
+            IncidentState.APPROVED_NOT_EXECUTED,
+            finding=env_secret,
+            note="approved with execute off",
+        ),
+        inc(
+            5,
+            "secrets:aws-access-key-id:config/settings.ini",
+            IncidentState.REJECTED,
+            finding=credential_finding(),
+            note="human rejected",
+        ),
+        inc(6, "build_probe:build_failed::", IncidentState.TIMED_OUT, note="gate timed out"),
+        inc(
+            7,
+            "secrets:env-file:.env",
+            IncidentState.RESOLVED_EXTERNALLY,
+            note="fixed on the default branch by hand",
+        ),
+        inc(
+            8,
+            "secrets:aws-access-key-id:config/settings.ini",
+            IncidentState.ESCALATED,
+            note="two plan attempts failed",
+        ),
+        inc(9, "build_probe:build_failed::", IncidentState.WITHDRAWN, note="project disabled"),
     ]
     return MaintenanceState(
         config=cfg,
@@ -149,9 +183,7 @@ def _representative_state() -> MaintenanceState:
 def test_capture_023a_state_fixture():
     """Write the 023a fixture — only when ``SDLC_CAPTURE_FIXTURES=1``."""
     if os.environ.get(CAPTURE_ENV) != "1":
-        pytest.skip(
-            f"capture run only: set {CAPTURE_ENV}=1 to (re)write {FIXTURE.name}"
-        )
+        pytest.skip(f"capture run only: set {CAPTURE_ENV}=1 to (re)write {FIXTURE.name}")
     state = _representative_state()
     FIXTURE.parent.mkdir(parents=True, exist_ok=True)
     payload = state.model_dump(mode="json")

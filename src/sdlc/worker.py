@@ -85,6 +85,7 @@ from .crew.activities import (
 )
 from .crew.loader import validate_crew_clis
 from .harness.registry import check_harness_versions
+from .maintenance.activities import probe_repair_child
 from .memoization.activities import cache_get, cache_put
 from .memory.activities import (
     capture_watermark,
@@ -113,9 +114,11 @@ from .vcs import (
     cleanup_run_worktrees,
     create_worktree,
     get_task_diff,
+    is_ancestor,
     merge_into_integration,
     prepare_base_worktree,
     read_committed_bytes,
+    remove_verification_tree,
     setup_integration_branch,
 )
 from .vcs.janitor import worktree_janitor
@@ -172,6 +175,11 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         merge_into_integration,
         build_verification_branch,
         prepare_base_worktree,
+        # 023b (T014): the maintenance loop's client-side probe and the two
+        # read-only/tidy-up verification activities (R2/R4/R8).
+        probe_repair_child,
+        is_ancestor,
+        remove_verification_tree,
         prepare_crew,
         run_crew_turn,
         read_round,

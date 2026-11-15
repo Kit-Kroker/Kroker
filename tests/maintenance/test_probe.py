@@ -293,25 +293,44 @@ async def test_rejected_child_probes_as_completed_with_the_verbatim_rejection(re
             assert probe["result"] == "rejected:merge"
 
 
-async def test_probing_a_running_child_twice_is_stable_and_read_only(repo_dir, worktrees):
-    """Edge: two probes of the same RUNNING child return the same phase, and
-    the child's workflow history is unchanged by probing."""
+async def test_probing_a_child_twice_is_stable_and_read_only(repo_dir, worktrees):
+    """Edge: two probes of the same child return the same result, and a
+    COMPLETED child's history is unchanged by probing.
+
+    Read-only-ness is measured against a completed child because a live one
+    never stands still in a time-skipping environment: a hang: loop re-arms
+    its own sleep timer every cycle and a parked gate re-fires its notify
+    schedule as the clock skips, so "history unchanged" would be
+    unmeasurable noise. A completed child's history is frozen; queries
+    themselves never append events."""
     base = commit_env_file(repo_dir)
     child_id = "maint-demo-abcd1234-inc7-a1"
     async with await WorkflowEnvironment.start_time_skipping(
         data_converter=pydantic_data_converter
     ) as env:
         async with _worker(env):
-            await _start_child(env, child_id, _run_input("hang: never parks", base, str(repo_dir)))
+            await _start_child(
+                env, child_id, _run_input("nofix: completes on reject", base, str(repo_dir))
+            )
             handle = env.client.get_workflow_handle(child_id)
+
+            async def _gate_open():
+                return await handle.query(StubRepairChild.pending_gate) == "awaiting:merge"
+
+            await _until(_gate_open, what="the merge gate to open")
+            await handle.signal(
+                "submit_gate_decision",
+                GateDecision(gate="merge", round=1, outcome=GateOutcome.REJECT, decided_by="human"),
+            )
+            await asyncio.wait_for(handle.result(), timeout=60)
             events_before = len((await handle.fetch_history()).events)
 
             first = await _probe(env, child_id, "stable-a")
             second = await _probe(env, child_id, "stable-b")
 
-            assert first["phase"] == "running"
-            assert second["phase"] == "running"
-            assert first["phase"] == second["phase"]
+            assert first["phase"] == "completed"
+            assert second["phase"] == first["phase"]
+            assert first["result"] == second["result"] == "rejected:merge"
             assert len((await handle.fetch_history()).events) == events_before, (
                 "probing changed the child's history"
             )

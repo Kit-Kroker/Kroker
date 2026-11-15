@@ -139,6 +139,7 @@ class StubRepairChild(GateHost):
         super().__init__()
         self._title = ""
         self._mode = ""
+        self._repo_url = ""
         self._started_at = None
         self._result = ""
 
@@ -151,6 +152,7 @@ class StubRepairChild(GateHost):
         script = title.split(":", 1)[0]
         self._title = run_input.idea.title
         self._mode = str(run_input.idea.mode.value)
+        self._repo_url = run_input.idea.repo_url or ""
         self._started_at = workflow.now()
         run_id = workflow.info().workflow_id
 
@@ -207,6 +209,7 @@ class StubRepairChild(GateHost):
         return RunState(
             run_id=workflow.info().workflow_id,
             title=self._title,
+            repo_url=self._repo_url or None,
             mode=self._mode,
             status=getattr(self, "_status", "starting"),
             started_at=self._started_at or workflow.now(),
