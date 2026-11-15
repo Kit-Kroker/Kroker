@@ -4,7 +4,7 @@
 |---|---|
 | Status | Draft v1.0 |
 | Date | 2026-07-02 |
-| Last amended | 2026-10-11 — direction set by the agent architecture plan: target blocks in §§1–6, 8–11, 13; ADR-2/6/9/12 amended; ADR-22…24 added; §9 and §14 corrected to the one queue `main` runs. 2026-09-01 — the crew, a multi-agent code stage (§§2, 3, 4; E-88); §14 regenerated from `main`; §7 marked P4/unbuilt |
+| Last amended | 2026-11-15 — §7's banner and the component table updated: Execute and Report are built (023b); ops actions stay proposal-only; rollback and deploy liveness deferred past P4. 2026-10-11 — direction set by the agent architecture plan: target blocks in §§1–6, 8–11, 13; ADR-2/6/9/12 amended; ADR-22…24 added; §9 and §14 corrected to the one queue `main` runs. 2026-09-01 — the crew, a multi-agent code stage (§§2, 3, 4; E-88); §14 regenerated from `main`; §7 marked P4/unbuilt |
 | Direction | `docs/reports/Kroker Agent Architecture & Implementation Plan.md` (2026-10-04, revised 2026-10-11 with scaling, SDK portability and run UI) is the priority document. Where this file and the plan disagree, the plan wins and this file moves toward it |
 | Related | `PRD.md`, `SDLC-spec-v2.md`, `ROADMAP.md`, `BENCHMARK.md` — contracts in `src/sdlc/models.py` are the source of truth |
 
@@ -78,7 +78,7 @@ through its validated diff artifact.
 |---|---|---|
 | Temporal server | run state, event history, timers, signals, schedules, visibility | business logic |
 | GraphWorkflow (the legacy FeatureWorkflow was deleted in round 020) | stage sequencing, gate waits, fix-loop bounds, budget counters | I/O, subprocesses, memory, nondeterminism |
-| MaintenanceWorkflow **(023a, 2026-11-15 — loop + gate half built; execute/report 023b)** | DAPER cycle (baseline → detect → plan → confidence gate), nudge coalescing, history roll-over, the schedule kicker (`MaintenanceKickWorkflow`); ops actions stay proposal-only | direct code patches (nothing in 023a executes a repair); CI/quarantined-task/error-budget Detect inputs (not built — see §7) |
+| MaintenanceWorkflow **(023a loop + gate, 023b execute/report — built 2026-11-15)** | DAPER cycle (baseline → detect → plan → confidence gate → execute → report/verify → retain), nudge coalescing, history roll-over, the schedule kicker (`MaintenanceKickWorkflow`); ops actions stay proposal-only | direct code patches by the LOOP's own process (children write in sandboxed worktrees; a dirty verification rejects the child's merge gate); CI/quarantined-task/error-budget Detect inputs (not built — see §7) |
 | Proposer agents | typed artifact proposals (Requirements … RepairPlan) | tool calls, file access. *Target (plan, not built):* owns typed evidence gathered with read-only repo tools; never writes, never runs unlisted commands, never computes its own verdict |
 | Harness runner activity | `claude -p` / `opencode run` execution, heartbeats, checkpoint commits, cost capture | leaving the worktree; choosing its own permissions |
 | CrewTaskWorkflow (E-88) | the code stage's round loop when a task runs as a crew: turn order, the four brakes, per-round checkpoints, its own `tool_approval` / `crew_question` gates | subprocesses and file I/O (every turn is an activity); writing repository files through any role but the lead |
@@ -543,21 +543,27 @@ tuning.
 
 ## 7. Maintenance loop (DAPER)
 
-> ⚠️ **Status: half built (023a, landed 2026-11-15).** The loop exists and is
-> gated: `MaintenanceWorkflow` (`maint-<project>`, `src/sdlc/workflows/maintenance.py`)
-> runs baseline → Detect (the triage signal set) → Analyze/Plan (the maintainer
-> proposer, confidence floor) → confidence gate (SOFT `repair:<n>`, HARD
-> detect-escalation), bounded by nudge coalescing (R2), the per-history
-> `continue_as_new` roll-over (FR-013) and the schedule kicker
-> (`MaintenanceKickWorkflow`, E-14). Ops actions are **proposal-only, never
-> executed** (023a GATE 2 ruling). **Deliberate narrowing of Detect**: CI,
-> quarantined tasks and error budgets are *not* built — Detect today is the
-> triage signals (build probe, secrets, packages…); deploy liveness is pending
-> 023b. **Execute and Report (re-verification, incident closing) are 023b** —
-> the section's Execute/Report paragraphs below remain design, read as
-> "will". FR-501/503 record the halves; FR-502 is untouched. The three
-> external-idea candidates (A4, B2, D1 in `docs/reports/external-ideas-2026-09.md`)
-> still land on Execute/Report and stay blocked with 023b.
+> ✅ **Status: built (023a loop + gate, 023b execute/report — landed 2026-11-15).** The
+> loop exists, is gated, and now acts: `MaintenanceWorkflow` (`maint-<project>`,
+> `src/sdlc/workflows/maintenance.py`) runs baseline → Detect (the triage signal
+> set) → Analyze/Plan (the maintainer proposer, confidence floor) → confidence
+> gate (SOFT `repair:<n>`, HARD detect-escalation) → **Execute** (approved plans
+> run as repair children in sandboxed worktrees, capped per cycle and per rolling
+> 7-day window; the loop's only child-gate decision is REJECT — a dirty or
+> regressed verification rejects the child's merge gate, approval stays with the
+> operator) → **Report** (re-verification closes, reopens or escalates the
+> incident) → Retain (one scrubbed record per terminal incident). Bounded by
+> nudge coalescing (R2), the per-history `continue_as_new` roll-over (FR-013)
+> and the schedule kicker (`MaintenanceKickWorkflow`, E-14). Ops actions are
+> **proposal-only, never executed** (the 023a GATE 2 ruling stands); **rollback
+> and deploy liveness are deferred past P4**. **Deliberate narrowing of
+> Detect**: CI, quarantined tasks and error budgets are *not* built — Detect
+> today is the triage signals (build probe, secrets, packages…). The section's
+> Execute/Report paragraphs below are now landed (023b); read them as "is".
+> FR-501/503 record the halves (both complete); FR-502's code-fix clause is
+> delivered, its ops clause stays open. The three external-idea candidates
+> (A4, B2, D1 in `docs/reports/external-ideas-2026-09.md`) land on
+> Execute/Report and are unblocked for re-reading with 023b.
 
 Per-project proactive workflow: wake on timer or `nudge` signal →
 **Detect** (deterministic signal collection — CI, deploy health, quarantined
@@ -899,7 +905,8 @@ Kroker/
 
 **Not in this tree, and deliberately:** there is no `config/` directory (agent
 configuration lives in `agents/`, policy in `policy/`, and pipeline settings
-are `PipelineConfig` defaults overridden per run) and no maintenance package
-(§7 is P4, unbuilt). `interfaces/mcp/` now exists — the E-11 MCP channel
+are `PipelineConfig` defaults overridden per run). The maintenance package
+exists (`src/sdlc/maintenance/`, §7 — built in 023a/023b). `interfaces/mcp/`
+now exists — the E-11 MCP channel
 adapter (FR-602, round 022): a Rust `rmcp` stdio server over the Python verb
 bridge `sdlc/operator/bridge.py`, which re-exports `sdlc/operator/tools.py`.
