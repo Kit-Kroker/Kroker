@@ -23,7 +23,7 @@ flag in `agent.yaml`.
 
 ## AP-1 — Quick wins on lost inputs
 
-- [ ] **AP-1.0** ADR-6 by model, not provider prefix. `check_adr6_families` compares prefixes, and the shipped reviewer (`zai:glm-5.3`) and `dev` (`zai-coding-plan/glm-5.3`) are the same model. Placed here, ahead of any conclusion about the reviewer drawn from the benchmark. Blocked on choosing the reviewer's second model family, because the corrected check fails the shipped registry.
+- [x] **AP-1.0** ADR-6 by model, not provider prefix — **landed 2026-11-11** (judges on `zai:glm-5.3-flash`, `dev` on `zai-coding-plan/glm-5.3` — different families, so `check_adr6_families` no longer trips the shipped registry).
 - [ ] ⚠️ **AP-1.1** Pass `requirements` (with clarify answers) into the planner prompt. `stages/plan/step.py` already accepts and forwards `requirements`; whether the prompt renders it is to be confirmed under AP-0.3.
 - [ ] **AP-1.2** `test_commands` / `lint_commands` in the dev prompt as the definition of done.
 - [ ] **AP-1.3** Raise `_TEST_OUTPUT_MAX` to 6–8k and send the full failures section into the fix loop. Same defect as ROADMAP §0's P2 residual "the retry prompt carries no diagnostic".

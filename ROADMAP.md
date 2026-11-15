@@ -474,18 +474,18 @@ as tracked rather than accidental.
 ## 4. Success criteria (PRD §8)
 
 - [ ] — **SC-1** ≥80% runs reach merge gate unattended — not measurable (no fleet runs). Vehicle: the benchmark matrix (§9.8, E-34) is where unattended-reach rate is aggregated; cases can now carry a held-out grade (E-31 landed), so the gate is the next load-bearing piece.
-  **Aggregation landed** (`benchmarks/sc_rollup.py`, `sdlc benchmark score`);
+  **Aggregation landed** (`src/sdlc/benchmarks/sc_rollup.py`, `sdlc benchmark score`);
   the number is n/a until 5+ runs exist.
 - [ ] — **SC-2** ≤15 min operator time — not measurable.
 - [ ] — **SC-3** fix-loop success ≥70% — mechanism exists; no aggregate metric captured. Captured per run as a coordination metric by the benchmark (§9.8, E-36 heatmap): fix-loop attempts vs resolution, per stage.
-  **Aggregation landed** (`benchmarks/sc_rollup.py`, `sdlc benchmark score`);
+  **Aggregation landed** (`src/sdlc/benchmarks/sc_rollup.py`, `sdlc benchmark score`);
   the number is n/a until 5+ runs exist.
 - [ ] — **SC-4** repeat-clarification <10% by run 10 — needs reflect wiring (FR-404) + runs. **The per-run signal now accrues:** the retro stage (E-32) emits a `RunSummary` carrying `clarifications[].answered_by` (`human`/`suggested`/`unanswered`) on every terminal path. The cross-run *aggregation* into a repeat-clarification rate remains the benchmark's job (§9.8), via the memory-on cells that generate the run-10 series.
-  **Aggregation landed** (`benchmarks/sc_rollup.py`, `sdlc benchmark score`);
+  **Aggregation landed** (`src/sdlc/benchmarks/sc_rollup.py`, `sdlc benchmark score`);
   the number is n/a until 5+ runs exist.
 - [x] **SC-5** zero deploys past a failed **absolute** check — empty/vacuous-task bypass fixed, absolute failure is terminal, and the `security_no_critical` floor is now emitted by the `security_scan` activity and wired as an absolute merge-gate check (`feature.py:807,818`). `tests/test_security_floor.py` asserts a critical finding blocks deploy. Text unchanged by diff-scoped gates (2026-09-11): its absolute checks are FR-106's amended ones, judging the change against the pinned base.
 - [ ] — **SC-6** soft-gate override <5% — mechanism exists; not measurable without runs + reflect. **The per-run signal now accrues:** the retro stage (E-32) emits `RunSummary.gates[]` with `policy`/`decided_by`/`confidence`/`overrides` (ARCHITECTURE §10 calibration compare). The cross-run *aggregation* into an override rate remains the benchmark's job (§9.8).
-  **Aggregation landed** (`benchmarks/sc_rollup.py`, `sdlc benchmark score`);
+  **Aggregation landed** (`src/sdlc/benchmarks/sc_rollup.py`, `sdlc benchmark score`);
   the number is n/a until 5+ runs exist.
 - [ ] — **SC-7** grounding integrity: 100% of `grounded` findings re-verify byte-exact, zero fabricated path/line refs — **the assessment product's SC-5**: one violation is a defect, not a percentage. Mechanism is E-43 / E-48 (2026-08-15): zero fabricated references is now computed and enforced on every run via the citation guard in `verify_discover_refs`, not only sampled.
 - [ ] — **SC-8** capability coverage ≥90% with classified orphans on ≥80% of readiness-passing repos — needs **E-47a + E-47b** (the coverage floor and orphan classification are E-47b; it needs E-47a's identified capability set to classify against) + a corpus. Not E-47c. **(2026-08-14):** E-47a/b/c are all done; the blocker narrows to a corpus of readiness-passing repos.
