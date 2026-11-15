@@ -128,6 +128,7 @@ def _needs_temporal_client(args) -> bool:
         or args.cmd == "doctor"
         or args.cmd == "gates-list"
         or args.cmd == "calibration"
+        or args.cmd == "decisions"
     )
     return not local_only
 
@@ -402,6 +403,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_dispositions_parser(sub)
 
+    from .observability.decisions import add_decisions_parser
+
+    add_decisions_parser(sub)
+
     from .doctor.cli import add_doctor_parser
 
     add_doctor_parser(sub)
@@ -503,6 +508,14 @@ async def main() -> None:
         from .calibration.cli import run_calibration
 
         print(run_calibration(args))
+        return
+
+    if args.cmd == "decisions":
+        # FR-304: the decision-log read over the run exports -- same
+        # local-only, exit-0-always contract as calibration above.
+        from .observability.decisions import run_decisions
+
+        print(run_decisions(args))
         return
 
     from .worker import TASK_QUEUE

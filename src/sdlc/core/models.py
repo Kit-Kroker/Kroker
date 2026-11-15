@@ -520,13 +520,21 @@ class ClarificationOutcome(BaseModel):
 
 class GateOutcomeSummary(BaseModel):
     """SC-6 + ARCHITECTURE §10 calibration signal: policy, who decided, the
-    confidence available at decision time, and any advisory checks waved."""
+    confidence available at decision time, and any advisory checks waved.
+
+    FR-304: outcome/comments/reviewer/decided_at are the full decision
+    record. None on each means a pre-FR-304 record — on those, `approved`
+    distinguishes nothing between reject and revise."""
 
     gate: str
     round: int
     policy: str  # GatePolicy value
     decided_by: str  # "human" | "policy" | "timeout"
     approved: bool
+    outcome: GateOutcome | None = None
+    comments: str | None = None
+    reviewer: str | None = None
+    decided_at: datetime | None = None
     confidence: float | None = None
     # C7 (ruling OQ4): the proposer model whose confidence this is. Buckets
     # are per-(gate, model) because calibration is a property of the model,

@@ -57,3 +57,73 @@ def test_snapshot_run_state_carries_the_cfg_project_key():
 
     wf._cfg = None
     assert wf._snapshot_run_state().project_key is None
+
+
+# --- FR-304 (RED): GATE_DECIDED carries the full decision record ---------------
+
+
+def _drive_on_gate_decided(decision, policy, confidence=None):
+    """Drive _on_gate_decided on a bare GraphWorkflow, capturing the kwargs
+    it hands _emit. _cfg None keeps the method off _retain/workflow.info, so
+    no Temporal context is needed."""
+    import asyncio
+
+    from sdlc.core.models import GatePolicy
+
+    wf = GraphWorkflow()
+    wf._cfg = None
+    emitted: list[dict] = []
+    wf._emit = lambda kind, stage=None, **data: emitted.append(  # type: ignore[method-assign]
+        {"kind": kind, "stage": stage, **data}
+    )
+    gate = decision.gate
+    rnd = decision.round
+    asyncio.run(wf._on_gate_decided(gate, rnd, policy or GatePolicy.HARD, decision, confidence))
+    return emitted
+
+
+def test_on_gate_decided_emits_full_field_set():
+    from datetime import UTC, datetime
+
+    from sdlc.core.models import GateDecision, GateOutcome, GatePolicy
+
+    (data,) = _drive_on_gate_decided(
+        GateDecision(
+            gate="merge",
+            round=1,
+            outcome=GateOutcome.REJECT,
+            decided_by="human",
+            reviewer="maksim",
+            comments="not ready",
+            decided_at=datetime(2026, 11, 15, 9, 0, tzinfo=UTC),
+        ),
+        GatePolicy.HARD,
+    )
+    assert data["outcome"] == "reject"
+    assert data["reviewer"] == "maksim"
+    assert data["comments"] == "not ready"
+    assert data["decided_at"] == "2026-11-15T09:00:00+00:00"
+
+
+def test_on_gate_decided_emits_absent_optionals_only_when_set():
+    """A decision with no reviewer/comments (e.g. a SOFT auto-approve; the
+    timeout path does carry a comments string) emits neither key, while
+    decided_at — stamped by GateHost._gate for every path — is always set."""
+    from datetime import UTC, datetime
+
+    from sdlc.core.models import GateDecision, GateOutcome, GatePolicy
+
+    (data,) = _drive_on_gate_decided(
+        GateDecision(
+            gate="architecture",
+            round=1,
+            outcome=GateOutcome.APPROVE,
+            decided_by="policy",
+            decided_at=datetime(2026, 11, 15, 9, 5, tzinfo=UTC),
+        ),
+        GatePolicy.SOFT,
+        confidence=0.92,
+    )
+    assert "reviewer" not in data
+    assert "comments" not in data
+    assert data["decided_at"] == "2026-11-15T09:05:00+00:00"

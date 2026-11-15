@@ -400,6 +400,19 @@ def test_a_corrupt_summary_is_skipped_not_fatal(tmp_path):
     ]
 
 
+def test_a_truncated_multibyte_summary_is_skipped_not_fatal(tmp_path):
+    """A crashed run's truncated write can cut a multi-byte UTF-8 character
+    mid-sequence; that is the same corrupt-summary shape, not a crash."""
+    exports = tmp_path / "exports"
+    _export_run(exports, "run-1", [_gate()])
+    bad = exports / "run-0"
+    bad.mkdir()
+    (bad / "summary.json").write_bytes(b'{"run_id": "run-0", "gates": [{"gate": "arch\xc3"}')
+    assert gate_decisions_from_exports(exports) == [
+        GateDecisionRecord("architecture", "soft", "policy")
+    ]
+
+
 # --- SC-6: the verb's one line -----------------------------------------------
 
 

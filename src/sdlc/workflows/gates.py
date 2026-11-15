@@ -269,6 +269,10 @@ class GateHost:
                 self._pending.pop(key, None)
                 self._pending_activation.pop(key, None)
 
+        # FR-304: every decide path leaves with a timestamp. The human path
+        # was already stamped at signal time (submit_gate_decision) — the
+        # guard keeps that, more accurate, stamp.
+        decision.decided_at = decision.decided_at or workflow.now()
         await self._on_gate_decided(name, round, policy, decision, confidence, author_model)
         return decision
 
