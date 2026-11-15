@@ -108,7 +108,7 @@
   - Any attempt to pass gate policy (CLI flags `--gate-policy` / `--on-timeout`) is refused by the CLI with a named-field message, because those fields do not exist on the model (`extra="forbid"`).
 - **Decider and auto-approve.**
   - A `_gate` timeout returns `decided_by="timeout"`, `outcome=REJECT` (`workflows/gates.py:228-239`) → incident `timed_out`.
-  - The SOFT auto-decision is `GateDecision(outcome=APPROVE, decided_by="policy")`, passed only when `effective >= threshold`.
+  - The SOFT auto-decision is `GateDecision(outcome=APPROVE, decided_by="policy")`, passed only when `effective > threshold` (corrected 2026-11-15 per 023a verification T025; code is strict — an at-threshold plan stays human-gated).
   - Approved by anyone → `approved_not_executed`, with the decider recorded.
 - **Rationale.** `GateConfig` allows `OFF` and `on_timeout=APPROVE` (`core/models.py:57-68`, `gates.py:206-209,233-237`). The only way "no configuration can open it" is true is that no configuration reaches it (advisor §7.3, skeptic (c)).
 - **Alternative considered.** A flag on `GateHost._gate`. Rejected: it edits the shared gate used by every workflow.

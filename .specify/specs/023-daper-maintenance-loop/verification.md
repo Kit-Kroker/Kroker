@@ -36,6 +36,10 @@ every command run on the final tree.
   the default 0.8); `data-model.md` §R9's `>=` wording conflicts at the
   boundary and the research consequence won. Flagged here so 023b's
   data-model revision can align the wording.
+  Correction (2026-11-15, 023b T051): the conflicting `>=` was in research
+  R8 (its "Decider and auto-approve" bullet, now edited in place with a
+  dated note), not in data-model §R9 — §R9 is the no-gates-field rule and
+  never carried a threshold claim.
 
 ## PRD FR-501..503 re-read against shipped behaviour (T035, PRD untouched)
 
