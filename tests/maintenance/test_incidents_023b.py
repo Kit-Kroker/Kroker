@@ -218,3 +218,40 @@ def test_reopened_persisted_increments_consecutive_seen_and_stays_reopened():
     (inc,) = _finding_incidents(nxt)
     assert inc.consecutive_seen == 3
     assert inc.state.value == "reopened"
+
+
+# --------------------------------------------------------------------------- #
+# T032 (023b): the closure guard in step().
+#
+# PRE-GREEN REGRESSION PIN, not RED: T020 already keeps Detect from resolving
+# in-flight incidents (R7/R8, incidents.py RESOLVED branch). The verified row is
+# the R8 guard against an identity that the default branch no longer shows. The
+# closure decision belongs to closure_outcome (test_execution.py) and to Report.
+# This pin guards the T035 wiring from regressing the guard away.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("live", ["verified", "executing", "verifying"])
+def test_step_never_resolves_an_in_flight_or_verified_incident(live):
+    state = _live_state(live)
+    nxt, _ = step(state, make_triage())  # clean, collected: the identity is RESOLVED
+
+    (inc,) = _finding_incidents(nxt)
+    assert inc.state.value == live, "Detect must not pre-empt Report's closure decision"
+
+
+def test_step_resolves_a_not_yet_started_incident_externally():
+    """PRE-GREEN boundary pin, expected to PASS on HEAD. Not RED.
+
+    The R8 guard skips only the in-flight and verified trio. An incident that has
+    not entered the execute path (here awaiting_decision, with its repair gate
+    still open) is resolved_externally by a clean collected RESOLVED Detect, and
+    it lands in events.resolved_externally. This stops T035's wiring from
+    widening the guard to every live state.
+    """
+    state = _live_state("awaiting_decision")
+    nxt, events = step(state, make_triage())  # clean, collected: the identity is RESOLVED
+
+    (inc,) = _finding_incidents(nxt)
+    assert inc.state.value == "resolved_externally"
+    assert inc.no in events.resolved_externally

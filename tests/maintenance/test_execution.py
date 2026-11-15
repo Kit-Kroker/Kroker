@@ -710,3 +710,129 @@ def test_apply_verdict_is_pure_and_never_mutates_the_input():
     snapshot = before.model_dump_json()
     apply_verdict(before, "persisted", _cfg())
     assert before.model_dump_json() == snapshot
+
+
+# =========================================================================== #
+# T032 (023b, RED): the closure decision (R8, B-FR-008).
+#
+# Subject: ``closure_outcome(incident, detect_collected, identity_present,
+# child_head_is_ancestor) -> str | None`` in ``sdlc.maintenance.execution``.
+# SHAPE CHOSEN: pure. It returns the decision literal, or None for "no change",
+# and never mutates the incident.
+#
+# The ancestry input is a BOOLEAN that the caller computes from
+# ``incident.execution.integration_head`` (the CHILD head recorded at
+# awaiting_merge, R8's recorded-head ruling). The function never reads
+# ``incident.verification``, so the verify-branch head cannot change it.
+#
+# Each test imports ``closure_outcome`` / ``UNMERGED_HINT`` inside its body, so
+# before T035 each case fails per test on ImportError.
+# =========================================================================== #
+
+
+def _closure_incident():
+    """A VERIFIED incident whose child head and verify head are distinct, so a
+    test can show which head a decision reads."""
+    from datetime import UTC, datetime
+
+    from sdlc.maintenance.models import ExecutionRecord, IncidentState, VerificationResult
+
+    inc = _incident(FixClass.MECHANICAL)
+    return inc.model_copy(
+        update={
+            "state": IncidentState.VERIFIED,
+            "plan": _plan([_code()], floor=0.95),
+            "execution": ExecutionRecord(
+                attempt=1,
+                child_id="maint-demo-abcd1234-inc1-a1",
+                base_sha="a" * 40,
+                started_at=datetime(2026, 11, 15, tzinfo=UTC),
+                integration_branch="sdlc/maint-demo-abcd1234-inc1-a1/integration",
+                integration_head="c" * 40,
+                outcome="awaiting_merge",
+                detail="parked at merge",
+            ),
+            "verification": VerificationResult(
+                child_id="maint-demo-abcd1234-inc1-a1",
+                base_sha="a" * 40,
+                verify_head="d" * 40,
+                collected=True,
+                verdict="resolved",
+                delta_note="",
+            ),
+        }
+    )
+
+
+@pytest.mark.parametrize("identity_present", [True, False])
+@pytest.mark.parametrize("ancestor", [True, False])
+def test_a_lost_collection_cycle_changes_nothing(identity_present, ancestor):
+    """R8: a not-collected Detect is a no-op. The check is a state check that re-runs
+    on the next collected cycle, so a lost cycle cannot strand the incident."""
+    from sdlc.maintenance.execution import closure_outcome
+
+    out = closure_outcome(_closure_incident(), False, identity_present, ancestor)
+    assert out is None
+
+
+def test_absent_and_an_ancestor_closes_the_incident():
+    from sdlc.maintenance.execution import closure_outcome
+
+    assert closure_outcome(_closure_incident(), True, False, True) == "closed"
+
+
+def test_absent_and_not_an_ancestor_is_resolved_externally():
+    """Squash-merge honesty (R8): the child head is not an ancestor after a squash,
+    so the fix is recorded as resolved externally. It is claimed as a lesson only
+    when provenance is provable."""
+    from sdlc.maintenance.execution import closure_outcome
+
+    assert closure_outcome(_closure_incident(), True, False, False) == "resolved_externally"
+
+
+def test_present_and_an_ancestor_is_dirty_because_the_fix_did_not_hold():
+    from sdlc.maintenance.execution import closure_outcome
+
+    assert closure_outcome(_closure_incident(), True, True, True) == "dirty"
+
+
+def test_present_and_not_an_ancestor_stays_verified_with_the_unmerged_hint():
+    """The incident stays verified (the caller keeps the state). It renders the hint
+    in ``sdlc maintain incidents`` (T047)."""
+    from sdlc.maintenance.execution import closure_outcome
+
+    assert closure_outcome(_closure_incident(), True, True, False) == "fix_not_on_default_branch"
+
+
+def test_the_unmerged_hint_text_is_pinned_verbatim():
+    from sdlc.maintenance.execution import UNMERGED_HINT
+
+    assert UNMERGED_HINT == "fix not on default branch"
+
+
+def test_the_decision_ignores_the_verify_branch_head():
+    """R8 recorded-head ruling: closure keys on the CHILD head (integration_head),
+    never on the verify-branch head. Two incidents differing only in
+    verification.verify_head get the same outcome for every input combination."""
+    from sdlc.maintenance.execution import closure_outcome
+
+    a = _closure_incident()
+    b = a.model_copy(
+        update={"verification": a.verification.model_copy(update={"verify_head": "e" * 40})}
+    )
+    for identity_present in (True, False):
+        for ancestor in (True, False):
+            assert closure_outcome(a, True, identity_present, ancestor) == closure_outcome(
+                b, True, identity_present, ancestor
+            )
+
+
+def test_closure_outcome_is_pure_and_never_mutates_the_incident():
+    from sdlc.maintenance.execution import closure_outcome
+
+    inc = _closure_incident()
+    snapshot = inc.model_dump_json()
+    first = closure_outcome(inc, True, False, True)
+    second = closure_outcome(inc, True, False, True)
+    assert first == second == "closed"
+    assert inc.model_dump_json() == snapshot
