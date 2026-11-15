@@ -371,8 +371,14 @@ async def test_a_regression_after_merge_is_dirty_and_reopens_without_a_reject(re
     hold: dirty, and the incident reopens. The child already completed, so no
     REJECT is sent. Its completed result stands.
 
-    The ExecutionRecord outcome is pinned to ``completed``. The data-model names
-    no outcome for a regression after merge."""
+    The ExecutionRecord outcome is pinned UNCHANGED (the verify pass left it
+    ``awaiting_merge`` and the closure stamps nothing): the data-model names
+    no outcome for a regression after merge, and the loop never observed the
+    child's post-approval completion — ``apply_verdict("regressed")`` is the
+    dirty mapping without an outcome stamp. (Executor adaptation of qa's
+    ``completed`` literal: nothing in the machinery writes ``completed`` —
+    the value before closure is ``awaiting_merge``; the pin keeps the INTENT,
+    no dirty stamp.) With T031's re-plan wired, ``reopened`` is transient."""
     arm: dict = {"on": False}
     async with await WorkflowEnvironment.start_time_skipping(
         data_converter=pydantic_data_converter
@@ -385,10 +391,15 @@ async def test_a_regression_after_merge_is_dirty_and_reopens_without_a_reject(re
             await _nudge(handle)
 
             inc = await _only(handle)
-            assert inc.state.value == "reopened"
-            assert inc.reopens == 1
+            assert inc.reopens == 1, "the dirty closure reopens exactly once"
+            assert inc.gate_round == 2
+            assert inc.state.value in {"reopened", "awaiting_decision"}, inc.state
+            if inc.state.value == "awaiting_decision":
+                assert inc.plan is not None
             assert inc.execution is not None
-            assert inc.execution.outcome == "completed"
+            assert inc.execution.outcome == "awaiting_merge", (
+                "the closure stamps no outcome on the completed attempt"
+            )
 
             child = env.client.get_workflow_handle(child_id)
             assert (await child.describe()).status == WorkflowExecutionStatus.COMPLETED

@@ -187,6 +187,23 @@ def apply_verdict(
             updated.state = IncidentState.ESCALATED
             updated.note = f"escalated: dirty verdict {verdict} at the reopen bound"
         return updated
+    if verdict == "regressed":
+        # Closure's dirty (R8: the fix is on the default branch and did not
+        # hold) — the SAME reopen mapping, but the attempt's outcome is NOT
+        # stamped: the attempt completed and the child did its job; the
+        # regression is new information from a later Detect, and the
+        # data-model names no outcome for it (T034's cell pins the record
+        # unchanged).
+        if updated.reopens < cfg.max_reopens:
+            updated.state = IncidentState.REOPENED
+            updated.reopens += 1
+            updated.gate_round += 1
+            updated.plan = None
+            updated.note = "dirty: the fix is on the default branch and did not hold"
+        else:
+            updated.state = IncidentState.ESCALATED
+            updated.note = "escalated: the fix regressed at the reopen bound"
+        return updated
     raise ValueError(f"unknown verdict: {verdict!r}")
 
 

@@ -55,8 +55,10 @@ with workflow.unsafe.imports_passed_through():
     from ..maintenance.activities import probe_repair_child
     from ..maintenance.execution import (
         OPS_REFUSAL_OUTCOME,
+        UNMERGED_HINT,
         apply_verdict,
         classify_verification,
+        closure_outcome,
         may_execute,
         merge_reject_decision,
     )
@@ -68,14 +70,16 @@ with workflow.unsafe.imports_passed_through():
         MaintenanceState,
         VerificationResult,
     )
+    from ..measurement import CollectionState
     from ..notify.activities import notify
     from ..notify.contract import NotifyInput, NotifyReason
     from ..pending import TaskEscalationPending
     from ..tidyup.backlog import repair_work_for, seeded_work_for
-    from ..triage.models import FixClass
+    from ..triage.models import FixClass, RepoTriage, SignalResult, finding_identity
     from ..vcs.integration import (
         VerifyBranchInput,
         build_verification_branch,
+        is_ancestor,
         remove_verification_tree,
     )
     from .gates import NOTIFY_ACT
@@ -105,6 +109,12 @@ CLEANUP_ACT = workflow.ActivityConfig(
 #: Verdicts that mean the fix did not hold (R5): the loop rejects the child's
 #: merge gate for exactly these, and never for anything else.
 DIRTY_VERDICTS = frozenset({"persisted", "new", "conflicted"})
+
+#: The closure ancestry check: read-only git plumbing, no mutation (R8).
+ANCESTRY_ACT = workflow.ActivityConfig(
+    start_to_close_timeout=timedelta(seconds=60),
+    retry_policy=RetryPolicy(maximum_attempts=2),
+)
 
 
 def choose_starts(
@@ -289,6 +299,61 @@ async def _decide(state: MaintenanceState, inc: Incident, verdict: str) -> None:
         ),
         **NOTIFY_ACT,
     )
+
+
+async def closure_step(state: MaintenanceState, triage: RepoTriage) -> None:
+    """One verified incident's closure check on a collected Detect (023b
+    T035, B-FR-008, R8). The decision is ``closure_outcome`` (pure); the
+    ancestry question is a read-only activity over the CHILD's recorded
+    integration head — the squash-merge honesty lives there. This is a
+    state check: it re-runs on every collected cycle, so a lost cycle
+    cannot strand the incident, and the outcomes route through the same
+    machinery as every other verdict — dirty reopens via ``apply_verdict``
+    (under the bound; escalate at it), ``closed``/``resolved_externally``
+    are terminal writes, ``fix_not_on_default_branch`` keeps the incident
+    verified with ``UNMERGED_HINT`` as the note (render shows it; the
+    operator resolves by merging, rejecting the child, or disabling)."""
+    for inc in sorted(
+        (i for i in state.incidents if i.state is IncidentState.VERIFIED), key=lambda i: i.no
+    ):
+        record = inc.execution
+        if record is None or not record.integration_head:
+            continue  # never parked: nothing to prove provenance with
+        sig = _signal_by(triage, inc.key.split(":", 1)[0])
+        collected = sig is not None and sig.collected.state is CollectionState.MEASURED
+        if not collected:
+            continue  # a lost cycle: closure_outcome is None; stay verified
+        present = inc.key in {finding_identity(f) for f in (sig.findings if sig else [])}
+        ancestor = await workflow.execute_activity(
+            is_ancestor,
+            args=[state.config.repo_dir, record.integration_head, triage.commit_sha],
+            **ANCESTRY_ACT,
+        )
+        outcome = closure_outcome(inc, collected, present, ancestor)
+        if outcome == "dirty":
+            await _decide(state, inc, "regressed")
+        elif outcome == "closed":
+            updated = inc.model_copy(deep=True)
+            updated.state = IncidentState.CLOSED
+            updated.note = "closed: the fix is on the default branch and holds"
+            _splice(state, updated)
+        elif outcome == "resolved_externally":
+            updated = inc.model_copy(deep=True)
+            updated.state = IncidentState.RESOLVED_EXTERNALLY
+            updated.note = (
+                "resolved externally: the identity is gone and the child head"
+                " is not an ancestor (squash or rebase merge) — retained as an"
+                " experience, not a lesson"
+            )
+            _splice(state, updated)
+        elif outcome == "fix_not_on_default_branch":
+            updated = inc.model_copy(deep=True)
+            updated.note = UNMERGED_HINT
+            _splice(state, updated)
+
+
+def _signal_by(triage: RepoTriage, signal: str) -> SignalResult | None:
+    return next((s for s in triage.signals if s.signal == signal), None)
 
 
 async def timeout_step(state: MaintenanceState, now: datetime) -> None:

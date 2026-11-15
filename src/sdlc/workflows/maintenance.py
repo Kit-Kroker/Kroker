@@ -46,7 +46,7 @@ with workflow.unsafe.imports_passed_through():
     from ..maintenance.render import gate_context_text
     from ..pending import GateContext
     from .gates import GateHost, GateWithdrawnError
-    from .maintenance_execute import execute_step, report_step, timeout_step
+    from .maintenance_execute import closure_step, execute_step, report_step, timeout_step
     from .tidyup import _default_fix_cfg
     from .triage import TriageInput, TriageWorkflow
     from .triage_child import triage_gates
@@ -181,6 +181,13 @@ class MaintenanceWorkflow(GateHost):
             id=f"maint-{cfg.project}-c{self._state.cycle}-triage",
         )
         self._state, _events = step(self._state, triage)
+
+        # 023b Closure (B-FR-008, R8): a verified incident's provenance
+        # check on THIS cycle's Detect — after Detect, before plan/gate.
+        # Behind both the config and the patch marker (R15): a pre-023b
+        # history never runs the ancestry activity.
+        if cfg.execute and workflow.patched("maint-023b-execute"):
+            await closure_step(self._state, triage)
 
         for inc in self._state.incidents:
             if inc.state is IncidentState.OPEN and inc.kind == "finding" and inc.plan is None:
