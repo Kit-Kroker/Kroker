@@ -11,6 +11,8 @@ import argparse
 import asyncio
 import concurrent.futures
 import os
+import time
+import uuid
 from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +34,16 @@ from .smoke import (
     resolve_repo_status,
     write_stamp,
 )
+
+
+def bench_workflow_id(case_id: str, now: Callable[[], float] = time.time) -> str:
+    """A fleet-safe workflow id for one benchmark start (024 T014, R8/W-5).
+
+    ``bench-<case_id>-<epoch>-<hex6>``: the epoch keeps ids greppable in
+    time order, and the uuid suffix keeps same-second starts distinct —
+    five concurrent starts of one case must not collide on the id.
+    """
+    return f"bench-{case_id}-{int(now())}-{uuid.uuid4().hex[:6]}"
 
 
 def _run_sync[T](coro: Coroutine[Any, Any, T]) -> T:
@@ -335,7 +347,7 @@ async def _run_matrix(
     handle = await client.start_workflow(
         BenchmarkWorkflow.run,
         spec.model_dump_json(),
-        id=f"bench-{spec.case_id}-{int(__import__('time').time())}",
+        id=bench_workflow_id(spec.case_id),
         task_queue=TASK_QUEUE,
     )
     return await handle.result()
