@@ -489,7 +489,10 @@ def _ot_summary(
 
 
 def _ot_runs(n, waits_min=(10,), start=0, **kw):
-    return [_ot_summary(f"ot-{start + i}", offset=start + i, waits_min=waits_min, **kw) for i in range(n)]
+    return [
+        _ot_summary(f"ot-{start + i}", offset=start + i, waits_min=waits_min, **kw)
+        for i in range(n)
+    ]
 
 
 def test_sc2_median_engaged_minutes_over_shipped_measured_runs():
