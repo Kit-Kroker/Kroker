@@ -69,18 +69,30 @@ def test_worker_registers_research_verify_activity():
 def test_worker_registers_the_post_020_workflow_set():
     """020 T025 (plan T050, FR-003): FeatureWorkflow is deleted with its
     registration. 023a T019/T029 add the maintenance pair — the loop and
-    its schedule kicker — so the set is ten."""
+    its schedule kicker — so the set is ten. 024 T009: the list lives in
+    the module-level _ALL_WORKFLOWS (worker.py's line ceiling) and is
+    passed as a Name, so a bare literal walk no longer resolves it."""
     import ast
     import inspect
 
     from sdlc import worker
+
+    module_lists: dict[str, set[str]] = {}
+    for node in ast.walk(ast.parse(inspect.getsource(worker))):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and isinstance(node.value, ast.List):
+                    module_lists[target.id] = {elt.id for elt in node.value.elts}
 
     registered: set[str] | None = None
     for node in ast.walk(ast.parse(inspect.getsource(worker))):
         if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "Worker":
             for kw in node.keywords:
                 if kw.arg == "workflows":
-                    registered = {elt.id for elt in kw.value.elts}
+                    if isinstance(kw.value, ast.List):
+                        registered = {elt.id for elt in kw.value.elts}
+                    elif isinstance(kw.value, ast.Name):
+                        registered = set(module_lists.get(kw.value.id, set()))
     assert registered is not None, "no Worker(..., workflows=[...]) call found"
     assert "FeatureWorkflow" not in registered
     assert registered == {

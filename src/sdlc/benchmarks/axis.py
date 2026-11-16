@@ -237,8 +237,13 @@ async def measure_code_axis(inp: AxisInput) -> AxisBag:
         # 024 T017 (skeptic L3/R10): rmtree removes the checkout but not
         # its REGISTRATION — .git/worktrees kept the stale entry, and the
         # leak compounded per measurement. Prune drops it; failures are
-        # the activity's own never-raise business.
-        _git(["worktree", "prune"], inp.repo_url)
+        # the activity's own never-raise business — a vanished repo_url
+        # (broken-repo inputs) makes subprocess itself raise OSError, so
+        # this is guarded, not just unchecked.
+        try:
+            _git(["worktree", "prune"], inp.repo_url)
+        except OSError:
+            pass
 
 
 def axis_record(

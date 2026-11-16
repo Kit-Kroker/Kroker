@@ -159,7 +159,7 @@
 
 ## Phase 7: 024-i close-out
 
-- [ ] T020 Run the 024-i battery:
+- [x] T020 Run the 024-i battery:
   ```bash
   uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run python scripts/check_file_size.py
   ```

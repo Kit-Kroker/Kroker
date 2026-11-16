@@ -13,7 +13,9 @@ def test_worker_validates_registry_at_boot():
 
 
 def test_worker_validation_runs_before_worker_run():
-    """The validation call must precede `await worker.run()` so a bad config
-    never reaches the run loop."""
+    """The validation call must precede the worker run loop so a bad config
+    never reaches it. 024 T009: the single `await worker.run()` became
+    `await asyncio.gather(*(w.run() ...))` (pool modes), so the anchor is
+    the gather."""
     src = WORKER_SRC.read_text(encoding="utf-8")
-    assert src.index("validate_registry(") < src.index("worker.run()")
+    assert src.index("validate_registry(") < src.index("asyncio.gather(")

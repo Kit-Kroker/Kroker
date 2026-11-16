@@ -64,7 +64,7 @@ One behaviour to note: `triage_*` read the target tree by sha from `repo_dir`. T
 **Pick: one pure helper in `pools.py`, spliced at every harness-class site.**
 
 ```python
-def on_harness(opts, queue):   # opts: ActivityConfig mapping, queue: str | None
+def on_harness(opts, queue):  # opts: ActivityConfig mapping, queue: str | None
     return opts if not queue else {**opts, "task_queue": queue}
 ```
 
