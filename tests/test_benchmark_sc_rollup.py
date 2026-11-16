@@ -445,3 +445,287 @@ def test_sc3_orders_unnumbered_attempts_by_start_time():
     bad = _corpus(BenchmarkOutcome.PASS, BenchmarkOutcome.FAIL)
     broken = _rate(build_sc_rollup([], bad), "SC-3")
     assert broken.n == MIN_RUNS and broken.rate == 0.0
+
+
+# --- 025 T007 (RED): SC-2 rows and companions (FR-006/007/008/012/013/015) ---
+
+_SC2_TARGET = "<=15 min"
+_EVIDENCE_TEXT = "weak evidence (SOFT: no gate asked a human unless it escalated)"
+
+
+def _ot_summary(
+    run_id,
+    offset=0,
+    outcome="deployed:pr",
+    waits_min=(),
+    instrumented=True,
+    policy="soft",
+):
+    """A summary whose human gates were each raised at T and decided
+    `wait` minutes later; no waits means no human interaction (state zero)."""
+    gates = [
+        GateOutcomeSummary(
+            gate=f"g{i}",
+            round=1,
+            policy=policy,
+            decided_by="human",
+            approved=True,
+            raised_at=T,
+            decided_at=T + timedelta(minutes=w),
+        )
+        for i, w in enumerate(waits_min)
+    ]
+    return RunSummary(
+        run_id=run_id,
+        mode="greenfield",
+        outcome=outcome,
+        terminal_stage="deploy",
+        started_at=T + timedelta(hours=offset),
+        ended_at=T + timedelta(hours=offset),
+        duration_s=0.0,
+        gates=gates,
+        operator_instrumented=instrumented,
+    )
+
+
+def _ot_runs(n, waits_min=(10,), start=0, **kw):
+    return [_ot_summary(f"ot-{start + i}", offset=start + i, waits_min=waits_min, **kw) for i in range(n)]
+
+
+def test_sc2_median_engaged_minutes_over_shipped_measured_runs():
+    rollup = build_sc_rollup(_ot_runs(5), [])
+    sc2 = _rate(rollup, "SC-2")
+    assert sc2.rate == 10.0 and sc2.n == 5 and sc2.target == _SC2_TARGET
+    assert "operator minutes" in sc2.label
+    all_ = _rate(rollup, "SC-2-all")
+    assert all_.rate == 10.0 and all_.n == 5 and all_.target == _SC2_TARGET
+
+
+def test_sc2_shipped_is_narrower_than_sc1_and_the_cap_bounds_engaged():
+    runs = _ot_runs(5) + [
+        _ot_summary("ot-rej", offset=9, outcome="rejected:merge", waits_min=(600,))
+    ]
+    rollup = build_sc_rollup(runs, [])
+    sc2 = _rate(rollup, "SC-2")
+    all_ = _rate(rollup, "SC-2-all")
+    assert sc2.n == 5 and sc2.rate == 10.0
+    assert all_.n == 6 and all_.rate == 10.0  # capped engaged, not the 600 min wait
+
+
+def test_sc2_merged_not_deployed_counts_as_shipped():
+    runs = _ot_runs(4) + [
+        _ot_summary("ot-m", offset=9, outcome="merged-not-deployed:http://pr", waits_min=(10,))
+    ]
+    sc2 = _rate(build_sc_rollup(runs, []), "SC-2")
+    assert sc2.n == 5 and sc2.rate == 10.0
+
+
+def test_sc2_is_na_below_the_floor_and_each_row_floors_on_its_own_n():
+    runs = _ot_runs(4)
+    rollup = build_sc_rollup(runs, [])
+    sc2 = _rate(rollup, "SC-2")
+    assert sc2.rate is None and sc2.n == 4
+    assert _rate(rollup, "SC-2-all").rate is None
+
+    # 4 shipped + 1 rejected:merge: SC-2-all reaches the floor, SC-2 does not.
+    mixed = runs + [_ot_summary("ot-rej", offset=9, outcome="rejected:merge", waits_min=(10,))]
+    rollup = build_sc_rollup(mixed, [])
+    assert _rate(rollup, "SC-2").rate is None and _rate(rollup, "SC-2").n == 4
+    assert _rate(rollup, "SC-2-all").rate == 10.0 and _rate(rollup, "SC-2-all").n == 5
+
+
+def test_sc2_not_measured_runs_are_excluded_from_n_and_counted_in_the_note():
+    runs = _ot_runs(5) + _ot_runs(2, start=5, instrumented=False)
+    rollup = build_sc_rollup(runs, [])
+    for name in ("SC-2", "SC-2-all"):
+        r = _rate(rollup, name)
+        assert r.n == 5, name
+        assert "2 not measured" in r.note, name
+        assert "excluded" in r.note, name
+    note = _rate(rollup, "SC-2").note
+    assert "600" in note or "10 min" in note  # the cap is stated
+    assert "median" in note  # the definition is stated
+
+
+def test_sc2_zero_interaction_runs_are_measured_and_counted():
+    runs = _ot_runs(3) + _ot_runs(2, waits_min=(), start=3)
+    rollup = build_sc_rollup(runs, [])
+    sc2 = _rate(rollup, "SC-2")
+    assert sc2.n == 5
+    assert sc2.rate == 10.0  # sorted 0, 0, 10, 10, 10
+    assert rollup.sc2_extra.zero_runs == 2
+    assert "2" in sc2.note and "zero" in sc2.note.lower()
+
+    # and with the zeros in the majority the median really is zero
+    low = build_sc_rollup(_ot_runs(2) + _ot_runs(3, waits_min=(), start=2), [])
+    assert _rate(low, "SC-2").rate == 0.0
+
+
+def test_sc2_companions_human_touched_and_uncapped_wait():
+    import json
+
+    # engaged minutes 2, 4, 10, 10, 20 -- the last two capped from 9 h waits;
+    # the 20 is one run with two capped 9 h gates.
+    runs = [
+        _ot_summary("c0", offset=0, waits_min=(2,)),
+        _ot_summary("c1", offset=1, waits_min=(4,)),
+        _ot_summary("c2", offset=2, waits_min=(540,)),
+        _ot_summary("c3", offset=3, waits_min=(540,)),
+        _ot_summary("c4", offset=4, waits_min=(540, 540)),
+        _ot_summary("c5", offset=5, waits_min=()),  # a measured zero
+    ]
+    rollup = build_sc_rollup(runs, [])
+    extra = rollup.sc2_extra
+    assert extra.zero_runs == 1
+    # human-touched = engaged > 0 only: 2, 4, 10, 10, 20
+    assert extra.human_touched_median_min == 10.0
+    assert extra.human_touched_max_min == 20.0
+    # wait is uncapped and counts the zero run: 0, 2, 4, 540, 540, 1080
+    assert extra.wait_median_min == 272.0
+    assert extra.wait_median_min > extra.human_touched_median_min
+
+    parsed = json.loads(render_sc_rollup_json(rollup))
+    for key in (
+        "zero_runs",
+        "human_touched_median_min",
+        "human_touched_max_min",
+        "wait_median_min",
+    ):
+        assert key in parsed["sc2_extra"]
+
+
+def test_sc2_policy_mix_and_evidence_tier_all_soft():
+    rollup = build_sc_rollup(_ot_runs(5), [])
+    assert "soft" in rollup.policy_mix and "hard" not in rollup.policy_mix
+    assert rollup.evidence_tier == _EVIDENCE_TEXT
+
+
+def test_sc2_policy_mix_names_both_policies_and_drops_the_tier_when_mixed():
+    runs = _ot_runs(4) + _ot_runs(1, start=4, policy="hard")
+    rollup = build_sc_rollup(runs, [])
+    assert "soft" in rollup.policy_mix and "hard" in rollup.policy_mix
+    assert rollup.evidence_tier is None
+
+
+def test_sc2_evidence_tier_is_none_when_no_gate_exists():
+    rollup = build_sc_rollup(_ot_runs(5, waits_min=()), [])
+    assert rollup.evidence_tier is None
+
+
+def test_sc2_rendering_markdown_html_and_json_carry_rows_and_companions():
+    import json
+
+    rollup = build_sc_rollup(_ot_runs(5), [])
+    md = render_sc_rollup_markdown(rollup)
+    html = render_sc_rollup_html(rollup)
+    for out in (md, html):
+        assert "SC-2" in out and "SC-2-all" in out
+        assert _SC2_TARGET in out or "&lt;=15 min" in out
+        low = out.lower()
+        for needle in ("human-touched", "wait", "zero", "policy mix"):
+            assert needle in low, needle
+        assert _EVIDENCE_TEXT in out
+
+    parsed = json.loads(render_sc_rollup_json(rollup))
+    assert {"SC-2", "SC-2-all"} <= {r["criterion"] for r in parsed["rates"]}
+    assert "sc2_extra" in parsed
+    assert "soft" in parsed["policy_mix"]
+    assert parsed["evidence_tier"] == _EVIDENCE_TEXT
+
+
+# --- 025 T007 (RED, chaos/edge cases): SC-2 rollup ---
+
+
+def test_sc2_missing_raise_time_makes_a_shipped_run_not_measured():
+    broken = RunSummary(
+        run_id="ot-broken",
+        mode="greenfield",
+        outcome="deployed:pr",
+        terminal_stage="deploy",
+        started_at=T + timedelta(hours=9),
+        ended_at=T + timedelta(hours=9),
+        duration_s=0.0,
+        gates=[
+            GateOutcomeSummary(
+                gate="g0",
+                round=1,
+                policy="soft",
+                decided_by="human",
+                approved=True,
+                raised_at=None,
+                decided_at=T + timedelta(minutes=10),
+            )
+        ],
+        operator_instrumented=True,
+    )
+    rollup = build_sc_rollup(_ot_runs(5) + [broken], [])
+    for name in ("SC-2", "SC-2-all"):
+        r = _rate(rollup, name)
+        assert r.n == 5, name
+        assert "1 not measured" in r.note, name
+
+
+def test_sc2_and_sc2_all_populations_diverge_on_shipped_vs_all_scored():
+    # engaged is capped at 10 min per interaction, so 500 engaged minutes is
+    # fifty 10-minute human gates in one run.
+    rejected = [
+        _ot_summary(
+            f"ot-rej-{i}",
+            offset=10 + i,
+            outcome="rejected:merge",
+            waits_min=tuple([10] * 50),
+        )
+        for i in range(6)
+    ]
+    shipped = _ot_runs(5, waits_min=(5,))
+    rollup = build_sc_rollup(shipped + rejected, [])
+    sc2 = _rate(rollup, "SC-2")
+    all_ = _rate(rollup, "SC-2-all")
+    assert sc2.n == 5 and sc2.rate == 5.0
+    assert all_.n == 11 and all_.rate == 500.0
+
+
+def test_sc2_clarification_batch_only_run_contributes_its_engaged_minutes():
+    batch_run = RunSummary(
+        run_id="ot-clar",
+        mode="greenfield",
+        outcome="deployed:pr",
+        terminal_stage="deploy",
+        started_at=T + timedelta(hours=9),
+        ended_at=T + timedelta(hours=9),
+        duration_s=0.0,
+        clarifications=[
+            ClarificationOutcome(
+                question_id=f"q{i}",
+                question="q?",
+                answered_by="human",
+                raised_at=T,
+                answered_at=T + timedelta(minutes=8),
+            )
+            for i in range(3)
+        ],
+        operator_instrumented=True,
+    )
+    runs = _ot_runs(2, waits_min=(2,)) + _ot_runs(2, waits_min=(20,), start=2) + [batch_run]
+    # engaged: 2, 2, 10(cap), 10(cap), 8 -> sorted 2, 2, 8, 10, 10 -> median 8.0
+    rollup = build_sc_rollup(runs, [])
+    sc2 = _rate(rollup, "SC-2")
+    assert sc2.n == 5
+    assert sc2.rate == 8.0
+
+
+def test_sc2_human_touched_excludes_zero_runs_from_median_and_max():
+    # 12 engaged minutes = two 6-minute gates (a single gate caps at 10)
+    runs = _ot_runs(4, waits_min=()) + _ot_runs(1, waits_min=(6, 6), start=4)
+    extra = build_sc_rollup(runs, []).sc2_extra
+    assert extra.zero_runs == 4
+    assert extra.human_touched_median_min == 12.0
+    assert extra.human_touched_max_min == 12.0
+
+
+def test_sc2_even_n_median_averages_the_middle_pair():
+    runs = [
+        _ot_summary(f"ot-e{i}", offset=i, waits_min=m)
+        for i, m in enumerate([(2,), (4,), (6,), (8,), (5, 5), (6, 6)])
+    ]
+    assert _rate(build_sc_rollup(runs, []), "SC-2").rate == 7.0
