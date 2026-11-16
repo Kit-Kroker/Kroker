@@ -525,6 +525,12 @@ class ClarificationOutcome(BaseModel):
     question: str
     answered_by: Literal["human", "suggested", "unanswered"]
     dimension: ClarificationDimension | None = None  # E-85
+    # 025 (FR-001): raw times for the SC-2 operator-time instrument — the
+    # CLARIFICATION_ASKED / CLARIFICATION_ANSWERED event `at` for this
+    # question. None on pre-025 summaries; answered_at stays None while the
+    # question is unanswered (the deadline event carries no answer time).
+    raised_at: datetime | None = None
+    answered_at: datetime | None = None
 
 
 class GateOutcomeSummary(BaseModel):
@@ -550,6 +556,10 @@ class GateOutcomeSummary(BaseModel):
     # not of the gate. None on pre-C7 records.
     author_model: str | None = None
     overrides: list[str] = Field(default_factory=list)
+    # 025 (FR-001/002): when this (gate, round) opened for a human — the
+    # GATE_AWAITED event's at, stamped by the summary builder after its
+    # dedup loop. None = never opened for a human, or a pre-025 summary.
+    raised_at: datetime | None = None
 
 
 class RunSummary(BaseModel):
@@ -584,6 +594,9 @@ class RunSummary(BaseModel):
     # 002 G4: the run's PipelineConfig.project_key, for the dashboard board
     # tab. None = summary built before the field existed / config unset.
     project_key: str | None = None
+    # 025 (FR-005): True on every summary the 025 builder writes; separates
+    # a measured zero-human run from a pre-025 summary (not-measured vs 0).
+    operator_instrumented: bool = False
 
 
 # The fleet strip's per-stage marks (E-75 spec §5.3); the vocabulary of
