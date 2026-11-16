@@ -174,3 +174,107 @@ def test_gate_outcome_summary_round_trips_full_fields():
         decided_at=datetime(2026, 11, 15, 10, 0, tzinfo=UTC),
     )
     assert GateOutcomeSummary.model_validate_json(g.model_dump_json()) == g
+
+
+# --- 025 T002 (RED): clarification times + operator_instrumented (FR-001/005/010, AS4) ---
+
+
+def test_legacy_pre_025_summary_json_loads_with_defaults():
+    """A summary.json written before 025 carries none of the new keys; it
+    loads unchanged with the new fields at their defaults."""
+    import json
+
+    raised = datetime(2026, 7, 22, 12, 0, tzinfo=UTC)
+    answered = datetime(2026, 7, 22, 12, 5, tzinfo=UTC)
+    full = _summary(
+        operator_instrumented=True,
+        clarifications=[
+            ClarificationOutcome(
+                question_id="q1",
+                question="scope?",
+                answered_by="human",
+                raised_at=raised,
+                answered_at=answered,
+            )
+        ],
+        gates=[
+            GateOutcomeSummary(
+                gate="architecture",
+                round=1,
+                policy="hard",
+                decided_by="human",
+                approved=True,
+                raised_at=raised,
+            )
+        ],
+    )
+    raw = json.loads(full.model_dump_json())
+    raw.pop("operator_instrumented")
+    for row in raw["gates"]:
+        row.pop("raised_at")
+    for row in raw["clarifications"]:
+        row.pop("raised_at")
+        row.pop("answered_at")
+
+    legacy = RunSummary.model_validate(raw)
+
+    expected = _summary(
+        operator_instrumented=False,
+        clarifications=[
+            ClarificationOutcome(
+                question_id="q1",
+                question="scope?",
+                answered_by="human",
+                raised_at=None,
+                answered_at=None,
+            )
+        ],
+        gates=[
+            GateOutcomeSummary(
+                gate="architecture",
+                round=1,
+                policy="hard",
+                decided_by="human",
+                approved=True,
+                raised_at=None,
+            )
+        ],
+    )
+    assert legacy == expected
+    assert legacy.operator_instrumented is False
+    assert legacy.gates[0].raised_at is None
+    assert legacy.clarifications[0].raised_at is None
+    assert legacy.clarifications[0].answered_at is None
+
+
+def test_pre_025_summary_without_rows_loads_with_operator_instrumented_false():
+    """The marker is a top-level default, not derived from rows being present."""
+    import json
+
+    raw = json.loads(_summary(operator_instrumented=True).model_dump_json())
+    raw.pop("operator_instrumented", None)
+    assert raw["gates"] == [] and raw["clarifications"] == []
+
+    legacy = RunSummary.model_validate(raw)
+
+    assert legacy.operator_instrumented is False
+
+
+def test_legacy_gate_row_without_raised_at_validates_with_none():
+    import json
+
+    row = json.loads(
+        GateOutcomeSummary(
+            gate="architecture",
+            round=1,
+            policy="hard",
+            decided_by="human",
+            approved=True,
+            raised_at=datetime(2026, 7, 22, 12, 0, tzinfo=UTC),
+        ).model_dump_json()
+    )
+    row.pop("raised_at", None)
+
+    legacy = GateOutcomeSummary.model_validate(row)
+
+    assert legacy.raised_at is None

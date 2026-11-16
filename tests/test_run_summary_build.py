@@ -603,3 +603,95 @@ def test_raised_at_does_not_leak_across_gates():
     by_gate = {g.gate: g for g in gates}
     assert by_gate["merge"].raised_at == T0 + timedelta(seconds=1)
     assert by_gate["deploy"].raised_at is None
+
+
+# --- 025 T002 (RED): clarification times + operator_instrumented (FR-001/005/010, AS4) ---
+
+
+def _build_025(trace, outcome="deployed"):
+    return build_run_summary(
+        run_id="r",
+        mode="greenfield",
+        outcome=outcome,
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+    )
+
+
+def test_clarification_answered_at_and_raised_at_are_stamped():
+    trace = [
+        _ev(0, RunEventKind.CLARIFICATION_ASKED, question_id="q1", question="scope?"),
+        _ev(4, RunEventKind.CLARIFICATION_ANSWERED, question_id="q1", answered_by="human"),
+        _ev(5, RunEventKind.RUN_FINISHED),
+    ]
+    s = _build_025(trace)
+    c = s.clarifications[0]
+    assert c.raised_at == T0 + timedelta(seconds=0)
+    assert c.answered_at == T0 + timedelta(seconds=4)
+    assert s.operator_instrumented is True
+
+
+def test_unanswered_clarification_has_raised_at_but_no_answered_at():
+    trace = [
+        _ev(0, RunEventKind.CLARIFICATION_ASKED, question_id="q1", question="scope?"),
+        _ev(9, RunEventKind.CLARIFICATION_ANSWERED, question_id="q1", answered_by="unanswered"),
+        _ev(10, RunEventKind.RUN_FINISHED),
+    ]
+    s = _build_025(trace)
+    c = s.clarifications[0]
+    assert c.answered_by == "unanswered"
+    assert c.raised_at == T0 + timedelta(seconds=0)
+    assert c.answered_at is None
+
+
+def test_builder_marks_every_summary_operator_instrumented():
+    s = _build_025([_ev(0, RunEventKind.RUN_FINISHED)])
+    assert s.operator_instrumented is True
+
+
+def test_suggested_answer_still_records_its_answered_at():
+    trace = [
+        _ev(0, RunEventKind.CLARIFICATION_ASKED, question_id="q1", question="scope?"),
+        _ev(3, RunEventKind.CLARIFICATION_ANSWERED, question_id="q1", answered_by="suggested"),
+        _ev(4, RunEventKind.RUN_FINISHED),
+    ]
+    c = _build_025(trace).clarifications[0]
+    assert c.answered_by == "suggested"
+    assert c.raised_at == T0 + timedelta(seconds=0)
+    assert c.answered_at == T0 + timedelta(seconds=3)
+
+
+def test_clarification_batch_shares_raised_at_with_per_question_answered_at():
+    trace = [
+        _ev(0, RunEventKind.CLARIFICATION_ASKED, question_id="q1", question="a?"),
+        _ev(0, RunEventKind.CLARIFICATION_ASKED, question_id="q2", question="b?"),
+        _ev(0, RunEventKind.CLARIFICATION_ASKED, question_id="q3", question="c?"),
+        _ev(2, RunEventKind.CLARIFICATION_ANSWERED, question_id="q1", answered_by="human"),
+        _ev(4, RunEventKind.CLARIFICATION_ANSWERED, question_id="q3", answered_by="human"),
+        _ev(5, RunEventKind.RUN_FINISHED),
+    ]
+    by_id = {c.question_id: c for c in _build_025(trace).clarifications}
+    assert set(by_id) == {"q1", "q2", "q3"}
+    assert all(c.raised_at == T0 for c in by_id.values())
+    assert by_id["q1"].answered_at == T0 + timedelta(seconds=2)
+    assert by_id["q2"].answered_at is None
+    assert by_id["q3"].answered_at == T0 + timedelta(seconds=4)
+
+
+def test_operator_instrumented_is_true_on_an_interaction_free_trace():
+    trace = [
+        _ev(
+            1,
+            RunEventKind.STAGE_ENDED,
+            stage="clarify",
+            role="clarify",
+            outcome="pass",
+            duration_s=1.0,
+            cost_usd=0.0,
+        ),
+        _ev(2, RunEventKind.RUN_FINISHED),
+    ]
+    s = _build_025(trace)
+    assert s.gates == [] and s.clarifications == []
+    assert s.operator_instrumented is True
