@@ -177,15 +177,15 @@
 
 ## Phase 8: Foundational (024-ii)
 
-- [ ] T021 Line-neutral extraction. Move `LONG_ACT_TIMEOUT_HOURS`, `LONG_ACT_HEARTBEAT_MINUTES`, `LONG_ACT`, `ACT` and `_long_act` (and only the constants they need) from `S/stages/code/step.py` (~lines 60–105; locate them by name) into a new `S/stages/code/acts.py`. Re-import them in `step.py` under the same names, and keep the re-exports any test imports from `step` (grep `T/` for `from sdlc.stages.code.step import`). No behaviour change: the fast tier is unchanged. Assert in the commit body that `wc -l src/sdlc/stages/code/step.py` ≤ 975. (plan G1; R3 ceiling) **(S)**
-- [ ] T022 RED: add `test_inputs_omit_none` and `test_inputs_roundtrip_queue` to `T/test_pools.py`. For each of `PipelineConfig`, `TriageInput`, `AssessmentInput`, `TidyUpInput`, `DeploymentInput`, `CrewTaskInput`, `CaseSpec` and `MaintenanceConfig` (built from the minimal valid instances the existing tests use; grep their factories):
+- [x] T021 Line-neutral extraction. Move `LONG_ACT_TIMEOUT_HOURS`, `LONG_ACT_HEARTBEAT_MINUTES`, `LONG_ACT`, `ACT` and `_long_act` (and only the constants they need) from `S/stages/code/step.py` (~lines 60–105; locate them by name) into a new `S/stages/code/acts.py`. Re-import them in `step.py` under the same names, and keep the re-exports any test imports from `step` (grep `T/` for `from sdlc.stages.code.step import`). No behaviour change: the fast tier is unchanged. Assert in the commit body that `wc -l src/sdlc/stages/code/step.py` ≤ 975. (plan G1; R3 ceiling) **(S)**
+- [x] T022 RED: add `test_inputs_omit_none` and `test_inputs_roundtrip_queue` to `T/test_pools.py`. For each of `PipelineConfig`, `TriageInput`, `AssessmentInput`, `TidyUpInput`, `DeploymentInput`, `CrewTaskInput`, `CaseSpec` and `MaintenanceConfig` (built from the minimal valid instances the existing tests use; grep their factories):
   - `"harness_queue" not in model_dump_json()` when it is unset;
   - `pydantic_data_converter.payload_converter.to_payloads([m])[0].data` has no `harness_queue` key;
   - with `harness_queue="q"`, it round-trips;
   - an invalid name is rejected;
   - a pre-024 payload, the JSON without the key, validates to `None`.
   (P-FR-005/011; R1; W-1) **(S)**
-- [ ] T023 Add `harness_queue: str | None = Field(default=None, exclude_if=lambda v: v is None)`, plus a validator reusing `pools` name validation, to the 8 models. The locations are research R1's table: `S/core/models.py:369`, `S/workflows/triage.py:75`, `S/workflows/assessment.py:131`, `S/workflows/tidyup.py:77`, `S/workflows/deployment.py:66`, `S/workflows/crew.py:66`, `S/benchmarks/models.py:348` and `S/maintenance/models.py:84` (`extra="forbid"` stays). Make T022 green. Run `uv run pytest -q tests/replay/`, which must stay green. **(M)**
+- [x] T023 Add `harness_queue: str | None = Field(default=None, exclude_if=lambda v: v is None)`, plus a validator reusing `pools` name validation, to the 8 models. The locations are research R1's table: `S/core/models.py:369`, `S/workflows/triage.py:75`, `S/workflows/assessment.py:131`, `S/workflows/tidyup.py:77`, `S/workflows/deployment.py:66`, `S/workflows/crew.py:66`, `S/benchmarks/models.py:348` and `S/maintenance/models.py:84` (`extra="forbid"` stays). Make T022 green. Run `uv run pytest -q tests/replay/`, which must stay green. **(M)**
 
 ---
 
@@ -195,7 +195,7 @@
 
 **Independent test**: quickstart §1b (the AST walk) plus §3 (replay).
 
-- [ ] T024 [US1] RED: write `T/test_pools_call_sites.py::test_harness_sites_routed`, the R4 static layer. `ast.parse` every `src/sdlc/**/*.py`, and for each call whose func is `workflow.execute_activity` or `workflow.start_activity`, resolve the first positional argument:
+- [x] T024 [US1] RED: write `T/test_pools_call_sites.py::test_harness_sites_routed`, the R4 static layer. `ast.parse` every `src/sdlc/**/*.py`, and for each call whose func is `workflow.execute_activity` or `workflow.start_activity`, resolve the first positional argument:
   - a `Name`: its activity name is the `@activity.defn(name=…)` or the function name;
   - a string `Constant`: itself.
 
@@ -206,7 +206,7 @@
   - no `execute_local_activity` call names a harness activity.
 
   Print the offending `file:line`s. It is RED with the 33 sites of research R3 listed. (P-FR-002/005; R4) **(M)**
-- [ ] T025 [P] [US1] RED: write `T/replay/test_pools_replay.py::test_forced_queue_replay`, R7(a). Force every harness queue to `"forced-q"`. T026/T027 call sites use the module-qualified form `**pools.on_harness(...)` (`from sdlc import pools`), so one `monkeypatch.setattr(sdlc.pools, "on_harness", …)` reaches them all. T024's AST check accepts `pools.on_harness` and requires that form (reviewer tasks-1 gap 2). Replay every history under `T/replay/histories/` with the replay harness's existing `Replayer` setup (`T/replay/harness.py`, `T/replay/test_graph_replay.py`), and assert `replay_failure is None`. Until T026–T028 land, no call site uses `on_harness`, so the patch is vacuous. Mark the test `xfail(strict=True, reason="vacuous until T028")` and assert inside it that at least one forced queue was applied; that assertion is what fails before T028. T028 removes the xfail. (SC-001; R7) **(S)**
+- [x] T025 [P] [US1] RED: write `T/replay/test_pools_replay.py::test_forced_queue_replay`, R7(a). Force every harness queue to `"forced-q"`. T026/T027 call sites use the module-qualified form `**pools.on_harness(...)` (`from sdlc import pools`), so one `monkeypatch.setattr(sdlc.pools, "on_harness", …)` reaches them all. T024's AST check accepts `pools.on_harness` and requires that form (reviewer tasks-1 gap 2). Replay every history under `T/replay/histories/` with the replay harness's existing `Replayer` setup (`T/replay/harness.py`, `T/replay/test_graph_replay.py`), and assert `replay_failure is None`. Until T026–T028 land, no call site uses `on_harness`, so the patch is vacuous. Mark the test `xfail(strict=True, reason="vacuous until T028")` and assert inside it that at least one forced queue was applied; that assertion is what fails before T028. T028 removes the xfail. (SC-001; R7) **(S)**
 
 ---
 
@@ -216,7 +216,7 @@
 
 **Independent test**: quickstart §2 (`test_pools_routing`, `test_pools_failfast`).
 
-- [ ] T026 [US2] Apply `**pools.on_harness(<opts>, <q>)` (module-qualified; see T025) at the graph-side and stage sites. The value of `q` is `cfg.harness_queue`; inline-keyword sites wrap them as `dict(...)`.
+- [x] T026 [US2] Apply `**pools.on_harness(<opts>, <q>)` (module-qualified; see T025) at the graph-side and stage sites. The value of `q` is `cfg.harness_queue`; inline-keyword sites wrap them as `dict(...)`.
   - `S/stages/code/step.py:311, 711, 740, 745`
   - `S/workflows/task_host.py:196, 274`
   - `S/workflows/graph_nodes/precode.py:58`
@@ -226,7 +226,7 @@
   - `S/stages/merge/step.py:340, 350, 396, 414, 420, 681`
 
   Where a step function lacks `cfg`, find the nearest caller that holds it and thread `harness_queue` through as a keyword argument. Record each such signature change in the commit body. (R3) **(M)**
-- [ ] T027 [US2] Apply `**pools.on_harness(...)` (module-qualified) at the child-workflow sites:
+- [x] T027 [US2] Apply `**pools.on_harness(...)` (module-qualified) at the child-workflow sites:
   - `S/workflows/crew.py:149, 175, 322, 359, 367, 385`, with `q = inp.harness_queue`;
   - `S/workflows/deployment.py:119, 141, 151` (`inp.harness_queue`);
   - `S/workflows/triage.py:194` (`inp.harness_queue`);
@@ -235,7 +235,7 @@
   - `S/benchmarks/workflow.py:396, 472, 501` (`spec.harness_queue`).
 
   (R3) **(M)**
-- [ ] T028 [US2] Add the child copies at the 11 inheritance sites (data-model §Inheritance):
+- [x] T028 [US2] Add the child copies at the 11 inheritance sites (data-model §Inheritance):
   - `S/benchmarks/workflow.py:_cell_config` (`:90`);
   - `S/workflows/tidyup.py:194, 204, 229`;
   - `S/workflows/assessment.py:371`;
@@ -245,7 +245,7 @@
   - `S/stages/deploy/step.py:138`.
 
   Then T024 must be green, so remove T025's xfail: T025 must pass. Run `uv run pytest -q tests/replay/`, which must stay green. (P-FR-006) **(M)**
-- [ ] T029 [US2] RED: add `test_start_paths_resolve` to `T/test_pools_call_sites.py`. Every `.start_workflow(` and `.create_schedule(` call in `S/` outside `@workflow.defn` classes must sit in a function that calls `resolve_harness_queue`, or in one whose callee does (`start_graph_run`). The allowlist is `S/demo/run.py`, with a reason comment. The test lists the expected sites:
+- [x] T029 [US2] RED: add `test_start_paths_resolve` to `T/test_pools_call_sites.py`. Every `.start_workflow(` and `.create_schedule(` call in `S/` outside `@workflow.defn` classes must sit in a function that calls `resolve_harness_queue`, or in one whose callee does (`start_graph_run`). The allowlist is `S/demo/run.py`, with a reason comment. The test lists the expected sites:
   - `S/graph/start.py:59`;
   - `S/cli.py` (the 3 direct sites);
   - `S/benchmarks/cli.py`;
@@ -253,7 +253,7 @@
   - `S/schedules/apply.py`.
 
   (P-FR-007; R6) **(S)**
-- [ ] T030 [US2] Wire the start paths (R6; W-3, W-4) to make T029 green. Each path calls `q = resolve_harness_queue()`, then, if `q`, `await require_harness_poller(client, q)`, and sets `harness_queue=q` on the root input.
+- [x] T030 [US2] Wire the start paths (R6; W-3, W-4) to make T029 green. Each path calls `q = resolve_harness_queue()`, then, if `q`, `await require_harness_poller(client, q)`, and sets `harness_queue=q` on the root input.
   - `S/graph/start.py:start_graph_run` sets it on `run_input.cfg`.
   - `S/cli.py:793, 839, 889`.
   - `S/benchmarks/cli.py:336` sets it on `spec`.
@@ -261,7 +261,7 @@
   - `S/schedules/apply.py:62` checks at apply time and bakes `q` into the action's input.
 
   The CLI catches `HarnessQueueUnpolled`, prints its message to stderr and exits 2. Keep `S/cli.py` ≤ 975 lines. **(M)**
-- [ ] T031 [US2] RED → green: write `T/test_pools_failfast.py::test_start_paths_refuse` (`-m temporal`). With `KROKER_HARNESS_QUEUE=failfast-q` and no harness worker, invoke each start path's function directly:
+- [x] T031 [US2] RED → green: write `T/test_pools_failfast.py::test_start_paths_refuse` (`-m temporal`). With `KROKER_HARNESS_QUEUE=failfast-q` and no harness worker, invoke each start path's function directly:
   - `start_graph_run`;
   - the triage/tidy-up/assessment CLI coroutines;
   - the benchmark start;
@@ -269,7 +269,7 @@
   - the schedules apply.
 
   Each must raise `HarnessQueueUnpolled` within 10 s (`asyncio.wait_for`), and afterwards `client.list_workflows()` returns none and no schedule exists. With the env unset, the same calls proceed as before; stub the workflow so it completes immediately. (SC-005; US2-AS4) **(M)**
-- [ ] T032 [US2] Write `T/test_pools_routing.py` (`-m temporal`), the R4 dynamic layer and SC-002. Use a test-only `temporalio.worker.Interceptor` whose `WorkflowOutboundInterceptor.start_activity` records `(input.activity, input.task_queue)`. Run two `Worker`s on one ephemeral server:
+- [x] T032 [US2] Write `T/test_pools_routing.py` (`-m temporal`), the R4 dynamic layer and SC-002. Use a test-only `temporalio.worker.Interceptor` whose `WorkflowOutboundInterceptor.start_activity` records `(input.activity, input.task_queue)`. Run two `Worker`s on one ephemeral server:
   - core: `ai-sdlc-test`, all workflows plus the core activities, identity `core@test`;
   - harness: `pools-q`, the harness activities, identity `harness@test`.
 
@@ -295,7 +295,7 @@
 
 **Independent test**: `uv run pytest -q -m temporal tests/test_pools_fleet.py`.
 
-- [ ] T033 [US3] Write `T/test_pools_fleet.py` (`-m temporal`).
+- [x] T033 [US3] Write `T/test_pools_fleet.py` (`-m temporal`).
   - **Barrier fake.** Define `@activity.defn(name="run_coding_task")` in the test. It increments a shared in-flight counter, records the peak, awaits an `asyncio.Event` that the test releases after ≥ 1.0 s, and returns the `S/demo/fakes.py` result shape. Register it on the harness `Worker` only, with `max_concurrent_activities=2` and the identity asserted.
   - **The run.** Start 5 `BenchmarkWorkflow`s via `bench_workflow_id` within one second, 2 of them on the same case. Use a one-cell spec over the demo fakes.
   - **During the hold.** Schedule a core model-call activity (the fake agent request) and record its schedule-to-start from history.
@@ -311,25 +311,25 @@
 
 ## Phase 12: Replay and the routing-on capture (SC-006)
 
-- [ ] T034 Write `T/replay/test_pools_replay.py::test_routing_on_projection`, R7(b). In-test, run the `greenfield_happy` scenario from `T/replay/scenarios.py` on two `Worker`s with `harness_queue="replay-q"`, using the capture harness's setup without writing files. Fetch the history, replay it with `Replayer`, and assert `command_projection(history)` equals the projection in `T/replay/golden/greenfield_happy.json`. Assert `git status --short tests/replay/histories tests/replay/golden` is empty. (SC-006; P-FR-011) **(M)**
+- [x] T034 Write `T/replay/test_pools_replay.py::test_routing_on_projection`, R7(b). In-test, run the `greenfield_happy` scenario from `T/replay/scenarios.py` on two `Worker`s with `harness_queue="replay-q"`, using the capture harness's setup without writing files. Fetch the history, replay it with `Replayer`, and assert `command_projection(history)` equals the projection in `T/replay/golden/greenfield_happy.json`. Assert `git status --short tests/replay/histories tests/replay/golden` is empty. (SC-006; P-FR-011) **(M)**
 
 ---
 
 ## Phase 13: Docs and close-out (024-ii)
 
-- [ ] T035 [P] Update `ARCHITECTURE.md` §9. Replace the "Status: the split above is designed, not built" note with: two queues built (E-91, 024); `ai-sdlc` core plus `KROKER_HARNESS_QUEUE` harness; routing off by default; the five-pool target still plan (AP-2.5b, needs AP-2.1); worker-specific queues still AP-2.6. Link `docs/operations/worker-pools.md`. (P-FR-013) **(S)**
-- [ ] T036 [P] In `docs/adr.md`, change ADR-9's status line to "two capability queues built 2026-11-xx (E-91); the five-pool amendment stays plan (AP-2.5b)". (P-FR-013) **(S)**
-- [ ] T037 [P] In `docs/roadmap/agent-architecture-plan.md:41`, split AP-2.5 into `[x] AP-2.5a` (two capability queues and pools, E-91) and `[ ] AP-2.5b` (per-role routing from `RoleSpec`, depends on AP-2.1). (GATE 1 Q1/Q4) **(S)**
-- [ ] T038 [P] In `docs/roadmap/crew.md:69-71`, reword the session-resume boundary per R9. Resume across harness workers is safe on one host when every harness replica mounts the same session-store volume (`docker-compose.pools.yml`). It is not safe across hosts. Worker-Specific Task Queues remain AP-2.6. (GATE 1 Q2) **(S)**
-- [ ] T039 PROOF (re-run): run `uv run pytest -q -m temporal tests/test_pools_failfast.py tests/test_pools_routing.py tests/test_pools_fleet.py` and `uv run pytest -q tests/replay/`. Any red here is a STOP, not a fix-forward. (quickstart §2–§3) **(S)**
-- [ ] T040 Update `ROADMAP.md`:
+- [x] T035 [P] Update `ARCHITECTURE.md` §9. Replace the "Status: the split above is designed, not built" note with: two queues built (E-91, 024); `ai-sdlc` core plus `KROKER_HARNESS_QUEUE` harness; routing off by default; the five-pool target still plan (AP-2.5b, needs AP-2.1); worker-specific queues still AP-2.6. Link `docs/operations/worker-pools.md`. (P-FR-013) **(S)**
+- [x] T036 [P] In `docs/adr.md`, change ADR-9's status line to "two capability queues built 2026-11-xx (E-91); the five-pool amendment stays plan (AP-2.5b)". (P-FR-013) **(S)**
+- [x] T037 [P] In `docs/roadmap/agent-architecture-plan.md:41`, split AP-2.5 into `[x] AP-2.5a` (two capability queues and pools, E-91) and `[ ] AP-2.5b` (per-role routing from `RoleSpec`, depends on AP-2.1). (GATE 1 Q1/Q4) **(S)**
+- [x] T038 [P] In `docs/roadmap/crew.md:69-71`, reword the session-resume boundary per R9. Resume across harness workers is safe on one host when every harness replica mounts the same session-store volume (`docker-compose.pools.yml`). It is not safe across hosts. Worker-Specific Task Queues remain AP-2.6. (GATE 1 Q2) **(S)**
+- [x] T039 PROOF (re-run): run `uv run pytest -q -m temporal tests/test_pools_failfast.py tests/test_pools_routing.py tests/test_pools_fleet.py` and `uv run pytest -q tests/replay/`. Any red here is a STOP, not a fix-forward. (quickstart §2–§3) **(S)**
+- [x] T040 Update `ROADMAP.md`:
   - NFR-2 (`:462`) becomes `[x]` "two capability pools (E-91); five-pool form AP-2.5b";
   - the ADR-9 row (`:527`);
   - §8 item 1 (`:569`): the next step is R025 fleet runs;
   - the `Last verified` cell gets one sentence, and the full entry is prepended to `docs/roadmap/last-verified-log.md` per the AGENTS.md rule.
 
   Remove the 024-i banner from `docs/operations/worker-pools.md`. (P-FR-013) **(S)**
-- [ ] T041 Run the full battery (quickstart §4):
+- [x] T041 Run the full battery (quickstart §4):
   ```bash
   uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run python scripts/check_file_size.py
   uv run pytest -q
@@ -339,7 +339,7 @@
   - Also run quickstart §1a, §1b and §5 (`docker compose … config -q`).
   - Then run `git diff --stat <024-i merge base>..HEAD -- 'src/sdlc/stages/*/*.md' src/sdlc/graph/node_types.py src/sdlc/workflows/gates.py $(grep -ril containment src/sdlc --include=*.py -l | grep -v pools.py)`, which must be empty apart from the documented `**pools.on_harness` splats (P-FR-012). List any hit in verification.md with its reason (reviewer tasks-1 gap 4).
   **(S)**
-- [ ] T042 Write `verification.md` §024-ii:
+- [x] T042 Write `verification.md` §024-ii:
   - the SC-001..SC-007 table, with command and result;
   - the P-FR-012 diff evidence;
   - the residuals: R6's no schedule-fire pre-flight; R1's maintenance rollback asymmetry; R12's notes deferred to R025; a harness worker dying with no fresh replacement leaves activities queued (the F1 semantics);
