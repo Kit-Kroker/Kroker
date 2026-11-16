@@ -48,6 +48,7 @@ from .core.models import (
 )
 from .dashboard.fleet import FleetCapacityExceeded, guard_fleet_capacity
 from .naming import slug
+from .pools import HarnessQueueUnpolled, require_harness_poller, resolve_harness_queue
 
 # The worker and the workflows are imported inside main(), after `doctor` has
 # been dispatched: importing them builds the agent registry, which fails
@@ -781,6 +782,8 @@ async def main() -> None:
         # (call-overload: mypy misses the start_workflow overload for a
         # run-method plus id/task_queue keywords -- the legacy-workflow form
         # above only passes because its run() takes an optional argument.)
+        if q := resolve_harness_queue():
+            await require_harness_poller(client, q)
         handle = await client.start_workflow(
             TriageWorkflow.run,  # type: ignore[call-overload,arg-type]
             TriageInput(
@@ -788,6 +791,7 @@ async def main() -> None:
                 commit=args.commit,
                 build_probe=not args.no_build_probe,
                 advisory_source=args.advisory_source,
+                harness_queue=q,
             ),
             id=wf_id,
             task_queue=TASK_QUEUE,
@@ -825,6 +829,8 @@ async def main() -> None:
         repo = os.path.abspath(args.repo)
         wf_id = tidyup_workflow_id(repo)
         assert client is not None
+        if q := resolve_harness_queue():
+            await require_harness_poller(client, q)
         handle = await client.start_workflow(
             TidyUpWorkflow.run,  # type: ignore[call-overload,arg-type]
             TidyUpInput(
@@ -834,6 +840,7 @@ async def main() -> None:
                 advisory_source=args.advisory_source,
                 base_branch=args.base_branch,
                 max_fix_runs=args.max_fix_runs,
+                harness_queue=q,
             ),
             id=wf_id,
             task_queue=TASK_QUEUE,
@@ -876,6 +883,8 @@ async def main() -> None:
         project_key = args.project or os.path.basename(repo)
         wf_id = assess_workflow_id(repo)
         assert client is not None
+        if q := resolve_harness_queue():
+            await require_harness_poller(client, q)
         handle = await client.start_workflow(
             AssessmentWorkflow.run,  # type: ignore[call-overload,arg-type]
             AssessmentInput(
@@ -884,6 +893,7 @@ async def main() -> None:
                 build_probe=not args.no_build_probe,
                 advisory_source=args.advisory_source,
                 project_key=project_key,
+                harness_queue=q,
             ),
             id=wf_id,
             task_queue=TASK_QUEUE,
@@ -956,4 +966,10 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except HarnessQueueUnpolled as e:
+        # W-4: every start path's poller refusal, one chokepoint — the
+        # message on stderr, exit 2 (usage-class refusal).
+        print(e, file=sys.stderr)
+        raise SystemExit(2) from None

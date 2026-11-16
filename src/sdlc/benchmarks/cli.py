@@ -342,8 +342,14 @@ async def _run_matrix(
     client = await Client.connect(
         os.environ.get("TEMPORAL_HOST", "localhost:7233"), data_converter=pydantic_data_converter
     )
+    from ..pools import require_harness_poller, resolve_harness_queue
     from ..worker import TASK_QUEUE
 
+    # 024 R6/W-4: refuse before start when routing is on with no fresh poller.
+    q = resolve_harness_queue()
+    if q:
+        await require_harness_poller(client, q)
+        spec = spec.model_copy(update={"harness_queue": q})
     handle = await client.start_workflow(
         BenchmarkWorkflow.run,
         spec.model_dump_json(),

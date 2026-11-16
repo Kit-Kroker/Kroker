@@ -206,6 +206,17 @@ async def _enable(args: argparse.Namespace, client) -> int:  # noqa: ANN001
     if probe_problem is not None:
         print(probe_problem, file=sys.stderr)
         return 2
+    # 024 R6/W-4: a routing-on enable with no fresh harness poller is a
+    # usage-class refusal (exit 2), checked before the filesystem walk.
+    from ..pools import HarnessQueueUnpolled, require_harness_poller, resolve_harness_queue
+
+    harness_queue = resolve_harness_queue()
+    if harness_queue:
+        try:
+            await require_harness_poller(client, harness_queue)
+        except HarnessQueueUnpolled as e:
+            print(e, file=sys.stderr)
+            return 2
     # 024 T023: Any, not int — the constructor's **kwargs now also meets the
     # str | None harness_queue param, and mypy checks **dict against every
     # unsatisfied parameter.
@@ -238,6 +249,7 @@ async def _enable(args: argparse.Namespace, client) -> int:  # noqa: ANN001
             threshold=args.threshold,
             gate_timeout_hours=args.gate_timeout_hours,
             execute=args.execute,
+            harness_queue=harness_queue,
             **cap_kwargs,
         )
     except Exception as e:  # noqa: BLE001 -- a refusal, never a traceback

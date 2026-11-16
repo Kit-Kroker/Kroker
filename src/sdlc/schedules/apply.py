@@ -7,6 +7,7 @@ effect of a worker restart. See the spec's "explicit CLI apply" decision.
 
 from __future__ import annotations
 
+import sys
 from typing import Literal, cast
 
 from temporalio.client import (
@@ -123,6 +124,22 @@ async def apply_changes(
     client: Client, desired: list[ScheduleAsset], changes: list[Change], prune: bool = False
 ) -> list[str]:
     """Execute a plan. Drift is only deleted when prune is True."""
+    # 024 R6/W-4: apply-time fail-fast. A routing-on schedule fires into an
+    # unroutable fleet when no harness worker polls KROKER_HARNESS_QUEUE, so
+    # the check gates create AND update here, before any mutation. What a
+    # fired schedule does NOT carry is the queue itself: the kicker only
+    # signals the loop (023a R1), and the loop's routing rides its own
+    # state.config, set at ENABLE time — the R1 remedy (re-apply schedules
+    # with the queue unset after re-enabling) covers the drift case.
+    from ..pools import HarnessQueueUnpolled, require_harness_poller, resolve_harness_queue
+
+    q = resolve_harness_queue()
+    if q:
+        try:
+            await require_harness_poller(client, q)
+        except HarnessQueueUnpolled as e:
+            print(e, file=sys.stderr)
+            raise SystemExit(2) from None
     by_id = {a.id: a for a in desired}
     results: list[str] = []
     for c in changes:

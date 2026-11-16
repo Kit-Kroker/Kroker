@@ -33,6 +33,16 @@ async def start_graph_run(
     store: GraphStore | None = None,
 ) -> Any:
     st = store if store is not None else GraphStore()
+    # 024 R6/W-3/W-4: routing is resolved on the CLIENT, once, at start —
+    # a function-level import on purpose: sdlc.graph's module-level import
+    # pin (tests/graph/test_graph_purity.py) keeps workflow modules free of
+    # Temporal code at import time, and this path only ever runs client-side.
+    from ..pools import require_harness_poller, resolve_harness_queue
+
+    q = resolve_harness_queue()
+    if q:
+        await require_harness_poller(client, q)
+        run_input.cfg.harness_queue = q
     try:
         st.put(run_input.graph)  # identity + layout (E-77), never `latest`
     except Exception:  # noqa: BLE001 -- a storage hiccup must not block a run; §6.2 backfills
