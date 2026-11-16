@@ -142,3 +142,25 @@ cleared.
   The smoke stamp is the proof this resolves; an auth failure there is
   infra-class.
 
+## T022 — the freeze (2026-11-16)
+
+- Dedicated checkout: `git worktree add ../kroker-fleet 93120693` —
+  **fleet commit `93120693`** (`93120693f48c2599da23b86fe1d4647d1cabdfe0`,
+  "T021: scratch repos seeded..."). `git -C ../kroker-fleet status
+  --short` is empty. All runs dispatch from this checkout (provenance is
+  stamped from the CLI's tree).
+- Image rebuilt FROM the dedicated checkout
+  (`docker build -f ../kroker-fleet/Dockerfile --target runtime`):
+  `sha256:ad0b46f248a6`; both workers recreated onto it, restarts=0.
+  In-container: `operator_time.ENGAGEMENT_CAP_S == 600` on both pools;
+  readtime reference deps re-installed after the recreate (the T021
+  caveat executed once, pre-smoke — no recreate remains between now and
+  the last run).
+- Pollers re-verified on the new containers: `core@…` activity+workflow
+  on `ai-sdlc`; `harness@…` activity on `ai-sdlc-harness` (cap 2).
+- `/srv/scratch-repos` (5 cases) and `/app/runs` (empty, the dedicated
+  fleet root) confirmed inside both containers.
+- **FREEZE ANNOUNCED: fleet commit `93120693`; no commit lands between
+  the smoke stamp and the last scored run.**
+
+
