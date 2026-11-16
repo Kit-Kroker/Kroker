@@ -15,11 +15,13 @@ finalize_benchmark_report activity, invoked via execute_activity.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import cast
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from .. import pools
     from ..agents.loader import HARNESS_ROLES, validate_run_roles
     from ..agents.model_ids import validate_proposer_model
     from ..agents.roles import STAGE_MODELS
@@ -392,18 +394,23 @@ class BenchmarkWorkflow:
                 grade: OracleGrade | None = None
                 if spec.language is not None and progress.code_finished:
                     started = workflow.now()
-                    grade = await workflow.execute_activity(
-                        grade_oracle,
-                        OracleInput(
-                            case_id=spec.case_id,
-                            repo_url=spec.repo_url or "",
-                            run_id=child_id,
-                            language=spec.language,
-                            base_branch=idea.base_branch,
-                            author_model=cell.role_models.get("dev", ""),
-                            judge_model=spec.judge_model,
+                    # cast: the **on_harness splat hides the typed overload
+                    # from mypy (grade_oracle -> OracleGrade).
+                    grade = cast(
+                        OracleGrade,
+                        await workflow.execute_activity(
+                            grade_oracle,
+                            OracleInput(
+                                case_id=spec.case_id,
+                                repo_url=spec.repo_url or "",
+                                run_id=child_id,
+                                language=spec.language,
+                                base_branch=idea.base_branch,
+                                author_model=cell.role_models.get("dev", ""),
+                                judge_model=spec.judge_model,
+                            ),
+                            **pools.on_harness(ORACLE_ACT, spec.harness_queue),
                         ),
-                        **ORACLE_ACT,
                     )
                     ended = workflow.now()
                     await workflow.execute_activity(
@@ -478,7 +485,7 @@ class BenchmarkWorkflow:
                             base_branch=idea.base_branch,
                             code_finished=progress.code_finished,
                         ),
-                        **AXIS_ACT,
+                        **pools.on_harness(AXIS_ACT, spec.harness_queue),
                     )
                     await workflow.execute_activity(
                         record_benchmark,
@@ -497,18 +504,22 @@ class BenchmarkWorkflow:
             elif spec.language:
                 # pre-012 path, kept verbatim for replay of in-flight runs
                 started = workflow.now()
-                grade = await workflow.execute_activity(
-                    grade_oracle,
-                    OracleInput(
-                        case_id=spec.case_id,
-                        repo_url=spec.repo_url or "",
-                        run_id=child_id,
-                        language=spec.language,
-                        base_branch=idea.base_branch,
-                        author_model=cell.role_models.get("dev", ""),
-                        judge_model=spec.judge_model,
+                # cast: same typed-overload note as the post-012 path above.
+                grade = cast(
+                    OracleGrade,
+                    await workflow.execute_activity(
+                        grade_oracle,
+                        OracleInput(
+                            case_id=spec.case_id,
+                            repo_url=spec.repo_url or "",
+                            run_id=child_id,
+                            language=spec.language,
+                            base_branch=idea.base_branch,
+                            author_model=cell.role_models.get("dev", ""),
+                            judge_model=spec.judge_model,
+                        ),
+                        **pools.on_harness(ORACLE_ACT, spec.harness_queue),
                     ),
-                    **ORACLE_ACT,
                 )
                 ended = workflow.now()
                 await workflow.execute_activity(

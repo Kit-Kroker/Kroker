@@ -22,6 +22,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from .. import pools
     from ..core.models import (
         GateConfig,
         GatePolicy,
@@ -331,7 +332,7 @@ class TidyUpWorkflow(GateHost):
                 tidyup_id=workflow.info().workflow_id,
                 branches=branches,
             ),
-            **VERIFY_ACT,
+            **pools.on_harness(VERIFY_ACT, inp.harness_queue),
         )
         merged = set(verify.merged)
         for r in runs:

@@ -44,6 +44,7 @@ with workflow.unsafe.imports_passed_through():
 
     from temporalio.common import RetryPolicy, WorkflowIDReusePolicy
 
+    from .. import pools
     from ..core.models import (
         GateDecision,
         GateSettings,
@@ -345,7 +346,7 @@ async def closure_step(state: MaintenanceState, triage: RepoTriage) -> None:
         ancestor = await workflow.execute_activity(
             is_ancestor,
             args=[state.config.repo_dir, record.integration_head, triage.commit_sha],
-            **ANCESTRY_ACT,
+            **pools.on_harness(ANCESTRY_ACT, state.config.harness_queue),
         )
         outcome = closure_outcome(inc, collected, present, ancestor)
         if outcome == "dirty":
@@ -479,7 +480,7 @@ async def report_step(state: MaintenanceState, now: datetime) -> None:
                     tidyup_id=record.child_id,
                     branches=[record.integration_branch or ""],
                 ),
-                **VCS_ACT,
+                **pools.on_harness(VCS_ACT, cfg.harness_queue),
             )
             conflicted = bool(result.conflicted)
             verify_head = result.head_sha
@@ -535,5 +536,5 @@ async def report_step(state: MaintenanceState, now: datetime) -> None:
             await workflow.execute_activity(
                 remove_verification_tree,
                 args=[cfg.repo_dir, record.child_id],
-                **CLEANUP_ACT,
+                **pools.on_harness(CLEANUP_ACT, cfg.harness_queue),
             )

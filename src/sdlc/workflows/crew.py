@@ -18,6 +18,7 @@ from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, ApplicationError
 
 with workflow.unsafe.imports_passed_through():
+    from .. import pools
     from ..core.models import (
         GatePolicy,
         GateSettings,
@@ -155,7 +156,7 @@ class CrewTaskWorkflow(GateHost):
         await workflow.execute_activity(
             prepare_crew,
             PrepareCrewInput(worktree=inp.worktree, layout=inp.layout, brief=inp.prompt),
-            **FS_ACT,
+            **pools.on_harness(FS_ACT, inp.harness_queue),
         )
 
         for rnd in range(1, inp.rounds_max + 1):
@@ -199,7 +200,9 @@ class CrewTaskWorkflow(GateHost):
                         grants=grants,
                         repair=inp.repair,
                     ),
-                    **_turn_act(min(inp.turn_timeout_s, int(remaining))),
+                    **pools.on_harness(
+                        _turn_act(min(inp.turn_timeout_s, int(remaining))), inp.harness_queue
+                    ),
                 )
 
                 # Pick First: the crew's own deadline must win over the turn,
@@ -345,7 +348,7 @@ class CrewTaskWorkflow(GateHost):
                             containment_strict=inp.containment_strict,
                             repair=inp.repair,
                         ),
-                        **_turn_act(budget_s),
+                        **pools.on_harness(_turn_act(budget_s), inp.harness_queue),
                     )
                 except ActivityError as e:
                     # A critic that fails does NOT fail the round: the lead's
@@ -365,7 +368,7 @@ class CrewTaskWorkflow(GateHost):
                 commit_sha = await workflow.execute_activity(
                     checkpoint_round,
                     CheckpointInput(worktree=inp.worktree, round=rnd, exit_code=out.run.exit_code),
-                    **GIT_ACT,
+                    **pools.on_harness(GIT_ACT, inp.harness_queue),
                 )
                 break
 
@@ -378,7 +381,7 @@ class CrewTaskWorkflow(GateHost):
                     round=rnd,
                     deliverable_path=inp.deliverable_path,
                 ),
-                **FS_ACT,
+                **pools.on_harness(FS_ACT, inp.harness_queue),
             )
             record.deliverable_path = reading.deliverable_path
             record.note_summary = reading.note_summary
@@ -391,7 +394,7 @@ class CrewTaskWorkflow(GateHost):
             commit_sha = await workflow.execute_activity(
                 checkpoint_round,
                 CheckpointInput(worktree=inp.worktree, round=rnd, exit_code=out.run.exit_code),
-                **GIT_ACT,
+                **pools.on_harness(GIT_ACT, inp.harness_queue),
             )
 
             if reading.question:

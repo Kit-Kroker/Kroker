@@ -20,6 +20,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from .. import pools
     from ..core.models import (
         DeployConfig,
     )
@@ -125,7 +126,7 @@ class DeploymentWorkflow:
                     RollbackInput(
                         plan=inp.plan, cfg=inp.cfg, repo_path=inp.repo_path, to_version=previous
                     ),
-                    **ROLLBACK_ACT,
+                    **pools.on_harness(ROLLBACK_ACT, inp.harness_queue),
                 )
             except Exception as e:
                 # The worst outcome in the system: the environment is now in
@@ -143,7 +144,9 @@ class DeploymentWorkflow:
         apply_detail = ""
 
         try:
-            applied = await workflow.execute_activity(deploy_apply, act_in, **APPLY_ACT)
+            applied = await workflow.execute_activity(
+                deploy_apply, act_in, **pools.on_harness(APPLY_ACT, inp.harness_queue)
+            )
         except Exception as e:
             # A partially-applied stack is exactly why rollback runs on apply
             # failure too, not only on smoke failure.
@@ -157,7 +160,7 @@ class DeploymentWorkflow:
                 SmokeCheckInput(
                     plan=inp.plan, cfg=inp.cfg, repo_path=inp.repo_path, endpoint=applied.endpoint
                 ),
-                **SMOKE_ACT,
+                **pools.on_harness(SMOKE_ACT, inp.harness_queue),
             )
         ).results
 

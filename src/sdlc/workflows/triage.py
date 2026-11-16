@@ -20,6 +20,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from .. import pools
     from ..core.models import (
         GateDecision,
         GateOutcome,
@@ -199,7 +200,7 @@ class TriageWorkflow(GateHost):
                     "build_probe",
                     triage_build_probe,
                     TriageProbeInput(repo_dir=inp.repo_dir, commit_sha=commit_sha),
-                    PROBE_ACT,
+                    pools.on_harness(PROBE_ACT, inp.harness_queue),
                 )
             )
         results = list(await asyncio.gather(*jobs))
