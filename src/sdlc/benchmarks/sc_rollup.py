@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from html import escape
+from statistics import median
 
 from pydantic import BaseModel, Field
 
@@ -18,6 +19,7 @@ from ..core.models import (
     RunSummary,
 )
 from .models import BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, is_pre012
+from .operator_time import RunOperatorTime, operator_time
 from .runs import MIN_OBSERVATIONS, attempt_sort_key
 
 # Below this many runs a percentage is noise dressed as a result. A single
@@ -32,6 +34,14 @@ MERGE_GATE = "merge"
 # not passing it, so a merge-time rejection counts (feature.py:1757, 1791,
 # 1828, 1836).
 REACHED_PREFIXES: tuple[str, ...] = ("deployed:", "merged-not-deployed:", "rejected:merge")
+
+# 025 (FR-012): SC-2's population is SHIPPED runs only — narrower than
+# SC-1's REACHED_PREFIXES by rejected:merge (research R6).
+SHIPPED_PREFIXES: tuple[str, ...] = ("deployed:", "merged-not-deployed:")
+
+# 025 FR-015: the tier line SC-1/SC-2 carry when no gate ever asked a human
+# unless it escalated (GATE 2: SOFT stands, with the weakness explicit).
+EVIDENCE_WEAK_SOFT = "weak evidence (SOFT: no gate asked a human unless it escalated)"
 
 
 class SCRate(BaseModel):
@@ -50,6 +60,17 @@ class SC4Point(BaseModel):
     human_rate: float
 
 
+class SC2Extra(BaseModel):
+    """025 FR-013: the companions rendered beside the SC-2 rows, over the
+    all-scored measured population (zeros are measured; not-measured runs
+    are excluded like they are from every SC-2 number)."""
+
+    zero_runs: int = 0
+    human_touched_median_min: float | None = None  # engaged > 0 only
+    human_touched_max_min: float | None = None
+    wait_median_min: float | None = None  # UNCAPPED wait, zeros included
+
+
 class SCRollup(BaseModel):
     rates: list[SCRate] = Field(default_factory=list)
     sc4_series: list[SC4Point] = Field(default_factory=list)
@@ -60,6 +81,11 @@ class SCRollup(BaseModel):
     # of them left a run summary; rendered as the opening line.
     summary_runs: int = 0
     selection_runs: int = 0
+    # 025 (FR-013/015): SC-2 companions, the runs' gate-policy mix, and the
+    # evidence tier line when every gate ran SOFT.
+    sc2_extra: SC2Extra = Field(default_factory=SC2Extra)
+    policy_mix: str = ""
+    evidence_tier: str | None = None
 
 
 def _rate(n_hits: int, n: int) -> float | None:
@@ -76,12 +102,18 @@ def build_sc_rollup(
 ) -> SCRollup:
     ordered = sorted(summaries, key=lambda s: (s.started_at, s.run_id))
     data = [r for r in records if r.scope is not BenchmarkScope.CELL]
+    ots = [(s, operator_time(s)) for s in ordered]
+    policies = sorted({g.policy for s in ordered for g in s.gates})
     return SCRollup(
-        rates=[_sc1(ordered), _sc3(data), _sc4(ordered), *_sc6(ordered)],
+        rates=[_sc1(ordered), *_sc2_rows(ots), _sc3(data), _sc4(ordered), *_sc6(ordered)],
         sc4_series=_sc4_series(ordered),
         pre012_records=sum(1 for r in data if is_pre012(r)),
         summary_runs=len(summaries),
         selection_runs=selection_runs,
+        sc2_extra=_sc2_extra(ots),
+        policy_mix="+".join(policies),
+        # FR-015: the tier exists only when gates ran AND all were SOFT.
+        evidence_tier=EVIDENCE_WEAK_SOFT if policies == ["soft"] else None,
     )
 
 
@@ -111,6 +143,47 @@ def _sc1(summaries: list[RunSummary]) -> SCRate:
         target=">=0.80",
         note="reached = outcome in deployed/merged-not-deployed/rejected:merge; "
         "unattended = no human-decided gate before the merge gate",
+    )
+
+
+def _sc2_rows(ots: list[tuple[RunSummary, RunOperatorTime]]) -> list[SCRate]:
+    """025 FR-006/012: SC-2 (shipped) and SC-2-all (all scored), the median
+    engaged operator minutes per run. Each row floors on its OWN n; zero
+    runs are measured (in n and in the median) while not-measured runs are
+    excluded and named in the note (FR-005/007)."""
+
+    def row(criterion: str, label: str, base: list[tuple[RunSummary, RunOperatorTime]]) -> SCRate:
+        measured = [(s, ot) for s, ot in base if ot.state != "not_measured"]
+        engaged = [ot.engaged_s / 60.0 for _, ot in measured]
+        zero = sum(1 for _, ot in measured if ot.state == "zero")
+        note = (
+            f"median engaged operator minutes per {label}; engaged caps at "
+            f"600 s (10 min) per interaction; {zero} zero-interaction runs "
+            f"of {len(measured)} measured; "
+            f"{len(base) - len(measured)} not measured (excluded)"
+        )
+        return SCRate(
+            criterion=criterion,
+            label=f"median operator minutes per {label}",
+            rate=median(engaged) if len(engaged) >= MIN_RUNS else None,
+            n=len(engaged),
+            target="<=15 min",
+            note=note,
+        )
+
+    shipped = [(s, ot) for s, ot in ots if s.outcome.startswith(SHIPPED_PREFIXES)]
+    return [row("SC-2", "shipped run", shipped), row("SC-2-all", "scored run", ots)]
+
+
+def _sc2_extra(ots: list[tuple[RunSummary, RunOperatorTime]]) -> SC2Extra:
+    measured = [ot for _, ot in ots if ot.state != "not_measured"]
+    touched = [ot.engaged_s / 60.0 for ot in measured if ot.engaged_s > 0]
+    waits = [ot.wait_s / 60.0 for ot in measured]
+    return SC2Extra(
+        zero_runs=sum(1 for ot in measured if ot.state == "zero"),
+        human_touched_median_min=median(touched) if touched else None,
+        human_touched_max_min=max(touched) if touched else None,
+        wait_median_min=median(waits) if waits else None,
     )
 
 
@@ -212,6 +285,21 @@ def _fmt(rate: float | None) -> str:
     return "n/a" if rate is None else f"{rate:.2f}"
 
 
+def _mins(x: float | None) -> str:
+    return "n/a" if x is None else f"{x:.1f}"
+
+
+def _sc2_companions_line(r: SCRollup) -> str:
+    e = r.sc2_extra
+    return (
+        f"SC-2 companions: human-touched median {_mins(e.human_touched_median_min)} "
+        f"and max {_mins(e.human_touched_max_min)} min; "
+        f"uncapped wait median {_mins(e.wait_median_min)} min; "
+        f"{e.zero_runs} zero-interaction runs (measured); "
+        f"gate policy mix: {r.policy_mix or 'none'}."
+    )
+
+
 def render_sc_rollup_markdown(r: SCRollup) -> str:
     """ASCII only (report.py:70-74)."""
     lines = [
@@ -235,6 +323,11 @@ def render_sc_rollup_markdown(r: SCRollup) -> str:
         lines += [f"- {p.index}: {p.run_id} {p.human_rate:.2f}" for p in r.sc4_series]
     lines += ["", "Definitions:", ""]
     lines += [f"- **{x.criterion}**: {x.note}" for x in r.rates if x.note]
+    # 025 (FR-013/015): the SC-2 companions and the evidence tier ride the
+    # same section in every renderer.
+    lines += ["", _sc2_companions_line(r)]
+    if r.evidence_tier:
+        lines += [f"Evidence tier: {r.evidence_tier}."]
     if r.pre012_records:
         lines += ["", f"includes {r.pre012_records} pre-012 records (untrusted)"]
     return "\n".join(lines) + "\n"
@@ -256,6 +349,7 @@ def render_sc_rollup_html(r: SCRollup) -> str:
         if r.pre012_records
         else ""
     )
+    tier = f"<p>Evidence tier: {escape(r.evidence_tier)}</p>" if r.evidence_tier else ""
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Success criteria</title>
 <style>
@@ -271,5 +365,6 @@ th{{background:#f3f3f3}} li{{margin:.3rem 0}}
 run displaying 100% would be quoted as a result.</p>
 <table><tr><th>criterion</th><th>measure</th><th>rate</th><th>n</th>
 <th>target</th><th></th></tr>{rows}</table>
-<h2>Definitions</h2><ul>{notes}</ul>{untrusted}
+<p>{escape(_sc2_companions_line(r))}</p>
+{tier}<h2>Definitions</h2><ul>{notes}</ul>{untrusted}
 </body></html>"""
