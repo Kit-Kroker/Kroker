@@ -86,6 +86,11 @@ class SCRollup(BaseModel):
     sc2_extra: SC2Extra = Field(default_factory=SC2Extra)
     policy_mix: str = ""
     evidence_tier: str | None = None
+    # 025 (FR-014/024): the fleet's commit provenance — the distinct
+    # commits joined to these summaries by run_id, and the flag naming a
+    # mixed set and/or a summary no record vouches for ("" = clean).
+    commits: set[str] = Field(default_factory=set)
+    commit_flag: str = ""
 
 
 def _rate(n_hits: int, n: int) -> float | None:
@@ -104,6 +109,7 @@ def build_sc_rollup(
     data = [r for r in records if r.scope is not BenchmarkScope.CELL]
     ots = [(s, operator_time(s)) for s in ordered]
     policies = sorted({g.policy for s in ordered for g in s.gates})
+    commits, commit_flag = _commit_provenance(ordered, data)
     return SCRollup(
         rates=[_sc1(ordered), *_sc2_rows(ots), _sc3(data), _sc4(ordered), *_sc6(ordered)],
         sc4_series=_sc4_series(ordered),
@@ -114,7 +120,37 @@ def build_sc_rollup(
         policy_mix="+".join(policies),
         # FR-015: the tier exists only when gates ran AND all were SOFT.
         evidence_tier=EVIDENCE_WEAK_SOFT if policies == ["soft"] else None,
+        commits=commits,
+        commit_flag=commit_flag,
     )
+
+
+def _commit_provenance(
+    summaries: list[RunSummary], records: list[BenchmarkRecord]
+) -> tuple[set[str], str]:
+    """FR-014/024: join each summary to its records on run_id. Only records
+    that JOIN a selected summary contribute commits — a record for a run
+    outside the selection vouches for nothing here. Two independent breaks,
+    both flagged: a mixed commit set, and any summary no record carries a
+    commit for (no records at all, or only pre-012 None commits)."""
+    commits_by_run: dict[str, set[str]] = defaultdict(set)
+    for r in records:
+        if r.kroker_commit:
+            commits_by_run[r.run_id].add(r.kroker_commit)
+    commits: set[str] = set()
+    unknown = 0
+    for s in summaries:
+        joined = commits_by_run.get(s.run_id)
+        if joined:
+            commits |= joined
+        else:
+            unknown += 1
+    parts: list[str] = []
+    if len(commits) > 1:
+        parts.append(f"multiple commits ({'+'.join(sorted(commits))})")
+    if unknown:
+        parts.append(f"{unknown} run(s) commit unknown")
+    return commits, "; ".join(parts)
 
 
 def _reached_merge(s: RunSummary) -> bool:
@@ -328,6 +364,13 @@ def render_sc_rollup_markdown(r: SCRollup) -> str:
     lines += ["", _sc2_companions_line(r)]
     if r.evidence_tier:
         lines += [f"Evidence tier: {r.evidence_tier}."]
+    # FR-024: provenance renders only when broken — a clean fleet shows no
+    # commit noise, a broken one shows the set and the flag.
+    if r.commit_flag:
+        lines += [
+            "",
+            f"Commit set: {'+'.join(sorted(r.commits))}. FLAG: {r.commit_flag}.",
+        ]
     if r.pre012_records:
         lines += ["", f"includes {r.pre012_records} pre-012 records (untrusted)"]
     return "\n".join(lines) + "\n"
@@ -350,6 +393,11 @@ def render_sc_rollup_html(r: SCRollup) -> str:
         else ""
     )
     tier = f"<p>Evidence tier: {escape(r.evidence_tier)}</p>" if r.evidence_tier else ""
+    commit_html = (
+        f"<p>Commit set: {escape('+'.join(sorted(r.commits)))}. FLAG: {escape(r.commit_flag)}.</p>"
+        if r.commit_flag
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Success criteria</title>
 <style>
@@ -366,5 +414,5 @@ run displaying 100% would be quoted as a result.</p>
 <table><tr><th>criterion</th><th>measure</th><th>rate</th><th>n</th>
 <th>target</th><th></th></tr>{rows}</table>
 <p>{escape(_sc2_companions_line(r))}</p>
-{tier}<h2>Definitions</h2><ul>{notes}</ul>{untrusted}
+{tier}{commit_html}<h2>Definitions</h2><ul>{notes}</ul>{untrusted}
 </body></html>"""
