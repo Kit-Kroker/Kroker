@@ -13,6 +13,7 @@ stages continuously, and a resume reuses the dir in place."""
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import logging
 import os
 import time
@@ -40,34 +41,60 @@ async def sweep_once(
 ) -> list[str]:
     """One pass over the worktrees root. Returns the run dirs swept. A
     dir is swept when its workflow is not Running AND its mtime is older
-    than ``grace_s``; anything else is left for a later pass."""
+    than ``grace_s``; anything else is left for a later pass.
+
+    024 T016 (R10): the pass holds a non-blocking flock on
+    ``<root>/.janitor.lock`` so two worker processes in the same root
+    (a core and an all-mode worker, say) never sweep concurrently. A held
+    lock skips the pass entirely — before any IO — with an INFO log.
+    """
     root = _worktrees_root() if root is None else root
-    running = await open_workflow_ids(client)
-    if now is None:
-        now = time.time()
-    swept: list[str] = []
+    lock_fd: int | None = None
     try:
-        entries = list(os.scandir(root))
-    except OSError:
-        return swept
-    for entry in entries:
-        if not entry.is_dir() or entry.name in running:
-            continue
         try:
-            age = now - entry.stat().st_mtime
+            lock_fd = os.open(os.path.join(root, ".janitor.lock"), os.O_CREAT | os.O_WRONLY, 0o644)
         except OSError:
-            continue
-        if age < grace_s:
-            continue
-        report = cleanup_run_dir(entry.name)
-        swept.append(entry.name)
-        if report.errors:
-            _log.warning(
-                "worktree janitor: run %s swept with errors: %s",
-                entry.name,
-                "; ".join(report.errors),
+            # A root that cannot even host the lock file gets the same
+            # tolerance as the missing-root scandir below: no sweep, no
+            # raise (the sweep loop tries again on the next tick).
+            return []
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            _log.info(
+                "worktree janitor: %s is held by another sweep; skipping this pass",
+                os.path.join(root, ".janitor.lock"),
             )
-    return swept
+            return []
+        running = await open_workflow_ids(client)
+        if now is None:
+            now = time.time()
+        swept: list[str] = []
+        try:
+            entries = list(os.scandir(root))
+        except OSError:
+            return swept
+        for entry in entries:
+            if not entry.is_dir() or entry.name in running:
+                continue
+            try:
+                age = now - entry.stat().st_mtime
+            except OSError:
+                continue
+            if age < grace_s:
+                continue
+            report = cleanup_run_dir(entry.name)
+            swept.append(entry.name)
+            if report.errors:
+                _log.warning(
+                    "worktree janitor: run %s swept with errors: %s",
+                    entry.name,
+                    "; ".join(report.errors),
+                )
+        return swept
+    finally:
+        if lock_fd is not None:
+            os.close(lock_fd)  # releases the flock
 
 
 async def worktree_janitor(
