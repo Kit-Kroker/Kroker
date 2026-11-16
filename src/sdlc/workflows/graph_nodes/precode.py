@@ -12,6 +12,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from ... import pools
     from ...agents.roles import (
         resolve_role_model,
         t_architect,
@@ -59,7 +60,7 @@ async def intake_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) -> 
         IntegrationInput(
             repo_path=nc.facts.repo_path, run_id=nc.facts.run_id, base_branch=idea.base_branch
         ),
-        **ACT,
+        **pools.on_harness(ACT, cfg.harness_queue),
     )
     nc.facts.set_integration(integration)
     nc.host._integration_head = integration.head_sha

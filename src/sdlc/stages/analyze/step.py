@@ -17,6 +17,7 @@ from temporalio.common import RetryPolicy
 # the marker the sandbox re-imports them isolated, duplicating classes
 # pydantic then rejects (first post-B0 brownfield run, DS12).
 with workflow.unsafe.imports_passed_through():
+    from ... import pools
     from ...agents.loader import model_id
     from ...agents.model_ids import forwarded_model
     from ...benchmarks.models import BenchmarkOutcome, TraceBag
@@ -117,7 +118,7 @@ async def step(
         diff = await _exec_activity(
             get_task_diff,
             DiffInput(worktree=integration_wt, branch_point=base_branch),
-            **_ACT,
+            **pools.on_harness(_ACT, cfg.harness_queue),
         )
 
     authoritative: list[tuple[str, str]] = []

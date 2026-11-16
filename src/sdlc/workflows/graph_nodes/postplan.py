@@ -8,6 +8,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from ... import pools
     from ...agents.roles import STAGE_MODELS, resolve_role_model, t_analyst, t_merge_verdict
     from ...core.models import GateDecision, GateOutcome, PipelineConfig
     from ...graph.router import Activation
@@ -123,7 +124,7 @@ async def analyze_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
     integration_diff = await workflow.execute_activity(
         get_task_diff,
         DiffInput(worktree=integration.worktree_path, branch_point=nc.facts.base_sha or ""),
-        **ACT,
+        **pools.on_harness(ACT, cfg.harness_queue),
     )
     done = {r.task_id: r for r in results.task_results}
     outcome = await analyze.step(

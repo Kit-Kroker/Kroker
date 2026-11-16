@@ -22,6 +22,7 @@ from temporalio.exceptions import ChildWorkflowError
 # the marker the sandbox re-imports them isolated, duplicating classes
 # pydantic then rejects (first post-B0 brownfield run, DS12).
 with workflow.unsafe.imports_passed_through():
+    from ... import pools
     from ...artifacts.read import LoadSessionInput, load_session
     from ...benchmarks.models import BenchmarkOutcome, WasteBag
     from ...benchmarks.record_builder import stage_record
@@ -300,7 +301,7 @@ async def _execute_coding_task(
                 grants=grants,
                 repair=repair,
             ),
-            **_long_act(role_cfg),
+            **pools.on_harness(_long_act(role_cfg), cfg.harness_queue),
         )
         refs = [run.session_ref] if run.session_ref is not None else []
         return run, {}, refs
@@ -692,7 +693,7 @@ async def step(
                     fence_globs=policy_globs.fence,
                     report_globs=policy_globs.report,
                 ),
-                **ACT,
+                **pools.on_harness(ACT, cfg.harness_queue),
             )
         elif cfg.containment_enabled and _is_repair_attempt(attempt, thawed):
             # Skip-and-RECORD, never skip-and-report-clean: with no anchor
@@ -716,12 +717,12 @@ async def step(
         qa_raw = await workflow.execute_activity(
             run_test_suite,
             QAInput(worktree=worktree, test_cmd=test_cmd),
-            **_long_act(cfg.roles.get("test", role_cfg)),
+            **pools.on_harness(_long_act(cfg.roles.get("test", role_cfg)), cfg.harness_queue),
         )
         diff = await workflow.execute_activity(
             get_task_diff,
             DiffInput(worktree=worktree, branch_point=branch_point),
-            **ACT,
+            **pools.on_harness(ACT, cfg.harness_queue),
         )
         qa_spend = RoleUsage(role="qa", model=resolve_role_model(cfg, "qa"))
         qa = await qa_step(

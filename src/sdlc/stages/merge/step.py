@@ -20,6 +20,7 @@ from temporalio.common import RetryPolicy
 # the marker the sandbox re-imports them isolated, duplicating classes
 # pydantic then rejects (first post-B0 brownfield run, DS12).
 with workflow.unsafe.imports_passed_through():
+    from ... import pools
     from ...benchmarks.models import BenchmarkOutcome
     from ...benchmarks.record_builder import stage_record
     from ...calibration.activities import VerdictInput, calibration_verdict
@@ -341,7 +342,7 @@ async def step(
         BaseWorktreeInput(
             integration_wt=integration_wt, run_id=_workflow_id() or "local", base_sha=base_sha
         ),
-        **_ACT,
+        **pools.on_harness(_ACT, cfg.harness_queue),
     )
     base_path = base.path if isinstance(getattr(base, "path", None), str) else None
     base_reason = _as_str(getattr(base, "reason", ""), "base worktree unavailable")
@@ -356,7 +357,7 @@ async def step(
             base_sha=base_sha,
             renames=renames,
         ),
-        **_INTEG_ACT,
+        **pools.on_harness(_INTEG_ACT, cfg.harness_queue),
     )
     if getattr(ichecks, "toolchain", None) is not None:
         t_rep = getattr(ichecks, "tests", None)
@@ -393,7 +394,9 @@ async def step(
         )
         lint_cmd = _contract_shell_cmd(lint_commands, DEFAULT_LINT_CMD)
         l_clean, l_detail = await _exec_activity(
-            run_lint, LintInput(worktree=integration_wt, lint_cmd=lint_cmd), **_ACT
+            run_lint,
+            LintInput(worktree=integration_wt, lint_cmd=lint_cmd),
+            **pools.on_harness(_ACT, cfg.harness_queue),
         )
         absolute = [
             build_check(
@@ -413,7 +416,7 @@ async def step(
     cov: CoverageReport = await _exec_activity(
         measure_coverage,
         CoverageInput(worktree=integration_wt, changed_files=changed_files),
-        **_ACT,
+        **pools.on_harness(_ACT, cfg.harness_queue),
     )
 
     sec = await _exec_activity(
@@ -424,7 +427,7 @@ async def step(
             renames=renames,
             base_reason=base_reason,
         ),
-        **_ACT,
+        **pools.on_harness(_ACT, cfg.harness_queue),
     )
     if not isinstance(sec, ScopedSecurityReport):
         sec = ScopedSecurityReport(
@@ -685,6 +688,6 @@ async def step(
             body=pr_body,
             base_branch=idea.base_branch,
         ),
-        **_ACT,
+        **pools.on_harness(_ACT, cfg.harness_queue),
     )
     return pr_url

@@ -15,6 +15,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from .. import pools
     from ..agents.roles import (
         t_adversary,
         t_deep_review,
@@ -182,7 +183,9 @@ class TaskHost:
         super().__init__()
         self._session_refs: list[ArtifactRef] = []
 
-    async def _merge_task(self, tr: TaskResult, repo_path: str) -> str | None:
+    async def _merge_task(
+        self, tr: TaskResult, repo_path: str, harness_queue: str | None = None
+    ) -> str | None:
         """Merge a completed task branch into the integration branch and
         advance self._integration_head.
 
@@ -200,7 +203,7 @@ class TaskHost:
                 task_branch=tr.branch,
                 integration_path=getattr(self, "_integration_wt", ""),
             ),
-            **ACT,
+            **pools.on_harness(ACT, harness_queue),
         )
         if merge_res.conflict:
             # Falsified `overlaps` declaration → terminal status, not a raise.
@@ -278,7 +281,7 @@ class TaskHost:
                 task_id=task.id,
                 from_ref=from_ref,
             ),
-            **ACT,
+            **pools.on_harness(ACT, cfg.harness_queue),
         )
         handoff_notes = _handoff_notes(prior_handoffs)
         result = await code_step(

@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import os
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
+from ... import pools
 from ...agents.loader import model_id
 from ...core.context import StageContext
 from ...core.models import PipelineConfig, RoleConfig, RoleUsage
@@ -135,10 +136,15 @@ async def step(
         test_commands = getattr(contract, "test_commands", None) if contract else None
         test_cmd = _contract_shell_cmd(test_commands, DEFAULT_TEST_CMD)
         role_cfg = cfg.roles.get(getattr(task, "role", "dev"), cfg.roles.get("dev"))
-        qa_raw = await workflow.execute_activity(
-            run_test_suite,
-            QAInput(worktree=worktree, test_cmd=test_cmd),
-            **_long_act(cfg.roles.get("test", role_cfg)),
+        # cast: the **on_harness splat hides the typed overload from mypy
+        # (the activity itself is run_test_suite -> QAReport).
+        qa_raw = cast(
+            QAReport,
+            await workflow.execute_activity(
+                run_test_suite,
+                QAInput(worktree=worktree, test_cmd=test_cmd),
+                **pools.on_harness(_long_act(cfg.roles.get("test", role_cfg)), cfg.harness_queue),
+            ),
         )
 
     assertions: list[str] = (

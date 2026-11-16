@@ -15,6 +15,7 @@ from temporalio.common import RetryPolicy
 from temporalio.exceptions import ApplicationError
 
 with workflow.unsafe.imports_passed_through():
+    from .. import pools
     from ..agents import (
         loader as _loader,  # noqa: F401 -- validate()'s lazy import stays passthrough
     )
@@ -222,8 +223,13 @@ class GraphWorkflow(
             await workflow.execute_activity(
                 cleanup_run_worktrees,
                 CleanupWorktreesInput(run_id=self._run_id),
-                start_to_close_timeout=timedelta(minutes=5),
-                retry_policy=RetryPolicy(maximum_attempts=1),
+                **pools.on_harness(
+                    {
+                        "start_to_close_timeout": timedelta(minutes=5),
+                        "retry_policy": RetryPolicy(maximum_attempts=1),
+                    },
+                    self._cfg.harness_queue if self._cfg else None,
+                ),
             )
         except Exception as e:  # noqa: BLE001
             workflow.logger.warning(

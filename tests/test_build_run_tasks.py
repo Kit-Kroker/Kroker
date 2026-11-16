@@ -43,7 +43,8 @@ class FakeHost:
     async def _board_evidence(self, cfg, tid, kind, report_json):
         self.calls.append(("evidence", tid, kind))
 
-    async def _merge_task(self, tr, repo_path):
+    async def _merge_task(self, tr, repo_path, harness_queue=None):
+        # 024 T026: harness_queue kwarg mirrors the real host's signature.
         self.calls.append(("merge", tr.task_id))
         if tr.task_id == self.conflict_on:
             return f"failed:integration-conflict:{tr.task_id}"

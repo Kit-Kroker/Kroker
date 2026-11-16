@@ -89,7 +89,7 @@ async def run_tasks(
             # branches from the updated integration head.
             tr = await run_one(ready[0])
             if tr.status == "done":
-                conflict = await host._merge_task(tr, repo_path)
+                conflict = await host._merge_task(tr, repo_path, harness_queue=cfg.harness_queue)
                 if conflict:
                     return done, conflict
         else:
@@ -108,7 +108,9 @@ async def run_tasks(
             )  # determinism: wave batch order
             for tr in results:
                 if tr.status == "done":
-                    conflict = await host._merge_task(tr, repo_path)
+                    conflict = await host._merge_task(
+                        tr, repo_path, harness_queue=cfg.harness_queue
+                    )
                     if conflict:
                         return done, conflict
 
