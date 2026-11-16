@@ -136,7 +136,7 @@
 
 ## Phase 6: Deployment and docs (024-i)
 
-- [ ] T018 Confirm the session-store paths in the runtime image. Read `Dockerfile` (the `HOME`/user of the `runtime` stage) and `S/harness/claude_code.py` and `S/harness/opencode.py`, and record the claude store dir and the opencode storage dir in this task's commit body. Then create `docker-compose.pools.yml` per contracts/worker-boot.md §Compose:
+- [x] T018 Confirm the session-store paths in the runtime image. Read `Dockerfile` (the `HOME`/user of the `runtime` stage) and `S/harness/claude_code.py` and `S/harness/opencode.py`, and record the claude store dir and the opencode storage dir in this task's commit body. Then create `docker-compose.pools.yml` per contracts/worker-boot.md §Compose:
   - `worker` gets `KROKER_WORKER_POOL: core` and `KROKER_HARNESS_QUEUE: ${KROKER_HARNESS_QUEUE:-default}`.
   - `worker-harness` uses the same `image`/`build` as `worker`, with `KROKER_WORKER_POOL: harness`, the same queue and `KROKER_HARNESS_CAP: ${KROKER_HARNESS_CAP:-2}`.
   - Both mount `worker-worktrees`, `worker-repos` and `${KROKER_RUNS_BIND:-worker-runs}`. `worker-harness` also mounts the `harness-sessions` named volume at the two confirmed store **subpaths**, never their parent, so the `auth.json` `:ro` bind in `docker-compose.override.example.yml:17` is not shadowed (R9).

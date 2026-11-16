@@ -1,0 +1,69 @@
+# Two worker pools (024 T018, E-91; contracts/worker-boot.md §Compose).
+#
+# Overlay use:
+#   docker compose -f docker-compose.yml -f docker-compose.pools.yml up
+#
+# `worker` becomes the CORE pool (all workflows plus the core activities,
+# queue ai-sdlc); `worker-harness` is a second process from the same image
+# serving only the harness activity class on KROKER_HARNESS_QUEUE, capped
+# by KROKER_HARNESS_CAP. docker-compose.yml itself is unchanged: without
+# this overlay, `worker` is the single pool exactly as before (G-1).
+#
+# The queue default is the "default" sentinel — worker.main resolves it to
+# ai-sdlc-harness (pools.HARNESS_QUEUE_DEFAULT); set KROKER_HARNESS_QUEUE
+# in .env for a custom queue name.
+
+services:
+  worker:
+    environment:
+      KROKER_WORKER_POOL: core
+      KROKER_HARNESS_QUEUE: ${KROKER_HARNESS_QUEUE:-default}
+
+  worker-harness:
+    image: ghcr.io/kit-kroker/kroker-worker:${KROKER_IMAGE_TAG:-latest}
+    build:
+      context: .
+      # Same image as worker: multi-stage Dockerfile, runtime target.
+      target: runtime
+    depends_on: ["temporal", "hindsight"]
+    environment:
+      TEMPORAL_HOST: "temporal:7233"
+      # merge activity commits on the pipeline's behalf; same identity as
+      # the core worker (one pipeline, two processes).
+      GIT_AUTHOR_NAME: "SDLC Benchmark Worker"
+      GIT_AUTHOR_EMAIL: "sdlc-benchmark@localhost"
+      GIT_COMMITTER_NAME: "SDLC Benchmark Worker"
+      GIT_COMMITTER_EMAIL: "sdlc-benchmark@localhost"
+      KROKER_WORKER_POOL: harness
+      KROKER_HARNESS_QUEUE: ${KROKER_HARNESS_QUEUE:-default}
+      KROKER_HARNESS_CAP: ${KROKER_HARNESS_CAP:-2}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # Same persistent trees as the core worker: worktrees need them
+      # across activity retries, repos and runs are the pipeline's stores.
+      - worker-worktrees:/tmp/sdlc/worktrees
+      - worker-repos:/srv/repos
+      - ${KROKER_RUNS_BIND:-worker-runs}:/app/runs
+      # R9 (024): the harness CLIs' session stores, one shared volume so
+      # every harness replica on this ONE host resumes sessions safely.
+      # Two SUBPATH mounts of that one volume — the claude and opencode
+      # stores never see each other's files — and never the parent dirs,
+      # so the operator's auth.json :ro bind
+      # (docker-compose.override.example.yml:17) is not shadowed.
+      # Resume across hosts is NOT safe; see docs/operations/worker-pools.md.
+      - type: volume
+        source: harness-sessions
+        target: /root/.claude
+        volume:
+          subpath: claude
+      - type: volume
+        source: harness-sessions
+        target: /root/.local/share/opencode/storage
+        volume:
+          subpath: opencode
+    restart: unless-stopped
+
+volumes:
+  harness-sessions:
