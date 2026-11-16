@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from sdlc.benchmarks.operator_time import ENGAGEMENT_CAP_S, operator_time
+
 from sdlc.core.models import ClarificationOutcome, GateOutcomeSummary, RunSummary
 
 # --- 025 T005 (RED): operator_time (FR-003/004/005, A.6) ---
@@ -114,9 +115,7 @@ def test_human_gate_without_raise_time_is_not_measured():
 
 def test_overlapping_gates_sum_as_upper_bound():
     a = _gate(name="architecture", raised=T, decided=T + timedelta(minutes=5))
-    b = _gate(
-        name="plan", raised=T + timedelta(minutes=1), decided=T + timedelta(minutes=6)
-    )
+    b = _gate(name="plan", raised=T + timedelta(minutes=1), decided=T + timedelta(minutes=6))
     r = operator_time(_summary(gates=[a, b]))
     assert r.state == "measured"
     assert len(r.interactions) == 2
@@ -151,16 +150,12 @@ def test_batch_with_zero_human_answers_does_not_qualify():
 
 
 def test_engagement_cap_boundary_exactly_at_cap_and_just_over():
-    at_cap = operator_time(
-        _summary(gates=[_gate(raised=T, decided=T + timedelta(seconds=600))])
-    )
+    at_cap = operator_time(_summary(gates=[_gate(raised=T, decided=T + timedelta(seconds=600))]))
     assert at_cap.state == "measured"
     assert at_cap.engaged_s == 600.0
     assert at_cap.wait_s == 600.0
 
-    over = operator_time(
-        _summary(gates=[_gate(raised=T, decided=T + timedelta(seconds=601))])
-    )
+    over = operator_time(_summary(gates=[_gate(raised=T, decided=T + timedelta(seconds=601))]))
     assert over.state == "measured"
     assert over.engaged_s == 600.0
     assert over.wait_s == 601.0
