@@ -98,6 +98,37 @@ def test_smoke_case_resolution_and_errors(tmp_path):
         smoke_case(tmp_path)
 
 
+def test_smoke_case_matrix_is_strong_arm_only_and_passes_the_adr6_boundary():
+    """025 infra stop 1, fix (a): the smoke case's matrix is the strong
+    arm alone. The flash model rode the backward-compat arm path whose
+    dev shares weights with the registry's default reviewer/qa/
+    merge_verdict (agents/<role>/agent.yaml pin zai:glm-5.3-flash), so
+    the workflow boundary (validate_run_roles) rejected that cell and the
+    smoke's one_file_per_cell condition could never hold at two cells.
+    The smoke matrix must be exactly the cells that can run: one, the
+    strong arm, accepted by the same ADR-6 check the boundary runs."""
+    from sdlc.agents.loader import validate_run_roles
+    from sdlc.agents.roles import STAGE_MODELS
+
+    spec = smoke_case(CASES_ROOT)
+    cells = expand_matrix(spec)
+    assert len(cells) == 1
+    assert cells[0].arm_name == "zai-coding-plan-glm-5.3"
+
+    # The same judge-role map the boundary builds (benchmarks/workflow.py
+    # _cell path): arm overrides over the registry STAGE_MODELS defaults.
+    for cell in cells:
+        resolved = cell.role_models
+        adr6 = {
+            "dev": resolved.get("dev"),
+            "reviewer": resolved.get("reviewer", STAGE_MODELS["review"]),
+        }
+        for judge in ("deep_review", "qa", "merge_verdict"):
+            if judge in STAGE_MODELS:
+                adr6[judge] = resolved.get(judge, STAGE_MODELS[judge])
+        validate_run_roles(adr6)
+
+
 def test_seven_corpus_cases_have_two_arms_and_matching_base_cells():
     specs = load_corpus(CASES_ROOT)
     by_id = {s.case_id: s for s in specs}

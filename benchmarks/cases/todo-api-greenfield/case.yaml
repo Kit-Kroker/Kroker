@@ -25,8 +25,15 @@ research_enabled: true
 harnesses:
   - opencode
 models:
+  # 025 infra stop 1, fix (a): strong arm only. The flash entry rode the
+  # backward-compat arm path (one arm per model) whose dev shares weights
+  # with the registry's default reviewer/qa/merge_verdict
+  # (agents/<role>/agent.yaml pin zai:glm-5.3-flash), so the workflow's
+  # ADR-6 boundary rejected the cell and the smoke's one_file_per_cell
+  # could never hold. Scored runs are strong-arm only (025 B.3); the
+  # case carries no separation object, so nothing else references the
+  # weak arm.
   - zai-coding-plan/glm-5.3
-  - zai-coding-plan/glm-5.3-flash
 judge_model: anthropic:claude-sonnet-5     # different family than the author (ADR-6); gemini free tier lost R0 attempts 5, 8, 10, 11 to 503 waves and daily 429 quota
 # extra_args_by_model dropped 2026-10-26: z.ai marked glm-5.2 deprecated
 # in the models.dev catalog (opencode filters deprecated models at
