@@ -7,7 +7,6 @@ fix loop, and returns TaskResult.
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -16,7 +15,6 @@ if TYPE_CHECKING:
     from ..review.models import DeepReviewReport, ReviewReport
 
 from temporalio import workflow
-from temporalio.common import RetryPolicy
 from temporalio.exceptions import ChildWorkflowError
 
 # This module executes inside the workflow sandbox (feature.py's
@@ -56,23 +54,16 @@ with workflow.unsafe.imports_passed_through():
     from ..qa.activities import QAInput, run_test_suite
     from ..qa.step import _fix_loop_issues
     from .activities import CodingTaskInput, DriftGlobsInput, load_drift_globs, run_coding_task
+    from .acts import (  # noqa: F401 -- re-exported under pre-024 names (024 T021)
+        ACT,
+        LONG_ACT,
+        LONG_ACT_HEARTBEAT_MINUTES,
+        LONG_ACT_TIMEOUT_HOURS,
+        _long_act,
+    )
     from .freeze import _drift_note, _is_repair_attempt, _next_anchor
     from .models import HandoffSummary
     from .usage import _record_attempt_usage
-
-ACT = workflow.ActivityConfig(
-    start_to_close_timeout=timedelta(minutes=10),
-    retry_policy=RetryPolicy(maximum_attempts=3),
-)
-
-LONG_ACT_HEARTBEAT_MINUTES = int(os.environ.get("SDLC_LONG_ACTIVITY_HEARTBEAT_MINUTES", "60"))
-LONG_ACT_TIMEOUT_HOURS = int(os.environ.get("SDLC_LONG_ACTIVITY_TIMEOUT_HOURS", "4"))
-LONG_ACT = workflow.ActivityConfig(
-    start_to_close_timeout=timedelta(hours=LONG_ACT_TIMEOUT_HOURS),
-    heartbeat_timeout=timedelta(minutes=LONG_ACT_HEARTBEAT_MINUTES),
-    retry_policy=RetryPolicy(maximum_attempts=2),
-)
-
 DEFAULT_TEST_CMD = "pytest -q --maxfail=25"
 
 
@@ -88,20 +79,6 @@ def _workflow_id() -> str:
         return workflow.info().workflow_id
     except Exception:
         return "local"
-
-
-def _long_act(role_cfg: RoleConfig | None = None) -> workflow.ActivityConfig:
-    if role_cfg is None:
-        return LONG_ACT
-    hours = role_cfg.activity_timeout_hours
-    minutes = role_cfg.activity_heartbeat_minutes
-    if hours is None and minutes is None:
-        return LONG_ACT
-    return workflow.ActivityConfig(
-        start_to_close_timeout=timedelta(hours=hours or LONG_ACT_TIMEOUT_HOURS),
-        heartbeat_timeout=timedelta(minutes=minutes or LONG_ACT_HEARTBEAT_MINUTES),
-        retry_policy=RetryPolicy(maximum_attempts=2),
-    )
 
 
 def _contract_stack_directive(contract: Any) -> str:
