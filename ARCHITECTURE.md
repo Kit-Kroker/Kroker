@@ -644,9 +644,14 @@ flowchart LR
     GH[(Git remote / CI)]; WH --> GH
 ```
 
-> **Status: the split above is designed, not built.** `main` runs one task
-> queue (`TASK_QUEUE = "ai-sdlc"` in `worker.py`); ROADMAP NFR-2 and ADR-9
-> are open.
+> **Status: two queues are built (E-91, round 024; operations in
+> [`docs/operations/worker-pools.md`](docs/operations/worker-pools.md)).**
+> The core pool runs every workflow plus the cheap, pure activities on
+> `ai-sdlc`; the harness pool runs the harness activities on the queue named
+> by `KROKER_HARNESS_QUEUE` — routing is **off by default** (the variable
+> unset means one pool). The five-pool target below is still plan (AP-2.5b,
+> needs AP-2.1), and worker-specific queues remain AP-2.6 (ADR-9 tracks
+> both).
 
 Two task queues split the fleet: lightweight proposer/support workers scale
 on LLM throughput; heavy harness workers (harness CLIs, language toolchains,
