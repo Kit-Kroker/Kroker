@@ -732,3 +732,102 @@ def test_sc2_even_n_median_averages_the_middle_pair():
         for i, m in enumerate([(2,), (4,), (6,), (8,), (5, 5), (6, 6)])
     ]
     assert _rate(build_sc_rollup(runs, []), "SC-2").rate == 7.0
+
+
+# --- 025 T009 (RED): the commit set (FR-014/024) ---
+
+
+def _commit_rec(run, commit):
+    rec = _code(run, "t01", BenchmarkOutcome.PASS, 0)
+    return rec.model_copy(update={"kroker_commit": commit})
+
+
+def _commit_summaries(*run_ids):
+    return [_summary(rid, offset=i) for i, rid in enumerate(run_ids)]
+
+
+def test_commit_set_collects_distinct_commits_and_flags_a_mixed_fleet():
+    summaries = _commit_summaries("r1", "r2", "r3")
+    recs = [_commit_rec("r1", "aaa"), _commit_rec("r2", "aaa"), _commit_rec("r3", "bbb")]
+    rollup = build_sc_rollup(summaries, recs)
+    assert rollup.commits == {"aaa", "bbb"}
+    assert rollup.commit_flag
+    assert "commit" in rollup.commit_flag
+    assert "aaa" in rollup.commit_flag and "bbb" in rollup.commit_flag
+
+
+def test_commit_flag_says_commit_unknown_for_a_summary_with_no_record():
+    summaries = _commit_summaries("r1", "r2", "r3", "r4")
+    recs = [_commit_rec(r, "aaa") for r in ("r1", "r2", "r3")]
+    rollup = build_sc_rollup(summaries, recs)
+    assert "commit unknown" in rollup.commit_flag
+
+
+def test_commit_flag_is_empty_when_every_summary_joins_one_commit():
+    summaries = _commit_summaries("r1", "r2", "r3")
+    recs = [_commit_rec(r, "aaa") for r in ("r1", "r2", "r3")]
+    rollup = build_sc_rollup(summaries, recs)
+    assert rollup.commits == {"aaa"}
+    assert rollup.commit_flag == ""
+
+
+def test_commit_flag_carries_both_conditions_in_one_string():
+    summaries = _commit_summaries("r1", "r2", "r3")
+    recs = [_commit_rec("r1", "aaa"), _commit_rec("r2", "bbb")]  # r3 has no record
+    flag = build_sc_rollup(summaries, recs).commit_flag
+    assert "aaa" in flag and "bbb" in flag
+    assert "commit unknown" in flag
+
+
+def test_commit_flag_renders_in_markdown_html_and_json_and_clean_runs_show_none():
+    import json
+
+    flagged = build_sc_rollup(
+        _commit_summaries("r1", "r2", "r3", "r4"),
+        [_commit_rec("r1", "aaa"), _commit_rec("r2", "aaa"), _commit_rec("r3", "bbb")],
+    )
+    assert "commit unknown" in flagged.commit_flag
+    assert "commit unknown" in render_sc_rollup_markdown(flagged)
+    assert "commit unknown" in render_sc_rollup_html(flagged)
+    parsed = json.loads(render_sc_rollup_json(flagged))
+    assert "commits" in parsed and "commit_flag" in parsed
+    assert "commit unknown" in parsed["commit_flag"]
+
+    clean = build_sc_rollup(
+        _commit_summaries("r1", "r2"), [_commit_rec("r1", "aaa"), _commit_rec("r2", "aaa")]
+    )
+    assert clean.commit_flag == ""
+    for out in (render_sc_rollup_markdown(clean), render_sc_rollup_html(clean)):
+        assert "commit unknown" not in out
+        assert "aaa" not in out and "bbb" not in out
+    assert json.loads(render_sc_rollup_json(clean))["commit_flag"] == ""
+
+
+# --- 025 T009 (RED, chaos/edge cases): the commit set ---
+
+
+def test_summary_whose_only_records_carry_no_commit_is_commit_unknown():
+    summaries = _commit_summaries("r1", "r2")
+    recs = [_commit_rec("r1", "aaa"), _commit_rec("r2", None)]
+    rollup = build_sc_rollup(summaries, recs)
+    assert rollup.commits == {"aaa"}  # None never enters the set
+    assert "commit unknown" in rollup.commit_flag
+
+
+def test_records_for_runs_outside_the_summaries_contribute_no_commit():
+    summaries = _commit_summaries("r1", "r2", "r3")
+    recs = [_commit_rec(r, "aaa") for r in ("r1", "r2", "r3")] + [_commit_rec("ghost", "zzz")]
+    rollup = build_sc_rollup(summaries, recs)
+    assert rollup.commits == {"aaa"}
+    assert rollup.commit_flag == ""
+
+
+def test_pre012_line_and_commit_unknown_flag_are_independent():
+    summaries = _n_summaries(MIN_RUNS)
+    recs = [_commit_rec(f"run-{i}", None) for i in range(MIN_RUNS)]
+    rollup = build_sc_rollup(summaries, recs)
+    assert rollup.commits == set()
+    assert "commit unknown" in rollup.commit_flag
+    line = f"includes {MIN_RUNS} pre-012 records (untrusted)"
+    assert line in render_sc_rollup_markdown(rollup)
+    assert line in render_sc_rollup_html(rollup)
