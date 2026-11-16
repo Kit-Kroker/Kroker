@@ -24,12 +24,14 @@ it freely (it must never import ``sdlc.worker`` or any stage).
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import enum
 import logging
 import os
 import re
 import socket
+import time
 from collections.abc import Mapping
 from typing import Any
 
@@ -224,3 +226,60 @@ def boot_plan_from_env(env: Mapping[str, str] | None = None) -> PoolBootPlan:
                 f"KROKER_HARNESS_CAP must be an integer >= 1 (got {raw_cap!r})"
             ) from exc
     return pool_boot_plan(mode, queue, cap)
+
+
+# ------------------------------------------------------------ poller check (R6)
+#
+# Start paths refuse to launch when routing is on and the harness queue has
+# no fresh poller: a run whose harness activities queue forever is the F1
+# failure the fail-fast exists to prevent.
+
+
+class HarnessQueueUnpolled(RuntimeError):
+    """No worker has polled the harness task queue within the freshness window."""
+
+
+async def require_harness_poller(
+    client: Any,
+    queue: str,
+    *,
+    freshness_s: float = 90,
+    timeout_s: float = 5,
+) -> None:
+    """Raise :class:`HarnessQueueUnpolled` unless a worker polled ``queue``.
+
+    Asks the activity task queue for its pollers and requires at least one
+    whose ``last_access_time`` is within ``freshness_s`` of now. The
+    temporalio.api imports stay inside the function so importing this leaf
+    stays cheap for workflow code (data-model: stdlib + temporalio.api).
+    """
+    from temporalio.api.enums.v1 import TaskQueueType
+    from temporalio.api.taskqueue.v1 import TaskQueue
+    from temporalio.api.workflowservice.v1 import DescribeTaskQueueRequest
+
+    request = DescribeTaskQueueRequest(
+        namespace=client.namespace,
+        task_queue=TaskQueue(name=queue),
+        task_queue_type=TaskQueueType.TASK_QUEUE_TYPE_ACTIVITY,
+    )
+    try:
+        response = await asyncio.wait_for(
+            client.workflow_service.describe_task_queue(request), timeout_s
+        )
+    except TimeoutError as exc:
+        raise HarnessQueueUnpolled(
+            f"task queue {queue!r} could not be described within {timeout_s}s — "
+            "start a harness worker with KROKER_WORKER_POOL=harness "
+            f"(and KROKER_HARNESS_QUEUE={queue!r})"
+        ) from exc
+    now = time.time()
+    for poller in response.pollers:
+        last = poller.last_access_time
+        accessed = last.seconds + last.nanos / 1e9
+        if now - accessed <= freshness_s:
+            return
+    raise HarnessQueueUnpolled(
+        f"task queue {queue!r} has no harness worker poller fresher than "
+        f"{freshness_s}s — start one with KROKER_WORKER_POOL=harness "
+        f"(and KROKER_HARNESS_QUEUE={queue!r})"
+    )

@@ -92,7 +92,7 @@
   - Start `worktree_janitor` only when `plan.janitor` is set.
   - Keep `S/worker.py` under 400 lines; move helpers into `S/pools.py` if needed.
   **(M)**
-- [ ] T010 [US2] PROOF: write `T/test_pools_failfast.py::test_poller_freshness` (`-m temporal`, ephemeral dev-server) and implement `require_harness_poller(client, queue, *, freshness_s=90, timeout_s=5)` plus `HarnessQueueUnpolled` in `S/pools.py` (R6).
+- [x] T010 [US2] PROOF: write `T/test_pools_failfast.py::test_poller_freshness` (`-m temporal`, ephemeral dev-server) and implement `require_harness_poller(client, queue, *, freshness_s=90, timeout_s=5)` plus `HarnessQueueUnpolled` in `S/pools.py` (R6).
   - The call is `client.workflow_service.describe_task_queue(DescribeTaskQueueRequest(namespace=client.namespace, task_queue=TaskQueue(name=queue), task_queue_type=TASK_QUEUE_TYPE_ACTIVITY))`, wrapped in `asyncio.wait_for(…, timeout_s)`.
   - **Assert:**
     - (a) with no worker it raises within 10 s, and the message names the queue and `KROKER_WORKER_POOL=harness`;
