@@ -326,6 +326,9 @@ not be evaluated is `errored` and never counts as a pass.
   and the deterministic gate, and
   [`docs/reference/architecture-review-2026-07.md`](docs/reference/architecture-review-2026-07.md)
   for the design decisions and implementation status.
+- See [`docs/operations/worker-pools.md`](docs/operations/worker-pools.md) for running the worker
+  as two capability pools — modes and env vars, the compose overlay, cap sizing, the janitor lock,
+  the doctor row, session-resume boundaries, and rollback.
 - See [`BENCHMARK.md`](BENCHMARK.md) for the benchmark & evaluation design — the four measurement axes (harness / model×role / memory / case), how success criteria SC-1..6 get their numbers, and the E-30…E-37 increments. Subcommands:
   - `python -m sdlc.cli benchmark smoke`: executes the smoke test case, verifies smoke conditions, and writes a commit stamp.
   - `python -m sdlc.cli benchmark accept --case <id> [--offline]`: evaluates reference, floor, and separation checks, persisting `<case>/acceptance.yaml`.

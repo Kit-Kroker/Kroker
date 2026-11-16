@@ -143,7 +143,7 @@
   - Declare `harness-sessions` under `volumes:`.
 
   Validate with `docker compose -f docker-compose.yml -f docker-compose.pools.yml config -q`, which must exit 0. `docker-compose.yml` itself is unchanged. (P-FR-010; quickstart §5) **(M)**
-- [ ] T019 Write `docs/operations/worker-pools.md` (new; under 250 lines). Cover:
+- [x] T019 Write `docs/operations/worker-pools.md` (new; under 250 lines). Cover:
   - the three modes, the three env vars and the truth table, linking data-model.md rather than copying it;
   - the compose overlay command;
   - the cap, and that it is per process;
