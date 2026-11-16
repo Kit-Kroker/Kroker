@@ -95,7 +95,7 @@ from .memory.activities import (
 )
 from .notify.activities import notify
 from .observability.activities import export_run_artifacts
-from .pools import HARNESS_ACTIVITIES
+from .pools import HARNESS_ACTIVITIES, boot_plan_from_env, pool_identity
 from .pricing import price_usage
 from .stages import STAGE_MODULES
 from .task_queue import TASK_QUEUE  # noqa: F401 -- re-export
@@ -297,7 +297,28 @@ def graph_boot_problems() -> list[str]:
     return problems
 
 
+_ALL_WORKFLOWS = [
+    GraphWorkflow,
+    BenchmarkWorkflow,
+    ReflectWorkflow,
+    DeploymentWorkflow,
+    TriageWorkflow,
+    TidyUpWorkflow,
+    AssessmentWorkflow,
+    CrewTaskWorkflow,
+    MaintenanceWorkflow,
+    MaintenanceKickWorkflow,
+]
+
+
 async def main() -> None:
+    # 024 T009: the pool plan comes first, before anything connects —
+    # every refuse row of the R5 truth table exits here (worker-boot G-2).
+    try:
+        plan = boot_plan_from_env()
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
+
     # Fail closed: a registry that violates the ADR-6 family-inequality
     # invariant must never boot a worker (FR-204/US-5).
     validate_registry(load_registry())
@@ -310,6 +331,7 @@ async def main() -> None:
     if graph_problems:
         raise SystemExit("graph registry unhealthy: " + "; ".join(graph_problems))
     # E-24 (via E-35): warn — not fail — on harness CLI version drift.
+    # The boot checks above run in every pool mode (worker-boot G-1).
     check_harness_versions()
 
     from .observability.logfire_setup import configure as configure_logfire
@@ -323,32 +345,54 @@ async def main() -> None:
         plugins=[SdlcPydanticAIPlugin()],
     )
 
-    worker = Worker(
-        client,
-        task_queue=TASK_QUEUE,
-        workflows=[
-            GraphWorkflow,
-            BenchmarkWorkflow,
-            ReflectWorkflow,
-            DeploymentWorkflow,
-            TriageWorkflow,
-            TidyUpWorkflow,
-            AssessmentWorkflow,
-            CrewTaskWorkflow,
-            MaintenanceWorkflow,
-            MaintenanceKickWorkflow,
-        ],
-        activities=get_worker_activities(),
-    )
-    print(f"worker running on task queue {TASK_QUEUE!r}")
-    # A-terminal backstop: sweeps run dirs whose workflow is gone and that
-    # have been untouched past the grace period (killed/crashed runs — the
-    # workflow-side teardown cannot fire for those).
-    janitor = asyncio.create_task(worktree_janitor(client))
+    workers: list[Worker] = []
+    if plan.harness_worker:
+        # G-4: the harness worker is built (and starts) first.
+        cap_kwargs: dict[str, Any] = (
+            {} if plan.cap is None else {"max_concurrent_activities": plan.cap}
+        )
+        assert plan.queue is not None  # the plan's refusals guarantee it
+        workers.append(
+            Worker(
+                client,
+                task_queue=plan.queue,
+                workflows=[],
+                activities=harness_activities(),
+                identity=pool_identity("harness"),
+                **cap_kwargs,
+            )
+        )
+        cap_part = f", cap={plan.cap}" if plan.cap is not None else ""
+        print(f"worker running on task queue {plan.queue!r} (pool=harness{cap_part})")
+    if plan.core_worker:
+        single = plan.queue is None
+        # Single pool is today, exactly (G-1): same activities, same line,
+        # no identity key. `all`+queue keeps everything on core (pre-024
+        # clients may send harness work unrouted); `core` is core-only.
+        acts = get_worker_activities() if single or plan.harness_worker else core_activities()
+        id_kwargs: dict[str, Any] = {} if single else {"identity": pool_identity("core")}
+        workers.append(
+            Worker(
+                client,
+                task_queue=TASK_QUEUE,
+                workflows=_ALL_WORKFLOWS,
+                activities=acts,
+                **id_kwargs,
+            )
+        )
+        pool_part = "" if single else " (pool=core)"
+        print(f"worker running on task queue {TASK_QUEUE!r}{pool_part}")
+
+    # A-terminal backstop: sweeps run dirs whose workflow is gone and has
+    # been untouched past the grace period (killed/crashed runs — the
+    # workflow-side teardown cannot fire for those). Harness-capable modes
+    # only (R5: all and harness; core never mutates worktrees).
+    janitor = asyncio.create_task(worktree_janitor(client)) if plan.janitor else None
     try:
-        await worker.run()
+        await asyncio.gather(*(w.run() for w in workers))
     finally:
-        janitor.cancel()
+        if janitor is not None:
+            janitor.cancel()
 
 
 if __name__ == "__main__":

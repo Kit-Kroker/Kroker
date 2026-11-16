@@ -29,6 +29,7 @@ import enum
 import logging
 import os
 import re
+import socket
 from collections.abc import Mapping
 from typing import Any
 
@@ -141,6 +142,11 @@ class PoolBootPlan:
     janitor: bool
     cap: int | None
     queue: str | None
+
+
+def pool_identity(pool: str) -> str:
+    """The worker-boot G-3 identity: ``<pool>@<hostname>:<pid>``."""
+    return f"{pool}@{socket.gethostname()}:{os.getpid()}"
 
 
 def pool_boot_plan(

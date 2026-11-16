@@ -77,14 +77,14 @@
   - **Filters.** `core_activities()` ∪ `harness_activities()` equals `get_worker_activities()` by name, and the two are disjoint.
   (P-FR-003, P-FR-004; R5) **(S)**
 - [x] T007 [US2] Implement `PoolBootPlan` (frozen dataclass), `pool_boot_plan(mode, queue, cap)` and `boot_plan_from_env(env=os.environ)` in `S/pools.py`. Implement `core_activities()` and `harness_activities()` in `S/worker.py`, filtering `get_worker_activities()` by `activity.defn` name against `HARNESS_ACTIVITIES`. Make T006 green. **(S)**
-- [ ] T008 [US2] RED: write `T/test_worker_main_pools.py` (fast tier: monkeypatch `Client.connect`, `Worker` and `worktree_janitor` with recorders; no server).
+- [x] T008 [US2] RED: write `T/test_worker_main_pools.py` (fast tier: monkeypatch `Client.connect`, `Worker` and `worktree_janitor` with recorders; no server).
   - **No vars set (G-1, G-5).** Exactly one `Worker(task_queue="ai-sdlc")` is built with all ten workflows and every activity; the janitor starts; the printed line is exactly `worker running on task queue 'ai-sdlc'`.
   - **`all` + queue + cap 2 (G-3, G-4).** Two workers: the harness one is built **first**, with `max_concurrent_activities=2`, no workflows, the harness set and identity `harness@…`. The core one keeps everything, with identity `core@…`.
   - **`core` + queue.** One worker with the core activities only and no janitor.
   - **`harness` + queue.** One worker with no workflows, and the janitor starts.
   - **Refusals (G-2).** Every refuse row exits non-zero **before** `Client.connect` is called.
   (contracts/worker-boot.md G-1..G-5) **(M)**
-- [ ] T009 [US2] Restructure `S/worker.py:main()` to make T008 green.
+- [x] T009 [US2] Restructure `S/worker.py:main()` to make T008 green.
   - Compute `boot_plan_from_env()` first, before any connect. A refusal raises `SystemExit` with the message.
   - Keep the existing boot checks (`validate_registry`, `validate_crew_clis`, `graph_boot_problems`, `check_harness_versions`) in every mode.
   - Build the workers per the plan, using the `identity` format `f"{pool}@{socket.gethostname()}:{os.getpid()}"` for pool workers only. The single-pool `Worker(...)` call keeps today's arguments.
