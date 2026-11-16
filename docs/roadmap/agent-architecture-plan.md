@@ -38,7 +38,8 @@ flag in `agent.yaml`.
 - [ ] **AP-2.2** `RepoReadTools` with commit pinning, truncation and paging.
 - [x] **AP-2.3** Validators library and evidence schemas (FR-205). Validators that read the tree run in an activity; the role loop runs in workflow code. *Delivered 2026-11-14: `src/sdlc/validators/` — pure checks + `path_like_tokens`, the `paths_exist` activity (the activity/inline split as specified), and the ADR-24 evidence schemas (first consumer `plan_valid`, FR-301, 2026-11-15); plan_check and clarify are the first consumers. Factory integration (`make_agent`) remains AP-2.1's.*
 - [ ] **AP-2.4** Dev-harness wrapper that refuses hand-off unless the contract's commands exit 0.
-- [ ] **AP-2.5** Per-role task queues and worker pools, routed from `RoleSpec` (NFR-2, ADR-9).
+- [x] **AP-2.5a** Two capability task queues and worker pools, run-level routing (NFR-2, ADR-9). *Delivered 2026-11-16 (E-91, round 024): the core pool on `ai-sdlc` plus the harness pool on `KROKER_HARNESS_QUEUE`, routing off by default (`docs/operations/worker-pools.md`, ADR-9 status).*
+- [ ] **AP-2.5b** Per-role task queues routed from `RoleSpec`, the five-pool form (NFR-2, ADR-9; depends on AP-2.1).
 - [ ] **AP-2.6** Worker-specific task queue for worktree affinity, with recreate-on-loss; task branches pushed to shared storage at each checkpoint.
 - [ ] **AP-2.7** `S3ArtifactStore` and Temporal `ExternalStorage` on every client and worker (FR-702, ADR-10).
 - [ ] **AP-2.8** Per-role lifecycle events on `RunEvent`: model, tool start/end, approval, usage.
