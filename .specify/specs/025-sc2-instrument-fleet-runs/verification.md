@@ -69,3 +69,20 @@ checkouts): `KROKER_HARNESS_QUEUE=default` — the sentinel resolving to
 activities and passes the CLI's `require_harness_poller` guard before
 starting. The scratch repos were untouched (each still exactly one clean
 `init` commit on `main`).
+
+### Smoke attempt 1 — infra stop 1 (unscored, kept and labelled)
+
+`bench-todo-api-greenfield-1794850805-91d165` (2026-11-16 17:40 UTC,
+fleet commit `93120693`): harness routing held, but the glm-5.3 cell died
+in `setup_integration_branch` — `git worktree add` refused the
+bind-mounted scratch repo (dubious ownership; host uid 1000 vs container
+root), and `kroker_commit` read `unknown` on every record (image built
+without `--build-arg KROKER_COMMIT`). The flash arm was correctly
+rejected at the ADR-6 boundary (registry reviewer/qa/merge_verdict
+default to the same `glm-5.3-flash` weights as the arm's dev), so the
+smoke's `one_file_per_cell` could not pass either. Verdict FAIL on all
+four conditions; **$0.00 spend**; classified infra per B.5(a)+(b);
+quarantined to `kroker-fleet-runs-025-evidence/infra-1-smoke-…`; failed
+stamp at the checkout's gitignored `runs/ops/smoke/unknown.json`.
+Sequence halted per FR-023 — diagnosis and fix options in
+`preflight.md` "Infra stop #1".

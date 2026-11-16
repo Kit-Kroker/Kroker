@@ -163,4 +163,64 @@ cleared.
 - **FREEZE ANNOUNCED: fleet commit `93120693`; no commit lands between
   the smoke stamp and the last scored run.**
 
+## Infra stop #1 — smoke attempt 1 (2026-11-16, ~17:40 UTC)
+
+Announced paid smoke (both arms, soft, fleet commit `93120693`) ran from
+the frozen checkout. It completed dispatch — harness routing held
+(`measure_code_axis` executed on the harness queue) — but the run died in
+setup and the smoke verdict was FAIL on all four conditions
+(`rubric_scores`, `commit_on_records`, `one_file_per_cell`,
+`oracle_all_pass`). Failed stamp retained at
+`../kroker-fleet/runs/ops/smoke/unknown.json` (cwd-relative ops root;
+`runs/` is gitignored, the checkout stays clean). Run evidence kept and
+labelled at `kroker-fleet-runs-025-evidence/infra-1-smoke-…` (quarantined
+out of the runs root so `score --all` cannot ingest it). **Spend $0.00**
+— no model or judge call ran.
+
+Three independent defects, one run:
+
+1. **git dubious ownership (infra, host/container)** —
+   `setup_integration_branch` runs `git worktree add` as container root
+   against `/srv/scratch-repos/todo-api-greenfield`, owned by host uid
+   1000; git's `safe.directory` check refused (rc=128). Three retries,
+   then the child `GraphWorkflow` failed at 3.4 s. Fix (non-tree):
+   `GIT_CONFIG_COUNT/KEY/VALUE` `safe.directory` entries for the five
+   repos via the gitignored compose override on both pools (git 2.47 in
+   image; survives recreate), or an in-container `git config --global`
+   (writable layer, recreate-fragile). Override env preferred.
+2. **`kroker_commit: unknown` on every record (infra, image build)** —
+   `resolve_provenance` falls back to the `KROKER_COMMIT` env when /app
+   carries no `.git`; the runtime image was built without
+   `--build-arg KROKER_COMMIT=<sha>` (Dockerfile:126-127), so the env is
+   the literal `unknown` and `commit_on_records` can never pass. Fix
+   (non-tree): rebuild the image from the fleet checkout WITH the
+   build-arg.
+3. **flash arm rejected at the boundary (case/registry config, needs a
+   tree edit)** — todo-api's backward-compat arms assign
+   dev/test/devops per `models:` entry while proposer roles keep the
+   registry default; `agents/reviewer/agent.yaml` (and qa, merge_verdict,
+   deep_review) default to `zai:glm-5.3-flash`, the same model id as the
+   flash arm's dev → ADR-6 (loader `check_adr6_families`) correctly
+   rejects the cell ("a judge must not run the weights it judges"). The
+   glm-5.3 arm is unaffected (reviewer=flash ≠ dev=glm-5.3). With the
+   flash cell rejected, `one_file_per_cell` (n_cells=2) can never pass —
+   the smoke cannot pass at this commit, by design surfacing the
+   collision. Candidate fixes (both tree edits → fleet restart at the new
+   commit + fresh owner go, B.4 rule 3):
+   (a) todo-api `case.yaml`: drop `zai-coding-plan/glm-5.3-flash` from
+   `models:` — smoke matrix becomes the strong arm alone (scored runs are
+   strong-arm only per B.3; the case has no separation object, so no
+   acceptance/stale coupling; cheapest smoke);
+   (b) add explicit `arms:` overriding `reviewer`/`qa`/`merge_verdict`
+   to `zai-coding-plan/glm-5.3` for the flash arm — keeps both arms in
+   the smoke at ~2× judge cost.
+
+Classification per B.5: infra — "(a) no stage produced a valid artifact"
+and "(b) a verifiable host error outside harness task execution"
+(defect 1 killed the run; defects 2–3 would each have failed the smoke on
+their own). The 13:11 casualty remains pre-smoke per the owner's ruling;
+this is **infra stop 1 of 2** — a second infra stop ends the delegation.
+Per FR-023 the sequence halts here; nothing below runs until the owner
+clears it.
+
 
