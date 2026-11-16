@@ -11,7 +11,9 @@ import enum
 import importlib
 import subprocess
 import sys
+from collections.abc import Callable
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -164,3 +166,132 @@ def test_resolve_accepts_one_char_name() -> None:
 def test_resolve_rejects_control_unicode_and_punctuation_names(bad: str) -> None:
     with pytest.raises(ValueError):
         _pools().resolve_harness_queue({QUEUE_ENV: bad})
+
+
+# ------------------------------------------------- root inputs carry harness_queue
+# 024 T022 (P-FR-005/011; R1; W-1). RED until T023 adds the field to the 8 models.
+# Invalid-name rejection and pre-024 payload validation are owned by qa-chaos.
+
+_INPUT_NAMES = [
+    "PipelineConfig",
+    "TriageInput",
+    "AssessmentInput",
+    "TidyUpInput",
+    "DeploymentInput",
+    "CrewTaskInput",
+    "CaseSpec",
+    "MaintenanceConfig",
+]
+
+
+def _make_input(name: str, **kw: Any) -> Any:
+    """Minimal valid instance of root input ``name``, reusing the existing tests' kwargs."""
+    from sdlc.benchmarks.models import CaseSpec
+    from sdlc.core.models import DeployConfig, PipelineConfig
+    from sdlc.maintenance.models import MaintenanceConfig
+    from sdlc.stages.deploy.models import DeployPlan
+    from sdlc.workflows.assessment import AssessmentInput
+    from sdlc.workflows.crew import CrewTaskInput
+    from sdlc.workflows.deployment import DeploymentInput
+    from sdlc.workflows.tidyup import TidyUpInput
+    from sdlc.workflows.triage import TriageInput
+
+    role = {
+        "name": "coder",
+        "harness": "opencode",
+        "model": "glm-5.3",
+        "writes": True,
+        "skill": "coder",
+    }
+    factories: dict[str, Callable[..., Any]] = {
+        "PipelineConfig": lambda **k: PipelineConfig(**k),
+        "TriageInput": lambda **k: TriageInput(repo_dir="/r", **k),
+        "AssessmentInput": lambda **k: AssessmentInput(repo_dir="/r", **k),
+        "TidyUpInput": lambda **k: TidyUpInput(repo_dir="/r", **k),
+        "DeploymentInput": lambda **k: DeploymentInput(
+            plan=DeployPlan(environment="staging", version="v2"),
+            cfg=DeployConfig(adapter="script"),
+            repo_path="/r",
+            **k,
+        ),
+        "CrewTaskInput": lambda **k: CrewTaskInput(
+            layout="code", lead="coder", roles=[role], prompt="p", worktree="/w", **k
+        ),
+        "CaseSpec": lambda **k: CaseSpec(
+            case_id="add-login",
+            idea_summary="add login",
+            mode="greenfield",
+            harnesses=["claude_code"],
+            models=["anthropic:claude-sonnet-4-6"],
+            judge_model="openai/gpt-5.2",
+            rubrics={},
+            **k,
+        ),
+        "MaintenanceConfig": lambda **k: MaintenanceConfig(
+            project="p", repo_dir="/r", build_probe=False, **k
+        ),
+    }
+    return factories[name](**kw)
+
+
+@pytest.mark.parametrize("name", _INPUT_NAMES)
+def test_inputs_omit_none(name: str) -> None:
+    from temporalio.contrib.pydantic import pydantic_data_converter
+
+    m = _make_input(name)
+
+    assert "harness_queue" not in m.model_dump_json()
+    wire = pydantic_data_converter.payload_converter.to_payloads([m])[0].data
+    assert b"harness_queue" not in wire
+
+
+@pytest.mark.parametrize("name", _INPUT_NAMES)
+def test_inputs_roundtrip_queue(name: str) -> None:
+    m = _make_input(name, harness_queue="q")
+
+    assert m.harness_queue == "q"
+    assert type(m).model_validate_json(m.model_dump_json()).harness_queue == "q"
+
+
+# ---- chaos: the field never holds an invalid value; pre-024 payloads still load
+
+_VALID_QUEUES = ["a" * 200, "my.q-1", "a_b.C-9", "q"]
+_INVALID_QUEUES = ["bad q", "a" * 201, ""]
+
+
+@pytest.mark.parametrize("bad", _INVALID_QUEUES, ids=["space", "len201", "empty"])
+@pytest.mark.parametrize("name", _INPUT_NAMES)
+def test_inputs_reject_invalid_queue_name(name: str, bad: str) -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError) as exc:
+        _make_input(name, harness_queue=bad)
+
+    # extra="forbid" models also raise today, for the wrong reason (field missing).
+    assert all(e["type"] != "extra_forbidden" for e in exc.value.errors())
+
+
+@pytest.mark.parametrize("good", _VALID_QUEUES, ids=["len200", "dotted", "mixed", "one"])
+@pytest.mark.parametrize("name", _INPUT_NAMES)
+def test_inputs_accept_boundary_valid_queue_name(name: str, good: str) -> None:
+    m = _make_input(name, harness_queue=good)
+
+    assert m.harness_queue == good
+    assert type(m).model_validate_json(m.model_dump_json()).harness_queue == good
+
+
+@pytest.mark.parametrize("name", _INPUT_NAMES)
+def test_inputs_pre_024_payload_validates_to_none(name: str) -> None:
+    m = _make_input(name)
+    payload = m.model_dump_json()
+
+    assert "harness_queue" not in payload
+    assert type(m).model_validate_json(payload).harness_queue is None
+
+
+def test_maintenance_config_forbid_accepts_harness_queue_key() -> None:
+    from sdlc.maintenance.models import MaintenanceConfig
+
+    payload = '{"project": "p", "repo_dir": "/r", "build_probe": false, "harness_queue": "q"}'
+
+    assert MaintenanceConfig.model_validate_json(payload).harness_queue == "q"
