@@ -1,7 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
 from sdlc.benchmarks.operator_time import ENGAGEMENT_CAP_S, operator_time
-
 from sdlc.core.models import ClarificationOutcome, GateOutcomeSummary, RunSummary
 
 # --- 025 T005 (RED): operator_time (FR-003/004/005, A.6) ---
