@@ -97,3 +97,48 @@ post-ruling rebuild; evidenced in the T022/T023 updates of this file.
 STOPPED at the T020 infra finding (core worker boot regression). No paid
 run has started; no scored run exists; the tree at `b55773ff` is
 untouched. Awaiting the orchestrator's ruling on the tree fix.
+
+**Update (same day, after the ruling):** fresh go granted; the repair
+landed as `26481ae3` (activity_executor at both Worker sites via
+_build_workers, RED boot test first, battery 8059/2-pre-existing/0,
+reviewer approve). Both pools rebuilt from the fixed checkout and verified
+live by Temporal pollers: `core@…` workflows+activities on `ai-sdlc`,
+`harness@…` activities on `ai-sdlc-harness`, restarts=0. The stop is
+cleared.
+
+## T021 — seeding (2026-11-16)
+
+- Scratch repos live on the HOST at `/home/maksim/work/scratch-repos`
+  (writable; `/srv` itself is root-owned) and reach the workers as
+  `/srv/scratch-repos` via the per-machine
+  `docker-compose.override.yml` (gitignored, the documented mechanism) —
+  mounted into BOTH pools. Five repos seeded per the cat-cafe plan's
+  protocol (a non-bare repo, single empty `init` commit on `main`):
+  todo-api-greenfield, deveval-readtime, deveval-lice, deveval-geotext,
+  cat-cafe-monitoring — all `mode: greenfield`.
+- Runs root: `.env` gains `KROKER_RUNS_BIND=/home/maksim/work/
+  kroker-fleet-runs-025` (fresh, empty, dedicated); the CLI side sets
+  `SDLC_RUNS_ROOT` to the same path. Both workers recreated with the
+  three-file compose; pollers re-verified.
+- Reference-env deps (readtime needs beautifulsoup4/pyquery/markdown2/
+  lxml; `network_required: false` so they must pre-exist; no provisioning
+  path exists — reference_env is E-80/E-81 scope): installed into BOTH
+  worker containers' venvs and the host venv. CAVEAT: container installs
+  live in the writable layer — they survive restarts/reboots but NOT a
+  recreate; no recreate is planned between the freeze and the last run
+  (the commit freeze forbids rebuilds), and any unplanned recreate is an
+  infra event anyway.
+- `sdlc benchmark verify-case` results: deveval-readtime PASS,
+  deveval-lice PASS, deveval-geotext PASS, cat-cafe-monitoring PASS.
+  todo-api-greenfield FAIL is a tool-shape mismatch, not a seeding
+  failure: verify-case runs an IMPORTED case's oracle against its
+  `reference/`, and the hand-written smoke case has none — its validation
+  is the smoke stamp itself (B.9, T023).
+- **cat-cafe conditionality resolved POSITIVE**: scratch repo seeded and
+  passing verify-case, research-provider key present (`EXA_API_KEY`).
+  cat-cafe runs as planned (run 4); no lice repeat needed.
+- opencode harness auth: no host auth.json exists to bind (the override
+  example's optional bind); the workers carry `ZAI_API_KEY` via env_file.
+  The smoke stamp is the proof this resolves; an auth failure there is
+  infra-class.
+
