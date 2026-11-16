@@ -13,6 +13,7 @@ import asyncio
 import logging
 import os
 from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from dotenv import load_dotenv
@@ -95,7 +96,12 @@ from .memory.activities import (
 )
 from .notify.activities import notify
 from .observability.activities import export_run_artifacts
-from .pools import HARNESS_ACTIVITIES, boot_plan_from_env, pool_identity
+from .pools import (
+    HARNESS_ACTIVITIES,
+    PoolBootPlan,
+    boot_plan_from_env,
+    pool_identity,
+)
 from .pricing import price_usage
 from .stages import STAGE_MODULES
 from .task_queue import TASK_QUEUE  # noqa: F401 -- re-export
@@ -311,6 +317,59 @@ _ALL_WORKFLOWS = [
 ]
 
 
+def _build_workers(client: Client, plan: PoolBootPlan) -> list[Worker]:
+    """Construct the plan's Worker(s); main runs them, the boot tests
+    construct through here.
+
+    025 Part B repair (T020 STOP): a sync ``@activity.defn`` —
+    paths_exist, 023 FR-205 — cannot construct without an
+    activity_executor. Executor over making the activity async:
+    paths_exist does blocking filesystem stats, which belong on a thread
+    pool, not the worker's event loop (Temporal's guidance for blocking
+    sync activities)."""
+    executor = ThreadPoolExecutor()
+    workers: list[Worker] = []
+    if plan.harness_worker:
+        # G-4: the harness worker is built (and starts) first.
+        cap_kwargs: dict[str, Any] = (
+            {} if plan.cap is None else {"max_concurrent_activities": plan.cap}
+        )
+        assert plan.queue is not None  # the plan's refusals guarantee it
+        workers.append(
+            Worker(
+                client,
+                task_queue=plan.queue,
+                workflows=[],
+                activities=harness_activities(),
+                identity=pool_identity("harness"),
+                activity_executor=executor,
+                **cap_kwargs,
+            )
+        )
+        cap_part = f", cap={plan.cap}" if plan.cap is not None else ""
+        print(f"worker running on task queue {plan.queue!r} (pool=harness{cap_part})")
+    if plan.core_worker:
+        single = plan.queue is None
+        # Single pool is today, exactly (G-1): same activities, same line,
+        # no identity key. `all`+queue keeps everything on core (pre-024
+        # clients may send harness work unrouted); `core` is core-only.
+        acts = get_worker_activities() if single or plan.harness_worker else core_activities()
+        id_kwargs: dict[str, Any] = {} if single else {"identity": pool_identity("core")}
+        workers.append(
+            Worker(
+                client,
+                task_queue=TASK_QUEUE,
+                workflows=_ALL_WORKFLOWS,
+                activities=acts,
+                activity_executor=executor,
+                **id_kwargs,
+            )
+        )
+        pool_part = "" if single else " (pool=core)"
+        print(f"worker running on task queue {TASK_QUEUE!r}{pool_part}")
+    return workers
+
+
 async def main() -> None:
     # 024 T009: the pool plan comes first, before anything connects —
     # every refuse row of the R5 truth table exits here (worker-boot G-2).
@@ -345,43 +404,7 @@ async def main() -> None:
         plugins=[SdlcPydanticAIPlugin()],
     )
 
-    workers: list[Worker] = []
-    if plan.harness_worker:
-        # G-4: the harness worker is built (and starts) first.
-        cap_kwargs: dict[str, Any] = (
-            {} if plan.cap is None else {"max_concurrent_activities": plan.cap}
-        )
-        assert plan.queue is not None  # the plan's refusals guarantee it
-        workers.append(
-            Worker(
-                client,
-                task_queue=plan.queue,
-                workflows=[],
-                activities=harness_activities(),
-                identity=pool_identity("harness"),
-                **cap_kwargs,
-            )
-        )
-        cap_part = f", cap={plan.cap}" if plan.cap is not None else ""
-        print(f"worker running on task queue {plan.queue!r} (pool=harness{cap_part})")
-    if plan.core_worker:
-        single = plan.queue is None
-        # Single pool is today, exactly (G-1): same activities, same line,
-        # no identity key. `all`+queue keeps everything on core (pre-024
-        # clients may send harness work unrouted); `core` is core-only.
-        acts = get_worker_activities() if single or plan.harness_worker else core_activities()
-        id_kwargs: dict[str, Any] = {} if single else {"identity": pool_identity("core")}
-        workers.append(
-            Worker(
-                client,
-                task_queue=TASK_QUEUE,
-                workflows=_ALL_WORKFLOWS,
-                activities=acts,
-                **id_kwargs,
-            )
-        )
-        pool_part = "" if single else " (pool=core)"
-        print(f"worker running on task queue {TASK_QUEUE!r}{pool_part}")
+    workers = _build_workers(client, plan)
 
     # A-terminal backstop: sweeps run dirs whose workflow is gone and has
     # been untouched past the grace period (killed/crashed runs — the

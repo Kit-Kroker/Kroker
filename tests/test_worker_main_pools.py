@@ -150,7 +150,9 @@ def test_no_vars_builds_one_worker_exactly_as_today(
     assert _wf_names(kw["workflows"]) == WORKFLOW_NAMES
     assert _names(kw["activities"]) == _names(worker.get_worker_activities())
     # Today's exact Worker call keeps its arguments: no cap, no identity.
-    assert set(kw) == {"task_queue", "workflows", "activities"}
+    # (025 Part B repair: activity_executor joins every Worker call — the
+    # sync paths_exist activity, FR-205, cannot construct without it.)
+    assert set(kw) == {"task_queue", "workflows", "activities", "activity_executor"}
     assert janitors == 1
     assert "worker running on task queue 'ai-sdlc'" in capsys.readouterr().out.splitlines()
 
