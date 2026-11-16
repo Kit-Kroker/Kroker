@@ -371,6 +371,7 @@ class AssessmentWorkflow(GateHost):
                     build_probe=inp.build_probe,
                     advisory_source=inp.advisory_source,
                     gates=inp.gates,
+                    harness_queue=inp.harness_queue,
                 ),
                 id=f"{workflow.info().workflow_id}-triage",
                 task_queue=workflow.info().task_queue,

@@ -90,6 +90,9 @@ def _cell_config(
     the cell runs — a violation raises, recording a failed cell rather than a
     silent bad run."""
     cfg = base.model_copy(deep=True)
+    # 024 R1 inheritance: the cell's child run carries the case's routing
+    # value verbatim (children copy; never mutated inside a workflow).
+    cfg.harness_queue = spec.harness_queue
     resolved = cell.role_models
     roles: dict[str, RoleConfig] = {}
     for role, model in resolved.items():

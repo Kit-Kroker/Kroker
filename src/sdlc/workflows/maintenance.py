@@ -194,6 +194,7 @@ class MaintenanceWorkflow(GateHost):
                 build_probe=cfg.build_probe,
                 advisory_source=cfg.advisory_source,
                 gates=triage_gates(GateSettings(), gating=False),
+                harness_queue=cfg.harness_queue,
             ),
             id=f"maint-{cfg.project}-c{self._state.cycle}-triage",
         )

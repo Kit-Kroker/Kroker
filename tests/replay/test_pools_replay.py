@@ -7,8 +7,9 @@ Research R7 found sdk-core does not compare activity queues on replay, so no
 Call sites use the module-qualified ``**pools.on_harness(...)`` form
 (T026-T028), so one ``setattr`` on the module reaches them all.
 
-RED today: no call site uses ``on_harness`` yet, so the patch is vacuous and
-the "a forced queue was applied" assertion fails. T028 removes the xfail.
+T028 removed the xfail: every call site routes through ``on_harness``
+now, so the patch is exercised by every replayed history, and R7's
+claim (a forced task_queue does not fail replay) is proven permanently.
 
 Stop-guard SG-2: a replay failure means the command sequence changed. Never
 re-record a history to turn it green (tests/replay/AGENTS.md).
@@ -58,7 +59,6 @@ def test_history_corpus_is_not_empty() -> None:
     assert _history_names(), f"no histories under {HISTORIES}"
 
 
-@pytest.mark.xfail(strict=True, raises=NoForcedQueueApplied, reason="vacuous until T028")
 @pytest.mark.asyncio
 async def test_forced_queue_replay(monkeypatch: pytest.MonkeyPatch) -> None:
     real = pools.on_harness

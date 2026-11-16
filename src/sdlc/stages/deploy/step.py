@@ -131,13 +131,16 @@ async def _execute_deployment_workflow(
     cfg: DeployConfig,
     repo_path: str,
     attempt: int,
+    harness_queue: str | None = None,
 ) -> DeployReport:
     """Run DeploymentWorkflow child workflow. Pure indirection so step tests can patch it."""
     from ...workflows.deployment import DeploymentInput, DeploymentWorkflow
 
     return await workflow.execute_child_workflow(
         DeploymentWorkflow.run,
-        DeploymentInput(plan=plan, cfg=cfg, repo_path=repo_path, attempt=attempt),
+        DeploymentInput(
+            plan=plan, cfg=cfg, repo_path=repo_path, attempt=attempt, harness_queue=harness_queue
+        ),
         id=f"{_workflow_id()}-deploy-{attempt}",
         task_queue=_task_queue(),
     )
@@ -184,7 +187,9 @@ async def step(
 
     attempt = 1
     while True:
-        report = await _execute_deployment_workflow(deploy_plan, cfg.deploy, repo_path, attempt)
+        report = await _execute_deployment_workflow(
+            deploy_plan, cfg.deploy, repo_path, attempt, harness_queue=cfg.harness_queue
+        )
         if report.deployed:
             # One record, reflecting the actual result -- never a
             # premature PASS from the gate. (SC-5 / E-40: a reading must

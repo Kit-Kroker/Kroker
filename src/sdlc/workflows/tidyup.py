@@ -206,6 +206,7 @@ class TidyUpWorkflow(GateHost):
                 build_probe=inp.build_probe,
                 advisory_source=inp.advisory_source,
                 gates=triage_gates(inp.gates, gating),
+                harness_queue=inp.harness_queue,
             ),
             id=f"{workflow.info().workflow_id}-triage-{suffix}",
             task_queue=workflow.info().task_queue,
@@ -231,7 +232,7 @@ class TidyUpWorkflow(GateHost):
                     repo_url=inp.repo_dir,
                     base_branch=inp.base_branch,
                 ),
-                cfg=inp.fix_cfg,
+                cfg=inp.fix_cfg.model_copy(update={"harness_queue": inp.harness_queue}),
                 seeded=seeded_work_for(identity, finding, signal_version),
                 task_queue=workflow.info().task_queue,
             )

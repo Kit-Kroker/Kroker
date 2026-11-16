@@ -278,6 +278,7 @@ async def _execute_coding_task(
                 repair=repair,
                 gate_settings=cfg.gate_settings(),
                 max_tool_escalations=cfg.max_tool_escalations,
+                harness_queue=cfg.harness_queue,
             ),
             id=f"{_workflow_id()}-crew-{task_id}-{attempt}",
             execution_timeout=timedelta(seconds=crew_layout.limits.wall_clock_s + 600),
