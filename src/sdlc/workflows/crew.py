@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
+from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, ApplicationError
@@ -44,6 +45,7 @@ with workflow.unsafe.imports_passed_through():
         ToolGrant,
     )
     from ..pending import GateContext
+    from ..pools import validate_harness_queue_name
     from .gates import GateHost
 
 EXIT_OK = 0
@@ -88,6 +90,11 @@ class CrewTaskInput(BaseModel):
     containment_policy_path: str | None = None
     containment_strict: bool = False
     repair: bool = False  # C2: forwarded to every turn in this attempt
+    # 024 R1: routing value, omitted from payloads when None (exclude_if).
+    # Copied verbatim by graph → crew at the CrewTaskInput construction.
+    harness_queue: Annotated[str | None, AfterValidator(validate_harness_queue_name)] = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
     # E-88 §6: the gate is hosted HERE, so the child needs the same three
     # fields GateHost reads. GateSettings exists precisely so a gate host
     # need not take the whole PipelineConfig.

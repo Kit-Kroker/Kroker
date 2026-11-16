@@ -19,6 +19,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from ..maintenance.models import MaintenanceConfig, MaintenanceState, MaintenanceSummary
 from ..maintenance.render import incidents_table
@@ -205,7 +206,10 @@ async def _enable(args: argparse.Namespace, client) -> int:  # noqa: ANN001
     if probe_problem is not None:
         print(probe_problem, file=sys.stderr)
         return 2
-    cap_kwargs: dict[str, int] = {}
+    # 024 T023: Any, not int — the constructor's **kwargs now also meets the
+    # str | None harness_queue param, and mypy checks **dict against every
+    # unsatisfied parameter.
+    cap_kwargs: dict[str, Any] = {}
     for dest in (
         "max_starts_per_cycle",
         "max_starts_per_window",

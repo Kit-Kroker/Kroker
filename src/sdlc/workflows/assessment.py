@@ -19,9 +19,9 @@ what remove that debt.
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import cast
+from typing import Annotated, cast
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
@@ -99,6 +99,7 @@ with workflow.unsafe.imports_passed_through():
     from ..measurement import CollectionState, Measurement
     from ..memoization.cache import NO_PROPOSER
     from ..pending import GateContext
+    from ..pools import validate_harness_queue_name
     from ..triage.admission import admits
     from ..triage.models import RepoTriage
     from .fanout import run_or_degrade
@@ -153,6 +154,10 @@ class AssessmentInput(BaseModel):
     # disabled (propose_risk=False, deterministic score only). The phase is
     # MEASURED either way -- what changes is whether the judgment layer is.
     propose_risk: bool = True
+    # 024 R1: routing value, omitted from payloads when None (exclude_if).
+    harness_queue: Annotated[str | None, AfterValidator(validate_harness_queue_name)] = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
 
 
 # The E-item owing each unbuilt phase body, so an empty assessment says WHY

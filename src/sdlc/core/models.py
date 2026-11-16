@@ -9,13 +9,16 @@ from __future__ import annotations
 import os
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     Field,
     field_validator,
 )
+
+from ..pools import validate_harness_queue_name
 
 
 class ProjectMode(StrEnum):
@@ -391,6 +394,12 @@ class PipelineConfig(BaseModel):
     # escalation gate `task:<id>` fired when a dev task exhausts its fix
     # budget. Kept separate from `gates` since task ids aren't known upfront.
     default_gate_policy: GatePolicy = GatePolicy.HARD
+    # 024 R1: the routing value. Set only by client start paths; omitted
+    # from payloads when None (exclude_if), so routing-off bytes are
+    # pre-024-identical. Never mutated inside a workflow; children copy it.
+    harness_queue: Annotated[str | None, AfterValidator(validate_harness_queue_name)] = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
 
     @field_validator("gates", mode="before")
     @classmethod

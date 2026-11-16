@@ -10,9 +10,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from ..agents.loader import HARNESS_ROLES, PROPOSER_ROLES
 from ..core.models import (
@@ -20,6 +20,7 @@ from ..core.models import (
     HarnessKind,
 )
 from ..harness.models import SessionDigest
+from ..pools import validate_harness_queue_name
 from ..stages.plan.models import PlanDrift
 
 # Who scored a stage attempt. The set is pinned by tests/test_judge_literal.py;
@@ -401,6 +402,11 @@ class CaseSpec(BaseModel):
     visibility: CaseVisibility | None = None
     strong_arm: str | None = None
     weak_arm: str | None = None
+    # 024 R1: routing value, omitted from payloads when None (exclude_if).
+    # Set by the benchmark start path from the resolved KROKER_HARNESS_QUEUE.
+    harness_queue: Annotated[str | None, AfterValidator(validate_harness_queue_name)] = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
 
     @model_validator(mode="after")
     def _validate_arms_selection(self) -> Self:

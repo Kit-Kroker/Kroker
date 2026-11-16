@@ -83,6 +83,22 @@ HARNESS_ACTIVITIES: frozenset[str] = frozenset(
 _QUEUE_NAME_RE = re.compile(r"[A-Za-z0-9._-]{1,200}")
 
 
+def validate_harness_queue_name(value: str | None) -> str | None:
+    """Validate a ``harness_queue`` input-field value (research R1).
+
+    The same name rule as :func:`resolve_harness_queue`, exposed for the
+    eight root inputs' field validators: ``None`` passes through (routing
+    off), any other value must match ``^[A-Za-z0-9._-]{1,200}$``. Pure and
+    free of pydantic so the model files can wrap it however they like.
+    """
+    if value is None or _QUEUE_NAME_RE.fullmatch(value) is not None:
+        return value
+    raise ValueError(
+        "harness_queue must match ^[A-Za-z0-9._-]{1,200}$ "
+        f"(got {value!r}); unset it for single-pool routing-off"
+    )
+
+
 class PoolMode(enum.StrEnum):
     """Which pool(s) a worker process hosts (research R5)."""
 

@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
+from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
@@ -26,6 +27,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from ..measurement import CollectionState, Measurement
     from ..pending import GateContext
+    from ..pools import validate_harness_queue_name
     from ..triage.activities import (
         TriageDependencyInput,
         TriagePin,
@@ -79,6 +81,10 @@ class TriageInput(BaseModel):
     advisory_source: str = "none"  # E-41a: declared egress, off by default
     gates: GateSettings = Field(default_factory=GateSettings)
     max_gate_rounds: int = 2  # D9's bound on the REVISE loop
+    # 024 R1: routing value, omitted from payloads when None (exclude_if).
+    harness_queue: Annotated[str | None, AfterValidator(validate_harness_queue_name)] = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
 
 
 def skipped_signal(signal_id: str, reason: str) -> SignalResult:

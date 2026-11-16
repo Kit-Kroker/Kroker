@@ -15,8 +15,9 @@ test commands, which is a wider exposure than E-42's build probe alone
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
@@ -30,6 +31,7 @@ with workflow.unsafe.imports_passed_through():
         ProjectMode,
     )
     from ..pending import GateContext
+    from ..pools import validate_harness_queue_name
     from ..tidyup.backlog import (
         admitted,
         mechanical_backlog,
@@ -83,6 +85,10 @@ class TidyUpInput(BaseModel):
     gates: GateSettings = Field(default_factory=GateSettings)
     fix_cfg: PipelineConfig = Field(default_factory=_default_fix_cfg)
     max_fix_runs: int = 10  # D10: a cap on spend, not on honesty
+    # 024 R1: routing value, omitted from payloads when None (exclude_if).
+    harness_queue: Annotated[str | None, AfterValidator(validate_harness_queue_name)] = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
 
 
 class FixRunResult(BaseModel):

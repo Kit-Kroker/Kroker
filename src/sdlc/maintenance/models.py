@@ -18,11 +18,19 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from ..core.models import GateDecision
+from ..pools import validate_harness_queue_name
 from ..triage.models import RepoTriage, TriageFinding
 from ..triage.signals import build_probe, dependencies, secrets
 
@@ -113,6 +121,13 @@ class MaintenanceConfig(BaseModel):
     max_starts_per_window: int = Field(default=3, ge=1, le=10)  # rolling 7 days
     max_reopens: int = Field(default=2, ge=0, le=2)  # code ceiling (GATE 1 Q3)
     child_timeout_hours: int = Field(default=24, ge=1, le=168)
+    # 024 R1: routing value, omitted from payloads when None (exclude_if).
+    # `extra="forbid"` stays: a routing-on payload on a pre-024 worker
+    # fails validation loudly (research R1's rollback asymmetry, remedy in
+    # docs/operations/worker-pools.md).
+    harness_queue: Annotated[str | None, AfterValidator(validate_harness_queue_name)] = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
 
     @field_validator("project")
     @classmethod

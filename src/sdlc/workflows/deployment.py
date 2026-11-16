@@ -13,9 +13,9 @@ the feature run instead of pinning it open.
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel
+from pydantic import AfterValidator, BaseModel, Field
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
@@ -23,6 +23,7 @@ with workflow.unsafe.imports_passed_through():
     from ..core.models import (
         DeployConfig,
     )
+    from ..pools import validate_harness_queue_name
     from ..stages.deploy.activities import (
         DeployActivityInput,
         RollbackInput,
@@ -68,6 +69,10 @@ class DeploymentInput(BaseModel):
     cfg: DeployConfig
     repo_path: str
     attempt: int = 1
+    # 024 R1: routing value, omitted from payloads when None (exclude_if).
+    harness_queue: Annotated[str | None, AfterValidator(validate_harness_queue_name)] = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
 
 
 def needs_rollback(results: list[SmokeCheckResult]) -> bool:
