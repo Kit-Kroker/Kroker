@@ -144,7 +144,8 @@
       "memory_watermark": null,
       "memory_retains": 0,
       "graph_sha": null,
-      "project_key": "kroker"
+      "project_key": "kroker",
+      "operator_instrumented": false
     },
     {
       "run_id": "fix-payment-retry",
@@ -167,7 +168,8 @@
       "memory_enabled": false,
       "memory_watermark": null,
       "memory_retains": 0,
-      "graph_sha": null
+      "graph_sha": null,
+      "operator_instrumented": false
     },
     {
       "run_id": "feature-flag-cleanup",
@@ -190,7 +192,8 @@
       "memory_enabled": false,
       "memory_watermark": null,
       "memory_retains": 0,
-      "graph_sha": null
+      "graph_sha": null,
+      "operator_instrumented": false
     },
     {
       "run_id": "graph-run-closed",
@@ -214,7 +217,8 @@
       "memory_watermark": null,
       "memory_retains": 0,
       "graph_sha": null,
-      "project_key": null
+      "project_key": null,
+      "operator_instrumented": false
     }
   ],
   "inbox": [
