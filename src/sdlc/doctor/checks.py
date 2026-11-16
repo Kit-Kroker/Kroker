@@ -291,6 +291,43 @@ async def check_temporal(connect=None) -> CheckResult:
     return CheckResult.ok(name, f"connected to {host}")
 
 
+async def check_worker_pools(connect=None) -> CheckResult:
+    """Row 13 (024 P-FR-008). With routing off (KROKER_HARNESS_QUEUE unset
+    or blank) the deployment is a single pool and this passes without
+    connecting. With routing on it requires a fresh harness poller on the
+    queue -- the same signal the start paths fail-fast on (R6) -- via the
+    check_temporal connect pattern, and it never raises (SG-3).
+    """
+    from ..pools import HarnessQueueUnpolled, require_harness_poller, resolve_harness_queue
+
+    name = "worker pools"
+    queue = resolve_harness_queue()
+    if queue is None:
+        return CheckResult.ok(name, "single pool (ai-sdlc)")
+    host = os.environ.get("TEMPORAL_HOST", "localhost:7233")
+    if connect is None:
+        from temporalio.client import Client
+
+        connect = Client.connect
+    try:
+        client = await asyncio.wait_for(connect(host), timeout=_TEMPORAL_TIMEOUT_S)
+    except TimeoutError:
+        return CheckResult.fail(name, f"routing on: cannot reach {host} to check '{queue}'")
+    except Exception as e:  # noqa: BLE001 -- a check never raises (SG-3)
+        return CheckResult.fail(name, f"routing on: cannot reach {host} to check '{queue}' ({e})")
+    try:
+        fresh = await require_harness_poller(client, queue, timeout_s=_TEMPORAL_TIMEOUT_S)
+    except HarnessQueueUnpolled:
+        return CheckResult.fail(
+            name,
+            f"routing on: '{queue}' has no harness worker — start one with "
+            "KROKER_WORKER_POOL=harness",
+        )
+    except Exception as e:  # noqa: BLE001 -- a check never raises (SG-3)
+        return CheckResult.fail(name, f"routing on: cannot reach {host} to check '{queue}' ({e})")
+    return CheckResult.ok(name, f"routing on: '{queue}' polled by {fresh} worker(s)")
+
+
 def check_board_db() -> CheckResult:
     """Row 9 (RULING 3). PASS on the stock default, printing the resolved
     absolute path; WARN only when SDLC_BOARD_DB is EXPLICITLY set to a
@@ -395,6 +432,7 @@ CHECKS: tuple[Check, ...] = (
     Check("gh", check_gh_binary, False),
     Check("GH_TOKEN", check_gh_token, False),
     Check("temporal", check_temporal, True),
+    Check("worker pools", check_worker_pools, True),
     Check("board db", check_board_db, False),
     Check("provider keys", check_provider_keys, False),
     Check("containment policy", check_containment_policy, False),

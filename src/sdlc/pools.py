@@ -245,13 +245,14 @@ async def require_harness_poller(
     *,
     freshness_s: float = 90,
     timeout_s: float = 5,
-) -> None:
-    """Raise :class:`HarnessQueueUnpolled` unless a worker polled ``queue``.
+) -> int:
+    """Return the number of fresh pollers on ``queue``; raise if none.
 
-    Asks the activity task queue for its pollers and requires at least one
-    whose ``last_access_time`` is within ``freshness_s`` of now. The
-    temporalio.api imports stay inside the function so importing this leaf
-    stays cheap for workflow code (data-model: stdlib + temporalio.api).
+    :class:`HarnessQueueUnpolled` is raised unless at least one worker
+    polled ``queue`` within ``freshness_s`` of now. Asks the activity task
+    queue for its pollers via DescribeTaskQueue. The temporalio.api
+    imports stay inside the function so importing this leaf stays cheap
+    for workflow code (data-model: stdlib + temporalio.api).
     """
     from temporalio.api.enums.v1 import TaskQueueType
     from temporalio.api.taskqueue.v1 import TaskQueue
@@ -273,13 +274,16 @@ async def require_harness_poller(
             f"(and KROKER_HARNESS_QUEUE={queue!r})"
         ) from exc
     now = time.time()
+    fresh = 0
     for poller in response.pollers:
         last = poller.last_access_time
         accessed = last.seconds + last.nanos / 1e9
         if now - accessed <= freshness_s:
-            return
-    raise HarnessQueueUnpolled(
-        f"task queue {queue!r} has no harness worker poller fresher than "
-        f"{freshness_s}s — start one with KROKER_WORKER_POOL=harness "
-        f"(and KROKER_HARNESS_QUEUE={queue!r})"
-    )
+            fresh += 1
+    if fresh == 0:
+        raise HarnessQueueUnpolled(
+            f"task queue {queue!r} has no harness worker poller fresher than "
+            f"{freshness_s}s — start one with KROKER_WORKER_POOL=harness "
+            f"(and KROKER_HARNESS_QUEUE={queue!r})"
+        )
+    return fresh

@@ -257,9 +257,10 @@ def test_registry_failure_reports_skip_rather_than_a_second_fail(monkeypatch):
 # --- the registry -----------------------------------------------------------
 
 
-def test_checks_registry_has_twelve_entries():
-    """RULING 4: twelve checks ship."""
-    assert len(checks.CHECKS) == 12
+def test_checks_registry_has_thirteen_entries():
+    """RULING 4 shipped twelve; 024 T012 adds the worker-pools row
+    (P-FR-008), next to temporal, async like it."""
+    assert len(checks.CHECKS) == 13
 
 
 def test_registry_names_are_unique():

@@ -109,14 +109,14 @@
 
 **Independent test**: `uv run pytest -q tests/test_doctor_pools.py`.
 
-- [ ] T011 [P] [US4] RED: write `T/test_doctor_pools.py`. `check_worker_pools(client_factory=…)` against stubs, one case per row of the contracts/worker-boot.md §Doctor table:
+- [x] T011 [P] [US4] RED: write `T/test_doctor_pools.py`. `check_worker_pools(client_factory=…)` against stubs, one case per row of the contracts/worker-boot.md §Doctor table:
   - unset → PASS `single pool (ai-sdlc)`;
   - set, with a stub that returns one fresh poller → PASS naming the queue and the count;
   - set, with a stub that returns no or stale pollers → FAIL with the exact remedy text;
   - set, with a connect that times out → FAIL `routing on: cannot reach …`.
 
   The check never raises (SG-3). (P-FR-008) **(S)**
-- [ ] T012 [US4] Implement `async def check_worker_pools(connect=None)` in `S/doctor/checks.py`, reusing `_TEMPORAL_TIMEOUT_S` and the `check_temporal` connect pattern (`S/doctor/checks.py:272-291`) and calling `require_harness_poller`. Add it to the doctor's row list next to `check_temporal` (locate the list by grepping `check_temporal` in `S/doctor/`). Update any test that pins the row count. Make T011 green. **(S)**
+- [x] T012 [US4] Implement `async def check_worker_pools(connect=None)` in `S/doctor/checks.py`, reusing `_TEMPORAL_TIMEOUT_S` and the `check_temporal` connect pattern (`S/doctor/checks.py:272-291`) and calling `require_harness_poller`. Add it to the doctor's row list next to `check_temporal` (locate the list by grepping `check_temporal` in `S/doctor/`). Update any test that pins the row count. Make T011 green. **(S)**
 
 ---
 
