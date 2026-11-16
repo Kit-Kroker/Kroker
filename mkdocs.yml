@@ -83,6 +83,8 @@ nav:
           - tier-0-triage: roadmap/tier-0-triage.md
           - tier-2-edcr: roadmap/tier-2-edcr.md
           - ui-component-library: roadmap/ui-component-library.md
+  - Operations:
+      - Worker pools: operations/worker-pools.md
   - Benchmark:
       - BENCHMARK: BENCHMARK.md
       - Analysis: generated/benchmark-analysis.md

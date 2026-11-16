@@ -202,6 +202,13 @@ only mode that does not. Read [`SECURITY.md`](SECURITY.md) before pointing
 it at a repository: the pipeline executes that repository's build and tests
 with the worker's environment.
 
+**Worker pools.** By default one `worker` process serves everything on the
+`ai-sdlc` queue. Setting `KROKER_HARNESS_QUEUE` moves the activities that
+spawn a coding CLI, run repo code or touch a run's worktree to a second
+queue, and `docker-compose.pools.yml` is an opt-in overlay that runs the
+two pools as two services. Routing is off unless you set it; see
+[`docs/operations/worker-pools.md`](docs/operations/worker-pools.md).
+
 **Published image.** Each `v*` tag publishes
 `ghcr.io/kit-kroker/kroker-worker:<version>` (and `latest`) from the same
 Dockerfile target, so from the first release after `v0.0.1` you can
