@@ -41,4 +41,31 @@ T009 approve · T010 approve · T011 approve · T012 approve · T013 approve.
 `066d43f9` — HEAD after the Part A merge (T013). Part B (T020 onward)
 freezes a dedicated clean checkout at this commit; the smoke stamp and
 every scored run must carry it (FR-024; the commit set in the rollup must
-be exactly one).
+be exactly one). **Superseded at T021/T022: the frozen fleet commit is
+`93120693`** (Part A close-out plus the spec evidence through the freeze;
+`066d43f9` remains an ancestor of it).
+
+## §025-B — the fleet runs (T020–T033)
+
+### Pre-smoke infrastructure casualty — not scored, not part of the fleet
+
+`bench-todo-api-greenfield-1794831076-c77ecc` — dispatched 2026-11-16
+13:11 local from the fleet checkout, before the harness queue was present
+in the dispatching CLI's environment. Single root cause: the CLI env
+lacked `KROKER_HARNESS_QUEUE`, so `spec.harness_queue` was `None` and
+every harness-class activity was scheduled on `ai-sdlc`, where the core
+worker correctly refuses them — `setup_integration_branch` failed the
+child `GraphWorkflow`, `measure_code_axis` failed the parent
+`BenchmarkWorkflow`. Both failures are that one misconfiguration; the
+pools themselves were healthy (ACTIVITY-type DescribeTaskQueue: `core` on
+`ai-sdlc`, `harness` on `ai-sdlc-harness`). Terminal-failed at 3.4 s,
+**$0.00 spend** (no model or judge call ran), no smoke stamp written.
+Quarantined to
+`kroker-fleet-runs-025-evidence/pre-smoke-infra-casualty-bench-todo-api-greenfield-1794831076-c77ecc`
+(outside the runs root, so `benchmark score --all` cannot ingest it).
+Fix, host-side only (gitignored `.env` in the primary and fleet
+checkouts): `KROKER_HARNESS_QUEUE=default` — the sentinel resolving to
+`HARNESS_QUEUE_DEFAULT` — so every later dispatch routes harness-class
+activities and passes the CLI's `require_harness_poller` guard before
+starting. The scratch repos were untouched (each still exactly one clean
+`init` commit on `main`).
