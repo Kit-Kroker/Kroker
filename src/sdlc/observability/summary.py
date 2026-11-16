@@ -152,9 +152,7 @@ def build_run_summary(
     ]
 
     answered_events = {
-        e.data.get("question_id"): e
-        for e in trace
-        if e.kind is RunEventKind.CLARIFICATION_ANSWERED
+        e.data.get("question_id"): e for e in trace if e.kind is RunEventKind.CLARIFICATION_ANSWERED
     }
     clarifications: list[ClarificationOutcome] = []
     for e in trace:
@@ -182,7 +180,7 @@ def build_run_summary(
                 # answer exists; unanswered keeps None so the deadline
                 # event's time never masquerades as an answer.
                 raised_at=e.at,
-                answered_at=ans.at if by != "unanswered" else None,
+                answered_at=ans.at if ans is not None and by != "unanswered" else None,
             )
         )
 
