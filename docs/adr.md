@@ -90,9 +90,11 @@ per `docs/documentation-rules.md`). ADR-22 was amended again on
   Temporal is the single source of run truth; surfaces cannot drift.
 - **ADR-9 Two worker pools by capability.** Proposer vs. harness queues:
   independent scaling, credential isolation, cheap fleet economics.
-  *Amended 2026-10-11 (plan, not built):* five pools routed per role
-  (§9), with worktree affinity and shared storage as prerequisites. `main`
-  still runs one queue.
+  *Two capability queues built 2026-11-16 (E-91):* the core pool on
+  `ai-sdlc` plus the harness pool on `KROKER_HARNESS_QUEUE`, run-level
+  routing off by default (`docs/operations/worker-pools.md`). *The
+  five-pool amendment stays plan (AP-2.5b):* pools routed per role (§9),
+  with worktree affinity and shared storage as prerequisites.
 - **ADR-10 Claim-check for all large payloads.** 2MB history limit as a
   design forcing-function; `ArtifactRef{kind, uri, sha256}` everywhere.
 - **ADR-11 Deterministic DAG, deliberately — contra the "Bitter Lesson."**
