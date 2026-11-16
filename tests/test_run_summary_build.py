@@ -424,3 +424,182 @@ def test_pre_change_events_parse_to_none_fields():
     g = s.gates[0]
     assert g.outcome is None and g.comments is None
     assert g.reviewer is None and g.decided_at is None
+
+
+# --- 025 T001 (RED): GateOutcomeSummary.raised_at (FR-001/002, US-A1 AS1) ---
+
+
+def test_raised_at_is_stamped_from_gate_awaited_event():
+    trace = [
+        _ev(2, RunEventKind.GATE_AWAITED, gate="architecture", round=1),
+        _ev(
+            5,
+            RunEventKind.GATE_DECIDED,
+            gate="architecture",
+            round=1,
+            policy="hard",
+            decided_by="human",
+            approved="true",
+        ),
+        _ev(6, RunEventKind.RUN_FINISHED),
+    ]
+    s = build_run_summary(
+        run_id="r",
+        mode="greenfield",
+        outcome="deployed",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+    )
+    assert len(s.gates) == 1
+    assert s.gates[0].raised_at == T0 + timedelta(seconds=2)
+
+
+def test_raised_at_survives_gate_dedup_enrich():
+    trace = [
+        _ev(1, RunEventKind.GATE_AWAITED, gate="merge", round=1),
+        _ev(
+            2,
+            RunEventKind.GATE_DECIDED,
+            gate="merge",
+            round=1,
+            policy="soft",
+            decided_by="human",
+            approved="true",
+        ),
+        _ev(
+            3,
+            RunEventKind.GATE_DECIDED,
+            gate="merge",
+            round=1,
+            policy="soft",
+            decided_by="maksim",
+            approved="true",
+            overrides="coverage,lint",
+        ),
+        _ev(4, RunEventKind.RUN_FINISHED),
+    ]
+    s = build_run_summary(
+        run_id="r",
+        mode="greenfield",
+        outcome="deployed",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+    )
+    assert len(s.gates) == 1
+    assert s.gates[0].raised_at == T0 + timedelta(seconds=1)
+
+
+def test_raised_at_is_none_when_gate_never_opened_for_a_human():
+    trace = [
+        _ev(
+            1,
+            RunEventKind.GATE_DECIDED,
+            gate="architecture",
+            round=1,
+            policy="soft",
+            decided_by="policy",
+            approved="true",
+        ),
+        _ev(2, RunEventKind.RUN_FINISHED),
+    ]
+    s = build_run_summary(
+        run_id="r",
+        mode="greenfield",
+        outcome="deployed",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+    )
+    assert s.gates[0].raised_at is None
+
+
+def _build_gates(trace):
+    return build_run_summary(
+        run_id="r",
+        mode="greenfield",
+        outcome="deployed",
+        trace=trace,
+        memory_enabled=False,
+        memory_watermark=None,
+    ).gates
+
+
+def test_raised_at_records_the_open_even_when_policy_auto_decides():
+    trace = [
+        _ev(1, RunEventKind.GATE_AWAITED, gate="architecture", round=1),
+        _ev(
+            3,
+            RunEventKind.GATE_DECIDED,
+            gate="architecture",
+            round=1,
+            policy="soft",
+            decided_by="policy",
+            approved="true",
+        ),
+        _ev(4, RunEventKind.RUN_FINISHED),
+    ]
+    gates = _build_gates(trace)
+    assert len(gates) == 1
+    assert gates[0].raised_at == T0 + timedelta(seconds=1)
+
+
+def test_raised_at_is_keyed_per_round_of_the_same_gate():
+    trace = [
+        _ev(1, RunEventKind.GATE_AWAITED, gate="architecture", round=1),
+        _ev(
+            2,
+            RunEventKind.GATE_DECIDED,
+            gate="architecture",
+            round=1,
+            policy="hard",
+            decided_by="human",
+            approved="false",
+        ),
+        _ev(5, RunEventKind.GATE_AWAITED, gate="architecture", round=2),
+        _ev(
+            6,
+            RunEventKind.GATE_DECIDED,
+            gate="architecture",
+            round=2,
+            policy="hard",
+            decided_by="human",
+            approved="true",
+        ),
+        _ev(7, RunEventKind.RUN_FINISHED),
+    ]
+    gates = _build_gates(trace)
+    assert len(gates) == 2
+    by_round = {g.round: g for g in gates}
+    assert by_round[1].raised_at == T0 + timedelta(seconds=1)
+    assert by_round[2].raised_at == T0 + timedelta(seconds=5)
+
+
+def test_raised_at_does_not_leak_across_gates():
+    trace = [
+        _ev(1, RunEventKind.GATE_AWAITED, gate="merge", round=1),
+        _ev(
+            2,
+            RunEventKind.GATE_DECIDED,
+            gate="merge",
+            round=1,
+            policy="hard",
+            decided_by="human",
+            approved="true",
+        ),
+        _ev(
+            3,
+            RunEventKind.GATE_DECIDED,
+            gate="deploy",
+            round=1,
+            policy="soft",
+            decided_by="policy",
+            approved="true",
+        ),
+        _ev(4, RunEventKind.RUN_FINISHED),
+    ]
+    gates = _build_gates(trace)
+    by_gate = {g.gate: g for g in gates}
+    assert by_gate["merge"].raised_at == T0 + timedelta(seconds=1)
+    assert by_gate["deploy"].raised_at is None
