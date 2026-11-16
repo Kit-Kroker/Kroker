@@ -212,3 +212,222 @@ def test_harness_sites_routed(classes: Classes) -> None:
         f"{len(offenders)} offending site(s) over {sites} resolved sites.\n"
         f"per file:\n{summary}\n{listing}"
     )
+
+
+# ------------------------------------------------------------------ start paths
+# 024 T029 (R6, static layer). Every product start path must resolve the harness
+# queue (``resolve_harness_queue``) before it starts a workflow or a schedule.
+
+# update_schedule has no caller today; it is in the set so a future one is guarded.
+START_CALLS = {"start_workflow", "create_schedule", "update_schedule"}
+# The demo drives its own demo queue, not the product start paths.
+START_ALLOWLIST = {"src/sdlc/demo/run.py"}
+EXPECTED_START_SITES = {
+    "src/sdlc/graph/start.py": 1,  # start_graph_run
+    "src/sdlc/cli.py": 3,  # three direct client.start_workflow sites
+    "src/sdlc/benchmarks/cli.py": 1,
+    "src/sdlc/maintenance/cli.py": 1,
+    "src/sdlc/schedules/apply.py": 1,  # create_schedule inside apply_changes
+}
+
+
+def _is_workflow_defn_class(node: ast.AST) -> bool:
+    if not isinstance(node, ast.ClassDef):
+        return False
+    return any(
+        _is_workflow_attr(d.func if isinstance(d, ast.Call) else d, {"defn"})
+        for d in node.decorator_list
+    )
+
+
+def _called_names(fn: ast.AST) -> set[str]:
+    return {
+        name
+        for c in ast.walk(fn)
+        if isinstance(c, ast.Call) and (name := _callee_name(c)) is not None
+    }
+
+
+def _start_sites(
+    tree: ast.Module,
+) -> list[tuple[ast.Call, list[ast.FunctionDef | ast.AsyncFunctionDef]]]:
+    """Start calls outside ``@workflow.defn`` classes, with enclosing functions (inner first)."""
+    out: list[tuple[ast.Call, list[ast.FunctionDef | ast.AsyncFunctionDef]]] = []
+
+    def visit(node: ast.AST, fns: list[ast.FunctionDef | ast.AsyncFunctionDef]) -> None:
+        if _is_workflow_defn_class(node):
+            return  # child starts inside workflows stay on the parent queue (W-2)
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in START_CALLS
+        ):
+            out.append((node, fns))
+        inner = [node, *fns] if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) else fns
+        for child in ast.iter_child_nodes(node):
+            visit(child, inner)
+
+    visit(tree, [])
+    return out
+
+
+def test_start_paths_resolve() -> None:
+    trees = _parse_tree()
+
+    resolvers = {
+        fn.name
+        for t in trees.values()
+        for fn in ast.walk(t)
+        if isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef)
+        and "resolve_harness_queue" in _called_names(fn)
+    }
+
+    census: Counter[str] = Counter()
+    offenders: list[str] = []
+    for rel, tree in trees.items():
+        if rel in START_ALLOWLIST:
+            continue
+        for call, fns in _start_sites(tree):
+            census[rel] += 1
+            ok = any({"resolve_harness_queue", *resolvers} & _called_names(fn) for fn in fns)
+            if not ok:
+                where = fns[0].name if fns else "<module>"
+                offenders.append(
+                    f"{rel}:{call.lineno}: {where}() starts without resolve_harness_queue"
+                )
+
+    assert dict(census) == EXPECTED_START_SITES, (
+        f"start-path census drifted: found {dict(sorted(census.items()))}, "
+        f"expected {dict(sorted(EXPECTED_START_SITES.items()))}"
+    )
+    assert not offenders, f"{len(offenders)} unresolved start path(s):\n" + "\n".join(
+        sorted(offenders)
+    )
+
+
+# ----------------------------------------------- chaos: the walk cannot be evaded
+
+
+def _outside_workflows(tree: ast.AST) -> list[ast.AST]:
+    """Every node outside ``@workflow.defn`` class bodies (same exclusion as ``_start_sites``)."""
+    out: list[ast.AST] = []
+
+    def visit(node: ast.AST) -> None:
+        if _is_workflow_defn_class(node):
+            return
+        out.append(node)
+        for child in ast.iter_child_nodes(node):
+            visit(child)
+
+    visit(tree)
+    return out
+
+
+def _alias_sites(tree: ast.AST) -> list[str]:
+    """Ways to reach a start scheduler other than calling ``<client>.<scheduler>(...)``."""
+    nodes = _outside_workflows(tree)
+    call_targets = {id(n.func) for n in nodes if isinstance(n, ast.Call)}
+    found: list[str] = []
+    for n in nodes:
+        line = getattr(n, "lineno", 0)
+        if isinstance(n, ast.Attribute) and n.attr in START_CALLS and id(n) not in call_targets:
+            found.append(f"{line}: {n.attr} used other than as a call (alias or argument)")
+        elif isinstance(n, ast.ImportFrom) and any(a.name in START_CALLS for a in n.names):
+            found.append(f"{line}: scheduler imported by bare name")
+        elif (
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Name)
+            and n.func.id == "getattr"
+            and any(isinstance(a, ast.Constant) and a.value in START_CALLS for a in n.args[1:2])
+        ):
+            found.append(f"{line}: scheduler fetched with getattr")
+    return found
+
+
+def test_start_schedulers_are_never_aliased() -> None:
+    offenders = [
+        f"{rel}:{hit}" for rel, tree in _parse_tree().items() for hit in _alias_sites(tree)
+    ]
+
+    assert not offenders, "start scheduler aliased (dodges the walk):\n" + "\n".join(offenders)
+
+
+@pytest.mark.parametrize(
+    "src",
+    [
+        "start = client.start_workflow",
+        "self._s = c.create_schedule",
+        "run = c.update_schedule",
+        "x: Any = c.start_workflow",
+        "helper(c.start_workflow)",
+        "from temporalio.client import start_workflow",
+        "from x import create_schedule as cs",
+        "f = getattr(c, 'start_workflow')",
+        "class Plain:\n    s = c.start_workflow",
+    ],
+)
+def test_alias_detector_catches_evasions(src: str) -> None:
+    assert _alias_sites(ast.parse(src)), src
+
+
+def test_alias_detector_ignores_plain_calls_and_workflow_bodies() -> None:
+    plain = "async def f(c):\n    await c.start_workflow(W.run, i)\n    c.update_schedule(1)"
+    in_workflow = "@workflow.defn\nclass W:\n    s = c.start_workflow"
+
+    assert _alias_sites(ast.parse(plain)) == []
+    assert _alias_sites(ast.parse(in_workflow)) == []
+
+
+_EXCLUSION_SRC = """
+class Plain:
+    async def f(self, c):
+        await c.start_workflow(1)
+
+@workflow.defn
+class W:
+    async def run(self, c):
+        await c.start_workflow(2)
+
+@workflow.defn(name="x")
+class Named:
+    class Inner:
+        async def g(self, c):
+            await c.create_schedule(3)
+
+@other.defn
+class NotWorkflow:
+    async def h(self, c):
+        await c.update_schedule(4)
+
+@dataclass
+class Data:
+    async def i(self, c):
+        await c.start_workflow(5)
+
+async def top(c):
+    await c.start_workflow(6)
+
+def outer():
+    @workflow.defn
+    class Local:
+        async def run(self, c):
+            await c.start_workflow(7)
+
+c.start_workflow(8)
+"""
+
+
+def test_workflow_defn_exclusion_only_covers_workflow_class_bodies() -> None:
+    sites = _start_sites(ast.parse(_EXCLUSION_SRC))
+
+    def marker(call: ast.Call) -> int:
+        arg = call.args[0]
+        assert isinstance(arg, ast.Constant) and isinstance(arg.value, int)
+        return arg.value
+
+    kept = sorted(marker(c) for c, _ in sites)
+    # 1 plain class, 4 foreign decorator, 5 dataclass, 6 function, 8 module level are kept;
+    # 2, 3 (nested in a named workflow class) and 7 (workflow class inside a function) are not.
+    assert kept == [1, 4, 5, 6, 8]
+    module_level = [fns for c, fns in sites if marker(c) == 8]
+    assert module_level == [[]]
