@@ -1,8 +1,5 @@
 # Worker pools — operations
 
-> 024-i: pools can boot; run-level routing lands in 024-ii
-> (`KROKER_HARNESS_QUEUE` is not yet read by start paths).
-
 ADR-9 splits the worker into two capability pools. The **core pool**
 (queue `ai-sdlc`) runs every workflow plus the cheap, pure activities.
 The **harness pool** (queue `KROKER_HARNESS_QUEUE`) runs the 28
@@ -73,7 +70,7 @@ log.
 `python -m sdlc.cli doctor` gains a `worker pools` row: with routing
 off it reports `single pool (ai-sdlc)`; with routing on it requires a
 fresh harness poller on the queue (the same R6 signal the start paths
-will fail-fast on in 024-ii) and names the remedy when there is none —
+fail-fast on) and names the remedy when there is none —
 start one with `KROKER_WORKER_POOL=harness`.
 
 ## Session resume — one host only (R9)

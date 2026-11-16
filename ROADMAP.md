@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-11-15 (round 023b — DAPER execute/report: approved plans run as capped repair children in sandboxed worktrees, incidents re-verify and close/reopen/escalate, disable withdraws in-flight attempts, retention writes one scrubbed record per terminal incident; details in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
+| Last verified | 2026-11-16 (round 024 — two worker pools E-91: `ai-sdlc` core + `KROKER_HARNESS_QUEUE` harness, run-level routing off by default, all 34 harness call sites routed with AST/replay/golden proofs and the five-run fleet cap demonstrated (peak 2, core p95 <1 ms); details in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -459,7 +459,7 @@ as tracked rather than accidental.
 ## 3. Non-functional requirements (PRD §7)
 
 - [x] **NFR-1** Durability — Temporal-native.
-- [ ] **NFR-2** Scale / two pools — single task queue `"ai-sdlc"`; contra ADR-9. Tracked as AP-2.5.
+- [x] **NFR-2** Scale / two pools — two capability pools (E-91, round 024): core `ai-sdlc` plus `KROKER_HARNESS_QUEUE` harness, routing off by default; five-pool form AP-2.5b.
 - [ ] — **NFR-3** Latency (5s/2s) — untested, not falsifiable from code.
 - [ ] ⚠️ **NFR-4** Auditability — Temporal history reconstructs runs, and the `events.jsonl`/`report.html` export exists (FR-704, E-32). Still partial: claim-check is not load-bearing (FR-702).
 - [ ] ⚠️ **NFR-5** Security — env allowlist done; `pre_tool` hook landed (2026-07-24, E-15/E-16, tool-level destructive-action + egress denial); OS user, container, network-level egress, scoped-cred injection still absent (E-20/E-21).
@@ -524,7 +524,7 @@ as tracked rather than accidental.
 - [x] **ADR-6** Anti-collusion review (model-family inequality, clean-context reviewer) — *the boot check validated `agents.yaml`'s `developer` entry, which nothing ran; `cfg.roles["dev"]` did the coding. Re-aimed at `dev` and the two registries mirror-checked at boot (`2026-07-16-registry-drives-every-role`).*
 - [ ] **ADR-7** Repairs execute through the factory — maintenance loop absent.
 - [ ] ⚠️ **ADR-8** Interfaces as stateless shells — true for CLI. **Two documented exceptions, both deliberate:** the agent board API (E-78) serves durable cross-run state no live workflow holds (ADR-21); and the dashboard backend (E-10) holds an in-process fleet poller and subscriber set — not durable state, but not a stateless shell either. The poller exists because a per-request fan-out costs `N_clients × N_runs` while one shared poller costs `N_runs`. ARCHITECTURE.md §8 scopes the claim accordingly.
-- [ ] **ADR-9** Two worker pools by capability — single queue.
+- [x] **ADR-9** Two worker pools by capability — built 2026-11-16 (E-91, round 024): core `ai-sdlc` plus `KROKER_HARNESS_QUEUE` harness, run-level routing off by default; the five-pool amendment stays plan (AP-2.5b).
 - [ ] ⚠️ **ADR-10** Claim-check for large payloads — `ArtifactRef` exists but not load-bearing. *Proposer prompts are guarded, not claim-checked: 1 MiB limit, non-retryable `ProposerPayloadTooLarge` before scheduling (007). Uncovered: aggregate parallel-request overflow, in-activity agents.*
 - [ ] ⚠️ **ADR-11** Deterministic DAG — holds for the 8 live stages; 6 stages absent.
 - [x] **ADR-12** Contract-first, clean-context validators — QA ✅ and review ✅ both clean-context. **(now complete)**
@@ -566,7 +566,7 @@ as tracked rather than accidental.
 
 ## 8. Recommended next increments (ranked by invariant undercut, not effort)
 
-1. **Finish P4 — DAPER maintenance loop + two worker pools (the active program; owner override 2026-11-14, Option B).** The owner chose P4 first — "finish all of needed" = the P4 row and its exit criterion (SC-1..3 at target) — reversing the 2026-11-11 swarm-first order (the intent doc records this as a dated addendum, its body unedited; spec: [`.specify/specs/023-daper-maintenance-loop/spec.md`](.specify/specs/023-daper-maintenance-loop/spec.md) §A.0). The **loop half landed 023a (2026-11-15)**: E-14 + FR-501's loop/schedule/nudge/gate + FR-503's gate half; **023b's execute/report landed (2026-11-15)** — FR-501/503 complete, FR-502's code-fix clause delivered (ops clause open). Next in this program: two worker pools (**NFR-2**/ADR-9/AP-2.5), fleet runs for SC-1..3 (SC-2 needs its operator-time instrument first). Swarm mode is parked (item 6).
+1. **Finish P4 — DAPER maintenance loop + two worker pools (the active program; owner override 2026-11-14, Option B).** The owner chose P4 first — "finish all of needed" = the P4 row and its exit criterion (SC-1..3 at target) — reversing the 2026-11-11 swarm-first order (the intent doc records this as a dated addendum, its body unedited; spec: [`.specify/specs/023-daper-maintenance-loop/spec.md`](.specify/specs/023-daper-maintenance-loop/spec.md) §A.0). The **loop half landed 023a (2026-11-15)**: E-14 + FR-501's loop/schedule/nudge/gate + FR-503's gate half; **023b's execute/report landed (2026-11-15)** — FR-501/503 complete, FR-502's code-fix clause delivered (ops clause open). The **pools half landed (round 024, 2026-11-16)**: two capability queues built (**NFR-2**/ADR-9/AP-2.5a), run-level routing off by default. Next in this program: fleet runs (**R025**) for SC-1..3 (SC-2 needs its operator-time instrument first). Swarm mode is parked (item 6).
 2. ~~**Close P1 honestly** — CI-runnable end-to-end run through `FeatureWorkflow` + wire the `security_no_critical` absolute check.~~ **Done** on `feat/p1-consolidation` (`3cfbe62`…`41c9185`); plan `docs/superpowers/plans/2026-07-15-p1-consolidation.md`.
 3. ~~**Analyze/Analyst stage** — unlocks coverage + criterion→test traceability advisory checks (FR-106).~~ **Done** on `feat/analyst-stage`; plan `docs/superpowers/plans/2026-07-16-analyst-stage.md`, spec `docs/superpowers/specs/2026-07-16-analyst-stage-traceability-coverage-design.md`.
 4. ~~**retro/reflect wiring** (FR-404) — starts accumulating the SC-4/SC-6 calibration signal. Tasks: **E-12, E-13** (§9.3).~~ **Partially done** — schedule mechanism + nightly project reflect ship (E-12/E-13); plan `docs/superpowers/plans/2026-07-16-schedules-as-files-and-nightly-reflect.md`. Signal only accrues on runs with `memory.enabled=true` (defaults `False`). Org half blocked on **E-25**; the retro *stage* (§1 item 13, `RunSummary`) is still unbuilt (**E-32**). *Follow-on:* the benchmark instrument (§9.8) is what turns the accruing signal into the SC-1..6 numbers — held-out grade (**E-30/E-31**) and per-role economics (**E-33**) are the load-bearing measurement work, ranked there by invariant undercut.
