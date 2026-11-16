@@ -26,22 +26,27 @@ real child needs the full agent bundle and gate driving. The stub records the
 (W-2); the child-side activity sites themselves are covered by (a) and by the
 AST layer, ``tests/test_pools_call_sites.py``.
 
-DEFERRED TO T032b (same round, next sitting; the in-round split the task text
-authorises, not a waiver):
+Driven in T032b (routing on, same rig; the task re-runs only (a)/(b) off):
 
-- (c) ``TriageWorkflow`` / ``TidyUpWorkflow`` / ``AssessmentWorkflow`` on the
-  ``tests/maintenance/conftest.py`` fixture repo;
+- (c) ``TriageWorkflow``, ``AssessmentWorkflow`` and ``TidyUpWorkflow`` on the
+  ``tests/maintenance/conftest.py`` fixture repo (assessment: the replay
+  scenario's staged repo and bundle);
 - (d) a ``MaintenanceWorkflow`` execute path via 023b's stub child
   (``tests/maintenance/stub_child.py::StubRepairChild``);
-- (e) ``ReflectWorkflow``.
+- (e) ``ReflectWorkflow``: the negative space. Every activity is core and no
+  harness queue appears anywhere in the run (R2's "Reflect all-core").
 """
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import contextlib
+import os
+import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -104,17 +109,20 @@ Recorded = list[tuple[str, str | None]]
 class _Recorder(Interceptor):
     """Records (activity, task_queue) at every workflow-side start_activity."""
 
-    def __init__(self, sink: Recorded) -> None:
+    def __init__(self, sink: Recorded, skip_types: frozenset[str] = frozenset()) -> None:
         self._sink = sink
+        self._skip = skip_types
 
     def workflow_interceptor_class(
         self, input: WorkflowInterceptorClassInput
     ) -> type[WorkflowInboundInterceptor]:
         sink = self._sink
+        skip = self._skip
 
         class _Outbound(WorkflowOutboundInterceptor):
             def start_activity(self, input: StartActivityInput) -> Any:
-                sink.append((input.activity, input.task_queue))
+                if workflow.info().workflow_type not in skip:
+                    sink.append((input.activity, input.task_queue))
                 return super().start_activity(input)
 
         class _Inbound(WorkflowInboundInterceptor):
@@ -136,7 +144,13 @@ def _split(bundle: list[Any]) -> tuple[list[Any], list[Any]]:
 
 @contextlib.asynccontextmanager
 async def _rig(
-    *, workflows: list[type], bundle: list[Any], routed: bool, sink: Recorded
+    *,
+    workflows: list[type],
+    bundle: list[Any],
+    routed: bool,
+    sink: Recorded,
+    skip_types: frozenset[str] = frozenset(),
+    core_extra: list[Any] | None = None,
 ) -> AsyncIterator[Client]:
     """Routed: core + harness workers. Unrouted: the core worker hosts everything."""
     core_acts, harness_acts = _split(bundle)
@@ -147,14 +161,14 @@ async def _rig(
             task_queue=CORE_Q,
             identity=CORE_ID,
             workflows=workflows,
-            activities=core_acts if routed else bundle,
+            activities=[*core_acts, *(core_extra or [])] if routed else bundle,
             plugins=[SdlcPydanticAIPlugin()],
-            interceptors=[_Recorder(sink)],
+            interceptors=[_Recorder(sink, skip_types)],
             workflow_runner=UnsandboxedWorkflowRunner(),
         )
         async with contextlib.AsyncExitStack() as stack:
             await stack.enter_async_context(core)
-            if routed:
+            if routed and harness_acts:  # (e) reflect has none: negative space
                 await stack.enter_async_context(
                     Worker(
                         client,
@@ -168,13 +182,18 @@ async def _rig(
             yield client
 
 
-async def _histories(client: Client, handle: WorkflowHandle) -> list[Any]:
-    """The workflow's history plus every child's, recursively."""
+async def _histories(
+    client: Client, handle: WorkflowHandle, skip_types: frozenset[str] = frozenset()
+) -> list[Any]:
+    """The workflow's history plus every child's, recursively (minus ``skip_types``)."""
     out: list[Any] = []
     pending = [handle]
     while pending:
         h = pending.pop()
         hist = await h.fetch_history()
+        first = hist.events[0].workflow_execution_started_event_attributes
+        if first.workflow_type.name in skip_types:
+            continue
         out.append(hist)
         for ev in hist.events:
             if ev.event_type == EventType.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
@@ -538,3 +557,390 @@ async def test_benchmark_routing_off() -> None:
     recorded, _ = await _drive_bench(None, False)
     assert CHILD_QUEUES == [None]
     _assert_unrouted(recorded)
+
+
+# ------------------------------------------------ T032b: (c) (d) (e), routing on
+
+
+async def _run_routed(
+    workflows: list[type],
+    bundle: list[Any],
+    start: Callable[[Client], Awaitable[WorkflowHandle]],
+    *,
+    timeout: float = 120,
+) -> tuple[Recorded, list[Any], Any]:
+    sink: Recorded = []
+    async with _rig(workflows=workflows, bundle=bundle, routed=True, sink=sink) as client:
+        handle = await start(client)
+        result = await asyncio.wait_for(handle.result(), timeout=timeout)
+        return sink, await _histories(client, handle), result
+
+
+def _wf_id(prefix: str) -> str:
+    return f"{prefix}-{uuid.uuid4()}"
+
+
+async def test_triage_routing_on(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from sdlc.workflows.triage import TriageInput, TriageWorkflow
+    from tests.maintenance.conftest import make_repo
+    from tests.maintenance.fake_triage import TRIAGE_ACTIVITIES
+
+    repo = make_repo(tmp_path)
+
+    async def start(client: Client) -> WorkflowHandle:
+        return await client.start_workflow(
+            TriageWorkflow.run,
+            TriageInput(
+                repo_dir=str(repo),
+                commit="HEAD",
+                build_probe=True,
+                advisory_source="none",
+                harness_queue=HARNESS_Q,
+            ),
+            id=_wf_id("pools-triage"),
+            task_queue=CORE_Q,
+        )
+
+    recorded, histories, _ = await _run_routed([TriageWorkflow], [*TRIAGE_ACTIVITIES], start)
+    assert "triage_build_probe" in {n for n, _ in recorded}
+    _assert_routed(recorded, histories)
+
+
+async def test_assessment_routing_on(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from sdlc.workflows.assessment import AssessmentWorkflow
+    from sdlc.workflows.triage import TriageWorkflow
+    from tests.replay import scenarios
+
+    # the scenario stages its repo and sets two machine-global env vars; restore them.
+    for key in ("SDLC_MEMOIZATION_CACHE_ROOT", "SDLC_BOARD_DB"):
+        monkeypatch.setenv(key, os.environ.get(key, ""))
+    scenario = scenarios.ASSESSMENT_SCENARIOS[0]
+    scenario.before()
+    inp = scenario.extra["assessment_input"].model_copy(update={"harness_queue": HARNESS_Q})
+
+    async def start(client: Client) -> WorkflowHandle:
+        return await client.start_workflow(
+            AssessmentWorkflow.run, inp, id=_wf_id("pools-assess"), task_queue=CORE_Q
+        )
+
+    recorded, histories, _ = await _run_routed(
+        [AssessmentWorkflow, TriageWorkflow], scenario.activities(), start
+    )
+    # the triage child inherited the queue (T028) and ran its build probe on pools-q
+    assert "triage_build_probe" in {n for n, _ in recorded}
+    _assert_routed(recorded, histories)
+
+
+# StubRepairChild is test code registered as "GraphWorkflow": it schedules its own vcs
+# activities with no routing, so it is outside what this test measures. The production
+# graph/crew/deploy children are driven by (a); the AST layer covers the rest.
+STUB_CHILD = frozenset({"GraphWorkflow"})
+
+
+async def _until(pred: Callable[[], Awaitable[bool]], what: str, timeout: float = 90.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with contextlib.suppress(Exception):  # queries before the first workflow task
+            if await pred():
+                return
+        await asyncio.sleep(0.1)
+    raise TimeoutError(f"timed out waiting for {what}")
+
+
+async def test_maintenance_execute_routing_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """(d) cribs tests/maintenance/test_workflow_exec_us1.py::_drive_policy_start."""
+    from sdlc.maintenance.models import (
+        MaintenanceConfig,
+        MaintenanceState,
+        RepairAction,
+        RepairProposal,
+    )
+    from sdlc.vcs import build_verification_branch, setup_integration_branch
+    from sdlc.workflows.maintenance import MaintenanceWorkflow
+    from sdlc.workflows.triage import TriageWorkflow
+    from tests.maintenance.conftest import (
+        MAINT_023B_ACTIVITIES,
+        commit_env_file,
+        fake_notify,
+        make_repo,
+    )
+    from tests.maintenance.fake_triage import TRIAGE_ACTIVITIES
+    from tests.maintenance.stub_child import STUB_ACTIVITIES, StubRepairChild
+
+    monkeypatch.setenv("SDLC_WORKTREES_ROOT", str(tmp_path / "wts"))
+    repo = make_repo(tmp_path)
+    proposal = RepairProposal(
+        analysis="The tracked file leaks a live credential; remove it from the index.",
+        actions=[
+            RepairAction(
+                kind="code_fix",
+                summary="remove the tracked credential file from the index",
+                target_paths=["config/settings.ini"],
+            )
+        ],
+        self_confidence=0.9,
+    )
+    cfg = MaintenanceConfig(
+        project="demo",
+        repo_dir=str(repo),
+        ack_unattended_build_probe=True,
+        execute=True,
+        harness_queue=HARNESS_Q,
+    )
+    bundle = [
+        *TRIAGE_ACTIVITIES,
+        *fake_agent_activities([("maintainer_agent", RepairProposal, proposal)]),
+        fake_notify,
+        setup_integration_branch,
+        build_verification_branch,
+        *STUB_ACTIVITIES,
+        *MAINT_023B_ACTIVITIES,
+    ]
+    sink: Recorded = []
+    async with _rig(
+        workflows=[MaintenanceWorkflow, TriageWorkflow, StubRepairChild],
+        bundle=bundle,
+        routed=True,
+        sink=sink,
+        skip_types=STUB_CHILD,
+        # the unrouted stub child calls setup_integration_branch directly; serve it on core
+        core_extra=[setup_integration_branch],
+    ) as client:
+        handle = await client.start_workflow(
+            MaintenanceWorkflow.run,
+            MaintenanceState(config=cfg),
+            id="maint-demo",
+            task_queue=CORE_Q,
+        )
+
+        async def nudge(cycle_after: int) -> None:
+            await handle.signal("nudge")
+
+            async def done() -> bool:
+                s = await handle.query(MaintenanceWorkflow.maintenance_state)
+                return s.cycle == cycle_after and not s.running_cycle
+
+            await _until(done, f"cycle {cycle_after}")
+
+        await nudge(2)  # cycle 1: baseline
+        commit_env_file(repo)
+        await nudge(3)  # cycle 2: incidents, plans, gates
+        await nudge(4)  # cycle 3: reproduced -> policy approval
+        await nudge(5)  # cycle 4: Execute starts the repair child
+        await nudge(6)  # cycle 5+: the loop observes the child and verifies
+        await nudge(7)
+
+        incidents = await handle.query(MaintenanceWorkflow.incidents)
+        assert any(i.execution is not None for i in incidents), "no repair child was started"
+        histories = await _histories(client, handle, STUB_CHILD)
+        await handle.terminate("T032b done")
+
+    names = {n for n, _ in sink}
+    # the triage child (inherited queue) and the loop's own verification calls
+    assert {"triage_build_probe", "build_verification_branch", "remove_verification_tree"} <= names
+    _assert_routed(sink, histories)
+    _assert_repair_child_input_carries_queue(histories)
+
+
+def _assert_repair_child_input_carries_queue(histories: list[Any]) -> None:
+    """Wire-level W-2, independent of the activity sink: the repair child's start
+    command (``StartChildWorkflowExecutionInitiated`` in the parent's history) carries
+    ``cfg.harness_queue == HARNESS_Q`` in its decoded input, so ``start_repair_child``'s
+    ``model_copy`` reached the wire. (Form landed: decoded child input, not the
+    child's ActivityTaskScheduled events: the stub child is skipped by design.)
+    """
+    from pydantic import BaseModel
+
+    inputs: list[Any] = []
+    for hist in histories:
+        for ev in hist.events:
+            if ev.event_type != EventType.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
+                continue
+            attrs = ev.start_child_workflow_execution_initiated_event_attributes
+            if attrs.workflow_type.name != "GraphWorkflow":
+                continue
+            [decoded] = pydantic_data_converter.payload_converter.from_payloads(
+                list(attrs.input.payloads), [dict]
+            )
+            inputs.append(decoded)
+    assert inputs, "no GraphWorkflow child start in the parent's history: the pin is vacuous"
+    for decoded in inputs:
+        cfg = decoded["cfg"]
+        assert not isinstance(cfg, BaseModel)
+        assert cfg.get("harness_queue") == HARNESS_Q, cfg.get("harness_queue")
+
+
+async def test_reflect_has_no_harness_queue_anywhere(tmp_path: Path) -> None:
+    """(e) The negative space: reflect is core; no harness queue in the run."""
+    from sdlc.memory.activities import reflect
+    from sdlc.workflows.reflect import ReflectScheduleInput, ReflectWorkflow
+
+    async def start(client: Client) -> WorkflowHandle:
+        return await client.start_workflow(
+            ReflectWorkflow.run,
+            ReflectScheduleInput(banks=["banks/one"], backend="fake"),
+            id=_wf_id("pools-reflect"),
+            task_queue=CORE_Q,
+        )
+
+    recorded, histories, result = await _run_routed([ReflectWorkflow], [reflect], start)
+    assert result == 1
+    assert [n for n, _ in recorded] == ["reflect"]
+    assert all(q is None for _, q in recorded)
+    assert {i for _, i in _started_identities(histories)} == {CORE_ID}
+
+
+async def test_tidyup_routing_on(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from sdlc.core.models import GateOutcome, GateSettings
+    from sdlc.vcs import build_verification_branch, setup_integration_branch
+    from sdlc.workflows.tidyup import TidyUpInput, TidyUpWorkflow
+    from sdlc.workflows.triage import TriageWorkflow
+    from tests.maintenance.conftest import MAINT_023B_ACTIVITIES, commit_env_file, make_repo
+    from tests.maintenance.fake_triage import TRIAGE_ACTIVITIES
+    from tests.maintenance.stub_child import STUB_ACTIVITIES, StubRepairChild
+    from tests.replay.scenarios import decide
+
+    monkeypatch.setenv("SDLC_WORKTREES_ROOT", str(tmp_path / "wts"))
+    repo = make_repo(tmp_path)
+    commit_env_file(repo)  # a mechanical finding, so tidy-up has a backlog
+
+    async def start(client: Client) -> WorkflowHandle:
+        return await client.start_workflow(
+            TidyUpWorkflow.run,
+            TidyUpInput(
+                repo_dir=str(repo),
+                commit="HEAD",
+                build_probe=True,
+                advisory_source="none",
+                max_fix_runs=1,
+                gates=GateSettings(default_gate_policy=GatePolicy.OFF),
+                harness_queue=HARNESS_Q,
+            ),
+            id=_wf_id("pools-tidyup"),
+            task_queue=CORE_Q,
+        )
+
+    sink: Recorded = []
+    async with _rig(
+        workflows=[TidyUpWorkflow, TriageWorkflow, StubRepairChild],
+        bundle=[
+            *TRIAGE_ACTIVITIES,
+            _fake_notify,
+            setup_integration_branch,
+            build_verification_branch,
+            *STUB_ACTIVITIES,
+            *MAINT_023B_ACTIVITIES,
+        ],
+        routed=True,
+        sink=sink,
+        skip_types=STUB_CHILD,
+        core_extra=[setup_integration_branch],
+    ) as client:
+        handle = await start(client)
+
+        # The fix-run child is the stub, parked at its real HARD merge gate: approve it.
+        async def child_id() -> str | None:
+            for ev in (await handle.fetch_history()).events:
+                if ev.event_type == EventType.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
+                    attrs = ev.child_workflow_execution_started_event_attributes
+                    if attrs.workflow_type.name == "GraphWorkflow":
+                        return str(attrs.workflow_execution.workflow_id)
+            return None
+
+        async def child_parked() -> bool:
+            cid = await child_id()
+            if cid is None:
+                return False
+            pending = await client.get_workflow_handle(cid).query("pending_decisions")
+            return bool(pending)
+
+        await _until(child_parked, "the fix-run child to park at its merge gate")
+        cid = await child_id()
+        assert cid is not None
+        await decide(client.get_workflow_handle(cid), "merge", 1, GateOutcome.APPROVE)
+        await asyncio.wait_for(handle.result(), timeout=120)
+        histories = await _histories(client, handle, STUB_CHILD)
+
+    # the triage child (inherited queue) and TidyUp's own verification call
+    assert {"triage_build_probe", "build_verification_branch"} <= {n for n, _ in sink}
+    _assert_routed(sink, histories)
+
+
+# ------------------------------------------- chaos: skip_types can only silence the stub
+
+
+def _call_name(call: ast.Call) -> str | None:
+    f = call.func
+    return f.id if isinstance(f, ast.Name) else None
+
+
+def _skip_violations(tree: ast.AST) -> list[str]:
+    """Every way a workflow type other than the stub child could be silenced."""
+    bad: list[str] = []
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.Call):
+            continue
+        name = _call_name(n)
+        for kw in n.keywords:
+            if kw.arg == "skip_types" and not (
+                isinstance(kw.value, ast.Name) and kw.value.id == "STUB_CHILD"
+            ):
+                bad.append(f"{n.lineno}: skip_types is not STUB_CHILD")
+        if name == "_histories" and len(n.args) > 2:
+            a = n.args[2]
+            if not (isinstance(a, ast.Name) and a.id == "STUB_CHILD"):
+                bad.append(f"{n.lineno}: _histories skip arg is not STUB_CHILD")
+        if name == "_Recorder" and len(n.args) > 1:
+            a = n.args[1]
+            if not (isinstance(a, ast.Name) and a.id == "skip_types"):
+                bad.append(f"{n.lineno}: _Recorder skip arg is not the rig's skip_types")
+        if name == "_rig":
+            kws = {kw.arg: kw.value for kw in n.keywords}
+            wfs = kws.get("workflows")
+            names = (
+                {e.id for e in wfs.elts if isinstance(e, ast.Name)}
+                if isinstance(wfs, ast.List)
+                else set()
+            )
+            skips = "skip_types" in kws
+            if "StubRepairChild" in names and not skips:
+                bad.append(f"{n.lineno}: _rig registers StubRepairChild without skip_types")
+            if skips and ("StubRepairChild" not in names or "GraphWorkflow" in names):
+                bad.append(f"{n.lineno}: _rig skips types but not for the stub alone")
+    return bad
+
+
+async def test_skip_types_can_only_silence_the_stub_child() -> None:
+    from tests.maintenance.stub_child import StubRepairChild
+
+    source = Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    stub_name = str(getattr(StubRepairChild, "__temporal_workflow_definition").name)  # noqa: B009
+    assert stub_name
+    assert STUB_CHILD == frozenset({stub_name}), "STUB_CHILD drifted from the stub's wire name"
+    assert _skip_violations(tree) == []
+    # non-vacuous: the file really does pass the skip somewhere
+    assert any(
+        kw.arg == "skip_types"
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        for kw in n.keywords
+    )
+
+
+@pytest.mark.parametrize(
+    "src",
+    [
+        "_rig(workflows=[StubRepairChild], skip_types=frozenset({'X'}))",
+        "_rig(workflows=[GraphWorkflow, StubRepairChild], skip_types=STUB_CHILD)",
+        "_rig(workflows=[TriageWorkflow], skip_types=STUB_CHILD)",
+        "_rig(workflows=[StubRepairChild])",
+        "_histories(client, handle, frozenset({'TriageWorkflow'}))",
+        "_Recorder(sink, frozenset({'GraphWorkflow'}))",
+    ],
+)
+async def test_skip_detector_catches_silencing_of_real_workflows(src: str) -> None:
+    assert _skip_violations(ast.parse(src)), src
