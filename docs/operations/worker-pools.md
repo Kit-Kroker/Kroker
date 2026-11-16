@@ -111,3 +111,6 @@ Not fixed in 024; the fleet round owns them:
 - one Hindsight instance shared by the fleet;
 - fixed-port collisions in case test suites;
 - the board SQLite WAL under fleet load.
+
+The protocol that consumes these pools — pre-flight, freeze, announce,
+stop rules, scoring — is [fleet-runs.md](fleet-runs.md).
