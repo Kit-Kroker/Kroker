@@ -135,30 +135,56 @@ def build_run_summary(
             g = _gate_outcome(e)
             key = (g.gate, g.round)
             gate_by_key[key] = _enrich(gate_by_key[key], g) if key in gate_by_key else g
-    gates = list(gate_by_key.values())
 
-    answered = {
-        e.data.get("question_id"): e.data.get("answered_by", "unanswered")
+    # 025 (FR-001/002): when each (gate, round) OPENED, from its
+    # GATE_AWAITED event. Stamped after the dedup loop — deliberately not
+    # part of _ENRICH_OPTIONALS: a repeated emit never rewrites the open,
+    # and a gate with no AWAITED event keeps None (never opened for a
+    # human). A later AWAITED on the same key wins, matching trace order.
+    gate_raised_at = {
+        (e.data.get("gate", "?"), int(e.data.get("round", "1"))): e.at
+        for e in trace
+        if e.kind is RunEventKind.GATE_AWAITED
+    }
+    gates = [
+        g.model_copy(update={"raised_at": gate_raised_at.get((g.gate, g.round))})
+        for g in gate_by_key.values()
+    ]
+
+    answered_events = {
+        e.data.get("question_id"): e
         for e in trace
         if e.kind is RunEventKind.CLARIFICATION_ANSWERED
     }
-    clarifications = [
-        ClarificationOutcome(
-            question_id=e.data.get("question_id", "?"),
-            question=e.data.get("question", ""),
-            # Event data is untyped at this boundary; the model validates the
-            # Literal at construction, the cast only states that contract.
-            answered_by=cast(
-                Literal["human", "suggested", "unanswered"],
-                answered.get(e.data.get("question_id"), "unanswered"),
-            ),
-            # E-85. Absent on pre-E-85 runs, "" on the flag-off path; both
-            # mean "no dimension", and "" is not a valid enum member.
-            dimension=cast(ClarificationDimension | None, e.data.get("dimension") or None),
+    clarifications: list[ClarificationOutcome] = []
+    for e in trace:
+        if e.kind is not RunEventKind.CLARIFICATION_ASKED:
+            continue
+        ans = answered_events.get(e.data.get("question_id"))
+        # The ANSWERED event is emitted for every question in a batch; its
+        # answered_by says whether an answer exists at all ("unanswered" is
+        # the deadline path). Absent event means the same.
+        by = ans.data.get("answered_by", "unanswered") if ans is not None else "unanswered"
+        clarifications.append(
+            ClarificationOutcome(
+                question_id=e.data.get("question_id", "?"),
+                question=e.data.get("question", ""),
+                # Event data is untyped at this boundary; the model validates
+                # the Literal at construction, the cast only states that
+                # contract.
+                answered_by=cast(Literal["human", "suggested", "unanswered"], by),
+                # E-85. Absent on pre-E-85 runs, "" on the flag-off path;
+                # both mean "no dimension", and "" is not a valid enum
+                # member.
+                dimension=cast(ClarificationDimension | None, e.data.get("dimension") or None),
+                # 025 (FR-001): raw times for the SC-2 instrument — the
+                # question's ASKED at, and the ANSWERED at only when an
+                # answer exists; unanswered keeps None so the deadline
+                # event's time never masquerades as an answer.
+                raised_at=e.at,
+                answered_at=ans.at if by != "unanswered" else None,
+            )
         )
-        for e in trace
-        if e.kind is RunEventKind.CLARIFICATION_ASKED
-    ]
 
     terminal = next(
         (e.stage for e in reversed(trace) if e.kind is RunEventKind.STAGE_ENDED and e.stage),
@@ -196,4 +222,7 @@ def build_run_summary(
         memory_retains=retains,
         graph_sha=graph_sha,
         project_key=project_key,
+        # 025 (FR-005): every summary this builder writes is instrumented;
+        # False marks a pre-025 summary (not-measured, never zero).
+        operator_instrumented=True,
     )

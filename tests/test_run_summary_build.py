@@ -237,6 +237,9 @@ def test_without_graph_sha_the_summary_is_unchanged_and_graph_sha_is_none():
         stages=[
             StageOutcome(stage="code", role="dev", outcome="pass", duration_s=4.0, cost_usd=1.5)
         ],
+        # 025: the builder now stamps the instrument marker on every
+        # summary (FR-005) — still field-for-field, with the new field.
+        operator_instrumented=True,
     )
     assert s == expected
     assert s.graph_sha is None
