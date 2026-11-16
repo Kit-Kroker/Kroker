@@ -43,7 +43,10 @@ freezes a dedicated clean checkout at this commit; the smoke stamp and
 every scored run must carry it (FR-024; the commit set in the rollup must
 be exactly one). **Superseded at T021/T022: the frozen fleet commit is
 `93120693`** (Part A close-out plus the spec evidence through the freeze;
-`066d43f9` remains an ancestor of it).
+`066d43f9` remains an ancestor of it). **Superseded again after infra
+stop 1: the fleet commit is `ce3a36f8`** (fix (a) — the smoke case runs
+the strong arm only; B.4 rule 3 restart), `93120693` its parent-by
+evidence.
 
 ## §025-B — the fleet runs (T020–T033)
 

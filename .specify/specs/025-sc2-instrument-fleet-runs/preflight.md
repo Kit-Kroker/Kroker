@@ -223,4 +223,43 @@ this is **infra stop 1 of 2** — a second infra stop ends the delegation.
 Per FR-023 the sequence halts here; nothing below runs until the owner
 clears it.
 
+## Fleet restart — fix (a) applied under the owner's fresh go (2026-11-16)
+
+- Tree fix `ce3a36f8` (reviewer: fixes-needed on `1da893fa` for one ruff
+  I001 import-order nit → fixed → **approve** on the amend; amended rather
+  than follow-up-committed so the fleet commit set stays exactly one):
+  flash model dropped from the smoke case's `models:`; new RED-first test
+  pins the matrix to one strong cell AND replays the boundary's exact
+  judge-role map (`STAGE_MODELS` defaults over arm overrides →
+  `validate_run_roles`); `test_todo_api_case_loads` updated to match.
+  Battery in CI-equivalent env (routing vars blank): **the two known
+  baseline failures only, nothing new**. Host-env caveat, disclosed to
+  the reviewer: with this host's routing-enabled `.env` the full battery
+  shows 43 PRE-EXISTING failures — verified identical with the diff
+  stashed; 024's `require_harness_poller` guard reaches stale
+  `_DummyClient` doubles missing `.namespace` in the run-gate tests, plus
+  order-dependent maintenance/graph flakes; CI (no `.env`) sees none of
+  them; 024 test debt, out of this round's authorized scope.
+- Non-tree defect 1 fix: `docker-compose.override.yml` carries tight
+  `GIT_CONFIG_COUNT/KEY/VALUE` `safe.directory` entries for the five
+  repos on BOTH pools (survives recreate; no writable-layer fragility).
+  Pre-proofed in-container before and after the recreate: `worktree add`
+  as container root, git ops inside the linked worktree, clean removal —
+  the per-repo entry is sufficient, no wildcard needed.
+- Non-tree defect 2 fix: image rebuilt FROM the fleet checkout WITH
+  `--build-arg KROKER_COMMIT=ce3a36f88d08e54892e8a72c96ceb6165ba4bc13`
+  → `sha256:c939ff6bc5e6…`; both workers recreated (restarts=0); readtime
+  deps re-provisioned post-recreate.
+- Verified in-container on BOTH pools: `KROKER_COMMIT` env = full sha;
+  `resolve_provenance()` returns the sha (pre-proof of
+  `commit_on_records`); `ENGAGEMENT_CAP_S=600`; deps import;
+  `expand_matrix(smoke_case)` = exactly 1 strong cell (pre-proof of the
+  corrected `one_file_per_cell`); pollers re-verified (ACT-type probe:
+  `core`→`ai-sdlc`, `harness`→`ai-sdlc-harness`).
+- **FLEET RESTARTED at commit `ce3a36f8`.** The worktree `../kroker-fleet`
+  moved to it; status clean; `.env` + `runs/` are untracked survivors and
+  `.dockerignore` excludes both from the image build. Quarantines
+  unchanged: the 13:11 casualty and infra-1 stay in
+  `kroker-fleet-runs-025-evidence/`, unscored, outside the runs root.
+
 
