@@ -66,9 +66,14 @@ its measurement can be reproduced from.
   `containment_strict`. Containment is therefore a statement about a crew's
   composition: in a contained run, a non-lead role wants a harness with a hook
   layer.
-- ⚠️ **Session resume is not worker-pinned.** A retry taken by a different
-  worker needs that CLI's session store to be reachable; Worker-Specific Task
-  Queues would fix it and are not scheduled.
+- ⚠️ **Session resume is safe on one host, not across hosts.** A retry
+  taken by a different harness worker resumes when every harness replica
+  mounts the same session-store volume (`docker-compose.pools.yml`) —
+  containers on one host share one kernel, so the CLIs' file locks hold;
+  concurrent writers on one store are already the status quo (one worker,
+  many CLI subprocesses, one `HOME`). Across hosts the store is not
+  reachable and resume is not safe. Worker-Specific Task Queues would fix
+  that and remain AP-2.6.
 - ⚠️ **`CursorHarness` parses cost under `# ASSUMPTION: may be absent`**, so a
   cursor role may yield `cost_incomplete`.
 - Quality is **not** a crew acceptance criterion. The `crew-probe` baseline
