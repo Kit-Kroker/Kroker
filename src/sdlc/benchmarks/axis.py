@@ -234,6 +234,11 @@ async def measure_code_axis(inp: AxisInput) -> AxisBag:
         return _reason(f"measurement failed: {type(e).__name__}: {e}")
     finally:
         shutil.rmtree(parent, ignore_errors=True)
+        # 024 T017 (skeptic L3/R10): rmtree removes the checkout but not
+        # its REGISTRATION — .git/worktrees kept the stale entry, and the
+        # leak compounded per measurement. Prune drops it; failures are
+        # the activity's own never-raise business.
+        _git(["worktree", "prune"], inp.repo_url)
 
 
 def axis_record(

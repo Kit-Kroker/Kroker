@@ -130,7 +130,7 @@
 - [x] T014 [US3] Implement `bench_workflow_id` in `S/benchmarks/cli.py` (`uuid.uuid4().hex[:6]`) and use it at `:338`. Make T013 green. **(S)**
 - [x] T015 [P] [US3] RED: write `T/test_janitor_lock.py`. With `_worktrees_root()` monkeypatched to a tmp dir, hold `fcntl.flock(<root>/.janitor.lock, LOCK_EX)` from a second open file. `sweep_once(...)` must then return without calling `cleanup_run_dir` (monkeypatched recorder) and log a skip. With the lock free, it sweeps as before. (R10) **(S)**
 - [x] T016 [US3] Add the non-blocking `fcntl.flock(LOCK_EX | LOCK_NB)` around `sweep_once`'s body in `S/vcs/janitor.py:34`. Create the lock file under `_worktrees_root()`, release it in `finally`, and on `BlockingIOError` log at INFO and return. Make T015 green. **(S)**
-- [ ] T017 [P] [US3] RED then fix: write `T/test_axis_prune.py`. Run the worktree-creating path of `measure_code_axis` (`S/benchmarks/axis.py:198-236`; call its inner helper, or the activity with a tmp git repo and a stub measurement). Afterwards, `git worktree list --porcelain` in the repo shows only the main worktree. This is RED today. Then add `git worktree prune` (via the module's existing git runner) in the `finally` at `S/benchmarks/axis.py:235-236`. (R10, skeptic L3) **(S)**
+- [x] T017 [P] [US3] RED then fix: write `T/test_axis_prune.py`. Run the worktree-creating path of `measure_code_axis` (`S/benchmarks/axis.py:198-236`; call its inner helper, or the activity with a tmp git repo and a stub measurement). Afterwards, `git worktree list --porcelain` in the repo shows only the main worktree. This is RED today. Then add `git worktree prune` (via the module's existing git runner) in the `finally` at `S/benchmarks/axis.py:235-236`. (R10, skeptic L3) **(S)**
 
 ---
 
