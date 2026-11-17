@@ -318,4 +318,38 @@ gitignored override per the documented example; recreate; prove auth
 in-container (one `opencode run` probe or the smoke itself); rerun the
 smoke (announced). No tree edit; fleet commit stays `ce3a36f8`.
 
+## Owner fresh go — auth fix applied (2026-11-17 ~23:00Z)
+
+New tripwire (replaces the two-stop budget, which is spent): ANY further
+infra stop, whatever the count, halts everything and reports to the
+owner before another cent.
+
+- Host `~/.local/share/opencode/auth.json` generated from `.env`'s
+  `ZAI_API_KEY` (entries for both `zai` and `zai-coding-plan`; mode 600)
+  and bound **read-only into both pools** via the override — the exact
+  documented mechanism (`docker-compose.override.example.yml`). HOME is
+  on the harness env allowlist, so the curated child resolves
+  `/root/.local/share/opencode/auth.json`.
+- Containers recreated (the stack had bounced with the host minutes
+  earlier; temporal restarted too). Readtime deps re-provisioned
+  post-recreate.
+- **Auth proven by a real API round-trip** inside the harness container,
+  same invocation shape the harness uses (`opencode run … --pure --auto
+  --format json -m zai-coding-plan/glm-5.3`): model replied, tokens
+  input=267/output=3, cost $0 (flat subscription). Not just file
+  presence.
+- Post-recreate verification battery, all green on BOTH pools: image
+  `sha256:c939ff6bc5e6` (the `ce3a36f8` build), restarts=0;
+  `KROKER_COMMIT=ce3a36f88d08…` and `GIT_CONFIG_COUNT=5` baked;
+  `ENGAGEMENT_CAP_S=600`; deps import; `resolve_provenance()` returns
+  the fleet commit; smoke matrix = 1 strong cell; ACT-type pollers
+  `core`→`ai-sdlc`, `harness`→`ai-sdlc-harness`; no running workflows
+  (clean slate after the bounce).
+- Attendant v3: auto-discovers the new bench id (no hardcoded id);
+  handles all four PendingDecision kinds; its finalize now reads records
+  via `SDLC_BENCHMARKS_ROOT` (set in every launch env — the CLI's own
+  post-processing too; that env gap caused the bogus attempt-2 stamp).
+- Smoke attempt 3 announced and launched below; fleet commit unchanged
+  `ce3a36f8`.
+
 
