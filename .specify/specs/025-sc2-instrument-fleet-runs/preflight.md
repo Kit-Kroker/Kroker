@@ -262,4 +262,60 @@ clears it.
   unchanged: the 13:11 casualty and infra-1 stay in
   `kroker-fleet-runs-025-evidence/`, unscored, outside the runs root.
 
+## Infra stop #2 — smoke attempt 2 concluded (2026-11-17 ~00:39–01:39 UTC)
+
+The run executed end-to-end under the attendant (research gate approved
+by the operator at 21:0xZ; 8 clarify answers + architecture + plan gates
++ T-01..T-05 task-escalation approvals by the automated attendant;
+parent closed 00:39Z; server-side finalize wrote 54 records + reports at
+01:39Z). **True conditions over the real records** (re-evaluated with
+`SDLC_BENCHMARKS_ROOT` pointing at the runs root): rubric_scores PASS
+(clarify 0.955 / architecture 0.95, `staged_rubric`), commit_on_records
+PASS (every record carries `ce3a36f88d08…`), one_file_per_cell PASS
+(1/1) — all three restart fixes verified in production.
+**oracle_all_pass FAIL** (case-level oracle graded the produced code
+0.0). Measured judge cost: **$0.45976** ($0.0356938 + $0.42406664) —
+the T024 input for whenever a passing smoke exists.
+
+**Root cause of the oracle fail — harness credential gap (infra):**
+every one of the 15 opencode invocations (3 attempts × 5 dev tasks)
+exited **1 at 2.2–2.3 s with zero input/output tokens and empty stderr**
+— the CLI died at provider resolution; no model turn ever ran.
+`harness/base.py` `ENV_ALLOWLIST` deliberately forwards only toolchain
+vars, and `provider_env()` injects only `ANTHROPIC_*` — the design
+expects opencode to authenticate from **its own auth.json**
+(`docker-compose.override.example.yml` documents binding a host
+`~/.local/share/opencode/auth.json`). This host has no auth.json (T021
+finding) and the env-file `ZAI_API_KEY` route cannot reach the child
+through the curated environment. The T021 pre-flight pre-registered
+exactly this: "an auth failure there is infra-class." Classification
+per B.5: infra — credential failure in the harness runtime, outside
+task execution (nothing executed). **Infra stop 2 of 2 — the delegation
+ends here; no further run starts without a fresh owner go.**
+
+Evidence hygiene:
+- The attendant's finalize had its own bug (it read the records root via
+  `_root()` without `SDLC_BENCHMARKS_ROOT` set → 0 records → a bogus
+  all-four-FAIL stamp at `runs/ops/smoke/unknown.json`). Disclosed; the
+  faithful stamp is `runs/ops/smoke/ce3a36f88d08….json`
+  (`passed=false, failed_conditions=[oracle_all_pass]`), written with the
+  same `write_stamp` code over the real records. Both files retained.
+- The run dir is quarantined unscored at
+  `kroker-fleet-runs-025-evidence/infra-2-smoke-…` (B.5: kept, labelled,
+  listed apart). Runs root is empty again.
+- Attendant ledger (full disclosure): 16 interactions total — 1 human
+  (research gate), 15 automated (8 clarify with suggested answers,
+  architecture r1, plan r1, T-01..T-05 task-escalation approvals). The
+  five escalation approvals approved work the harness never did — with a
+  working harness those escalations would not exist; the history stands
+  as recorded.
+
+**Staged fix for the owner's fresh go (non-tree):** generate a host
+`~/.local/share/opencode/auth.json` from the existing `ZAI_API_KEY`
+(opencode api-key format `{"zai": {"type": "api", "key": …}}`) or run
+`opencode auth login`; bind it read-only into BOTH pools via the
+gitignored override per the documented example; recreate; prove auth
+in-container (one `opencode run` probe or the smoke itself); rerun the
+smoke (announced). No tree edit; fleet commit stays `ce3a36f8`.
+
 

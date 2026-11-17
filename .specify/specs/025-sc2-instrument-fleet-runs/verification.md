@@ -89,3 +89,25 @@ quarantined to `kroker-fleet-runs-025-evidence/infra-1-smoke-…`; failed
 stamp at the checkout's gitignored `runs/ops/smoke/unknown.json`.
 Sequence halted per FR-023 — diagnosis and fix options in
 `preflight.md` "Infra stop #1".
+
+### Smoke attempt 2 — infra stop 2 (unscored, kept and labelled)
+
+`bench-todo-api-greenfield-1794852280-ff756a` (2026-11-16 18:04 →
+2026-11-17 00:39 UTC, fleet commit `ce3a36f8`): the full path executed
+under attendant treatment — rubric_scores PASS (clarify 0.955,
+architecture 0.95; **measured judge cost $0.45976**, the T024 input),
+commit_on_records PASS (all records carry `ce3a36f88d08…`),
+one_file_per_cell PASS (1/1). oracle_all_pass FAIL (oracle 0.0): all 15
+opencode harness invocations (3 × 5 dev tasks) exited 1 at ~2.3 s with
+zero tokens — provider resolution failed because the curated harness
+environment (`ENV_ALLOWLIST` + `ANTHROPIC_*` only) never receives
+`ZAI_API_KEY` and no host `auth.json` is bound (the documented
+mechanism). Credential failure in the harness runtime, pre-registered
+infra-class by the T021 pre-flight. **Infra stop 2 of 2: the delegation
+ends; no run starts without a fresh owner go.** Run dir quarantined
+unscored at `kroker-fleet-runs-025-evidence/infra-2-smoke-…`; faithful
+FAIL stamp at the checkout's `runs/ops/smoke/ce3a36f88d08….json`
+(oracle_all_pass only); the attendant's bogus all-four stamp
+(`unknown.json`, records-root misread — `SDLC_BENCHMARKS_ROOT` was
+unset) disclosed and retained. Attendant ledger: 16 interactions (1
+human, 15 automated), full list in preflight.md.
