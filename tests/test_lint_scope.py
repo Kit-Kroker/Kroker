@@ -10,7 +10,9 @@ re-imports and re-exports the same objects; the JSON wire format holds.
 from __future__ import annotations
 
 import ast
+import inspect
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -289,3 +291,279 @@ def test_merge_reexports_by_import_not_redefinition(module, names):
         for alias in node.names
     }
     assert set(names) <= imported, f"{module} does not import {sorted(set(names) - imported)}"
+
+
+# --- 026 T017: parity proof (US A2 AS3) -------------------------------------
+#
+# One fixture tree, two call paths: the per-task lint (qa's run_test_suite,
+# which materializes its own sibling base) and the merge lint
+# (run_integration_checks, given a base worktree). Both run ruff from the same
+# ambient env (the stubbed _ensure_python_env below), with the same command
+# (adapter.lint_json_cmd()) and the same configuration resolution, so the
+# introduced lists must be equal element-wise.
+
+PARITY_BASE_A = "import os\n\n\ndef f():\n    return 1\n"  # pre-existing F401
+PARITY_HEAD_B = "import sys\n\n\ndef g():\n    return 2\n"  # the attempt's F401
+PARITY_LINT_CMD = "ruff check --output-format json --exit-zero --no-cache ."
+
+
+@pytest.fixture
+def parity_env(monkeypatch):
+    """The host python3.14 lacks ensurepip, so venv provisioning fails here
+    (see tests/qa/test_task_lint.py). Both paths get the same ambient env,
+    which is the parity claim: the same ruff binary by construction."""
+
+    async def ambient(worktree, timeout_s, *, shared=True):
+        return None, None
+
+    monkeypatch.setattr("sdlc.stages.qa.activities._ensure_python_env", ambient)
+    monkeypatch.setattr("sdlc.stages.merge.activities._ensure_python_env", ambient)
+
+
+@pytest.fixture
+def parity_repo(git_repo):
+    """main carries requirements.txt (adapter marker) and a.py (pre-existing
+    F401). The task worktree sits at main's tip; the attempt commits b.py."""
+    import asyncio
+
+    from sdlc.vcs import IntegrationInput, WorktreeInput, create_worktree, setup_integration_branch
+    from sdlc.vcs.git import _git
+    from tests.conftest import run_git
+
+    repo = Path(git_repo)
+    (repo / "requirements.txt").write_text("\n", encoding="utf-8")
+    (repo / "a.py").write_text(PARITY_BASE_A, encoding="utf-8")
+    run_git(["add", "-A"], repo)
+    run_git(["commit", "-m", "base"], repo)
+    setup = asyncio.run(
+        setup_integration_branch(
+            IntegrationInput(repo_path=git_repo, run_id="run-par", base_branch="main")
+        )
+    )
+    wt = asyncio.run(
+        create_worktree(
+            WorktreeInput(
+                repo_path=git_repo, run_id="run-par", task_id="T1", from_ref=setup.head_sha
+            )
+        )
+    )
+    Path(wt.path, "b.py").write_text(PARITY_HEAD_B, encoding="utf-8")
+    _git(["add", "-A"], wt.path)
+    _git(["commit", "-m", "attempt"], wt.path)
+    return {"wt": wt.path, "base_sha": setup.head_sha}
+
+
+def _renames(wt: str, base_sha: str) -> list[list[str]]:
+    """The same rename map the per-task path computes from `git diff -M`."""
+    from sdlc.vcs.git import _git
+
+    out = _git(["diff", "-M", "--name-status", f"{base_sha}...HEAD"], wt).stdout
+    rows = (ln.split("\t") for ln in out.splitlines())
+    return [[p[1], p[2]] for p in rows if len(p) == 3 and p[0].startswith("R")]
+
+
+def _introduced(report) -> list[tuple[str, str, str]]:
+    return [(f.rule, f.path, f.line) for f in report.lint.introduced]
+
+
+@pytest.mark.asyncio
+@pytest.mark.slow
+async def test_parity_task_and_merge_paths_report_the_same_introduced_list(parity_repo, parity_env):
+    """Element-wise equal introduced lists and equal preexisting counts for the
+    same base and head, through the two real activities."""
+    from sdlc.stages.merge.activities import IntegrationChecksInput, run_integration_checks
+    from sdlc.stages.qa.activities import QAInput, run_test_suite
+    from sdlc.vcs.integration import materialize_base
+    from sdlc.vcs.worktree import _worktrees_root
+
+    wt, base_sha = parity_repo["wt"], parity_repo["base_sha"]
+    task = await run_test_suite(
+        QAInput(worktree=wt, test_cmd="true", lint_base=base_sha, lint_key="run-par/base-T1")
+    )
+    merge_base = materialize_base(
+        wt, base_sha, os.path.join(_worktrees_root(), "run-par", "merge-base")
+    )
+    merge = await run_integration_checks(
+        IntegrationChecksInput(
+            worktree=wt,
+            changed_files=["b.py"],
+            base_worktree=merge_base.path,
+            base_reason=merge_base.reason,
+            base_sha=base_sha,
+            renames=_renames(wt, base_sha),
+        )
+    )
+
+    assert task.lint is not None and merge.lint is not None
+    assert task.lint.state is CollectionState.MEASURED
+    assert merge.lint.state is CollectionState.MEASURED
+    assert _introduced(task) == _introduced(merge) == [("F401", "b.py", "import sys")]
+    assert task.lint.preexisting == merge.lint.preexisting >= 1
+
+
+def test_parity_both_paths_resolve_the_same_adapter_and_command(parity_repo):
+    """Fast, no ruff run: both paths resolve the one PYTHON adapter instance,
+    its lint command is the exact one both scoped paths run, and both reach
+    the moved scoped_lint (by identity; merge goes through scoping's re-export,
+    pinned by T011)."""
+    import sdlc.stages.merge.activities as merge_act
+    import sdlc.stages.qa.activities as qa_act
+    from sdlc.toolchain.adapters import TOOLCHAINS, ToolchainKind, detect
+
+    wt = parity_repo["wt"]
+    adapter = detect(wt)
+    assert adapter is TOOLCHAINS[ToolchainKind.PYTHON]
+    assert detect(wt) is adapter  # the same object on every call
+    assert adapter.lint_json_cmd() == PARITY_LINT_CMD
+
+    assert qa_act.scoped_lint is lint_scope.scoped_lint
+    assert merge_act.scoped_lint is lint_scope.scoped_lint
+
+    qa_src = inspect.getsource(qa_act._task_scoped_lint)
+    merge_src = inspect.getsource(merge_act.run_integration_checks)
+    assert "detect(inp.worktree)" in qa_src
+    assert "detect(inp.worktree)" in merge_src
+    assert "scoped_lint(" in qa_src and "scoped_lint(" in merge_src
+
+
+@pytest.mark.asyncio
+@pytest.mark.slow
+async def test_parity_unmeasured_paths_both_report_not_collected(parity_repo, parity_env):
+    """An unresolvable base: the task path reports NOT_COLLECTED and the task
+    still passes (never fails a task); the merge path, with no base worktree,
+    reports NOT_COLLECTED too and fails closed at merge."""
+    from sdlc.stages.merge.activities import IntegrationChecksInput, run_integration_checks
+    from sdlc.stages.qa.activities import QAInput, run_test_suite
+
+    wt, base_sha = parity_repo["wt"], parity_repo["base_sha"]
+    task = await run_test_suite(
+        QAInput(worktree=wt, test_cmd="true", lint_base="de" * 20, lint_key="run-par/base-T1")
+    )
+    merge = await run_integration_checks(
+        IntegrationChecksInput(
+            worktree=wt,
+            changed_files=["b.py"],
+            base_worktree=None,
+            base_reason="clone failed",
+            base_sha=base_sha,
+            renames=[],
+        )
+    )
+
+    assert task.tests_passed is True
+    for label, lint in (("task", task.lint), ("merge", merge.lint)):
+        assert lint is not None, label
+        assert lint.state is CollectionState.NOT_COLLECTED, label
+        assert lint.reason, label
+        assert lint.introduced == [], label
+
+
+# --- chaos / edge cases (026 T017, chaos QA): parity edges -------------------
+#
+# Both paths run the same ruff from the same stubbed env, so these must PASS
+# on the implemented move. A failure here means the two paths diverged.
+
+LONG_LINE = 'VALUE = "this line is deliberately longer than forty columns"\n'
+
+
+async def _base_and_worktree(git_repo, run_id: str, base_files: dict[str, str]) -> tuple[str, str]:
+    """A base commit with `base_files` (plus a Python marker) and a task
+    worktree at its tip. Returns (worktree path, base sha)."""
+    from sdlc.vcs import IntegrationInput, WorktreeInput, create_worktree, setup_integration_branch
+    from tests.conftest import run_git
+
+    repo = Path(git_repo)
+    (repo / "requirements.txt").write_text("\n", encoding="utf-8")
+    for rel, text in base_files.items():
+        (repo / rel).write_text(text, encoding="utf-8")
+    run_git(["add", "-A"], repo)
+    run_git(["commit", "-m", "base"], repo)
+    setup = await setup_integration_branch(
+        IntegrationInput(repo_path=git_repo, run_id=run_id, base_branch="main")
+    )
+    wt = await create_worktree(
+        WorktreeInput(repo_path=git_repo, run_id=run_id, task_id="T1", from_ref=setup.head_sha)
+    )
+    return wt.path, setup.head_sha
+
+
+async def _both_paths(wt: str, base_sha: str, run_id: str, changed: list[str]):
+    """Run the per-task path and the merge path on the same base and head."""
+    from sdlc.stages.merge.activities import IntegrationChecksInput, run_integration_checks
+    from sdlc.stages.qa.activities import QAInput, run_test_suite
+    from sdlc.vcs.integration import materialize_base
+    from sdlc.vcs.worktree import _worktrees_root
+
+    task = await run_test_suite(
+        QAInput(worktree=wt, test_cmd="true", lint_base=base_sha, lint_key=f"{run_id}/base-T1")
+    )
+    merge_base = materialize_base(
+        wt, base_sha, os.path.join(_worktrees_root(), run_id, "merge-base")
+    )
+    merge = await run_integration_checks(
+        IntegrationChecksInput(
+            worktree=wt,
+            changed_files=changed,
+            base_worktree=merge_base.path,
+            base_reason=merge_base.reason,
+            base_sha=base_sha,
+            renames=_renames(wt, base_sha),
+        )
+    )
+    return task, merge
+
+
+@pytest.mark.asyncio
+@pytest.mark.slow
+async def test_parity_rename_keeps_a_base_finding_preexisting_on_both_paths(git_repo, parity_env):
+    """The base's a.py has F401. The attempt only renames it to new_name.py with
+    the same line. Both paths consume the same `git diff -M` rename map, so the
+    finding is preexisting on both and the two introduced lists match (empty)."""
+    from sdlc.vcs.git import _git
+
+    wt, base_sha = await _base_and_worktree(git_repo, "run-ren", {"a.py": PARITY_BASE_A})
+    _git(["mv", "a.py", "new_name.py"], wt)
+    _git(["commit", "-m", "rename"], wt)
+    assert _renames(wt, base_sha) == [["a.py", "new_name.py"]]  # the rename is really there
+
+    task, merge = await _both_paths(wt, base_sha, "run-ren", ["new_name.py"])
+
+    assert task.lint.state is merge.lint.state is CollectionState.MEASURED
+    assert _introduced(task) == _introduced(merge) == []
+    assert task.lint.preexisting == merge.lint.preexisting >= 1
+
+
+def test_parity_report_only_filter_lives_only_in_attempt_failure():
+    """The fence is applied in code/attempt_failure._lint_ok, never in a lint
+    path. The per-task lint and the merge lint both report every finding, and
+    merge has no report-only concept at all."""
+    import sdlc.stages.merge.activities as merge_act
+    import sdlc.stages.qa.activities as qa_act
+
+    assert "lint_report_only" not in inspect.getsource(qa_act._task_scoped_lint)
+    assert "report_only" not in inspect.getsource(merge_act.run_integration_checks)
+    merge_file = Path(merge_act.__file__).read_text(encoding="utf-8")
+    assert "report_only" not in merge_file
+
+
+@pytest.mark.asyncio
+@pytest.mark.slow
+async def test_parity_repo_own_ruff_config_is_honored_identically(git_repo, parity_env):
+    """The repo's own ruff.toml (committed in the base, so not a policy change)
+    selects E501 with a 40-column limit, a non-default rule. Both paths resolve
+    the same configuration and report the same introduced finding."""
+    ruff_toml = 'line-length = 40\n[lint]\nselect = ["E501"]\n'
+    wt, base_sha = await _base_and_worktree(
+        git_repo, "run-cfg", {"a.py": "x = 1\n", "ruff.toml": ruff_toml}
+    )
+    Path(wt, "b.py").write_text(LONG_LINE, encoding="utf-8")
+    from sdlc.vcs.git import _git
+
+    _git(["add", "-A"], wt)
+    _git(["commit", "-m", "attempt"], wt)
+
+    task, merge = await _both_paths(wt, base_sha, "run-cfg", ["b.py"])
+
+    assert task.lint.state is merge.lint.state is CollectionState.MEASURED
+    assert _introduced(task) == _introduced(merge)
+    assert [(rule, path) for rule, path, _ in _introduced(task)] == [("E501", "b.py")]
