@@ -150,7 +150,14 @@ def write_score(ev: Evidence, out_dir: Path, weights: CompositeWeights) -> list[
 
     written += _write_case_matrices(ev, out_dir, notes, runs=runs)
 
-    rollup = build_sc_rollup(ev.summaries, ev.records, selection_runs=ev.selection_runs)
+    rollup = build_sc_rollup(
+        ev.summaries,
+        ev.records,
+        selection_runs=ev.selection_runs,
+        no_summary=ev.no_summary,
+        roots=ev.roots,
+        excluded_smoke=ev.excluded_smoke,
+    )
     for name, text in (
         ("sc-rollup.html", render_sc_rollup_html(rollup)),
         ("sc-rollup.json", render_sc_rollup_json(rollup)),

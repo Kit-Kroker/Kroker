@@ -10,7 +10,6 @@ Pure aggregation + rendering, no I/O -- mirrors heatmap.py.
 from __future__ import annotations
 
 from collections import defaultdict
-from html import escape
 from statistics import median
 
 from pydantic import BaseModel, Field
@@ -18,6 +17,8 @@ from pydantic import BaseModel, Field
 from ..core.models import (
     RunSummary,
 )
+from ..runs_paths import RootsReport
+from .evidence import NoSummaryRun
 from .models import BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, is_pre012
 from .operator_time import RunOperatorTime, operator_time
 from .runs import MIN_OBSERVATIONS, attempt_sort_key
@@ -91,6 +92,14 @@ class SCRollup(BaseModel):
     # mixed set and/or a summary no record vouches for ("" = clean).
     commits: set[str] = Field(default_factory=set)
     commit_flag: str = ""
+    # 026 (FR-002/003/004): the scored selection's full accounting. Every
+    # run is either summarized or named in no_summary with its terminal
+    # class (an SC-1 miss, SC-2 not-measured); smoke runs are excluded and
+    # named; the roots line states which roots were read and how (FR-001).
+    no_summary: list[NoSummaryRun] = Field(default_factory=list)
+    excluded_smoke: list[str] = Field(default_factory=list)
+    roots: RootsReport | None = None
+    roots_line: str = ""
 
 
 def _rate(n_hits: int, n: int) -> float | None:
@@ -104,14 +113,28 @@ def build_sc_rollup(
     records: list[BenchmarkRecord],
     *,
     selection_runs: int = 0,
+    no_summary: list[NoSummaryRun] | None = None,
+    roots: RootsReport | None = None,
+    excluded_smoke: list[str] | None = None,
 ) -> SCRollup:
+    no_summary = no_summary or []
+    excluded_smoke = excluded_smoke or []
     ordered = sorted(summaries, key=lambda s: (s.started_at, s.run_id))
     data = [r for r in records if r.scope is not BenchmarkScope.CELL]
     ots = [(s, operator_time(s)) for s in ordered]
     policies = sorted({g.policy for s in ordered for g in s.gates})
     commits, commit_flag = _commit_provenance(ordered, data)
+    # 026 (FR-003, research R2): SC-1's denominator is the distinct
+    # (non-smoke) run_ids records vouch for, plus every no-summary run as
+    # a miss. A summary no record vouches for stays under the commit flag
+    # and never enters n. With no records at all there is no vouching
+    # evidence, so summaries stand on their own (the 013 behavior, kept
+    # for the records-less call path).
+    record_run_ids = {r.run_id for r in records}
+    vouched = [s for s in ordered if s.run_id in record_run_ids] if record_run_ids else ordered
+    sc1 = _sc1(vouched, no_summary)
     return SCRollup(
-        rates=[_sc1(ordered), *_sc2_rows(ots), _sc3(data), _sc4(ordered), *_sc6(ordered)],
+        rates=[sc1, *_sc2_rows(ots, no_summary), _sc3(data), _sc4(ordered), *_sc6(ordered)],
         sc4_series=_sc4_series(ordered),
         pre012_records=sum(1 for r in data if is_pre012(r)),
         summary_runs=len(summaries),
@@ -122,6 +145,31 @@ def build_sc_rollup(
         evidence_tier=EVIDENCE_WEAK_SOFT if policies == ["soft"] else None,
         commits=commits,
         commit_flag=commit_flag,
+        no_summary=no_summary,
+        excluded_smoke=excluded_smoke,
+        roots=roots,
+        roots_line=_roots_line(roots, sc1.n, len(no_summary), no_summary, excluded_smoke),
+    )
+
+
+def _roots_line(
+    roots: RootsReport | None,
+    n_scored: int,
+    n_no_summary: int,
+    no_summary: list[NoSummaryRun],
+    excluded_smoke: list[str],
+) -> str:
+    """FR-001's stated-roots line, rendered in every format ("" when the
+    caller supplied no roots: legacy callers see no new text)."""
+    if roots is None:
+        return ""
+    ns = ", ".join(f"{x.run_id}: {x.terminal_class}" for x in no_summary) or "none"
+    sm = ", ".join(excluded_smoke) or "none"
+    return (
+        f"records: {roots.records} ({roots.records_how}); "
+        f"summaries: {roots.export} ({roots.export_how}); "
+        f"{n_scored - n_no_summary} of {n_scored} scored runs summarized; "
+        f"no-summary: {ns}; smoke excluded: {sm}"
     )
 
 
@@ -169,24 +217,32 @@ def _unattended_to_merge(s: RunSummary) -> bool:
     return True
 
 
-def _sc1(summaries: list[RunSummary]) -> SCRate:
-    hits = sum(1 for s in summaries if _reached_merge(s) and _unattended_to_merge(s))
+def _sc1(vouched: list[RunSummary], no_summary: list[NoSummaryRun]) -> SCRate:
+    """026 (FR-003): n is the distinct run_ids of the vouched summaries
+    plus every no-summary run — a crashed, timed-out, terminated or
+    summary-missing run counts in the denominator as a miss, never drops
+    out silently."""
+    hits = sum(1 for s in vouched if _reached_merge(s) and _unattended_to_merge(s))
+    n = len({s.run_id for s in vouched} | {x.run_id for x in no_summary})
     return SCRate(
         criterion="SC-1",
         label="runs reaching the merge gate unattended",
-        rate=_rate(hits, len(summaries)),
-        n=len(summaries),
+        rate=_rate(hits, n),
+        n=n,
         target=">=0.80",
         note="reached = outcome in deployed/merged-not-deployed/rejected:merge; "
         "unattended = no human-decided gate before the merge gate",
     )
 
 
-def _sc2_rows(ots: list[tuple[RunSummary, RunOperatorTime]]) -> list[SCRate]:
+def _sc2_rows(
+    ots: list[tuple[RunSummary, RunOperatorTime]], no_summary: list[NoSummaryRun] | None = None
+) -> list[SCRate]:
     """025 FR-006/012: SC-2 (shipped) and SC-2-all (all scored), the median
     engaged operator minutes per run. Each row floors on its OWN n; zero
     runs are measured (in n and in the median) while not-measured runs are
-    excluded and named in the note (FR-005/007)."""
+    excluded and named in the note (FR-005/007). 026 (FR-002): runs with
+    no summary are named as not measured with their terminal class."""
 
     def row(criterion: str, label: str, base: list[tuple[RunSummary, RunOperatorTime]]) -> SCRate:
         measured = [(s, ot) for s, ot in base if ot.state != "not_measured"]
@@ -198,6 +254,8 @@ def _sc2_rows(ots: list[tuple[RunSummary, RunOperatorTime]]) -> list[SCRate]:
             f"of {len(measured)} measured; "
             f"{len(base) - len(measured)} not measured (excluded)"
         )
+        if ns_named := [f"{x.run_id}: {x.terminal_class}" for x in no_summary or []]:
+            note += f"; no summary, not measured: {', '.join(ns_named)}"
         return SCRate(
             criterion=criterion,
             label=f"median operator minutes per {label}",
@@ -313,106 +371,19 @@ def _sc6(summaries: list[RunSummary]) -> list[SCRate]:
 # ------------------------------------------------------------- rendering
 
 
-def render_sc_rollup_json(r: SCRollup) -> str:
-    return r.model_dump_json(indent=2)
+# 026 T006: the render functions live in sc_render.py (moved verbatim; this
+# module crossed its plan budget). Re-exported lazily (PEP 562) because a
+# module-level import would cycle — sc_render imports MIN_RUNS from here.
+_RENDERERS = ("render_sc_rollup_html", "render_sc_rollup_json", "render_sc_rollup_markdown")
 
 
-def _fmt(rate: float | None) -> str:
-    return "n/a" if rate is None else f"{rate:.2f}"
+def __getattr__(name: str):  # noqa: ANN202
+    if name in _RENDERERS:
+        from . import sc_render
+
+        return getattr(sc_render, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def _mins(x: float | None) -> str:
-    return "n/a" if x is None else f"{x:.1f}"
-
-
-def _sc2_companions_line(r: SCRollup) -> str:
-    e = r.sc2_extra
-    return (
-        f"SC-2 companions: human-touched median {_mins(e.human_touched_median_min)} "
-        f"and max {_mins(e.human_touched_max_min)} min; "
-        f"uncapped wait median {_mins(e.wait_median_min)} min; "
-        f"{e.zero_runs} zero-interaction runs (measured); "
-        f"gate policy mix: {r.policy_mix or 'none'}."
-    )
-
-
-def render_sc_rollup_markdown(r: SCRollup) -> str:
-    """ASCII only (report.py:70-74)."""
-    lines = [
-        "",
-        "## Success criteria",
-        "",
-        f"{r.summary_runs} of {r.selection_runs} runs left a run summary",
-        "",
-        f"Rates below n={MIN_RUNS} render n/a rather than a percentage.",
-        "",
-        "| criterion | measure | rate | n | target | |",
-        "|---|---|---|---|---|---|",
-    ]
-    for x in r.rates:
-        flag = "PROXY" if x.proxy else ""
-        lines.append(
-            f"| {x.criterion} | {x.label} | {_fmt(x.rate)} | n={x.n} | {x.target} | {flag} |"
-        )
-    if r.sc4_series:
-        lines += ["", "SC-4 series (human-answered fraction, by run order):", ""]
-        lines += [f"- {p.index}: {p.run_id} {p.human_rate:.2f}" for p in r.sc4_series]
-    lines += ["", "Definitions:", ""]
-    lines += [f"- **{x.criterion}**: {x.note}" for x in r.rates if x.note]
-    # 025 (FR-013/015): the SC-2 companions and the evidence tier ride the
-    # same section in every renderer.
-    lines += ["", _sc2_companions_line(r)]
-    if r.evidence_tier:
-        lines += [f"Evidence tier: {r.evidence_tier}."]
-    # FR-024: provenance renders only when broken — a clean fleet shows no
-    # commit noise, a broken one shows the set and the flag.
-    if r.commit_flag:
-        lines += [
-            "",
-            f"Commit set: {'+'.join(sorted(r.commits))}. FLAG: {r.commit_flag}.",
-        ]
-    if r.pre012_records:
-        lines += ["", f"includes {r.pre012_records} pre-012 records (untrusted)"]
-    return "\n".join(lines) + "\n"
-
-
-def render_sc_rollup_html(r: SCRollup) -> str:
-    rows = "".join(
-        f"<tr><th>{escape(x.criterion)}</th><td>{escape(x.label)}</td>"
-        f"<td>{_fmt(x.rate)}</td><td>{x.n}</td>"
-        f"<td>{escape(x.target)}</td>"
-        f"<td>{'PROXY' if x.proxy else ''}</td></tr>"
-        for x in r.rates
-    )
-    notes = "".join(
-        f"<li><b>{escape(x.criterion)}</b>: {escape(x.note)}</li>" for x in r.rates if x.note
-    )
-    untrusted = (
-        f"<p>includes {r.pre012_records} pre-012 records (untrusted)</p>"
-        if r.pre012_records
-        else ""
-    )
-    tier = f"<p>Evidence tier: {escape(r.evidence_tier)}</p>" if r.evidence_tier else ""
-    commit_html = (
-        f"<p>Commit set: {escape('+'.join(sorted(r.commits)))}. FLAG: {escape(r.commit_flag)}.</p>"
-        if r.commit_flag
-        else ""
-    )
-    return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Success criteria</title>
-<style>
-body{{font:14px system-ui,sans-serif;margin:2rem;color:#111}}
-h1{{font-size:1.3rem}}
-table{{border-collapse:collapse;margin:.5rem 0}}
-td,th{{border:1px solid #ccc;padding:.3rem .6rem;text-align:center}}
-th{{background:#f3f3f3}} li{{margin:.3rem 0}}
-</style></head><body>
-<h1>Success criteria</h1>
-<p>{r.summary_runs} of {r.selection_runs} runs left a run summary</p>
-<p>Rates below n={MIN_RUNS} render n/a rather than a percentage: a single
-run displaying 100% would be quoted as a result.</p>
-<table><tr><th>criterion</th><th>measure</th><th>rate</th><th>n</th>
-<th>target</th><th></th></tr>{rows}</table>
-<p>{escape(_sc2_companions_line(r))}</p>
-{tier}{commit_html}<h2>Definitions</h2><ul>{notes}</ul>{untrusted}
-</body></html>"""
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_RENDERERS))
