@@ -73,6 +73,18 @@ AXIS_ACT = workflow.ActivityConfig(
 )
 
 
+def _child_failure_text(e: BaseException) -> str:
+    """026 T004 (advisor D2): the child-failure string with its cause type
+    — `ChildWorkflowError(cause=TimeoutError): ...` — when the exception
+    carries one; otherwise today's `TypeError: ...` shape unchanged. A
+    bare `ChildWorkflowError: ...` drops `e.cause`, leaving a timed-out
+    child indistinguishable from a crashed one."""
+    cause = getattr(e, "cause", None)
+    if cause is not None:
+        return f"{type(e).__name__}(cause={type(cause).__name__}): {e}"
+    return f"{type(e).__name__}: {e}"
+
+
 def _cell_config(
     base: PipelineConfig,
     idea: IdeaBrief,
@@ -379,8 +391,14 @@ class BenchmarkWorkflow:
                     on_graph=_keep_sha,
                 )
             except Exception as e:
-                # a failed/escalated cell is a data point, not a crash
-                child_failure = f"{type(e).__name__}: {e}"
+                # a failed/escalated cell is a data point, not a crash.
+                # 026 T004 (advisor D2): the failure text carries the cause
+                # type so a timed-out child is tellable from a crashed one
+                # downstream (evidence._no_summary_class). String-only and
+                # replay-safe: it flows into a record activity's INPUT,
+                # which Temporal does not compare on replay (the 021
+                # precedent, workflows/AGENTS.md "Single model egress").
+                child_failure = _child_failure_text(e)
                 workflow.logger.warning("cell %s failed: %s", child_id, e)
             pipeline_finished = child_failure is None
 

@@ -12,6 +12,7 @@ from sdlc.benchmarks.tasks import TaskGrade
 from sdlc.benchmarks.workflow import (
     BenchmarkWorkflow,
     _cell_config,
+    _child_failure_text,
     _oracle_record,
     _oracle_task_records,
 )
@@ -224,6 +225,30 @@ def test_cell_config_given_provenance_sets_cell_identity_and_commit():
 def test_benchmark_workflow_class_has_run():
     # the @workflow.run method exists
     assert hasattr(BenchmarkWorkflow, "run")
+
+
+def test_child_failure_text_carries_the_cause_type():
+    """026 T004 (advisor D2): a ChildWorkflowError drops `e.cause` when
+    str()'d, so a timed-out child was indistinguishable from a crashed
+    one downstream (evidence._no_summary_class reads this exact text).
+    The edit is string-only and replay-safe: activity-input content is
+    not compared on replay (021 precedent)."""
+    from temporalio.client import WorkflowFailureError
+    from temporalio.exceptions import TimeoutError as WorkflowTimeoutError
+    from temporalio.exceptions import TimeoutType
+
+    inner = WorkflowTimeoutError(
+        "workflow execution timeout", type=TimeoutType.START_TO_CLOSE, last_heartbeat_details=b""
+    )
+    outer = WorkflowFailureError(cause=inner)
+    assert _child_failure_text(outer) == (
+        "WorkflowFailureError(cause=TimeoutError): Workflow execution failed"
+    )
+
+
+def test_child_failure_text_without_a_cause_is_unchanged():
+    err = TypeError("unsupported operand for +: 'Result' and 'Result'")
+    assert _child_failure_text(err) == "TypeError: unsupported operand for +: 'Result' and 'Result'"
 
 
 def test_cell_config_forwards_per_model_extra_args():
