@@ -1,5 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from sdlc.benchmarks.models import (
     BenchmarkOutcome,
     BenchmarkRecord,
@@ -831,3 +833,140 @@ def test_pre012_line_and_commit_unknown_flag_are_independent():
     line = f"includes {MIN_RUNS} pre-012 records (untrusted)"
     assert line in render_sc_rollup_markdown(rollup)
     assert line in render_sc_rollup_html(rollup)
+
+
+# --- 026 T023 (RED): SC-3 split by lint-only loops (A-4, FR-021) -------------
+#
+# A loop is LINT-ONLY when it has a failed code record and EVERY failed code
+# record carries failure.checks == ["lint"]. Every other loop is NON-LINT:
+# a loop with any non-lint or legacy (failure None) failed record, and a loop
+# with no failed record at all (nothing proves lint). Each loop lands in
+# exactly one of the two rows, so they partition SC-3. SC-3 itself is unchanged.
+# AttemptFailure is imported inside the helper, so the existing tests above
+# keep collecting while the model field is still unbuilt.
+
+
+def _failed(run, task, fix, checks=None):
+    """A FAILED code record. checks=None is the legacy shape (failure None)."""
+    from sdlc.benchmarks.models import AttemptFailure
+
+    rec = _code(run, task, BenchmarkOutcome.FAIL, fix)
+    if checks is None:
+        return rec
+    return rec.model_copy(update={"failure": AttemptFailure(checks=list(checks), summary="x")})
+
+
+def _passed(run, task, fix):
+    return _code(run, task, BenchmarkOutcome.PASS, fix)
+
+
+def _split_fleet():
+    """Five lint loops (three resolved, two not) and six non-lint loops (four
+    resolved: three by a named check and one legacy; two not resolved)."""
+    recs = []
+    for i in range(3):
+        recs += [_failed("r1", f"lint-ok{i}", 0, ["lint"]), _passed("r1", f"lint-ok{i}", 1)]
+    for i in range(2):
+        recs += [
+            _failed("r1", f"lint-bad{i}", 0, ["lint"]),
+            _failed("r1", f"lint-bad{i}", 1, ["lint"]),
+        ]
+    for i, checks in enumerate([["tests"], ["qa"], ["review"]]):
+        recs += [_failed("r1", f"ok{i}", 0, checks), _passed("r1", f"ok{i}", 1)]
+    recs += [_failed("r1", "legacy", 0, None), _passed("r1", "legacy", 1)]
+    recs += [
+        _failed("r1", "mixed-bad", 0, ["tests", "lint"]),
+        _failed("r1", "mixed-bad", 1, ["tests"]),
+    ]
+    recs += [_failed("r1", "bad-tests", 0, ["tests"]), _failed("r1", "bad-tests", 1, ["tests"])]
+    return recs
+
+
+def test_sc3_split_rows_exist_beside_sc3():
+    criteria = [r.criterion for r in build_sc_rollup(_n_summaries(MIN_RUNS), _split_fleet()).rates]
+    assert "SC-3-non-lint" in criteria
+    assert "SC-3-lint" in criteria
+    assert criteria.index("SC-3-non-lint") > criteria.index("SC-3")
+    assert criteria.index("SC-3-lint") > criteria.index("SC-3")
+
+
+def test_sc3_rows_partition_the_loops_and_the_successes():
+    rollup = build_sc_rollup(_n_summaries(MIN_RUNS), _split_fleet())
+    sc3 = _rate(rollup, "SC-3")
+    lint = _rate(rollup, "SC-3-lint")
+    nonlint = _rate(rollup, "SC-3-non-lint")
+    assert (lint.n, nonlint.n) == (5, 6)
+    assert lint.n + nonlint.n == sc3.n == 11
+    assert lint.rate == pytest.approx(3 / 5)
+    assert nonlint.rate == pytest.approx(4 / 6)
+    assert sc3.rate == pytest.approx(7 / 11)
+    lint_ok = round(lint.rate * lint.n)
+    nonlint_ok = round(nonlint.rate * nonlint.n)
+    assert lint_ok + nonlint_ok == round(sc3.rate * sc3.n) == 7
+
+
+def test_a_loop_is_lint_only_only_when_every_failed_attempt_is_lint_only():
+    recs = [
+        _failed("r1", "t", 0, ["lint"]),
+        _failed("r1", "t", 1, ["tests"]),
+        _passed("r1", "t", 2),
+    ]
+    rollup = build_sc_rollup(_n_summaries(MIN_RUNS), recs)
+    assert _rate(rollup, "SC-3-lint").n == 0
+    assert _rate(rollup, "SC-3-non-lint").n == 1
+
+
+def test_a_loop_whose_failed_attempts_are_all_lint_only_is_lint():
+    recs = [_failed("r1", "t", 0, ["lint"]), _failed("r1", "t", 1, ["lint"]), _passed("r1", "t", 2)]
+    rollup = build_sc_rollup(_n_summaries(MIN_RUNS), recs)
+    assert _rate(rollup, "SC-3-lint").n == 1
+    assert _rate(rollup, "SC-3-non-lint").n == 0
+
+
+def test_a_loop_with_no_failed_record_is_non_lint():
+    """The loop marker rides a passing record's fix_attempts; nothing proves
+    lint, so it is not a lint loop."""
+    recs = [_passed("r1", "t", 0), _passed("r1", "t", 1)]
+    rollup = build_sc_rollup(_n_summaries(MIN_RUNS), recs)
+    assert _rate(rollup, "SC-3-lint").n == 0
+    assert _rate(rollup, "SC-3-non-lint").n == 1
+
+
+def test_a_legacy_failed_record_makes_the_loop_non_lint():
+    """failure None on any failed record: the loop is non-lint, even beside a
+    lint-only failure."""
+    recs = [_failed("r1", "t", 0, None), _failed("r1", "t", 1, ["lint"]), _passed("r1", "t", 2)]
+    rollup = build_sc_rollup(_n_summaries(MIN_RUNS), recs)
+    assert _rate(rollup, "SC-3-lint").n == 0
+    assert _rate(rollup, "SC-3-non-lint").n == 1
+
+
+def test_sc3_overall_row_is_unchanged_by_the_split():
+    """SC-3 keeps its label, target, note and counting. Values computed by hand
+    from _split_fleet: 11 loops, 7 resolved."""
+    sc3 = _rate(build_sc_rollup(_n_summaries(MIN_RUNS), _split_fleet()), "SC-3")
+    assert sc3.criterion == "SC-3"
+    assert sc3.label == "fix loops that resolved"
+    assert sc3.target == ">=0.70"
+    assert sc3.n == 11
+    assert sc3.rate == pytest.approx(7 / 11)
+    assert sc3.note == (
+        "a loop = a (run, task) with any attempt at fix_attempts>0; "
+        "success = the final attempt passed; denominator is loops, "
+        "and the n/a floor of 5 applies to loops"
+    )
+
+
+def test_the_floor_applies_to_each_split_row_on_its_own_n():
+    recs = []
+    for i in range(2):
+        recs += [_failed("r1", f"lint{i}", 0, ["lint"]), _passed("r1", f"lint{i}", 1)]
+    for i in range(2):
+        recs += [_failed("r1", f"ok{i}", 0, ["tests"]), _passed("r1", f"ok{i}", 1)]
+    rollup = build_sc_rollup(_n_summaries(MIN_RUNS), recs)
+    for criterion in ("SC-3-lint", "SC-3-non-lint"):
+        row = _rate(rollup, criterion)
+        assert row.n == 2, criterion
+        assert row.rate is None, criterion
+    sc3 = _rate(rollup, "SC-3")
+    assert sc3.n == 4 and sc3.rate is None

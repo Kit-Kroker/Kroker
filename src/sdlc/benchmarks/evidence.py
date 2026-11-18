@@ -31,6 +31,29 @@ from .models import BenchmarkRecord
 DEFAULT_EXPORT_ROOT = runs_paths.EXPORT_DEFAULT
 
 
+def render_roots_line(
+    roots: runs_paths.RootsReport | None,
+    n_scored: int,
+    n_no_summary: int,
+    no_summary: list[NoSummaryRun],
+    excluded_smoke: list[str],
+) -> str:
+    """FR-001's stated-roots line, rendered in every format ("" when the
+    caller supplied no roots: legacy callers see no new text). 026 T023:
+    moved VERBATIM from sc_rollup._roots_line — it renders evidence
+    shapes (RootsReport, NoSummaryRun), so it lives beside them."""
+    if roots is None:
+        return ""
+    ns = ", ".join(f"{x.run_id}: {x.terminal_class}" for x in no_summary) or "none"
+    sm = ", ".join(excluded_smoke) or "none"
+    return (
+        f"records: {roots.records} ({roots.records_how}); "
+        f"summaries: {roots.export} ({roots.export_how}); "
+        f"{n_scored - n_no_summary} of {n_scored} scored runs summarized; "
+        f"no-summary: {ns}; smoke excluded: {sm}"
+    )
+
+
 class NoSummaryRun(BaseModel):
     """026 (FR-002, research R2): a scored run that left no summary, with
     the terminal class the cell record implies — `crashed`

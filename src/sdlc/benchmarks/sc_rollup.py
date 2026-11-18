@@ -20,7 +20,7 @@ from ..core.models import (
     RunSummary,
 )
 from ..runs_paths import RootsReport
-from .evidence import NoSummaryRun
+from .evidence import NoSummaryRun, render_roots_line
 from .models import BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, is_pre012
 from .operator_time import RunOperatorTime, operator_time
 from .runs import MIN_OBSERVATIONS, attempt_sort_key
@@ -30,6 +30,9 @@ from .sc_stats import ci95_label
 # green run rendering "100%" WILL be quoted; n/a cannot be. One floor for
 # the whole round (research R-8): an alias of runs.MIN_OBSERVATIONS.
 MIN_RUNS = MIN_OBSERVATIONS
+
+# 026 T023 (A-4): the shared note for SC-3's partition rows.
+_SPLIT_NOTE = "half of SC-3's loop partition; the n/a floor applies to this row's own denominator"
 
 # The merge gate's registered name (workflows/feature.py:1754).
 MERGE_GATE = "merge"
@@ -151,7 +154,7 @@ def build_sc_rollup(
             sc1,
             _sc1_strict(vouched, no_summary),
             *_sc2_rows(ots, no_summary),
-            _sc3(data),
+            *_sc3(data),
             _sc4(ordered),
             *_sc6(ordered),
         ],
@@ -168,28 +171,7 @@ def build_sc_rollup(
         no_summary=no_summary,
         excluded_smoke=excluded_smoke,
         roots=roots,
-        roots_line=_roots_line(roots, sc1.n, len(no_summary), no_summary, excluded_smoke),
-    )
-
-
-def _roots_line(
-    roots: RootsReport | None,
-    n_scored: int,
-    n_no_summary: int,
-    no_summary: list[NoSummaryRun],
-    excluded_smoke: list[str],
-) -> str:
-    """FR-001's stated-roots line, rendered in every format ("" when the
-    caller supplied no roots: legacy callers see no new text)."""
-    if roots is None:
-        return ""
-    ns = ", ".join(f"{x.run_id}: {x.terminal_class}" for x in no_summary) or "none"
-    sm = ", ".join(excluded_smoke) or "none"
-    return (
-        f"records: {roots.records} ({roots.records_how}); "
-        f"summaries: {roots.export} ({roots.export_how}); "
-        f"{n_scored - n_no_summary} of {n_scored} scored runs summarized; "
-        f"no-summary: {ns}; smoke excluded: {sm}"
+        roots_line=render_roots_line(roots, sc1.n, len(no_summary), no_summary, excluded_smoke),
     )
 
 
@@ -361,33 +343,61 @@ def _sc2_extra(ots: list[tuple[RunSummary, RunOperatorTime]]) -> SC2Extra:
     )
 
 
-def _sc3(records: list[BenchmarkRecord]) -> SCRate:
+def _sc3(records: list[BenchmarkRecord]) -> list[SCRate]:
     """A fix loop existed for a (run, task) where any attempt has
-    fix_attempts > 0; it succeeded if the LAST attempt passed."""
+    fix_attempts > 0; it succeeded if the LAST attempt passed.
+
+    026 T023 (A-4): the loops also PARTITION into SC-3-lint — every
+    failed code record's `failure.checks == ["lint"]` — and
+    SC-3-non-lint, everything else including legacy records whose
+    failure is None. Per-task lint became a loop trigger this round
+    (T016); the split shows what it did to the rate."""
     attempts: dict[tuple[str, str], list[BenchmarkRecord]] = defaultdict(list)
     for r in records:
         if r.stage == "code" and r.task_id:
             attempts[(r.run_id, r.task_id)].append(r)
 
-    loops = successes = 0
+    loops = successes = lint_n = lint_s = 0
     for recs in attempts.values():
         recs = sorted(recs, key=attempt_sort_key)
         if not any(r.fix_attempts > 0 for r in recs):
             continue
         loops += 1
-        if recs[-1].outcome is BenchmarkOutcome.PASS:
-            successes += 1
+        won = recs[-1].outcome is BenchmarkOutcome.PASS
+        successes += won
+        failed = [r for r in recs if r.outcome is BenchmarkOutcome.FAIL]
+        if failed and all(r.failure is not None and r.failure.checks == ["lint"] for r in failed):
+            lint_n += 1
+            lint_s += won
     # The denominator is LOOPS, not runs -- but the floor is one rule for
     # every rate: below MIN_RUNS observations, n/a rather than a percentage.
+    return [
+        _loop_rate(
+            "SC-3",
+            successes,
+            loops,
+            note="a loop = a (run, task) with any attempt at fix_attempts>0; "
+            "success = the final attempt passed; denominator is loops, "
+            f"and the n/a floor of {MIN_RUNS} applies to loops",
+            label="fix loops that resolved",
+        ),
+        _loop_rate("SC-3-non-lint", successes - lint_s, loops - lint_n),
+        _loop_rate("SC-3-lint", lint_s, lint_n),
+    ]
+
+
+def _loop_rate(
+    criterion: str, successes: int, loops: int, note: str = _SPLIT_NOTE, label: str = ""
+) -> SCRate:
+    """One fix-loop rate row (026 T023): the SC-3 overall row passes its
+    pinned note and label; the partition rows share the split note."""
     return SCRate(
-        criterion="SC-3",
-        label="fix loops that resolved",
+        criterion=criterion,
+        label=label or f"{criterion} loops that resolved",
         rate=_rate(successes, loops),
         n=loops,
         target=">=0.70",
-        note="a loop = a (run, task) with any attempt at fix_attempts>0; "
-        "success = the final attempt passed; denominator is loops, "
-        f"and the n/a floor of {MIN_RUNS} applies to loops",
+        note=note,
     )
 
 
