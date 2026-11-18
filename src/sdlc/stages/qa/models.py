@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ...core.models import ArtifactRef
 from ...measurement import CollectionState
+from ...toolchain.lint_scope import ScopedLintReport
 
 SecuritySeverity = Literal["critical", "high", "medium", "low"]
 
@@ -37,6 +38,12 @@ class QAReport(BaseModel):
     # executed across four attempts while QA reported tests_passed=False).
     stopped_early: bool = False
     report_ref: ArtifactRef | None = None
+    # 026 FR-010 (research R4): merge's own scoped lint, measured against
+    # the task's branch_point. None = not run (no lint_base, no adapter) —
+    # a pass by absence, exactly like a pre-026 record. NOT_COLLECTED is
+    # reported with its reason and never fails a task here; merge stays
+    # the fail-closed gate of record.
+    lint: ScopedLintReport | None = None
 
 
 class SecurityFinding(BaseModel):

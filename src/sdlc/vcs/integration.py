@@ -228,27 +228,20 @@ class BaseWorktree:
     reason: str = ""
 
 
-@activity.defn
-async def prepare_base_worktree(inp: BaseWorktreeInput) -> BaseWorktree:
-    """DS2/DS3: a disposable DETACHED worktree at the pinned base commit.
-
-    Never raises on a git failure: the merge gate must fail CLOSED on an
-    unmaterializable base (DS7), which it does by handing path=None to the
-    scoped activities, which then report NOT_COLLECTED. Raising would instead
-    fail the whole workflow. Idempotent across retries: a live worktree is
-    reset to base_sha and cleaned (keeping the provisioned venv), the
-    build_verification_branch pattern. Never pushed; never the operator's
+def materialize_base(repo_wt: str, base_sha: str, dest: str) -> BaseWorktree:
+    """026 T015: prepare_base_worktree's body, destination-taking, so the
+    per-task lint can materialize its own sibling base (FR-010) without the
+    merge activity. Same contract as the activity: never raises on a git
+    failure (the caller decides fail-closed semantics), idempotent across
+    retries (a live worktree at dest is reset to base_sha and cleaned,
+    keeping the provisioned venv), never pushed, never the operator's
     checkout.
     """
-    if not inp.base_sha:
-        return BaseWorktree(None, "no pinned base_sha was supplied to the merge gate")
-    want = _git(
-        ["rev-parse", "--verify", "--quiet", f"{inp.base_sha}^{{commit}}"], inp.integration_wt
-    )
+    want = _git(["rev-parse", "--verify", "--quiet", f"{base_sha}^{{commit}}"], repo_wt)
     if want.returncode != 0:
-        return BaseWorktree(None, f"base_sha {inp.base_sha!r} does not resolve to a commit")
+        return BaseWorktree(None, f"base_sha {base_sha!r} does not resolve to a commit")
     sha = want.stdout.strip()
-    root = os.path.join(_worktrees_root(), inp.run_id or "local", "base")
+    root = dest
     for cand in [root] + [f"{root}.{i}" for i in range(1, 8)]:
         cand = os.path.normpath(cand)
         live = (
@@ -258,10 +251,10 @@ async def prepare_base_worktree(inp: BaseWorktreeInput) -> BaseWorktree:
         if not live:
             if os.path.exists(cand):
                 try:
-                    _clear_worktree_dir(inp.integration_wt, cand)
+                    _clear_worktree_dir(repo_wt, cand)
                 except OSError:
                     continue  # Windows CWD lock: try the next candidate
-            add = _git(["worktree", "add", "--detach", cand, sha], inp.integration_wt)
+            add = _git(["worktree", "add", "--detach", cand, sha], repo_wt)
             if add.returncode != 0:
                 return BaseWorktree(
                     None,
@@ -280,6 +273,24 @@ async def prepare_base_worktree(inp: BaseWorktreeInput) -> BaseWorktree:
             return BaseWorktree(None, "base worktree HEAD does not match base_sha after reset")
         return BaseWorktree(cand)
     return BaseWorktree(None, f"could not clear or create a base worktree near {root}")
+
+
+@activity.defn
+async def prepare_base_worktree(inp: BaseWorktreeInput) -> BaseWorktree:
+    """DS2/DS3: a disposable DETACHED worktree at the pinned base commit.
+
+    Never raises on a git failure: the merge gate must fail CLOSED on an
+    unmaterializable base (DS7), which it does by handing path=None to the
+    scoped activities, which then report NOT_COLLECTED. Raising would instead
+    fail the whole workflow. Idempotent across retries: a live worktree is
+    reset to base_sha and cleaned (keeping the provisioned venv), the
+    build_verification_branch pattern. Never pushed; never the operator's
+    checkout.
+    """
+    if not inp.base_sha:
+        return BaseWorktree(None, "no pinned base_sha was supplied to the merge gate")
+    root = os.path.join(_worktrees_root(), inp.run_id or "local", "base")
+    return materialize_base(inp.integration_wt, inp.base_sha, root)
 
 
 @activity.defn

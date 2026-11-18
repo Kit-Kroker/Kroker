@@ -18,7 +18,10 @@ from ...change_scope import FindingKey, delta, normalize_line, normalize_path, r
 from ...measurement import CollectionState
 from ...process import kill_process_tree
 from ...toolchain.adapters import ToolchainKind, detect
+from ...toolchain.lint_scope import ScopedLintReport, scoped_lint
 from ...vcs.git import _git
+from ...vcs.integration import materialize_base
+from ...vcs.worktree import _clear_worktree_dir
 from .models import (
     QAReport,
     ScopedSecurityReport,
@@ -46,6 +49,15 @@ class QAInput:
     worktree: str
     test_cmd: str = "pytest -q --maxfail=25"
     timeout_s: int = 600
+    # 026 FR-010 (research R4): per-task lint inputs. lint_base is the
+    # task's branch_point; None = no per-task lint (legacy call sites, the
+    # qa fallback and crew paths). lint_key names the sibling base
+    # worktree (<run>/base-<task_id>). lint_report_only globs fence
+    # findings into reported-but-not-failing (T016's _lint_ok filters;
+    # this report never does).
+    lint_base: str | None = None
+    lint_key: str = ""
+    lint_report_only: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -444,18 +456,89 @@ async def run_test_suite(inp: QAInput) -> QAReport:
     # unrelated non-pytest command that happens to also exit 5 is never
     # mistaken for this case.
     if proc.returncode == 5 and "no tests ran" in out:
-        return QAReport(tests_passed=True, failing_tests=[], issues=[])
-    issues = []
-    if proc.returncode != 0:
-        issues = [_diagnostic_slice(out)]
-        if provisioning:
-            issues.insert(0, provisioning)
-    return QAReport(
-        tests_passed=proc.returncode == 0,
-        failing_tests=failing[:50],
-        issues=issues,
-        stopped_early=_stopped_early(out),
+        report = QAReport(tests_passed=True, failing_tests=[], issues=[])
+    else:
+        issues = []
+        if proc.returncode != 0:
+            issues = [_diagnostic_slice(out)]
+            if provisioning:
+                issues.insert(0, provisioning)
+        report = QAReport(
+            tests_passed=proc.returncode == 0,
+            failing_tests=failing[:50],
+            issues=issues,
+            stopped_early=_stopped_early(out),
+        )
+    # 026 FR-010: the tests ran first and their verdict is ground truth;
+    # the scoped lint rides beside it and never touches tests_passed.
+    report.lint = await _task_scoped_lint(inp, env)
+    return report
+
+
+async def _task_scoped_lint(inp: QAInput, env: dict[str, str] | None) -> ScopedLintReport | None:
+    """The merge gate's own scoped_lint, run per task against a sibling base
+    worktree at lint_base (research R4): same binary (env from the same
+    _ensure_python_env provisioning the tests just used), same command,
+    same configuration resolution, so the task verdict and the merge gate
+    can never disagree. None = not run (no lint_base, or no adapter).
+    NOT_COLLECTED never fails a task — merge stays the fail-closed gate of
+    record."""
+    if not inp.lint_base:
+        return None
+    adapter = detect(inp.worktree)
+    if adapter is None:
+        return None
+    dest = _lint_base_dest(inp)
+    base = materialize_base(inp.worktree, inp.lint_base, dest)
+    rng = f"{inp.lint_base}...HEAD"
+    renames = [
+        [parts[1], parts[2]]
+        for parts in (
+            ln.split("\t")
+            for ln in _git(["diff", "-M", "--name-status", rng], inp.worktree).stdout.splitlines()
+        )
+        if len(parts) == 3 and parts[0].startswith("R")
+    ]
+    try:
+        return await scoped_lint(
+            adapter,
+            inp.worktree,
+            base.path,
+            base.reason,
+            inp.lint_base,
+            renames,
+            env,
+            inp.timeout_s,
+        )
+    finally:
+        # Disposable by contract (a sibling base, never the operator's
+        # checkout); a failed removal leaves a stale dir the next
+        # materialization resets or clears.
+        if base.path:
+            try:
+                _clear_worktree_dir(inp.worktree, base.path)
+            except OSError:
+                _log.warning("lint base worktree not removed: %s", base.path, exc_info=True)
+
+
+def _lint_base_dest(inp: QAInput) -> str:
+    """Where the task's base worktree materializes: lint_key under the
+    worktrees root, or — keyless callers — a `base-*` sibling of the task
+    worktree (same parent, so ruff's config walk up the tree sees the same
+    world). Never the task worktree itself: a key that collides falls back
+    to the sibling form rather than resetting the head under test."""
+    sibling = os.path.join(
+        os.path.dirname(os.path.normpath(inp.worktree)),
+        "base-" + os.path.basename(os.path.normpath(inp.worktree)),
     )
+    if not inp.lint_key:
+        return sibling
+    from ...vcs.worktree import _worktrees_root
+
+    keyed = os.path.join(_worktrees_root(), inp.lint_key)
+    if os.path.normpath(keyed) == os.path.normpath(inp.worktree):
+        return sibling
+    return keyed
 
 
 _FAILURES_BANNER = "= FAILURES ="

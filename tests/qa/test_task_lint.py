@@ -37,6 +37,20 @@ HEAD_B = "import sys\n\n\ndef g():\n    return 2\n"  # the attempt's NEW F401 (s
 PASSING = "true"  # a test command that passes and writes nothing
 
 
+@pytest.fixture(autouse=True)
+def _ambient_env(monkeypatch):
+    """The host python3.14 lacks ensurepip, so `python -m venv` fails here
+    (pre-existing host condition). Venv provisioning has its own suite
+    (tests/qa/test_qa_task_venv_provisioning.py). These tests target the
+    scoped-lint wiring, which runs ruff from the ambient PATH (the uv-run
+    venv provides ruff), so the stub returns no venv and no setup error."""
+
+    async def ambient(worktree, timeout_s, *, shared=True):
+        return None, None
+
+    monkeypatch.setattr("sdlc.stages.qa.activities._ensure_python_env", ambient)
+
+
 @pytest.fixture
 def task_repo(git_repo, request):
     """main carries requirements.txt and a.py; a task worktree sits at main's
