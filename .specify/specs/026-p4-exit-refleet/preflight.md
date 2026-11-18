@@ -253,3 +253,19 @@ re-derivation; the ceiling stands**: judge **$13.95** + research
 $1.91 / lice $1.40; smoke stop $2.91. Cumulative 026 spend: **$1.50**
 (all of it this smoke) / $13.95 — $12.45 headroom. No spend of any
 kind proceeds past this halt without the owner's ruling.
+
+## Owner ruling + smoke re-run announcement (2026-11-18, ~20:4x UTC)
+
+Option (a) ruled: **re-run the smoke as-is at the frozen commit
+`ec3f128f`**. Rationale on record: the 025 control passed this exact
+case/path at oracle 1.0 — the failure was validator-authoring
+variance, not machinery. **SPEND ANNOUNCEMENT: smoke attempt 2,
+expected ~$1.50, stop line $2.91** (1.5 × the $1.94 base expectation);
+cumulative after attempt 1: $1.4961 / $13.95. **NEW GUARD (owner):**
+a second smoke failure in the same case-difficulty mode halts for the
+owner — twice is a pattern, not variance. The recurrence note
+(QA-authored validators breaking fix loops, 6/21 attempts) is a
+candidate triage class; every scored run is watched for it and notes
+any occurrence. Otherwise: stamp → ceiling re-derivation → scored
+runs with per-run announcements. The attempt-1 failed stamp is
+preserved at `case-smoke-1-failed-stamp.json` (evidence dir).
