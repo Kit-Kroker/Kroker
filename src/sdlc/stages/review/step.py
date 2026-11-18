@@ -23,7 +23,7 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from ...agents.loader import model_id
     from ...artifacts.read import LoadSessionInput, load_session
-    from ...benchmarks.models import BenchmarkOutcome
+    from ...benchmarks.models import AttemptFailure, BenchmarkOutcome
     from ...benchmarks.record_builder import stage_record
     from ...core.context import StageContext
     from ...core.models import PipelineConfig, RoleUsage
@@ -152,6 +152,9 @@ async def step(
 
     if review is not None and hasattr(ctx, "record"):
         rec_builder = getattr(ctx, "stage_record", stage_record)
+        # 026 T020 (FR-021): a failed review says why, on the record — the
+        # blocking findings as the dev-facing summary. The reason rides
+        # `failure`, never `error`.
         await ctx.record(
             cfg,
             rec_builder(
@@ -168,6 +171,17 @@ async def step(
                 task_id=getattr(task, "id", None),
                 attempt=attempt,
                 fix_attempts=0,
+                failure=(
+                    None
+                    if review.approve
+                    else AttemptFailure(
+                        checks=["review"],
+                        summary="\n".join(
+                            f"{f.severity}: {f.assertion} — {f.detail}"
+                            for f in (review.blocking_findings or [])
+                        )[:500],
+                    )
+                ),
             ),
         )
 

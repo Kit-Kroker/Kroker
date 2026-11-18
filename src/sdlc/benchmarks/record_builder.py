@@ -12,6 +12,7 @@ with workflow.unsafe.imports_passed_through():
     from ..observability.usage import cost_bag_from_spend
     from ..stages.plan.models import PlanDrift
     from .models import (
+        AttemptFailure,
         BenchmarkOutcome,
         BenchmarkRecord,
         BenchmarkScope,
@@ -47,6 +48,7 @@ def stage_record(
     tasks_total: int | None = None,
     blocking_checks: list[str] | None = None,
     error: str | None = None,
+    failure: AttemptFailure | None = None,
     run_id: str | None = None,
 ) -> BenchmarkRecord:
     scope = BenchmarkScope.TASK_ATTEMPT if task_id is not None else BenchmarkScope.STAGE
@@ -102,6 +104,7 @@ def stage_record(
         outcome=outcome,
         fix_attempts=fix_attempts,
         error=error,
+        failure=failure,
         kroker_commit=kroker_commit,
         tree_dirty=tree_dirty,
         arm=arm,

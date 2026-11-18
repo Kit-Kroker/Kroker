@@ -273,6 +273,18 @@ class StageReach(BaseModel):
     merge_blocking_checks: list[str] = Field(default_factory=list)
 
 
+class AttemptFailure(BaseModel):
+    """026 FR-021: why a task attempt failed, classified — the check
+    vocabulary every failed code/qa/review record carries. `checks` is an
+    ordered subset of tests, qa, drift, review, lint, no_feedback; `summary`
+    is the text the dev was shown (the fix-loop issues plus the drift note,
+    cut to 500 chars). The reason rides here, NEVER `error`, which stays
+    the harness's own failure text."""
+
+    checks: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+
 class BenchmarkRecord(BaseModel):
     # identity
     run_id: str
@@ -299,6 +311,10 @@ class BenchmarkRecord(BaseModel):
     outcome: BenchmarkOutcome
     fix_attempts: int = 0
     error: str | None = None
+    # 026 FR-021: the classified attempt cause on failed attempts; None on
+    # a pass and on every pre-026 record (a legacy dict without the key
+    # loads with None). Never carries what belongs in `error`.
+    failure: AttemptFailure | None = None
     # E-77: the graph the record's run pinned; None = a pre-graph run or a
     # pre-E-77 record (contracts/records-and-store.md).
     graph: GraphAttribution | None = None

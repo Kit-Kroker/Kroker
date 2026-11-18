@@ -62,7 +62,7 @@ with workflow.unsafe.imports_passed_through():
         LONG_ACT_TIMEOUT_HOURS,
         _long_act,
     )
-    from .attempt_failure import _lint_input, _lint_ok
+    from .attempt_failure import _lint_input, _lint_ok, _qa_failure, attempt_failure
     from .freeze import _drift_note, _is_repair_attempt, _next_anchor
     from .models import HandoffSummary
     from .usage import _record_attempt_usage
@@ -759,6 +759,18 @@ async def step(
 
         lint_ok = _lint_ok(qa_raw, report_only)  # 026 T016: FR-010, unmeasured never fails
         task_passed = bool(qa_raw.tests_passed and not qa.issues and not drift.found and lint_ok)
+        # 026 T020: hoisted (pure) so the classified cause precedes the
+        # records — every failed attempt says why, on the record, in
+        # `failure` (never `error`).
+        review_outcome = classify_lens(
+            "reviewer",
+            enabled=cfg.review_enabled,
+            agent_present=reviewer_agent is not None,
+            reached=True,  # the primary runs on every attempt (:736)
+            report=review,
+        )
+        review_ok = primary_admits(review_outcome)
+        failure = attempt_failure(qa_raw, qa, drift, review_ok, review, report_only)
         plan_drift = compute_plan_drift(task, diff.get("files", []), drop_generated=_DRIFT_V2())
 
         await ctx.record(
@@ -782,6 +794,7 @@ async def step(
                 fix_attempts=attempt - 1,
                 task_id=task.id,
                 attempt=attempt - 1,
+                failure=failure,  # 026 T020: the full classified set
             ),
         )
 
@@ -808,17 +821,9 @@ async def step(
                 spend=qa_spend,
                 task_id=task.id,
                 attempt=attempt - 1,
+                failure=_qa_failure(failure),  # 026 T020: tests/qa checks only
             ),
         )
-
-        review_outcome = classify_lens(
-            "reviewer",
-            enabled=cfg.review_enabled,
-            agent_present=reviewer_agent is not None,
-            reached=True,  # the primary runs on every attempt (:736)
-            report=review,
-        )
-        review_ok = primary_admits(review_outcome)
 
         adversary = None
         # Classified as unreached up front: the adversary's run site is inside
