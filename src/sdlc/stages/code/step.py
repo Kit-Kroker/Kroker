@@ -62,6 +62,7 @@ with workflow.unsafe.imports_passed_through():
         LONG_ACT_TIMEOUT_HOURS,
         _long_act,
     )
+    from .attempt_failure import _lint_input, _lint_ok
     from .freeze import _drift_note, _is_repair_attempt, _next_anchor
     from .models import HandoffSummary
     from .usage import _record_attempt_usage
@@ -680,12 +681,14 @@ async def step(
         )
 
         drift = DriftReport()
+        report_only: list[str] = []  # 026 T016: repair fences → lint_report_only
         if cfg.containment_enabled and anchor is not None and _is_repair_attempt(attempt, thawed):
             policy_globs = await workflow.execute_activity(
                 load_drift_globs,
                 DriftGlobsInput(policy_path=cfg.containment.policy_path),
                 **ACT,
             )
+            report_only = list(policy_globs.fence)
             drift = await workflow.execute_activity(
                 check_test_drift,
                 DriftInput(
@@ -715,9 +718,10 @@ async def step(
             contract.test_commands if contract else None, DEFAULT_TEST_CMD
         )
         _code_ended = _now()  # 012 §5.1: code ends before the test run
+        lint_in = _lint_input(_workflow_id(), task.id, branch_point, report_only)
         qa_raw = await workflow.execute_activity(
             run_test_suite,
-            QAInput(worktree=worktree, test_cmd=test_cmd),
+            QAInput(worktree=worktree, test_cmd=test_cmd, **lint_in),
             **pools.on_harness(_long_act(cfg.roles.get("test", role_cfg)), cfg.harness_queue),
         )
         diff = await workflow.execute_activity(
@@ -753,7 +757,8 @@ async def step(
             started=_qa_ended,
         )
 
-        task_passed = bool(qa_raw.tests_passed and not qa.issues and not drift.found)
+        lint_ok = _lint_ok(qa_raw, report_only)  # 026 T016: FR-010, unmeasured never fails
+        task_passed = bool(qa_raw.tests_passed and not qa.issues and not drift.found and lint_ok)
         plan_drift = compute_plan_drift(task, diff.get("files", []), drop_generated=_DRIFT_V2())
 
         await ctx.record(

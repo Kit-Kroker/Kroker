@@ -106,6 +106,21 @@ def _fix_loop_issues(qa: Any, qa_raw: Any, review: Any = None, adversary: Any = 
                 "not have executed. Check whether it is yours before "
                 "changing it."
             )
+    # 026 T016 (FR-010): the task's own scoped-lint delta, AFTER the test
+    # evidence so the deterministic ground truth leads. Findings only, and
+    # capped: a wall of 74 findings taught the agent nothing (deveal-lice,
+    # 025); 25 lines plus a count is what a fix prompt can act on.
+    lint = getattr(qa_raw, "lint", None)
+    if lint is not None and getattr(lint, "introduced", None):
+        shown = lint.introduced[:25]
+        lines = [f"{f.rule} {f.path}: {f.line}" for f in shown]
+        hidden = len(lint.introduced) - len(shown)
+        if hidden:
+            lines.append(f"(+{hidden} more)")
+        deterministic.append(
+            "lint findings introduced by this task (the merge gate's own check):\n"
+            + "\n".join(lines)
+        )
     review_issues = [
         f"{f.severity}: {f.assertion} — {f.detail}"
         for r in (review, adversary)
@@ -176,7 +191,11 @@ async def step(
 
     prompt = qa_prompt(
         assertions,
-        qa_raw.model_dump_json(),
+        # 026 T016 (FR-040): lint is deterministic feedback for the dev's
+        # fix loop, carried by the retry prompt — never evidence for a
+        # clean-context judge, which would then parrot it as its own
+        # finding. The report itself (records, rollup) keeps the field.
+        qa_raw.model_dump_json(exclude={"lint"}),
         diff.get("stat", "") if isinstance(diff, dict) else "",
         diff.get("patch", "") if isinstance(diff, dict) else "",
     )

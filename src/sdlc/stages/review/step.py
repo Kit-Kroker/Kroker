@@ -76,7 +76,11 @@ def _get_qa_raw_json(qa_raw: Any) -> str:
     if qa_raw is None:
         return ""
     if hasattr(qa_raw, "model_dump_json"):
-        return qa_raw.model_dump_json()
+        # 026 T016 (FR-040): lint rides the QA report but is deterministic
+        # fix-loop feedback, not clean-context evidence — the reviewer and
+        # adversary must judge the diff, not parrot the linter. Unknown-key
+        # excludes are ignored by pydantic, so older report shapes pass.
+        return qa_raw.model_dump_json(exclude={"lint"})
     return str(qa_raw)
 
 

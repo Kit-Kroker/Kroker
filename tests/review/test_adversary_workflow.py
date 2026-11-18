@@ -163,11 +163,21 @@ def test_handoff_is_fail_open_and_never_reaches_a_validator():
 def test_adversary_receives_the_same_test_info_as_the_primary():
     """Identical information is what makes disagreement interpretable as model
     variance, not information asymmetry (spec 3.1). The adversary must see the
-    full QAReport the primary sees -- not an issues-only digest that is empty
-    on the approving path and biases it toward rejection."""
+    same QA dump the primary sees -- not an issues-only digest that is empty
+    on the approving path and biases it toward rejection.
+
+    026 T016 (d) amended "same" by one exclusion: both lenses route through
+    _get_qa_raw_json, which drops the QAReport's lint field -- lint is
+    deterministic fix-loop feedback (FR-010/FR-040), and a judge shown it
+    would parrot the linter as its own finding. The symmetry is the
+    invariant; the field set is the 026 contract."""
     src = STAGE_SRC.read_text(encoding="utf-8")
     adv = src[src.find("async def run_adversary") : src.find("async def run_deep_review")]
-    assert "qa_raw.model_dump_json()" in src
+    primary = src[src.find("async def step") : src.find("async def run_adversary")]
+    assert "_get_qa_raw_json(qa_raw)" in primary
+    assert "_get_qa_raw_json(qa_raw)" in adv
+    helper = src[src.find("def _get_qa_raw_json") : src.find("def _role_model")]
+    assert 'exclude={"lint"}' in helper
     assert "Test output:" not in adv
 
 
