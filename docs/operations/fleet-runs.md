@@ -183,6 +183,25 @@ corpus's one `role: smoke` case, resolved from the public cases root) are
 excluded from SC-1, SC-2 and SC-3, and the exclusion is stated on the
 line.
 
+**The SC-1 rows (026).** The headline **SC-1** is the PRD rule: the run
+reached the merge gate (`deployed:` / `merged-not-deployed:` /
+`rejected:merge`) with no *unplanned* escalation and no steering.
+Planned gates form a static allowlist, `STAGE_GATES` (research, clarify,
+architecture, plan, merge, deploy). An attendant who approves a
+configured HARD stage gate does not count against the run. Any other
+decision at a planned gate counts as steering, and an unknown gate name
+fails closed as unplanned. **SC-1-strict** renders the 025 rule beside
+it: any human-decided gate before merge disqualifies the run. SC-1
+carries an exact 95% Clopper-Pearson interval (`CI95 [lo, hi]`,
+`sc_stats.py`); the n floor is a floor, not proof of reliability.
+
+**The SC-3 partition (026).** Per-task lint became a fix-loop trigger in
+026, so SC-3's loops are also split into **SC-3-lint** (every failed
+code record has `failure.checks == ["lint"]`) and **SC-3-non-lint**
+(everything else, including pre-026 records with no `failure`). The two
+add up to SC-3, and each row applies the n/a floor to its own
+denominator.
+
 One rollup over the dedicated runs root; the outputs are saved beside the
 fleet report, which states for each of SC-1/2/3: value, n, target,
 met/missed and the evidence tier; SC-2 shipped and all-scored; the commit

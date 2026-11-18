@@ -33,6 +33,11 @@ file carries only what is true *here*.
   importability). uv workspaces, off-layout worktrees, lock contention
   and `shared=False` (the oracle) keep the legacy per-worktree
   `.sdlc-venv`.
+  With `QAInput.lint_base` set, it then runs the per-task scoped lint
+  (QA-1.7) in a sibling `base-*` worktree, removed afterwards, and
+  attaches `QAReport.lint`. Never let lint touch `tests_passed`. Keep
+  `lint` out of anything a clean-context judge reads
+  (`model_dump_json(exclude={"lint"})`).
 - `run_lint`: runs project linter inside worktree with diagnostic capture.
 - `scan_paths`: pure per-point scan over an explicit path list (one finding per match, with its line).
 - `scoped_security_scan`: tracked files at head and base, then the `change_scope` delta (DS4).

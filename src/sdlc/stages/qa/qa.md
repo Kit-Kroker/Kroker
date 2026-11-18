@@ -26,7 +26,7 @@ and never overwritten by LLM self-reports or model opinions. [Finding 4]
 
 ### QA-1.4
 Fix-loop analysis (`_fix_loop_issues`) unifies deterministic runner diagnostics and actionable findings
-from both QA and reviewer judges into structured retry instructions, detecting stopped-early suites. [FR-802]
+from both QA and reviewer judges into structured retry instructions, detecting stopped-early suites. The task's own introduced lint findings follow the test evidence, capped at 25 lines plus a count. [FR-802, 026 FR-010]
 
 ### QA-1.5
 The slice exports `step` and `ACTIVITIES` (`run_test_suite`, `run_lint`, `scoped_security_scan`), which run
@@ -35,6 +35,9 @@ in isolated worktree environments with bounded timeouts and group process manage
 ### QA-1.6
 The security scan measures the change, not the tree. `scan_paths` is a pure read over an explicit path list that emits one finding per match, each carrying its normalized source line. It skips paths under Kroker's own `_SCAN_SKIP_DIRS`, and any listed file it cannot read makes the point `NOT_COLLECTED`. `scoped_security_scan` lists tracked files (`git ls-files`) at the integration head and at the pinned base worktree, and returns a `ScopedSecurityReport`. `introduced` is the head-minus-base multiset over `(rule, path, line)`, with base paths mapped through the change's renames; pre-existing and resolved findings are counts. A report that is not `MEASURED` carries no findings and no counts. There is no exemption of any kind: pre-existing fixtures are pre-existing at the base, and new fixtures assemble their trigger text at runtime. [SC-5, FR-106, FR-915; diff-scoped gates DS4/DS7/DS9]
 
+### QA-1.7
+When given a `lint_base` (the task's `branch_point`), `run_test_suite` runs the merge gate's own `scoped_lint` (`src/sdlc/toolchain/lint_scope.py`) after the tests. It uses the same binary and environment the tests just used, compares against a disposable sibling base worktree, and attaches the result as `QAReport.lint`. The lint never touches `tests_passed`. `lint` is `None` when not run (no `lint_base`, or no adapter), and `NOT_COLLECTED` is reported with its reason, never failing a task here. Lint is fix-loop feedback for the dev, not evidence for a judge: the QA prompt, the reviewer and the adversary all see `qa_raw` without `lint`, while records and the rollup keep it. [026 FR-010, FR-040]
+
 ## Failure modes
 
 - **Test failure**: Subprocess returns non-zero; failure traceback and short test summary info are captured for the fix loop.
@@ -42,4 +45,5 @@ The security scan measures the change, not the tree. `scan_paths` is a pure read
 - **Stopped early**: Suite aborted early (`-x` / `--maxfail`); flagged via `stopped_early` so the agent recognizes partial evidence.
 - **Zero tests collected**: Pytest exits 5 with "no tests ran"; treated as vacuous pass when a task does not introduce tests yet.
 - **Missing python dependencies**: Worktree venv provisions dependencies from `pyproject.toml` or `requirements.txt` to avoid ambient environment contamination.
+- **Per-task lint base not materialized / lint tool failed**: `QAReport.lint` is `NOT_COLLECTED` with the reason; the task is not failed for it (QA-1.7).
 - **Base not materialized / tracked file unreadable / `git ls-files` failed**: the scoped scan is `NOT_COLLECTED` with the reason, and the merge gate's absolute `security_scan_collected` fails.

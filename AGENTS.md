@@ -52,7 +52,9 @@ default. Enable them explicitly when relevant to your change:
 `pytest -m "slow or temporal"` runs everything except the token-spending /
 Node-dependent tiers. `pytest -m ""` overrides `addopts` and runs truly
 everything. `tests/conftest.py` sets dummy API keys for import-only, so
-plain `pytest` needs no real credentials.
+plain `pytest` needs no real credentials. It also disables `.env` loading
+(`PYTHON_DOTENV_DISABLED=1`). Build a spawned CLI child's env with
+`child_env(...)` from the same file.
 
 ## Lint / format / typecheck
 

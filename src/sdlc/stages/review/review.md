@@ -39,6 +39,9 @@ reviewer is disabled or absent (012 §5.8).
 ### REVIEW-1.6
 Every lens in `GATING_LENSES` (`src/sdlc/stages/review/lenses.py`) yields a typed `LensOutcome` recording what it did: `PRESENT` with the report's verdict, or one of three absent states — `DECLARED_ABSENT` (the operator disabled it), `NOT_REACHED` (enabled, but its run site was never reached on this task), `UNDECLARED_ABSENT` (enabled and reached, but no report came back). `LensOutcome`'s validator makes an absent-and-approved outcome unconstructible, and every absent state carries a reason. `classify_lens` is the single producer, pure and derived from the same facts the runner's own pre-check consults, so a tombstone cannot disagree with the predicate that gated the run. Fail-open at the task layer is preserved and now explicit: `primary_admits` and `backstop_admits` admit every absent state, so absence never blocks delivery — it is graded at the merge gate instead (MERGE-1.8). [C8]
 
+### REVIEW-1.7
+A rejecting primary review's benchmark record carries `failure = AttemptFailure(checks=["review"], summary=<blocking findings, 500 chars>)`. An approving one carries `None` (CODE-1.10). The reviewer and adversary read the QA report without its `lint` field (QA-1.7), so they judge the diff, not the linter's output. [026 FR-021, FR-040]
+
 ## Failure modes
 
 - **Primary review absent**: the primary returns `None` in exactly two cases — `PipelineConfig.review_enabled=False`, or no reviewer agent configured. An exception inside the primary is *not* caught and propagates. Either absence is recorded as a `LensOutcome` (REVIEW-1.6) rather than read as approval.

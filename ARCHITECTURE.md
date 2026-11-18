@@ -756,6 +756,12 @@ resumes from its last checkpoint instead of starting over (§11).
   `BENCHMARK.md` §5.2), the rubric judge carries an output budget
   (`SDLC_JUDGE_MAX_TOKENS`), and `scripts/decomposition_report.py` turns
   stored plans and grades into an aggregates-only decomposition report.
+  Since round 026 one resolver (`runs_paths.py`) places both evidence
+  roots under `SDLC_RUNS_ROOT`. A failed attempt's record says why in
+  `BenchmarkRecord.failure` (`AttemptFailure`: checks plus the summary
+  the dev was shown). The SC rollup accounts for every scored run,
+  naming a run with no summary by its terminal class, and splits SC-3
+  into lint and non-lint loops (`docs/operations/fleet-runs.md`).
 - **Trajectory harvesting (P5 seam):** Temporal history + artifacts +
   handoffs + gate decisions already constitute complete trajectories
   (actions, tool calls, costs, outcomes, human feedback). The observability
@@ -890,7 +896,8 @@ Kroker/
 │   ├── notify/                # routes, schedule, notifiers, render (E-9)
 │   ├── observability/         # trace, export (events.jsonl/report.html), usage, logfire
 │   ├── eval/                  # promptfoo prompt gate + verdicts (E-82)
-│   ├── deploy/ · toolchain/ · schedules/ · tidyup/
+│   ├── deploy/ · toolchain/ · schedules/ · tidyup/   # toolchain/lint_scope.py: the scoped lint merge and per-task QA share (026)
+│   ├── runs_paths.py          # the one resolver for both evidence roots: SDLC_RUNS_ROOT → benchmarks/ + pipeline/ (026)
 │   ├── gate.py                # DeterministicQualityGate + ABSOLUTE_FLOOR
 │   ├── pending.py             # PendingDecision — the four gate variants
 │   ├── handoff.py · grounding.py · measurement.py · pricing.py · naming.py · prompts.py

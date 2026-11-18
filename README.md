@@ -313,7 +313,10 @@ not be evaluated is `errored` and never counts as a pass.
   constructed at import, including the shipped research role's
   `provider: exa` ExaSearch client, and the glm proposer roles resolve
   `zai:glm-5.3` models); `tests/conftest.py` sets dummy values for
-  import-only, so `pytest` needs no real keys.
+  import-only, so `pytest` needs no real keys. It also sets
+  `PYTHON_DOTENV_DISABLED=1` at import, so an operator's repo-root `.env`
+  cannot leak into tests. A test that spawns an `sdlc` CLI child builds
+  its env with `tests.conftest.child_env(...)`, not a from-scratch dict.
 - Added a new module and hit `ModuleNotFoundError`? Re-run `pip install -e .`
   (setuptools' editable wheel doesn't auto-discover new files).
 - Prompt changes are gated (E-82):

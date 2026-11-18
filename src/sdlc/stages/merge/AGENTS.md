@@ -14,6 +14,7 @@ file carries only what is true *here*.
 - Advisory checks may be overridden only by human approval via `ctx.gate("merge", ...)`.
 - MergeVerdict is advisory and consulted ONLY under SOFT gate policy after the deterministic gate passes clean.
 - The absolute checks judge the change: each is built from a scoped report (`ScopedTestReport`, `ScopedLintReport`, `ScopedSecurityReport`) measured between the pinned `base_sha` and the integration head, and passes only when that report is MEASURED with nothing introduced (MERGE-1.10).
+- `scoped_lint` lives in `toolchain/lint_scope.py`, shared with the per-task lint in `qa.run_test_suite` (026). A change there changes the task verdict and `lint_clean` together; the parity test in `tests/test_lint_scope.py` pins them. `prepare_base_worktree` is a thin wrapper over `vcs.integration.materialize_base`, which the per-task lint also calls.
 - The slice exports `step`, `prompt_digest`, `merge_verdict_prompt`, and `ACTIVITIES = [measure_coverage, run_integration_checks, open_pull_request, evaluate_gate]`.
 
 ## Temporal notes for this slice

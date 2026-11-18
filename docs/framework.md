@@ -195,6 +195,13 @@ A stage's `models.py` holds the types that stage *produces*:
 Downstream stages import those types directly from the producer's package. An import
 of a data model is a type reference, not a cross-stage function call.
 
+Behaviour two stages must both *run* is different, because a call into another stage's
+slice is banned. Move it to a horizontal package and have both stages call it there.
+Example: the scoped lint, which merge's `lint_clean` and the code stage's per-task lint
+(via `qa.run_test_suite`) both need, moved verbatim from `stages/merge/scoping.py` to
+`src/sdlc/toolchain/lint_scope.py` in round 026. The base-worktree materialization
+became `vcs.integration.materialize_base` in the same change.
+
 `src/sdlc/core/` holds only the types that **no stage produces**:
 cross-cutting envelopes and shared configuration used across the orchestrator
 (`PipelineConfig`, `GateDecision`, `RoleConfig`, `IdeaBrief`, `RunSummary`).

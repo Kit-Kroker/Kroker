@@ -26,4 +26,5 @@ The memo key's recall slot is the run's memory watermark, extended with the stag
 - **Delta grounding mismatch**: Proposed file changes do not match repository layout; retries with delta guidance or raises ApplicationError.
 - **Budget exhaustion**: Search budget exhausted during research subqueries; degrades gracefully into brief gaps without raising unhandled exceptions.
 - **Request limit**: a research subquery that reaches its request limit degrades the same way; its spend is still reported.
+- **Research tool retries exhausted**: an `UnexpectedModelBehavior` from the inner run (CodeMode's `run_code` or output validation used up its retries; 025 run 1's crash) degrades to a gap brief with Kroker's own text. Provider, auth and other infrastructure errors still propagate. [026 T022]
 - **Gate rejection**: Human reviewer rejects architecture spec; workflow aborts or branches cleanly per gate decision.

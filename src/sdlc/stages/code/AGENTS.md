@@ -14,6 +14,8 @@ file carries only what is true *here*.
 - `freeze.py` holds the C2 freeze/thaw decision rules as pure functions (no `ctx`, no I/O, table-testable); `step.py` re-exports them, so existing `from ...code.step import _next_anchor` sites keep working. Audit recorders (`_record_escalation`, `_record_thaw`) stay in `step.py`.
 - All tool escalations and approvals are recorded to benchmarks and trace events.
 - `run_coding_task`'s checkpoint commit failing is logged at WARNING and never raised (CODE-1.7): `commit_sha` stays `None` and the C2 anchor does not advance. `sdlc doctor`'s git-identity check is the pre-run guard for the usual cause; keep its FAIL text in step with this behaviour.
+- Safe lint autofix runs inside `run_coding_task`, before the checkpoint commit, and never raises (CODE-1.8). It skips repair-fenced paths on a repair attempt.
+- `attempt_failure.py` holds the pure classifiers (`attempt_failure`, `_qa_failure`, `_lint_ok`, `_lint_input`) behind `task_passed` and `BenchmarkRecord.failure`. The attempt's cause goes in `failure`, never in `error` (CODE-1.10). `_lint_ok` is the only place that decides a lint finding fails a task: fences are report-only and an unmeasured lint passes (CODE-1.9).
 - The C8 lens tombstones are classified here but defined in the review slice (`stages/review/lenses.py`); this slice never re-implements the presence rules or the admission predicates.
 - QA and review stages are invoked clean-context, validating against the frozen contract.
 - The review loop's reviewer label is the run's resolved model
