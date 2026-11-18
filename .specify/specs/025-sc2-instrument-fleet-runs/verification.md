@@ -111,3 +111,17 @@ FAIL stamp at the checkout's `runs/ops/smoke/ce3a36f88d08….json`
 (`unknown.json`, records-root misread — `SDLC_BENCHMARKS_ROOT` was
 unset) disclosed and retained. Attendant ledger: 16 interactions (1
 human, 15 automated), full list in preflight.md.
+
+### Smoke attempt 3 — PASS (2026-11-17, fleet commit `ce3a36f8`)
+
+`bench-todo-api-greenfield-1794953137-1ba84e` (22:05–23:20 UTC): stamp
+written by the CLI's own post-processing at
+`runs/ops/smoke/ce3a36f88d08….json` — **all four conditions PASS**,
+case-level oracle **1.0**. The read-only `auth.json` bind fixed the
+harness in production: **zero task escalations** (attempt 2: five), the
+pipeline reached merge + deploy and passed both. 48 records, 75 min.
+Attendant ledger: 12 interactions, all automated, zero human.
+**Measured judge spend $1.93805** (rubrics $0.61591 / research judge
+$0.85815 / other stage judging $0.46399) → T024 ceiling: **judge line
+$7.77 + EXA bound $1.00 = $8.77 remaining**; cumulative spend ≈ $2.40.
+Scored runs cleared to start (B.3 order; sequential until two done).

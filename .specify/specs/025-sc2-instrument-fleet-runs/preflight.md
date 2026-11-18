@@ -352,4 +352,154 @@ owner before another cent.
 - Smoke attempt 3 announced and launched below; fleet commit unchanged
   `ce3a36f8`.
 
+## T023 — SMOKE PASS (2026-11-17 22:05–23:20 UTC)
+
+`bench-todo-api-greenfield-1794953137-1ba84e` — **PASS**: stamp written
+by the CLI's own post-processing (and re-written identically by the
+attendant backup) at the checkout's gitignored
+`runs/ops/smoke/ce3a36f88d08….json`. All four conditions held: rubric
+scores (clarify/architecture), commit `ce3a36f88d08…` on every record,
+1 file / 1 cell, case-level oracle **PASS 1.0**. The auth fix proven in
+production: **zero task escalations** (attempt 2 had five — every task
+closed its criteria this time), merge + deploy gates reached and
+passed. 48 records, 75 min wall. Attendant ledger: **12 interactions,
+all automated** (research gate, 7 clarify with suggested answers,
+architecture, plan, merge, deploy); zero human interactions in this
+run. The smoke is counted in spend, not in the scored set (B.9).
+
+## T024 — cost ceiling (announced before scored run 1)
+
+Measured from the smoke's 48 records (all metered records bill the
+Anthropic judge; z.ai is the flat subscription and EXA is fetch-budget
+metered):
+
+- Smoke total metered judge spend: **$1.93805**, of which rubric judging
+  (staged_rubric) $0.61591 (2 rubrics → $0.30796/rubric), research
+  judging $0.85815, other stage judging (plan/qa/handoff/review/
+  analyze) $0.46399.
+- Per-run expectations (no prior records for any scored case — the
+  smoke stands in, B.6): deveval runs (1,2,3,5,6; rubrics {}, research
+  off) = stage judging only ≈ **$0.464/run**; cat-cafe (run 4; 5
+  rubrics, research on) = 0.464 + 0.858 (research judge) + 5×0.30796 =
+  **$2.862**.
+- **Anthropic judge ceiling = 1.5 × (5×0.464 + 2.862) = 1.5 × 5.182 =
+  $7.77** (covers the six scored runs; the smoke's $1.94 is already
+  spent and reported cumulatively).
+- **Research provider (EXA) line = $1.00**: only cat-cafe enables
+  research among scored runs; EXA bills fetches (budget-capped at
+  10/sub-question, ≤3 sub-questions observed) and the records meter
+  fetch counts, not dollars — $1.00 is an operator bound comfortably
+  above the worst-case fetch volume, stated as a bound, not a
+  measurement.
+- **Total remaining ceiling: $8.77.** Cumulative spend to date:
+  $1.94 judge (smoke 3) + $0.46 (smoke 2's partial judge spend) ≈
+  **$2.40**; z.ai flat; EXA unmeasured-to-negligible. Per-run stop: the
+  operator cancels a run whose judged spend crosses its announced
+  expectation by more than the 1.5× headroom.
+
+## Scored run 1 — deveval-readtime (2026-11-17 23:24–23:32 UTC)
+
+`bench-deveval-readtime-1794957781-bccb20`: clarify PASS (10 frozen OQs
+answered with suggested answers; $0.03615 judged), then the **architect
+agent's `run_code` tool failed on the model's own code**
+(`TypeError: unsupported operand for +: 'Result' and 'Result'`), retried
+3×, failed the child at architecture (stage_reach: last_stage=clarify
+pass, final_stage=merge unreached; no oracle; axis not_evaluated).
+**Class: case failure** — agent behavior inside task execution, the
+pre-registered always-case category; scored in the failure rate.
+Actual $0.0362 vs $0.464 expected. **SC-2: 10 interactions, all
+automated.** Cumulative **$2.44** / $8.77 ceiling. Run kept in the runs
+root (a scored run, not quarantined). One pre-start client slip (my
+`--case` path usage; no workflow, $0) is noted for the record.
+
+## Scored run 2 — deveval-lice (2026-11-17 23:36 → 2026-11-18 02:02 UTC)
+
+`bench-deveval-lice-1794958404-f74c98`: the full pipeline ran — 8 OQ
+clarify answers, architecture + plan gates, 7 code tasks (T-002 and
+T-004 hit their 3-attempt fix loops and were approved-to-proceed by the
+attendant), merge stage reached. Cell PASS; **merge FAIL** (blocking:
+lint_clean, review_severity, traceability, plan_drift; 5/7 tasks
+QA-passed, 2 not finished); **oracle 0.0 FAIL**. 62 records.
+**Class: case failure** (bad code/tests; the harness itself worked —
+real diffs, real checks, real grading). Actual **$0.9326** vs $0.464
+expected (escalation retries; within the 1.5× headroom). **SC-2: 12
+interactions, all automated.** Cumulative **$3.37 / $8.77**. Kept in
+the runs root, scored. Two concluded runs → overlap window open for
+runs 3+4.
+
+## Scored run 3 — deveval-geotext (2026-11-18 02:1x → ~04:4x UTC)
+
+`bench-deveval-geotext-1794967369-ea94f8`: full pipeline — 9 tasks
+(7/9 QA-passed; T-02 and T-09 hit 3-attempt fix loops, approved-to-
+proceed), merge FAIL (lint_clean, review_severity, traceability),
+**oracle 0.222 FAIL** (partial credit). 59 records. **Class: case
+failure.** Actual **$1.27** vs $0.464 expected — 2.7×, past the 1.5×
+per-run stop line, but concluded before a cancel point (driver:
+escalation retries). Fleet ceiling still holds; remaining runs watched
+closer. Interactions: geotext's portion of the shared 3+4 ledger
+(~6 OQ, architecture, plan, 2 task escalations); per-run authority is
+the SC-2 rollup. Cumulative **$4.64 / $8.77**. Kept in the runs root,
+scored.
+
+## Scored run 4 — cat-cafe-monitoring (2026-11-18 ~02:1x → ~06:0x UTC)
+
+`bench-cat-cafe-monitoring-1794967369-e94f43`: the fleet's rubric case.
+Full pipeline, **11/11 tasks QA-passed with zero escalations**, merge
+FAIL on a single check (`lint_clean`), **oracle 0.861 FAIL** — the
+closest run of the fleet. Rubrics (5, staged_rubric): research 0.78 /
+clarify 0.97 / architecture 0.90 / plan 0.94 / qa 0.775–1.0 per task.
+74 records. **Class: case failure.** Actual **$2.0025** vs $2.862
+expected (under; the EXA research line applied here — fetch-budget
+usage, well inside the $1.00 bound). Interactions: cat-cafe's portion
+of the shared ledger (~6-8 OQ answers + architecture + plan; no task
+escalations). Cumulative **$6.64 / $8.77**. Kept, scored. Runs 5+6
+remain: $2.13 budget vs $0.93 expected.
+
+## Scored run 5 — deveval-readtime repeat (2026-11-18 ~06:5x → ~09:xx UTC)
+
+`bench-deveval-readtime-1794980735-948597`: the fleet's first
+full-distance run — 9/9 tasks QA-passed with zero escalations, merge
+verdict `revise` with no blocking checks, **last_stage deploy PASS** —
+but the frozen DevEval **oracle graded 0.25 FAIL**. 58 records.
+**Class: case failure** (oracle miss). Actual **$1.1531**. The
+same-case variance read the repeat exists for: run 1 died at
+architecture for $0.036; run 5 shipped end-to-end for $1.15.
+Cumulative **$7.79 / $8.77** — $0.98 headroom for the final run.
+
+## Scored run 6 — deveval-lice repeat (2026-11-18 05:48 → 09:47 UTC, operator-stopped)
+
+`bench-deveval-lice-1794980735-e87339`: 12 OQ clarify answers,
+architecture + plan gates, then a three-escalation cascade (T-02, T-03,
+T-04, each at 3 attempts, approved-to-proceed). Judged spend crossed
+the announced per-run stop line ($0.70) and reached **$0.9613** with
+the fleet ceiling $0.02 away — **the operator stopped the run** per the
+pre-announced rule (both workflows terminated with the reason recorded;
+mid-pipeline at a QA-analyst activity, nothing pending). Partial
+records kept; listed as operator-stopped, not infra, not a scored
+outcome. Lice portion of the 5+6 ledger: 12 OQ + 2 gates + 3
+escalations. **Final cumulative: $8.7513 / $8.77 — ceiling not
+crossed.** Six scored runs concluded; the freeze ends; T032 begins.
+
+## T031 — run 7 decision
+
+**Run 7 not needed**: 6 scored runs concluded (≥ the 5-run floor); no
+extension of the delegation.
+
+## T032 — fleet score and report (2026-11-18)
+
+`benchmark score --all` from the fleet checkout over the dedicated runs
+root → `benchmarks/_all/score/` (outputs beside `fleet-report.md` at the
+runs root). Commit set **exactly one** by direct record scan (348/348
+at `ce3a36f88d08…`; the rollup's summary-fed `commits` array is empty
+— see the SC-2 finding). **Fleet total $8.7550 / $8.77** (authoritative
+record scan; $8.2953 in-root + $0.45976 quarantined smoke-2 judge).
+Full SC table, failures/infra tables, loop counts, variance reads and
+honest misses in `kroker-fleet-runs-025/fleet-report.md`. Headlines:
+SC-3 0.385 (5/13) MISS; SC-1 n/a (0 unattended runs — attendant decided
+every gate); SC-2 n/a (the rollup reads retro `summary.json` exports
+that benchmark-mode runs do not produce — backlog finding); scored set
+0/6 successes (oracle 0.000/0.222/0.250/0.861 on graded runs; best run
+blocked by `lint_clean` alone); zero human interactions across the
+entire fleet (87 automated attendant interactions).
+
 
