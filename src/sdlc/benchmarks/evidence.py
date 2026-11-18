@@ -17,17 +17,17 @@ module scope.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from .. import runs_paths
 from ..core.models import (
     RunSummary,
 )
 from .models import BenchmarkRecord
 
-DEFAULT_EXPORT_ROOT = "./runs/pipeline"
+DEFAULT_EXPORT_ROOT = runs_paths.EXPORT_DEFAULT
 
 
 class Evidence(BaseModel):
@@ -50,7 +50,7 @@ def export_root(root: str | None = None) -> Path:
     observability/activities.py's SDLC_EXPORT_ROOT resolution."""
     if root is not None:
         return Path(root)
-    return Path(os.environ.get("SDLC_EXPORT_ROOT", DEFAULT_EXPORT_ROOT))
+    return Path(runs_paths.export_root())
 
 
 def load_run_summaries(root: str | None = None) -> tuple[list[RunSummary], list[str]]:

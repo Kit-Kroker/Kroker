@@ -15,6 +15,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from .. import runs_paths
 from ..board.schema import apply_schema, connect, db_path
 from ..core.models import RunSummary
 from .metrics import GateDecisionRecord
@@ -107,7 +108,7 @@ def gate_decisions_from_exports(
     export from a crashed run must not hide every other run's decisions.
     Sorted glob so the read never depends on directory order.
     """
-    base = root if root is not None else os.environ.get("SDLC_EXPORT_ROOT", "./runs/pipeline")
+    base = root if root is not None else runs_paths.export_root()
     records: list[GateDecisionRecord] = []
     for path in sorted(Path(base).glob("*/summary.json")):
         try:

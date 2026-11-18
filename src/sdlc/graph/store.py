@@ -41,6 +41,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
+from sdlc.runs_paths import explicit_export_root
+
 from ..core.models import RoleConfig
 from .io import GraphSchemaError, from_yaml, to_yaml
 from .model import PipelineGraph
@@ -64,7 +66,10 @@ def _absolute_env(name: str) -> Path:
     relative value -- including the Windows drive-relative shapes
     (`D:x`, `\\graphs`) that Path.resolve() quietly anchors -- is refused
     with a ValueError naming the variable, before any file is touched."""
-    value = os.environ[name]
+    return _absolute_value(name, os.environ[name])
+
+
+def _absolute_value(name: str, value: str) -> Path:
     if not Path(value).is_absolute():
         raise ValueError(
             f"{name} must be an absolute path, got {value!r}: "
@@ -106,8 +111,9 @@ def default_root() -> Path:
         return _absolute_env("SDLC_GRAPH_STORE")
     if os.environ.get("SDLC_ARTIFACT_ROOT"):
         return (_absolute_env("SDLC_ARTIFACT_ROOT").parent / "graphs").resolve()
-    if os.environ.get("SDLC_EXPORT_ROOT"):
-        return (_absolute_env("SDLC_EXPORT_ROOT").parent / "graphs").resolve()
+    explicit = explicit_export_root()
+    if explicit is not None:
+        return (_absolute_value("SDLC_EXPORT_ROOT", explicit).parent / "graphs").resolve()
     return _anchored_root()
 
 

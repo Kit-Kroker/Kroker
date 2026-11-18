@@ -15,6 +15,7 @@ from typing import Protocol
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
+from .. import runs_paths
 from ..core.models import (
     ArtifactRef,
 )
@@ -42,11 +43,7 @@ class ArtifactStore(Protocol):
 
 class LocalFileStore:
     def __init__(self, root: str | os.PathLike | None = None):
-        self.root = Path(
-            root
-            or os.environ.get("SDLC_ARTIFACT_ROOT")
-            or os.environ.get("SDLC_EXPORT_ROOT", "./runs/pipeline")
-        )
+        self.root = Path(root or os.environ.get("SDLC_ARTIFACT_ROOT") or runs_paths.export_root())
 
     def put(self, kind: str, run_id: str, name: str, data: bytes) -> ArtifactRef:
         path = self.root / run_id / _SUBDIRS.get(kind, kind) / name

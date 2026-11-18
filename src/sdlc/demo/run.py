@@ -10,7 +10,6 @@ All output is ASCII: the Windows console cannot print anything else.
 from __future__ import annotations
 
 import asyncio
-import os
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,6 +20,7 @@ from typing import Any
 from temporalio.client import Client
 from temporalio.worker import Worker
 
+from .. import runs_paths
 from ..agents.runner import SdlcPydanticAIPlugin
 from ..channels.contract import Reply
 from ..channels.transport import describe, fetch_pending, submit
@@ -97,7 +97,7 @@ async def _drive(handle: Any, emit: Emit, done: asyncio.Event) -> None:
 
 def export_root() -> Path:
     # The same resolution export_run_artifacts performs inside the activity.
-    return Path(os.environ.get("SDLC_EXPORT_ROOT", "./runs/pipeline"))
+    return Path(runs_paths.export_root())
 
 
 async def run_demo(

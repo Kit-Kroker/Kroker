@@ -7,21 +7,21 @@ is skipped on read so a crashed writer never corrupts the readable history.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from temporalio import activity
 
+from .. import runs_paths
 from .models import BenchmarkRecord
 
-DEFAULT_ROOT = "runs/benchmarks"
+DEFAULT_ROOT = runs_paths.BENCHMARKS_DEFAULT
 
 
 _UNSAFE_CHARS = set(':<>|?*"\\/')
 
 
 def _root() -> str:
-    return os.environ.get("SDLC_BENCHMARKS_ROOT", DEFAULT_ROOT)
+    return runs_paths.benchmarks_root()
 
 
 def _sanitize_segment(s: str, allow_slash: bool) -> str:

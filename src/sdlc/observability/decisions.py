@@ -25,6 +25,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, ValidationError
 
+from .. import runs_paths
 from ..core.models import GateOutcome, RunSummary
 
 
@@ -80,7 +81,7 @@ def decisions_from_exports(
     summary order within a run. Filters are conjunctive exact matches.
     `limit` keeps the most recent N rows (the tail of that order).
     """
-    base = root if root is not None else os.environ.get("SDLC_EXPORT_ROOT", "./runs/pipeline")
+    base = root if root is not None else runs_paths.export_root()
     records: list[DecisionLogRow] = []
     for path in sorted(Path(base).glob("*/summary.json")):
         try:

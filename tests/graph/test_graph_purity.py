@@ -46,12 +46,15 @@ ALLOWED: dict[str, set[str]] = {
     },
     # E-77 (T011): node_types for the registry snapshot, core.models for
     # RoleConfig in RunGraphPointer -- the only additions, still no Temporal.
+    # 026 T002: sdlc.runs_paths (stdlib-only root resolver) for the export
+    # root's sibling rule; no new route into any cycle.
     "store.py": {
         STDLIB,
         "sdlc.graph.io",
         "sdlc.graph.model",
         "sdlc.graph.node_types",
         "sdlc.core.models",
+        "sdlc.runs_paths",
     },
     "start.py": {STDLIB, "sdlc.graph.store"},
     "__init__.py": {

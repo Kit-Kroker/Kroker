@@ -4,12 +4,12 @@ setup_integration_branch resolves the worktree root inside an activity."""
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 from temporalio import activity
 
+from .. import runs_paths
 from ..core.models import (
     RunSummary,
 )
@@ -25,7 +25,7 @@ class RunExportInput(BaseModel):
 
 @activity.defn
 async def export_run_artifacts(inp: RunExportInput) -> str:
-    root = Path(os.environ.get("SDLC_EXPORT_ROOT", "./runs/pipeline"))
+    root = Path(runs_paths.export_root())
     run_dir = root / inp.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "events.jsonl").write_text(render_events_jsonl(inp.trace), encoding="utf-8")
