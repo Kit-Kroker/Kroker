@@ -150,6 +150,39 @@ no prior). Escalations during a run are answered by the owner.
 SDLC_RUNS_ROOT=<the dedicated dir> uv run python -m sdlc.cli benchmark score --all
 ```
 
+`SDLC_RUNS_ROOT` now drives **both** evidence halves. One resolver,
+`sdlc.runs_paths`, feeds every writer and reader of the records root
+(`$SDLC_RUNS_ROOT/benchmarks`) and the export root
+(`$SDLC_RUNS_ROOT/pipeline`); explicit `SDLC_BENCHMARKS_ROOT` /
+`SDLC_EXPORT_ROOT` still win, and the defaults (`runs/benchmarks`,
+`./runs/pipeline`) are unchanged. **Named behavior change (026):** a host
+that exports only `SDLC_RUNS_ROOT` now sees its exports *and* their
+readers move to `$SDLC_RUNS_ROOT/pipeline` together — before 026 the
+export root ignored the runs root entirely, which is why a fleet scored
+from its own directory read zero summaries. Workers are unaffected (the
+containers set no `SDLC_*_ROOT`).
+
+The rollup states which roots it read, in every output format, as the
+**roots line**:
+
+```
+records: <records root> (<how>); summaries: <export root> (<how>); k of n
+scored runs summarized; no-summary: <run_id>: <class>; smoke excluded: <ids>
+```
+
+where each `how` is `explicit`, `runs_root` or `default`. Every run of the
+scored selection is accounted for: a run with no summary is named with one
+of four terminal classes — **crashed** (the cell record says the pipeline
+did not finish), **timed_out** (the same, with a `(cause=TimeoutError)`
+marker in the child-failure text), **terminated** (no cell record at all:
+an operator stop or a parent timeout), or **summary_missing** (the cell
+record says the pipeline finished yet no summary exists — fail-closed).
+No-summary runs count in SC-1's denominator as misses and read "not
+measured" on SC-2; nothing drops out silently. Smoke-role case runs (the
+corpus's one `role: smoke` case, resolved from the public cases root) are
+excluded from SC-1, SC-2 and SC-3, and the exclusion is stated on the
+line.
+
 One rollup over the dedicated runs root; the outputs are saved beside the
 fleet report, which states for each of SC-1/2/3: value, n, target,
 met/missed and the evidence tier; SC-2 shipped and all-scored; the commit
