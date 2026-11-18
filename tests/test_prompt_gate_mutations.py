@@ -48,12 +48,16 @@ every suggested answer empty. Do not list anything as out of scope.
 def _gate(mutation: str | None):
     # conftest's autouse _llm_api_keys sets ANTHROPIC_API_KEY="test-key" for
     # every test, and gate.py passes env=os.environ to the promptfoo
-    # subprocess -- so the real key never reaches it. Load .env with override
-    # so the subprocess inherits real credentials. GEMINI_API_KEY (the judge)
-    # is not clobbered by conftest but is only in .env, so this loads it too.
-    from dotenv import load_dotenv
+    # subprocess -- so the real key never reaches it. Read .env values
+    # straight into the environment so the subprocess inherits real
+    # credentials. GEMINI_API_KEY (the judge) is not clobbered by conftest
+    # but is only in .env, so this loads it too. 026 T026: dotenv_values,
+    # NOT load_dotenv(override=True) -- conftest now sets
+    # PYTHON_DOTENV_DISABLED=1 suite-wide, which load_dotenv honors (a
+    # silent no-op) while dotenv_values reads the file directly.
+    from dotenv import dotenv_values
 
-    load_dotenv(override=True)
+    os.environ.update(dotenv_values())
     return run_gate(
         _ROLE,
         _CASE,

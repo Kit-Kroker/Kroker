@@ -2,7 +2,6 @@
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 
@@ -10,6 +9,7 @@ import pytest
 
 from sdlc.doctor.cli import add_doctor_parser, render_json, render_table, run_doctor
 from sdlc.doctor.models import CheckResult
+from tests.conftest import child_env
 
 
 def _parse(argv):
@@ -119,10 +119,16 @@ def test_doctor_reports_instead_of_crashing_without_provider_keys():
     Empty rather than removed: load_dotenv never overrides a variable that
     is set, so a developer's own .env cannot leak real keys into the child.
     """
-    env = dict(os.environ)
-    for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "EXA_API_KEY", "ZAI_API_KEY"):
-        env[key] = ""
-    env["TEMPORAL_HOST"] = "127.0.0.1:1"  # refused at once; no 3s probe timeout
+    # 026 T026: child_env, not a hand-built dict -- starts from os.environ,
+    # so PYTHON_DOTENV_DISABLED rides along and the child's own load_dotenv
+    # cannot walk up to a repo-root .env.
+    env = child_env(
+        ANTHROPIC_API_KEY="",
+        OPENAI_API_KEY="",
+        EXA_API_KEY="",
+        ZAI_API_KEY="",
+        TEMPORAL_HOST="127.0.0.1:1",  # refused at once; no 3s probe timeout
+    )
 
     out = subprocess.run(
         [sys.executable, "-m", "sdlc.cli", "doctor", "--json"],

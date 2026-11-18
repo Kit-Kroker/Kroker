@@ -12,6 +12,17 @@ from pathlib import Path
 
 import pytest
 
+# 026 T026 (research R7, the .env rider): shield the suite from an
+# operator's repo-root .env BEFORE any test module's import chain can run
+# src/sdlc/worker.py's import-time load_dotenv(). python-dotenv 1.2.2
+# honors PYTHON_DOTENV_DISABLED inside load_dotenv, and find_dotenv walks
+# up from worker.py to the repo root -- so a fleet-era .env
+# (KROKER_HARNESS_QUEUE=default, KROKER_RUNS_BIND=...) otherwise reaches
+# every in-process import AND every child spawned from os.environ (the
+# flag rides along with the copy). dotenv_values() ignores the flag,
+# which is how the one test that WANTS .env credentials reads them.
+os.environ["PYTHON_DOTENV_DISABLED"] = "1"
+
 # Importing sdlc.worker (transitively, from many test modules) pulls in
 # pydantic_ai agents that read ANTHROPIC_API_KEY / OPENAI_API_KEY at import
 # time, and the shipped research role (provider: exa) builds an ExaSearch
@@ -49,6 +60,18 @@ REAL_PRIVATE_ROOT = os.environ.get("SDLC_PRIVATE_CASES_ROOT")
 # import, mid-suite, and reopening the dotenv race. Pin one module object
 # under both names (no-op if pytest already used the `tests.conftest` name).
 sys.modules.setdefault("tests.conftest", sys.modules[__name__])
+
+
+def child_env(**overrides: str) -> dict[str, str]:
+    """Env for a child process a test spawns: this process's os.environ
+    (conftest's placeholders and PYTHON_DOTENV_DISABLED ride along, 026
+    T026) plus overrides. Build every sdlc-CLI-spawning child env this
+    way -- a from-scratch dict was the last door an operator's repo-root
+    .env could walk through, because the CLI's own load_dotenv() walks up
+    to the repo root (research R7)."""
+    env = dict(os.environ)
+    env.update(overrides)
+    return env
 
 
 def _pid_alive(pid: int) -> bool:

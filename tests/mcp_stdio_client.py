@@ -15,7 +15,6 @@ and cancellation. Frame shape notes: MRTR results carry
 from __future__ import annotations
 
 import json
-import os
 import queue
 import subprocess
 import threading
@@ -31,7 +30,12 @@ class McpError(Exception):
 
 class McpStdioClient:
     def __init__(self, argv: list[str], env: dict[str, str] | None = None) -> None:
-        self.env = {**os.environ, **(env or {})}
+        # 026 T026: child_env -- the server this spawns is the sdlc CLI
+        # family; its env must carry PYTHON_DOTENV_DISABLED so an
+        # operator's repo-root .env cannot reach it (research R7).
+        from tests.conftest import child_env
+
+        self.env = child_env(**(env or {}))
         self.proc = subprocess.Popen(
             argv,
             stdin=subprocess.PIPE,
