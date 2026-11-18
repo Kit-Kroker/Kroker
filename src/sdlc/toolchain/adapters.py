@@ -147,6 +147,19 @@ class ToolchainAdapter(ABC):
     def lint_json_cmd(self) -> str:
         """Machine-readable lint over the cwd; exit 0 whether or not it found anything."""
 
+    def lint_fix_cmd(self, files: list[str]) -> str | None:
+        """026 FR-011: apply SAFE autofixes over exactly `files`; None =
+        this toolchain has no safe-fix path. Safe fixes only (never the
+        unsafe set), `--force-exclude` so a config's excludes are honored,
+        `--exit-zero` so a finding never fails the command."""
+        return None
+
+    def lint_files_json_cmd(self, files: list[str]) -> str | None:
+        """026 FR-011: diagnostic JSON over exactly `files`, no fixing —
+        the before-half of the autofix accounting (which rules are
+        safe-applicable). None = opt out."""
+        return None
+
     @abstractmethod
     def parse_lint(self, code: int, out: str, root: str) -> list[tuple[str, str, int]] | None:
         """(rule, repo-relative POSIX path, 1-based row) per finding. None = the
@@ -250,6 +263,14 @@ class PythonToolchain(ToolchainAdapter):
 
     def lint_json_cmd(self) -> str:
         return "ruff check --output-format json --exit-zero --no-cache ."
+
+    def lint_fix_cmd(self, files: list[str]) -> str | None:
+        joined = " ".join(files)
+        return f"ruff check --fix --force-exclude --exit-zero --no-cache -- {joined}"
+
+    def lint_files_json_cmd(self, files: list[str]) -> str | None:
+        joined = " ".join(files)
+        return f"ruff check --output-format json --exit-zero --no-cache -- {joined}"
 
     def parse_lint(self, code: int, out: str, root: str) -> list[tuple[str, str, int]] | None:
         if code != 0:

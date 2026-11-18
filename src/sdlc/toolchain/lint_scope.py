@@ -17,6 +17,7 @@ absolute check fails closed (DS7).
 from __future__ import annotations
 
 import fnmatch
+import json
 import pathlib
 import re
 
@@ -27,6 +28,69 @@ from ..measurement import CollectionState
 from ..process import _bounded_shell
 from ..vcs.git import _git
 from .adapters import ToolchainAdapter
+
+
+class LintAutofix(BaseModel):
+    """026 FR-011 (advisor D4): the safe lint fixes applied to a task's own
+    changed Python files before the checkpoint commit. `files` is what was
+    handed to the fix command; `rules` counts the applied fixes per rule
+    (a probe's safe-applicable diagnostics are exactly what ruff applies;
+    invalid-syntax and I/O errors carry no fix and are never counted)."""
+
+    files: list[str] = Field(default_factory=list)
+    rules: dict[str, int] = Field(default_factory=dict)
+
+
+async def autofix_files(
+    adapter: ToolchainAdapter, wt: str, files: list[str], timeout_s: int
+) -> LintAutofix | None:
+    """Apply the adapter's safe fixes over exactly `files` in `wt`.
+
+    Returns the record, or None when the fix command itself failed (the
+    caller logs a WARNING and the checkpoint commits unfixed — a checkpoint
+    failure never raises)."""
+    rules: dict[str, int] = {}
+    probe = adapter.lint_files_json_cmd(files)
+    if probe is not None:
+        code, out = await _bounded_shell(probe, wt, timeout_s)
+        if code == 0:
+            try:
+                for row in json.loads(out):
+                    fix = row.get("fix")
+                    if isinstance(fix, dict) and fix.get("applicability") == "safe":
+                        rule = str(row.get("code") or "?")
+                        rules[rule] = rules.get(rule, 0) + 1
+            except ValueError:
+                rules = {}  # an unparseable probe reads as "nothing counted"
+    fix_cmd = adapter.lint_fix_cmd(files)
+    if fix_cmd is None:
+        return None  # no safe-fix path for this toolchain: not run, no record
+    code, _ = await _bounded_shell(fix_cmd, wt, timeout_s)
+    if code != 0:
+        return None
+    return LintAutofix(files=list(files), rules=rules)
+
+
+def changed_python_files(wt: str, exclude_globs: list[str] | None = None) -> list[str]:
+    """The *.py files this attempt changed (git status --porcelain, staged
+    and untracked alike), fenced paths dropped when given (026 FR-011:
+    autofix never touches a repair-fenced test file). Sorted for a
+    deterministic command line."""
+    out = _git(["status", "--porcelain", "--untracked-files=all"], wt)
+    if out.returncode != 0:
+        return []
+    files: set[str] = set()
+    for ln in out.stdout.splitlines():
+        path = ln[3:] if len(ln) > 3 else ""
+        if " -> " in path:  # a rename's new path is the live one
+            path = path.split(" -> ", 1)[1]
+        path = path.strip().strip('"')
+        if not path.endswith(".py"):
+            continue
+        if exclude_globs and any(fnmatch.fnmatch(path, g) for g in exclude_globs):
+            continue
+        files.add(path)
+    return sorted(files)
 
 
 class LintFinding(BaseModel):

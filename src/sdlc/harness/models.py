@@ -19,6 +19,11 @@ from ..core.models import (
     HarnessKind,
 )
 
+# 026 FR-011: bounded inline (files + per-rule counts), like containment —
+# the workflow and the records read it without loading anything else.
+# toolchain imports no harness module, so the dependency direction is safe.
+from ..toolchain.lint_scope import LintAutofix
+
 
 class SessionEvent(BaseModel):
     """One normalised harness-transcript event (ADR-16). Harness-agnostic;
@@ -188,6 +193,11 @@ class HarnessRunResult(BaseModel):
     deferred: DeferredToolUse | None = None  # E-17: suspended tool call
     escalations: list[ToolEscalation] = Field(default_factory=list)
     containment: ContainmentReport | None = None
+    # 026 FR-011: safe lint fixes applied to this attempt's changed *.py
+    # files before the checkpoint commit. None = not run (no python
+    # changes, no adapter, or the fix command failed) — never a claim of
+    # zero fixes.
+    lint_autofix: LintAutofix | None = None
     _raw_stdout: str = PrivateAttr(default="")
 
     def near_context_ceiling(self, fraction: float = 0.75) -> bool:

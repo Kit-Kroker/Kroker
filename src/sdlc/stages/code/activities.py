@@ -21,6 +21,8 @@ from ...harness.containment import (
 from ...harness.models import HarnessRunResult, ToolGrant
 from ...harness.registry import HARNESSES
 from ...observability.logfire_setup import span
+from ...toolchain.adapters import detect
+from ...toolchain.lint_scope import LintAutofix, autofix_files, changed_python_files
 from ...vcs.git import _git
 
 if TYPE_CHECKING:
@@ -148,7 +150,7 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
         repair=inp.repair,
         env=provider_env(),
     )
-    _, report = _resolve_containment(harness, inp, req)
+    policy, report = _resolve_containment(harness, inp, req)
     with span("harness.run", harness=inp.harness.value, task_id=inp.task_id, attempt=inp.attempt):
         result = await harness.run(req, heartbeat=activity.heartbeat)
     result.containment = report
@@ -176,6 +178,12 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
         )
         result.session_ref = ref
         result.session_digest = digest
+    # 026 FR-011: safe lint autofix rides inside the checkpoint commit, so
+    # the fix reaches the task branch and the C2 anchor with no workflow
+    # logic. Only this attempt's changed *.py files; on a repair attempt the
+    # policy's fenced paths are never touched. A failure is a WARNING: the
+    # checkpoint commits unfixed (a checkpoint failure never raises).
+    result.lint_autofix = await _autofix_before_checkpoint(inp, policy)
     # Checkpoint commit — the resume point if anything downstream fails.
     add = _git(["add", "-A"], inp.worktree)
     if add.returncode != 0:
@@ -213,6 +221,37 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
 
 
 ACTIVITIES = [run_coding_task, load_drift_globs]
+
+
+async def _autofix_before_checkpoint(inp: CodingTaskInput, policy) -> LintAutofix | None:
+    """Run the adapter's safe lint fixes over the attempt's changed *.py
+    files (fenced paths dropped on repair attempts). Best-effort by
+    construction: every failure path logs WARNING and returns None so the
+    checkpoint proceeds — an unfixed attempt meets the per-task lint
+    check (T014) and the merge gate, never a raised activity."""
+    try:
+        fences = repair_patterns(policy) if (inp.repair and policy is not None) else None
+        files = changed_python_files(inp.worktree, exclude_globs=fences)
+        if not files:
+            return None
+        adapter = detect(inp.worktree)
+        if adapter is None:
+            return None
+        applied = await autofix_files(adapter, inp.worktree, files, timeout_s=120)
+        if applied is None:
+            _log.warning(
+                "lint autofix command failed in %s; the checkpoint commits unfixed",
+                inp.worktree,
+            )
+        return applied
+    except Exception:  # noqa: BLE001
+        _log.warning(
+            "lint autofix error in %s; the checkpoint commits unfixed",
+            inp.worktree,
+            exc_info=True,
+        )
+        return None
+
 
 __all__ = [
     "ACTIVITIES",
