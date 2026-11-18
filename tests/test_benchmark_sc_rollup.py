@@ -831,4 +831,3 @@ def test_pre012_line_and_commit_unknown_flag_are_independent():
     line = f"includes {MIN_RUNS} pre-012 records (untrusted)"
     assert line in render_sc_rollup_markdown(rollup)
     assert line in render_sc_rollup_html(rollup)
-
