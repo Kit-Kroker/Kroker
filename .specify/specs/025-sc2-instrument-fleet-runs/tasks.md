@@ -58,6 +58,10 @@ All of Part B uses the **fleet commit** (HEAD after Part A merges and the docs l
 
 ---
 
+## Phase 3: Convergence
+
+- [ ] T034 Feed the rollup's summary-dependent fields for benchmark fleets — make `sdlc benchmark score --all` show the commit set and SC-2 operator-time medians without manual record scans, by wiring a benchmark-compatible `RunSummary` source (benchmark-mode runs produce no retro `summary.json`, so R025's rollup returned an empty commit set and 0-measured SC-2; the fleet report used a direct 348-record scan instead) per FR-024/FR-025 (partial).
+
 ## Dependencies
 
 T001→T003→T004; T002→T003→T004; T004→T005→T006→T007→T008→T009→T010→T011→T012→T013→T014. Part B: T014 → GATE 2 → T020→T021→T022→T023→T024→T025→T026→(T027–T030)→T031→T032→T033. T001/T002 may be written in parallel; Part B tasks T025–T030 are otherwise strictly announced and ordered as above.
