@@ -260,7 +260,7 @@
   deadlock) did not bite this run; they remain open.
 - [ ] ⚠️ **P3** — Hindsight memory + confidence-gated soft gates → *SC-4 and SC-6 measurable*
   Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs). **The retro stage that makes them measurable is E-32** (§9.8); the on/off memory delta is the measurement E-31/E-33 exist to run.
-- [ ] ⚠️ **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*
+- [ ] ⚠️ **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*. **R025 fleet ran (2026-11-18): SC-1 n/a-missed, SC-2 n/a-missed (export-path finding), SC-3 0.385 missed** — exit criterion **not met**; 0/6 scored successes at $8.755/$8.77 (report: `kroker-fleet-runs-025/fleet-report.md`). Conditional round 026 proposed, owner decides.
   MCP surface landed (E-11, 2026-11-14 — FR-602, round 022). DAPER's loop and
   execute/report halves landed (023a loop + gate, 023b execute/report — 2026-11-15;
   FR-502's code-fix clause delivered, its ops clause open). Fleet scale not started.
@@ -476,10 +476,27 @@ as tracked rather than accidental.
 - [ ] — **SC-1** ≥80% runs reach merge gate unattended — not measurable (no fleet runs). Vehicle: the benchmark matrix (§9.8, E-34) is where unattended-reach rate is aggregated; cases can now carry a held-out grade (E-31 landed), so the gate is the next load-bearing piece.
   **Aggregation landed** (`src/sdlc/benchmarks/sc_rollup.py`, `sdlc benchmark score`);
   the number is n/a until 5+ runs exist.
+  **Measured at R025 (2026-11-18, fleet report §SC-1)**: n=6 scored
+  runs at one commit — **0 unattended; rate n/a (missed)**. Every run's
+  stage gates were decided by the attendant (owner ruling: on-call
+  stand-in, interactions counted); the 24 h soft auto-continue path
+  never fired. An unattended-mode fleet needs either gates-off runs or
+  multi-day parks — an owner decision for the conditional 026.
 - [ ] — **SC-2** ≤15 min operator time — not measurable.
+  **Measured at R025 (2026-11-18, fleet report §SC-2)**: n/a — the
+  rollup's operator-time medians read retro `summary.json` exports,
+  which benchmark-mode runs do not produce (backlog finding: the
+  instrument's export path is unexercised by benchmark fleets).
+  Companion disclosure: 87 automated attendant interactions, 0 human,
+  across smoke + 6 scored runs; on-call latency seconds-to-minutes
+  (20 s poll), one pre-attendant 2 h 45 m park.
 - [ ] — **SC-3** fix-loop success ≥70% — mechanism exists; no aggregate metric captured. Captured per run as a coordination metric by the benchmark (§9.8, E-36 heatmap): fix-loop attempts vs resolution, per stage.
   **Aggregation landed** (`src/sdlc/benchmarks/sc_rollup.py`, `sdlc benchmark score`);
   the number is n/a until 5+ runs exist.
+  **Measured at R025 (2026-11-18, fleet report §SC-3)**: **0.385 (5/13
+  loops, n≥floor) — missed.** Escalations ended in approve-to-proceed,
+  not repair; scored set 0/6 successes (best oracle 0.861, blocked at
+  `lint_clean` alone).
 - [ ] — **SC-4** repeat-clarification <10% by run 10 — needs reflect wiring (FR-404) + runs. **The per-run signal now accrues:** the retro stage (E-32) emits a `RunSummary` carrying `clarifications[].answered_by` (`human`/`suggested`/`unanswered`) on every terminal path. The cross-run *aggregation* into a repeat-clarification rate remains the benchmark's job (§9.8), via the memory-on cells that generate the run-10 series.
   **Aggregation landed** (`src/sdlc/benchmarks/sc_rollup.py`, `sdlc benchmark score`);
   the number is n/a until 5+ runs exist.

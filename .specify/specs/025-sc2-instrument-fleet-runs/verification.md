@@ -125,3 +125,28 @@ Attendant ledger: 12 interactions, all automated, zero human.
 $0.85815 / other stage judging $0.46399) → T024 ceiling: **judge line
 $7.77 + EXA bound $1.00 = $8.77 remaining**; cumulative spend ≈ $2.40.
 Scored runs cleared to start (B.3 order; sequential until two done).
+
+### §025-B close-out (T032/T033, 2026-11-18)
+
+Six scored runs concluded at the one fleet commit `ce3a36f88d08…`
+(348/348 records): 0 success / 5 case failures / 1 operator-stopped at
+the pre-announced per-run limit; 0 infra stops in the scored set; no
+contested classifications. Oracle on graded scored runs: 0.000 / 0.222
+/ 0.250 / 0.861 (best run 11/11 QA-passed, blocked by `lint_clean`
+alone); run 5 was the fleet's first full-distance pipeline run (deploy
+PASS). `benchmark score --all` over the dedicated runs root;
+`fleet-report.md` (runs root) carries the full SC table, failures/infra
+tables, loop counts, variance reads and honest misses. Headlines:
+**SC-3 0.385 (5/13) missed; SC-1 n/a (0 unattended runs — attendant
+decided every gate per the owner's ruling); SC-2 n/a — the rollup reads
+retro `summary.json` exports that benchmark-mode runs do not produce
+(backlog finding). 87 automated attendant interactions, 0 human.**
+Fleet total **$8.7550 / $8.77 ceiling** (incl. quarantined smoke-2
+judge $0.45976). Run 7 not needed (6 ≥ 5 floor). ROADMAP SC-1/2/3 + P4
+rows updated with the measured reads; P4's exit criterion is **not
+met** — conditional round 026 proposed, owner decides. Dedicated
+checkout removed after the PASS stamp was archived to the evidence dir.
+Part B verified against FR-022/023/024/025 and SC-B1..B4: one commit ✓,
+strong arm only ✓, ≥5 scored at one commit over a dedicated root ✓,
+every infra failure halted the sequence ✓ (three halts, each owner-
+cleared before the next cent).

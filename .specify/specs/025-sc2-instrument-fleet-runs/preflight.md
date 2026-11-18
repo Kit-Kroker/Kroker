@@ -502,4 +502,20 @@ that benchmark-mode runs do not produce — backlog finding); scored set
 blocked by `lint_clean` alone); zero human interactions across the
 entire fleet (87 automated attendant interactions).
 
+## T033 — P4 close attempt (2026-11-18)
+
+ROADMAP SC-1/SC-2/SC-3 rows and the P4 line updated with the measured
+reads, citing the fleet report. **P4's exit criterion (SC-1..3 at
+target) is NOT met** — SC-1 n/a-missed, SC-2 n/a-missed (the
+export-path finding), SC-3 0.385 missed; a conditional round 026 is
+proposed for the owner to decide (candidate shape: fix the SC-2
+benchmark-export path; a gates-off or auto-continue fleet for SC-1;
+loop-repair work for SC-3). verification.md §025-B closed out.
+Dedicated-checkout removal: the PASS stamp archives to the evidence
+dir first, then `git worktree remove` (the untracked `.env` secret
+inside dies with the worktree — desirable). Four working-tree files
+(ROADMAP retro wording, docs/roadmap, nightly-reflect schedule + test)
+carry a PARALLEL seat's changes — untouched, excluded from my commits
+by selective staging.
+
 
