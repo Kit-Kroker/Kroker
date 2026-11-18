@@ -26,7 +26,6 @@ from pydantic import BaseModel, Field, model_validator
 from ..change_scope import FindingKey, delta, normalize_line, rename_map
 from ..measurement import CollectionState
 from ..process import _bounded_shell
-from ..vcs.git import _git
 from .adapters import ToolchainAdapter
 
 
@@ -76,6 +75,12 @@ def changed_python_files(wt: str, exclude_globs: list[str] | None = None) -> lis
     and untracked alike), fenced paths dropped when given (026 FR-011:
     autofix never touches a repair-fenced test file). Sorted for a
     deterministic command line."""
+    # Lazy: vcs.git decorates activities and pulls temporalio at module
+    # scope, and harness/models.py imports THIS module (LintAutofix) —
+    # module-level _git would put temporalio into every cold import of
+    # benchmarks.models (026 T027 caught by the import-purity tests).
+    from ..vcs.git import _git
+
     out = _git(["status", "--porcelain", "--untracked-files=all"], wt)
     if out.returncode != 0:
         return []
@@ -167,6 +172,9 @@ def _policy_and_suppressions(
     adapter: ToolchainAdapter, head_wt: str, base_sha: str
 ) -> tuple[list[str], int] | str:
     rng = f"{base_sha}...HEAD"
+    # Lazy, same reason as changed_python_files above.
+    from ..vcs.git import _git
+
     names = _git(["diff", "--name-only", rng], head_wt)
     patch = _git(["diff", "-U0", rng], head_wt)
     if names.returncode != 0 or patch.returncode != 0:
