@@ -38,3 +38,49 @@ autofix is the floor, not the cure. Evidence dirs preserved:
 `/tmp/opencode/t018-catcafe.*`, `/tmp/opencode/t018-geotext.*`,
 `/tmp/opencode/t018-lice1.*` (primary), `/tmp/opencode/t018-lice2.*`
 (secondary).
+
+### 025 baseline (T008, the $0 re-score — Part B entry condition)
+
+Command (copy, never the 025 root itself):
+
+```
+D=$(mktemp -d -p /tmp/opencode t008-XXXX)   # -> /tmp/opencode/t008-4DJV
+cp -a /home/maksim/work/kroker-fleet-runs-025/. "$D"/
+SDLC_RUNS_ROOT="$D" uv run python -m sdlc.cli benchmark score --all
+```
+
+Outputs written under `$D/benchmarks/_all/score/` (report.md,
+sc-rollup.{json,html}, heatmap/grid/gate-oracle, per-case matrices);
+the rollup, read from `sc-rollup.json`:
+
+| criterion | rate | n |
+|---|---|---|
+| SC-1 | 0.00 | 6 |
+| SC-1-strict | 0.00 | 6 |
+| SC-2 (shipped) | n/a | 1 |
+| SC-2-all | n/a | 4 |
+| SC-3 | 0.385 | 13 |
+| SC-3-non-lint | 0.385 | 13 |
+| SC-3-lint | n/a | 0 |
+| SC-4 | n/a | 4 |
+| SC-6 | 1.00 | 15 |
+| SC-6-advisory | 0.067 | 15 |
+
+- commits: `['ce3a36f88d08e54892e8a72c96ceb6165ba4bc13']` — one commit,
+  read by the rollup.
+- roots line (T006): `records: …/benchmarks (runs_root); summaries:
+  …/pipeline (runs_root); 4 of 6 scored runs summarized; no-summary:
+  bench-deveval-lice-1794980735-e87339/…: terminated,
+  bench-deveval-readtime-1794957781-bccb20/…: crashed; smoke excluded:
+  bench-todo-api-greenfield-1794953137-1ba84e/…`
+- evidence tier: weak (SOFT: no gate asked a human unless it escalated);
+  summary_runs 4, pre-012 records 0.
+
+Every quickstart expectation asserted and met: 4/6 summarized; the
+readtime crash and the lice termination named as the no-summary pair;
+smoke excluded; the single 025 commit; SC-1/SC-1-strict 0.00 (n=6);
+SC-2-all n/a on 4 measured; SC-3 0.385 (n=13) with the new partition
+reading non-lint 0.385 (n=13) and lint n/a (n=0) — every 025 loop is
+legacy (`failure is None`), which is the before-half of this round's
+T013–T016 change. No mismatch; no STOP. This is the baseline T050's
+deltas read against.
