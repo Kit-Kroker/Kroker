@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import cast
 
 from pydantic_ai import RunUsage, ToolReturn, UsageLimits
-from pydantic_ai.exceptions import UsageLimitExceeded
+from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 
 from ...observability.sub_run_usage import SubRunUsage, from_run_usage, metadata_for
 from .deps import BudgetExceeded, ResearchDeps
@@ -73,8 +73,12 @@ async def research_subquery_reported(
     UsageLimitExceeded from the inner run's request limit (N3) degrades the
     same way, with OUR text — never `str(exc)`, which carries the library's
     advice and documentation URL into the architect's context (AM2/R9). Both
-    degrades still report the spend made so far; any other exception
-    propagates (residual R1)."""
+    degrades still report the spend made so far. An UnexpectedModelBehavior
+    — the inner run exhausted a retry budget it owned (026 T022: CodeMode's
+    `run_code` burning its three attempts on the model's own bad code, 025
+    run 1's crash, or the output-validation retries) — degrades the same
+    way. Any OTHER exception — provider outages, auth failures, anything
+    infra — still propagates (residual R1, now exactly that set)."""
     from sdlc.agents.roles import OUTPUT_RETRIES, REGISTRY, t_research
 
     if t_research is None:
@@ -120,6 +124,22 @@ async def research_subquery_reported(
         )
     except UsageLimitExceeded:
         reason = f"request limit exhausted ({deps.max_requests} requests)"
+        brief = _gap_brief(
+            question,
+            why_it_matters=reason,
+            summary=f"Research stopped before this sub-question could be answered: {reason}",
+        )
+    except UnexpectedModelBehavior:
+        # 026 T022 (R6, run 1's crash): the inner run exhausted a retry
+        # budget it owned — most likely CodeMode's `run_code` burning its
+        # three attempts on the model's own bad code (025 run 1:
+        # `TypeError: unsupported operand for +: 'Result' and 'Result'`),
+        # or output-validation retries. Either way a bound was exceeded,
+        # and the contract for that is a gap brief, never a crash. OUR
+        # text only — `str(exc)` carries the library's advice and URL
+        # into the architect's context (AM2/R9). Provider and other infra
+        # exceptions still propagate (residual R1).
+        reason = "research tool exhausted its code-execution retries"
         brief = _gap_brief(
             question,
             why_it_matters=reason,
