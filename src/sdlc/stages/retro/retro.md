@@ -37,6 +37,9 @@ guarantees: internal activity failures or exceptions are trapped so the run outc
 ### RETRO-1.6
 Retro scores the run's own SOFT auto-approvals. For every gate in `RunSummary.gates` with `policy == "soft"`, `decided_by == "policy"` and a non-`None` confidence, it computes a realized-outcome label from the run's retained signals — plan-drift ratio for the plan gate, capped fix-attempt ratio for the architecture gate, the judge score in preference to either when benchmarking — and appends `(gate, bucket_key, confidence, outcome_label)` to the calibration ledger. Best-effort like every other retro side effect: a ledger outage is swallowed and the run's outcome is unchanged (RETRO-1.4). Gates a human decided are not evidence, and neither are OFF-policy approvals, which carry `decided_by == "policy"` too. [C7]
 
+### RETRO-1.7
+The `RunSummary` the retro step retains carries raw operator-time inputs: each human-facing gate round records `raised_at` (when the gate opened for a human, keyed from `GATE_AWAITED`), and each clarification records `raised_at` and `answered_at`. Summaries written by this builder set `operator_instrumented = true`; earlier summaries leave the marker false and are reported as "not measured", never as zero. The step stores raw times only: the engagement cap and the per-run derivation live in the benchmark rollup, so changing the cap never requires a re-run. [025 FR-001–FR-005]
+
 ## Failure modes
 
 - **Memory backend down**: `reflect` or `retain` fails due to network or service unavailability; trapped so the workflow completes successfully.

@@ -158,3 +158,41 @@ sensitivity row for any contested classification; per-case loop counts and
 first-pass rate for SC-3; total spend against the ceiling; and an
 honest-miss section — a miss is recorded as a miss, never rounded or
 re-run away.
+
+## Round 025 record
+
+Round 025 ran the fleet once. The measured outcome is the fleet report,
+`kroker-fleet-runs-025/fleet-report.md` (outside the repo; cited from
+[`ROADMAP.md`](../../ROADMAP.md) §4). In short:
+
+- **Part A — the SC-2 instrument** (commits `9d12ba14..c98cfcf2`): the
+  summary fields, builder stamps, `sdlc.benchmarks.operator_time`, and the
+  SC-2 rollup rows with their companions and commit set. Test battery:
+  8059 passing, 2 failures that pre-date the round, 0 new.
+- **Part B — the fleet** (commits `6523faf9..6a0ad280`): preflight evidence,
+  seeding, and the commit freeze. Three owner-cleared infrastructure halts
+  were quarantined, each with its own evidence, and the fleet restarted
+  once at `ce3a36f8` (fix (a): the smoke case uses strong-arm only; commit
+  `1da893fa` → `ce3a36f8` after review). The smoke passed.
+- **Ceiling:** $8.77 (judge $7.77 + EXA $1.00), set from the measured smoke
+  judge cost of $1.938.
+- **Scored runs:** six. 0 successes, 5 case failures, 1 operator-stopped at
+  the per-run limit. Oracle scores were 0.000 / 0.222 / 0.250 / 0.861. The
+  best run passed QA 11/11 and was blocked by `lint_clean` alone. Run 5 was
+  the first full-distance deploy-PASS.
+- **Spend:** $8.7550 of the $8.77 ceiling. The commit set is exactly one
+  (348/348 records at `ce3a36f8`).
+- **Attendance:** every gate was decided by the attendant under the owner's
+  ruling, not by a human. That was 87 automated interactions and 0 human,
+  with on-call latency of seconds to minutes. No run was unattended.
+
+**Outcome against the success criteria:** SC-1 n/a-missed (no unattended
+runs). SC-2 n/a-missed (the rollup reads retro exports that benchmark runs
+do not produce, so the export path needs its own fix). SC-3 0.385 (5/13)
+missed. P4's exit criterion is **not met**. A conditional round 026 is
+proposed; the owner decides it.
+
+**Evidence tree** (outside the repo): `kroker-fleet-runs-025/` holds the
+seven runs, their score outputs and `fleet-report.md`.
+`kroker-fleet-runs-025-evidence/` holds the three quarantined infrastructure
+attempts and the passing smoke stamp.

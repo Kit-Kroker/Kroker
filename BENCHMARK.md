@@ -115,8 +115,8 @@ quality at wildly different cost ($1,339 → $10,565 on the same task), because
 few moments in a task need frontier intelligence. Cost per role, not per token,
 is the number that moves.
 
-And the **factory's own state**: `ROADMAP.md` marks SC-1 through SC-6 as
-either not-measurable or mechanism-exists-no-metric. The pipeline can ship a
+And the **factory's own state**: `ROADMAP.md` records the first fleet read
+(R025, 2026-11-18): SC-1 and SC-2 n/a-missed, SC-3 0.385 missed, P4 exit not met. The pipeline can ship a
 feature end-to-end (P1 done), but it cannot yet tell you *how well* or *how
 cheaply* it does so across a fleet. The benchmark is the missing instrument,
 and it is the precondition for P3's exit and everything in P4. Since round
