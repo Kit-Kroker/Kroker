@@ -15,6 +15,8 @@ from statistics import median
 from pydantic import BaseModel, Field
 
 from ..core.models import (
+    GateOutcome,
+    GateOutcomeSummary,
     RunSummary,
 )
 from ..runs_paths import RootsReport
@@ -22,6 +24,7 @@ from .evidence import NoSummaryRun
 from .models import BenchmarkOutcome, BenchmarkRecord, BenchmarkScope, is_pre012
 from .operator_time import RunOperatorTime, operator_time
 from .runs import MIN_OBSERVATIONS, attempt_sort_key
+from .sc_stats import ci95_label
 
 # Below this many runs a percentage is noise dressed as a result. A single
 # green run rendering "100%" WILL be quoted; n/a cannot be. One floor for
@@ -30,6 +33,13 @@ MIN_RUNS = MIN_OBSERVATIONS
 
 # The merge gate's registered name (workflows/feature.py:1754).
 MERGE_GATE = "merge"
+
+# 026 A-2 (FR-006, research R3): SC-1's planned gates are a STATIC
+# allowlist — the six stage gates a fleet configures. It cannot be config
+# membership: `research` resolves through default_gate_policy exactly like
+# `task:<id>`, and the summary carries no config. Unknown gate names fail
+# closed (unplanned); `deploy_failed` is outside the set and post-merge.
+STAGE_GATES = frozenset(("research", "clarify", "architecture", "plan", "merge", "deploy"))
 
 # Run outcomes that reached the merge gate. The criterion is REACHING it,
 # not passing it, so a merge-time rejection counts (feature.py:1757, 1791,
@@ -53,6 +63,9 @@ class SCRate(BaseModel):
     target: str
     proxy: bool = False
     note: str = ""
+    # 026 A-5: the exact 95% Clopper-Pearson interval beside SC-1 ("CI95
+    # [lo, hi]"; "" when no rate). n is the floor, not proof of reliability.
+    ci95: str = ""
 
 
 class SC4Point(BaseModel):
@@ -134,7 +147,14 @@ def build_sc_rollup(
     vouched = [s for s in ordered if s.run_id in record_run_ids] if record_run_ids else ordered
     sc1 = _sc1(vouched, no_summary)
     return SCRollup(
-        rates=[sc1, *_sc2_rows(ots, no_summary), _sc3(data), _sc4(ordered), *_sc6(ordered)],
+        rates=[
+            sc1,
+            _sc1_strict(vouched, no_summary),
+            *_sc2_rows(ots, no_summary),
+            _sc3(data),
+            _sc4(ordered),
+            *_sc6(ordered),
+        ],
         sc4_series=_sc4_series(ordered),
         pre012_records=sum(1 for r in data if is_pre012(r)),
         summary_runs=len(summaries),
@@ -217,21 +237,81 @@ def _unattended_to_merge(s: RunSummary) -> bool:
     return True
 
 
+def _unplanned(g: GateOutcomeSummary) -> bool:
+    """026 A-2/D3: a gate the run did not configure, or a SOFT gate a
+    person had to answer. `decided_by != "policy"` also covers `timeout`
+    (an escalation was raised) and reviewer-named merge overrides."""
+    return g.decided_by != "policy" and (g.gate not in STAGE_GATES or g.policy == "soft")
+
+
+def _steered(g: GateOutcomeSummary) -> bool:
+    """The steering guard: a planned gate a person decided with anything
+    but `approve` (revise or reject) steered the run."""
+    return (
+        g.gate in STAGE_GATES
+        and g.decided_by != "policy"
+        and g.outcome is not None
+        and g.outcome is not GateOutcome.APPROVE
+    )
+
+
+def _pre_merge_gates(s: RunSummary) -> list[GateOutcomeSummary]:
+    """Every gate before the FIRST `merge` entry (a clean HARD merge opens
+    no merge gate at all, so such a run's every gate is pre-merge)."""
+    out: list[GateOutcomeSummary] = []
+    for g in s.gates:
+        if g.gate == MERGE_GATE:
+            break
+        out.append(g)
+    return out
+
+
+def _sc1_n(vouched: list[RunSummary], no_summary: list[NoSummaryRun]) -> int:
+    """026 FR-003 (research R2): n is the distinct run_ids the vouched
+    summaries cover plus every no-summary run — a crashed, timed-out,
+    terminated or summary-missing run counts in the denominator as a miss,
+    never drops out silently."""
+    return len({s.run_id for s in vouched} | {x.run_id for x in no_summary})
+
+
 def _sc1(vouched: list[RunSummary], no_summary: list[NoSummaryRun]) -> SCRate:
-    """026 (FR-003): n is the distinct run_ids of the vouched summaries
-    plus every no-summary run — a crashed, timed-out, terminated or
-    summary-missing run counts in the denominator as a miss, never drops
-    out silently."""
-    hits = sum(1 for s in vouched if _reached_merge(s) and _unattended_to_merge(s))
-    n = len({s.run_id for s in vouched} | {x.run_id for x in no_summary})
+    """026 FR-006 (Q1-A): the PRD rule — reach the merge gate with no
+    UNPLANNED escalation and no steering. Configured HARD stage gates an
+    attendant answered do not count against the run."""
+    hits = sum(
+        1
+        for s in vouched
+        if _reached_merge(s) and not any(_unplanned(g) or _steered(g) for g in _pre_merge_gates(s))
+    )
+    n = _sc1_n(vouched, no_summary)
+    planned = sum(1 for s in vouched for g in s.gates if g.gate in STAGE_GATES)
     return SCRate(
         criterion="SC-1",
-        label="runs reaching the merge gate unattended",
+        label="runs reaching the merge gate with no unplanned escalation",
         rate=_rate(hits, n),
         n=n,
         target=">=0.80",
+        ci95=ci95_label(hits, n),
         note="reached = outcome in deployed/merged-not-deployed/rejected:merge; "
-        "unattended = no human-decided gate before the merge gate",
+        f"planned gates = STAGE_GATES {{{', '.join(sorted(STAGE_GATES))}}} "
+        f"(this fleet: {planned} planned gates); steering = a planned gate a "
+        "person decided with anything but approve; unplanned = any other gate "
+        "a non-policy decider answered, or a SOFT gate a person answered",
+    )
+
+
+def _sc1_strict(vouched: list[RunSummary], no_summary: list[NoSummaryRun]) -> SCRate:
+    """The 025 rule, rendered beside the headline: any human-decided gate
+    before merge disqualifies, configured or not."""
+    hits = sum(1 for s in vouched if _reached_merge(s) and _unattended_to_merge(s))
+    n = _sc1_n(vouched, no_summary)
+    return SCRate(
+        criterion="SC-1-strict",
+        label="runs reaching the merge gate unattended (025 rule)",
+        rate=_rate(hits, n),
+        n=n,
+        target=">=0.80",
+        note="no human-decided gate before the merge gate, planned or not",
     )
 
 

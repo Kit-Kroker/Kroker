@@ -62,8 +62,9 @@ def render_sc_rollup_markdown(r: SCRollup) -> str:
     ]
     for x in r.rates:
         flag = "PROXY" if x.proxy else ""
+        tail = " ".join(p for p in (flag, x.ci95) if p)
         lines.append(
-            f"| {x.criterion} | {x.label} | {_fmt(x.rate)} | n={x.n} | {x.target} | {flag} |"
+            f"| {x.criterion} | {x.label} | {_fmt(x.rate)} | n={x.n} | {x.target} | {tail} |"
         )
     if r.sc4_series:
         lines += ["", "SC-4 series (human-answered fraction, by run order):", ""]
@@ -92,7 +93,7 @@ def render_sc_rollup_html(r: SCRollup) -> str:
         f"<tr><th>{escape(x.criterion)}</th><td>{escape(x.label)}</td>"
         f"<td>{_fmt(x.rate)}</td><td>{x.n}</td>"
         f"<td>{escape(x.target)}</td>"
-        f"<td>{'PROXY' if x.proxy else ''}</td></tr>"
+        f"<td>{escape(' '.join(p for p in ('PROXY' if x.proxy else '', x.ci95) if p))}</td></tr>"
         for x in r.rates
     )
     notes = "".join(
