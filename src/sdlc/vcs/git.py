@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import re
 import stat
 import subprocess
 import time
@@ -12,6 +13,8 @@ from pathlib import PurePosixPath
 
 from pydantic import BaseModel, Field
 from temporalio import activity
+
+from .models import CodeArtifact
 
 
 def _git(args: list[str], cwd: str) -> subprocess.CompletedProcess:
@@ -90,14 +93,35 @@ def _rmtree_with_retry(path: str, attempts: int = 3, delay_s: float = 1.0) -> No
 class DiffInput:
     worktree: str
     branch_point: str  # SHA the task branched from — NOT base_branch
-    max_chars: int = 60_000
+    label: str | None = None  # artifact name; None -> branch_point[:12]
+
+
+def _safe_label(label: str) -> str:
+    """Artifact-name slug (capture.py's _safe pattern): filesystem-unsafe
+    characters become '_', so a task id like 'task 1/a' names a readable
+    file instead of a path traversal."""
+    return re.sub(r"[^A-Za-z0-9._-]", "_", label)
+
+
+def _run_id() -> str:
+    """The calling workflow's run id — the artifact store's established key
+    (E-38 sessions use the same one, so a run's diffs sit beside its
+    transcripts). Outside a worker (direct unit-test calls): 'local'."""
+    try:
+        run_id = activity.info().workflow_run_id
+    except RuntimeError:
+        run_id = "local"
+    return run_id or "local"  # temporalio types the field as Optional
 
 
 @activity.defn
-async def get_task_diff(inp: DiffInput) -> dict:
+async def get_task_diff(inp: DiffInput) -> CodeArtifact:
     """Materialized diff for clean-context validators (FR-804), anchored to
     the task's branch point so a dependent task's diff shows only its own
-    change — upstream work is invisible (Finding #1)."""
+    change — upstream work is invisible (Finding #1). FR-702: the FULL
+    untruncated patch is stored in the artifact store and only the ref
+    crosses workflow history; prompts materialize bounded text via
+    load_diff (truncation is a read-back budget, never a storage limit)."""
     rng = f"{inp.branch_point}...HEAD"
     stat = _git(["diff", "--stat", rng], inp.worktree).stdout
     patch = _git(["diff", rng], inp.worktree).stdout
@@ -112,15 +136,15 @@ async def get_task_diff(inp: DiffInput) -> dict:
         )
         if len(parts) == 3 and parts[0].startswith("R")
     ]
-    # T3 (sbatch 2026-10-19): a cut patch must carry a visible marker —
-    # the oracle's pattern (benchmarks/oracle.py _truncate_diff): keep
-    # exactly the first max_chars chars, then say how much was omitted, so
-    # a reviewer or lens reading the tail knows the diff continued. A cut
-    # at exactly max_chars is no cut (oracle semantics: <= passes through).
-    patch_out = patch[: inp.max_chars]
-    if len(patch) > inp.max_chars:
-        patch_out += f"\n...[diff truncated, {len(patch) - inp.max_chars} chars omitted]"
-    return {"stat": stat, "patch": patch_out, "files": files, "renames": renames}
+    # Lazy import: the store is a sibling subpackage, and keeping it out of
+    # module scope leaves this module importable in agent-loader boot.
+    from ..artifacts.store import LocalFileStore
+
+    label = _safe_label(inp.label if inp.label is not None else inp.branch_point[:12])
+    ref = LocalFileStore().put("diff", _run_id(), f"{label}.patch", patch.encode("utf-8"))
+    # A store failure raises — activity-error semantics identical to a git
+    # failure today; there is no inline-patch fallback (FR-702's anti-goal).
+    return CodeArtifact(files=files, renames=renames, stat=stat, patch_ref=ref)
 
 
 @dataclass

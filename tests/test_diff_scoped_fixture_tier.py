@@ -47,7 +47,7 @@ async def gate(repo: pathlib.Path, base: str):
     ichecks = await run_integration_checks(
         IntegrationChecksInput(
             worktree=str(repo),
-            changed_files=diff["files"],
+            changed_files=diff.files,
             base_worktree=wt.path,
             base_reason=wt.reason,
             base_sha=base,

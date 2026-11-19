@@ -67,6 +67,7 @@ from ..stages.qa.models import QAReport, ScopedSecurityReport
 from ..vcs import (
     BaseWorktree,
     BaseWorktreeInput,
+    CodeArtifact,
     DiffInput,
     IntegrationHandle,
     IntegrationInput,
@@ -166,13 +167,21 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
 
 
 @activity.defn(name="get_task_diff")
-async def get_task_diff(inp: DiffInput) -> dict:
-    return {
-        "stat": " app/health.py | 6 ++++++",
-        "patch": "diff --git a/app/health.py b/app/health.py\n+ok\n",
-        "files": ["app/health.py"],
-        "renames": [],
-    }
+async def get_task_diff(inp: DiffInput) -> CodeArtifact:
+    """FR-702: the fake claim-checks like the real one, so the demo run
+    writes a real store entry the real load_diff can read back."""
+    from ..artifacts.store import LocalFileStore
+    from ..vcs.git import _run_id, _safe_label
+
+    patch = "diff --git a/app/health.py b/app/health.py\n+ok\n"
+    label = _safe_label(inp.label if inp.label is not None else inp.branch_point[:12])
+    ref = LocalFileStore().put("diff", _run_id(), f"{label}.patch", patch.encode("utf-8"))
+    return CodeArtifact(
+        files=["app/health.py"],
+        renames=[],
+        stat=" app/health.py | 6 ++++++",
+        patch_ref=ref,
+    )
 
 
 @activity.defn(name="run_test_suite")

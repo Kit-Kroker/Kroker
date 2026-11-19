@@ -1,13 +1,20 @@
 """DS2/DS3: the disposable detached base worktree, and rename pairs."""
 
+import hashlib
 import os
 import pathlib
-import re
 import subprocess
 
 import pytest
 
-from sdlc.vcs import BaseWorktreeInput, DiffInput, get_task_diff, prepare_base_worktree
+from sdlc.artifacts.store import ref_to_path
+from sdlc.vcs import (
+    BaseWorktreeInput,
+    CodeArtifact,
+    DiffInput,
+    get_task_diff,
+    prepare_base_worktree,
+)
 
 GIT = ["git", "-c", "user.email=t@example.test", "-c", "user.name=t"]
 
@@ -81,24 +88,22 @@ async def test_get_task_diff_reports_rename_pairs(tmp_path):
     _git(repo, "mv", "a.py", "b.py")
     _git(repo, "commit", "-q", "-m", "rename")
     d = await get_task_diff(DiffInput(worktree=str(repo), branch_point=base))
-    assert d["renames"] == [["a.py", "b.py"]]
-    assert "b.py" in d["files"]
+    assert d.renames == [["a.py", "b.py"]]
+    assert "b.py" in d.files
 
 
-# --- T3 (sbatch-2026-10-19): the max_chars cut carries a visible marker -----
+# --- FR-702: the diff travels by claim-check ---------------------------------
 #
-# get_task_diff silently slices the patch at max_chars (default 60_000) and
-# all four callers use the default — a reviewer can approve a diff whose
-# tail it never saw, and nothing records that a cut happened. The benchmark
-# oracle's equivalent cut appends a marker naming the omitted count
-# (benchmarks/oracle.py _truncate_diff); get_task_diff must adopt the same
-# shape, changing ONLY the over-budget case: the kept prefix is exactly the
-# first max_chars chars, and the under-budget return stays byte-identical
-# (task 2026-10-03-silent-patch-cut-no-marker).
+# get_task_diff stores the FULL untruncated patch in the artifact store and
+# returns a CodeArtifact; only the ref crosses workflow history. The T3
+# truncation-marker semantics moved with the cut: they live in load_diff's
+# bounded read-back (tests/test_task_diff_marker_edges.py), not at the
+# source -- truncation is a prompt context budget now, never a storage
+# limit.
 
 
 def _big_diff_repo(tmp_path: pathlib.Path) -> tuple[pathlib.Path, str]:
-    """A repo whose head diff comfortably overflows any small max_chars."""
+    """A repo whose head diff comfortably overflows any small size."""
     repo = tmp_path / "big"
     repo.mkdir()
     _git(repo, "init", "-q", "-b", "main")
@@ -126,55 +131,57 @@ def _raw_patch(repo: pathlib.Path, rng: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_cut_patch_carries_a_visible_truncation_marker(tmp_path):
+async def test_full_patch_stored_untruncated_with_claim_check(tmp_path, monkeypatch):
+    monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path / "store"))
     repo, base = _big_diff_repo(tmp_path)
-    max_chars = 100
     full = _raw_patch(repo, f"{base}...HEAD")
-    assert len(full) > max_chars, "fixture guard: the head diff must overflow max_chars"
+    assert len(full) > 1_000, "fixture guard: the head diff must be substantial"
 
-    d = await get_task_diff(DiffInput(worktree=str(repo), branch_point=base, max_chars=max_chars))
+    d = await get_task_diff(DiffInput(worktree=str(repo), branch_point=base, label="t1-a1"))
 
-    omitted = len(full) - max_chars
-    assert d["patch"].startswith(full[:max_chars]), (
-        "the cut must keep exactly the first max_chars chars of the real patch"
+    assert isinstance(d, CodeArtifact)
+    assert d.stat.startswith(" big.txt") and d.files == ["big.txt"] and d.renames == []
+    assert d.patch_ref is not None and d.patch_ref.kind == "diff"
+    stored = ref_to_path(d.patch_ref)
+    assert stored.parent.name == "diffs"
+    assert stored.name == "t1-a1.patch"
+    assert stored.read_text(encoding="utf-8") == full, (
+        "the stored bytes are the FULL patch -- no truncation exists at the source"
     )
-    assert d["patch"].endswith(f"\n...[diff truncated, {omitted} chars omitted]"), (
-        f"the cut patch must end with the oracle-shaped marker naming the "
-        f"omitted count ({omitted}); tail was {d['patch'][-60:]!r} — today the "
-        "cut is silent, so a reviewer never learns the diff continued"
-    )
+    assert d.patch_ref.sha256 == hashlib.sha256(full.encode("utf-8")).hexdigest()
 
 
 @pytest.mark.asyncio
-async def test_uncut_patch_is_byte_identical_with_no_marker(tmp_path):
-    repo, base = _repo(tmp_path)  # the tiny v1 -> v2 edit, far under 60_000
-    full = _raw_patch(repo, f"{base}...HEAD")
+async def test_outside_worker_call_falls_back_to_run_id_local(tmp_path, monkeypatch):
+    monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path / "store"))
+    repo, base = _repo(tmp_path)
 
     d = await get_task_diff(DiffInput(worktree=str(repo), branch_point=base))
 
-    assert len(full) <= 60_000, "fixture guard: the small diff must not be cut"
-    assert d["patch"] == full, (
-        "under-budget diffs must return byte-identical: the marker work must "
-        "not touch the no-cut path or change what is kept"
+    assert d.patch_ref is not None
+    stored = ref_to_path(d.patch_ref)
+    assert stored.parent.parent.name == "local", (
+        f"a direct (non-worker) call stores under run id 'local', got {stored}"
     )
-    assert "diff truncated" not in d["patch"], "no marker may appear when nothing was cut"
 
 
 @pytest.mark.asyncio
-async def test_marker_wording_follows_the_oracle_shape(tmp_path):
-    repo, base = _big_diff_repo(tmp_path)
-    max_chars = 60  # a second, different cut point than the marker test above
-    full = _raw_patch(repo, f"{base}...HEAD")
-    assert len(full) > max_chars, "fixture guard: the head diff must overflow max_chars"
+async def test_label_slug_survives_unsafe_chars(tmp_path, monkeypatch):
+    monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path / "store"))
+    repo, base = _repo(tmp_path)
 
-    d = await get_task_diff(DiffInput(worktree=str(repo), branch_point=base, max_chars=max_chars))
+    d = await get_task_diff(
+        DiffInput(worktree=str(repo), branch_point=base, label="task 1/attempt:2")
+    )
 
-    omitted = len(full) - max_chars
-    m = re.search(r"(?m)^\.\.\.\[diff truncated, (\d+) chars omitted\]$", d["patch"])
-    assert m is not None, (
-        "no line matches the oracle marker shape "
-        f"'...[diff truncated, <count> chars omitted]'; tail was {d['patch'][-60:]!r}"
-    )
-    assert m.group(1) == str(omitted), (
-        f"the marker must name the exact omitted count {omitted}, got {m.group(1)}"
-    )
+    assert ref_to_path(d.patch_ref).name == "task_1_attempt_2.patch"
+
+
+@pytest.mark.asyncio
+async def test_default_label_derives_from_branch_point(tmp_path, monkeypatch):
+    monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path / "store"))
+    repo, base = _repo(tmp_path)
+
+    d = await get_task_diff(DiffInput(worktree=str(repo), branch_point=base))
+
+    assert ref_to_path(d.patch_ref).name == f"{base[:12]}.patch"

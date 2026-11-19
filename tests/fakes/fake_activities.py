@@ -48,6 +48,7 @@ from sdlc.stages.qa.models import (
 from sdlc.vcs import (
     BaseWorktree,
     BaseWorktreeInput,
+    CodeArtifact,
     DiffInput,
     IntegrationHandle,
     IntegrationInput,
@@ -88,13 +89,21 @@ async def fake_run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
 
 
 @activity.defn(name="get_task_diff")
-async def fake_get_task_diff(inp: DiffInput) -> dict:
-    return {
-        "stat": " app/main.py | 3 +++",
-        "patch": "diff --git a/app/main.py b/app/main.py\n+ok\n",
-        "files": ["app/main.py"],
-        "renames": [],
-    }
+async def fake_get_task_diff(inp: DiffInput) -> CodeArtifact:
+    """FR-702: the fake claim-checks like the real one, so replay-tier runs
+    write real store entries the real load_diff reads back."""
+    from sdlc.artifacts.store import LocalFileStore
+    from sdlc.vcs.git import _run_id, _safe_label
+
+    patch = "diff --git a/app/main.py b/app/main.py\n+ok\n"
+    label = _safe_label(inp.label if inp.label is not None else inp.branch_point[:12])
+    ref = LocalFileStore().put("diff", _run_id(), f"{label}.patch", patch.encode("utf-8"))
+    return CodeArtifact(
+        files=["app/main.py"],
+        renames=[],
+        stat=" app/main.py | 3 +++",
+        patch_ref=ref,
+    )
 
 
 @activity.defn(name="run_test_suite")

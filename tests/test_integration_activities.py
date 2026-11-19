@@ -107,8 +107,8 @@ def test_diff_anchors_to_branch_point_not_base(git_repo):
     _add_commit(b.path, "b.txt", "from B\n", "B work")
     assert res.merged
     diff = asyncio.run(get_task_diff(DiffInput(worktree=b.path, branch_point=b.branch_point)))
-    assert "b.txt" in diff["files"]
-    assert "a.txt" not in diff["files"]  # A's change is upstream, not B's diff
+    assert "b.txt" in diff.files
+    assert "a.txt" not in diff.files  # A's change is upstream, not B's diff
 
 
 def test_merge_conflict_is_detected_and_aborted(git_repo):
