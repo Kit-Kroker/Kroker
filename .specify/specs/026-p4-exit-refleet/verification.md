@@ -182,3 +182,43 @@ on the baseline by construction — the before-half of T013–T016).
 **Fleet commit candidate:** the Part A close-out commit that carries this
 §026-A (HEAD at review time) — Part B changes no code, so the freeze
 target is this commit. Named for T041 at GATE 2.
+
+---
+
+## §026-B (Part B — the re-fleet, 2026-11-18/19)
+
+Entry conditions: T008's $0 re-score reproduced the 025 baseline
+(§026-A); GATE 2 accepted under the owner's standing delegation
+(freeze at pushed HEAD `ec3f128f1440de5957824f65b6658f32bc302db2`,
+ceiling $13.95 judge + $1.00 EXA, per-run stops cat-cafe $3.00 /
+readtime $1.73 / geotext $1.91 / lice $1.40, `--gate-policy hard`).
+Full operational record with every announcement, per-run report and
+evidence pointer: `preflight.md` (same directory). Fleet report with
+the SC table, deltas, triage and honest misses:
+`/home/maksim/work/kroker-fleet-runs-026/fleet-report.md`; rollup
+JSON beside it at `benchmarks/_all/score/`.
+
+| step | result |
+|---|---|
+| T040 pre-flight | every item evidenced (verbs/arm, doctor 10-1-2 with the 025 notes, pools overlay + cap 2 + live pollers, all four 025 host fixes incl. the image rebuilt with the provenance build-arg, keys, adversary/containment `false` in a dumped cell config, fresh runs root + roots line, five fresh scratch repos with verify-case 4 PASS + the known todo-api shape, attendant v026 with the A-3/A-5 duties) |
+| T041 freeze | worktree `../kroker-fleet-026` at `ec3f128f…`, status empty; image `sha256:41b306a9c003…`; both pools recreated, restarts 0, in-container battery green ×2 |
+| T042 smoke 1 | **FAIL `oracle_all_pass`** (the 3 infra conditions passed) — case class (QA-authored validator artifacts; harness exonerated three ways); $1.4961; HALTED for the owner; evidence quarantined `case-smoke-1-*` |
+| owner ruling | option (a): re-run as-is; NEW GUARD — a second same-mode smoke failure halts |
+| T042 smoke 2 | **PASS** at $1.3241 (oracle 6/6 = 1.0); recurrence fired again on T1 (`anyio.__version__`) — 2-for-2, watched per run |
+| T043 ceiling | smoke under the 1.5× line — ceiling stands; per-run expectations derived |
+| Runs 1–5 | cat-cafe 0.639 / readtime 0.167 (shipped) / geotext 0.600 / lice 0.000 / **cat-cafe repeat 1.0 — the fleet's first oracle-PASS success**; all five scored case-class-or-success, zero infra stops; $1.5781/$1.0864/$1.1655/$1.4013/$1.6667 |
+| T049 run 6 | **not needed** — 5 scored runs, all SC-2-measured (5/5 summarized; the 025 export gap is what this round fixed) |
+| T050 score | rollup: SC-1 0.60 (CI95 [0.15,0.95]) n=5; SC-1-strict 0.0; SC-2 1.47 min both rows n=5; SC-3 0.773 n=22 / **FR-004-corrected 0.842 n=19**; SC-3-lint **1.00 n=6**; SC-4 1.00; commits exactly one; roots line names the runs root |
+| T051 P4 read | ROADMAP SC-1/2/3 rows + P4 line + Last-verified cell updated with the measured reads and deltas; this §026-B; dedicated checkout removed (stamp archived first) |
+| T052 cards | 025 T034 closed; the .env rider card → done (T026); calibration-ledger card filed; the FR-004 smoke-inclusion defect + the validator/collector-artifact class filed; round close-out card written |
+
+**Spend: $9.7182 / $13.95 judge** (never crossed; $4.23 left), EXA
+within $1.00, z.ai flat. Tripwire never fired: **zero infra stops**.
+Disclosed apart: the $0 pre-start dispatch slip (guard-refused), and
+run 4 crossing its $1.40 stop by $0.0013 in its final minute
+(COST-STOP fired 41 s before natural close; no cancel point).
+
+**P4 verdict: exit NOT met — SC-1 0.60 < 0.80** (SC-2 and SC-3 both
+pass, decisively). Every SC-1 miss traces to the
+validator/collector-artifact class (green contract tests masked by
+malformed probes) — a harness-side fix named as the 027 candidate.
