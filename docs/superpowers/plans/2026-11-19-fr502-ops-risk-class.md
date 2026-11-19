@@ -40,7 +40,7 @@
 
 **Interfaces:**
 - Consumes: `RepairAction` (`kind: Literal["code_fix","ops"]`, `ops_action: Literal["rollback","restart","scale"] | None`), `RepairPlan` (`.actions`) from `maintenance/models.py`.
-- Produces: `class RiskClass(str, Enum): HUMAN_REQUIRED = "human_required"`; `risk_class(action: RepairAction) -> RiskClass | None`; `bears_human_required(plan: RepairPlan) -> bool` — both in `sdlc.maintenance.gate`.
+- Produces: `class RiskClass(StrEnum): HUMAN_REQUIRED = "human_required"` (corrected 2026-11-19 from the plan's original `(str, Enum)` — ruff UP042 forbids that form; `StrEnum` is behaviorally identical for the contract); `risk_class(action: RepairAction) -> RiskClass | None`; `bears_human_required(plan: RepairPlan) -> bool` — both in `sdlc.maintenance.gate`.
 
 - [ ] **Step 1: Write the failing tests** in `tests/maintenance/test_risk_class.py`
 
