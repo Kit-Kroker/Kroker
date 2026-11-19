@@ -13,9 +13,11 @@ from temporalio import activity
 from ..artifacts.store import LocalFileStore
 from .fake import FakeMemory
 from .models import (
+    MemoryKind,
     RecallSnapshot,
     RetainItem,
 )
+from .promote import GOTCHA_QUERY, promotions
 from .protocol import Memory
 from .query_hash import recall_query_hash, recall_snapshot_canonical
 from .scrub import scrub
@@ -166,3 +168,31 @@ class ReflectInput:
 async def reflect(inp: ReflectInput) -> None:
     memory = _backend(inp.base_url, inp.backend)
     await memory.reflect(inp.bank)
+
+
+@dataclass
+class PromoteInput:
+    project_banks: list[str]
+    org_bank: str
+    min_projects: int = 2
+    backend: str = "fake"
+    base_url: str = "http://localhost:8888"
+
+
+@activity.defn
+async def promote_org_learnings(inp: PromoteInput) -> int:
+    """Nightly cross-project gotcha promotion (E-25). Unlike
+    recall_snapshot this RAISES on backend failure: an empty recall here
+    would read as "no gotchas recurred" and the org bank would silently go
+    stale -- the nightly job's contract is no silent no-op. Recalled items
+    may predate scrubbing or come from another writer, so promoted text is
+    scrubbed at this boundary too (same policy as retain)."""
+    memory = _backend(inp.base_url, inp.backend)
+    items_by_bank: dict[str, list[str]] = {}
+    for bank in inp.project_banks:
+        snap = await memory.recall(bank, GOTCHA_QUERY, {"kind": MemoryKind.GOTCHA.value}, None)
+        items_by_bank[bank] = snap.items
+    promoted = promotions(items_by_bank, org_bank=inp.org_bank, min_projects=inp.min_projects)
+    for item in promoted:
+        await memory.retain(item.model_copy(update={"text": scrub(item.text)}))
+    return len(promoted)

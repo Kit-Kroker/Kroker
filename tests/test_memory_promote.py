@@ -1,4 +1,17 @@
-from sdlc.memory.models import MemoryKind
+import pathlib
+
+import pytest
+
+from sdlc.memory.activities import (
+    PromoteInput,
+    RecallInput,
+    RetainInput,
+    _fake_singleton,
+    promote_org_learnings,
+    recall_snapshot,
+    retain,
+)
+from sdlc.memory.models import MemoryKind, RetainItem
 from sdlc.memory.promote import GOTCHA_QUERY, promotions
 
 
@@ -48,3 +61,89 @@ def test_result_is_sorted_by_text():
 
 def test_gotcha_query_is_pinned():
     assert GOTCHA_QUERY == "recurring cross-project gotchas and stack knowledge"
+
+
+def test_promote_is_a_temporal_activity():
+    assert getattr(promote_org_learnings, "__temporal_activity_definition", None) is not None
+
+
+def test_promote_is_registered_on_the_worker():
+    # test_triage_registry.py's source-grep convention: the original FR-404
+    # bug was a registered-looking activity nobody called or served.
+    src = pathlib.Path("src/sdlc/worker.py").read_text(encoding="utf-8")
+    assert "promote_org_learnings" in src, "not registered in worker.py"
+
+
+@pytest.mark.asyncio
+async def test_promote_end_to_end_on_fake_backend():
+    await retain(
+        RetainInput(
+            item=RetainItem(
+                kind=MemoryKind.GOTCHA,
+                bank="project:e2e-a",
+                text="uv run pytest",
+                metadata={},
+            )
+        )
+    )
+    await retain(
+        RetainInput(
+            item=RetainItem(
+                kind=MemoryKind.GOTCHA,
+                bank="project:e2e-b",
+                text="uv run pytest",
+                metadata={},
+            )
+        )
+    )
+    n = await promote_org_learnings(
+        PromoteInput(project_banks=["project:e2e-a", "project:e2e-b"], org_bank="org:e2e")
+    )
+    assert n == 1
+    snap = await recall_snapshot(RecallInput(bank="org:e2e", query="q", backend="fake"))
+    assert snap.items == ["uv run pytest"]
+
+
+@pytest.mark.asyncio
+async def test_promote_scrubs_before_retain():
+    # Seed the fake singleton directly, bypassing the retain activity's own
+    # scrub, so the scrub under test is the one at the promote boundary:
+    # raw "key sk-<40 alnum> fix" in two banks must reach the org bank with
+    # "[REDACTED_API_KEY]" and never the raw key.
+    raw_key = "sk-" + "a" * 40
+    for bank in ("project:promote-scrub-a", "project:promote-scrub-b"):
+        await _fake_singleton.retain(
+            RetainItem(kind=MemoryKind.GOTCHA, bank=bank, text=f"key {raw_key} fix", metadata={})
+        )
+    n = await promote_org_learnings(
+        PromoteInput(
+            project_banks=["project:promote-scrub-a", "project:promote-scrub-b"],
+            org_bank="org:promote-scrub",
+        )
+    )
+    assert n == 1
+    snap = await recall_snapshot(RecallInput(bank="org:promote-scrub", query="q", backend="fake"))
+    assert "[REDACTED_API_KEY]" in snap.items[0]
+    assert raw_key not in snap.items[0]
+
+
+@pytest.mark.asyncio
+async def test_promote_with_no_recurrence_returns_zero():
+    await retain(
+        RetainInput(
+            item=RetainItem(
+                kind=MemoryKind.GOTCHA,
+                bank="project:promote-solo",
+                text="only ever seen in one project",
+                metadata={},
+            )
+        )
+    )
+    n = await promote_org_learnings(
+        PromoteInput(project_banks=["project:promote-solo"], org_bank="org:promote-solo-empty")
+    )
+    assert n == 0
+    snap = await recall_snapshot(
+        RecallInput(bank="org:promote-solo-empty", query="q", backend="fake")
+    )
+    assert snap.items == []

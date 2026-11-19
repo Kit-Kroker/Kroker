@@ -90,6 +90,7 @@ from .maintenance.activities import probe_repair_child
 from .memoization.activities import cache_get, cache_put
 from .memory.activities import (
     capture_watermark,
+    promote_org_learnings,
     recall_snapshot,
     reflect,
     retain,
@@ -213,6 +214,7 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         retain,
         capture_watermark,
         reflect,
+        promote_org_learnings,
         cache_get,
         cache_put,
         record_calibration_samples,
