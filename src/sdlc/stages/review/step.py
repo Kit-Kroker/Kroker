@@ -66,12 +66,6 @@ def _workflow_id() -> str:
         return ""
 
 
-def _get_patch(diff: dict[str, Any] | str) -> str:
-    if isinstance(diff, dict):
-        return str(diff.get("patch", ""))
-    return str(diff)
-
-
 def _get_qa_raw_json(qa_raw: Any) -> str:
     if qa_raw is None:
         return ""
@@ -108,7 +102,7 @@ async def step(
     cfg: PipelineConfig,
     task: Any,
     contract: Any,
-    diff: dict[str, Any] | str,
+    patch: str,
     worktree: str = "",
     reviewer_agent: Any = None,
     adversary_agent: Any = None,
@@ -133,7 +127,6 @@ async def step(
         if contract and getattr(contract, "assertions", None)
         else list(getattr(task, "acceptance_criteria", []))
     )
-    patch = _get_patch(diff)
     qa_raw_json = _get_qa_raw_json(qa_raw)
     model = reviewer_model or _role_model(cfg, "reviewer", reviewer_agent, default="unknown")
     # 012 (contract §5.7): the review record carries the reviewer call's
@@ -194,7 +187,7 @@ async def run_adversary(
     cfg: PipelineConfig,
     contract: Any,
     assertions: Sequence[str],
-    diff: dict[str, Any] | str,
+    patch: str,
     qa_raw: Any,
     task: Any,
     adversary_agent: Any = None,
@@ -221,7 +214,6 @@ async def run_adversary(
     model = adversary_model or _role_model(cfg, "adversary", adversary_agent, default="unknown")
     try:
         spend = RoleUsage(role="adversary", model=model)
-        patch = _get_patch(diff)
         qa_raw_json = _get_qa_raw_json(qa_raw)
         prompt = adversary_prompt(assertions, qa_raw_json, patch)
         role_res = await ctx.run_role(
@@ -279,7 +271,7 @@ async def run_deep_review(
     run: Any,
     contract: Any,
     assertions: Sequence[str],
-    diff: dict[str, Any] | str,
+    patch: str,
     task: Any,
     deep_review_agent: Any = None,
     deep_review_model: str = "",
@@ -314,7 +306,6 @@ async def run_deep_review(
             cfg, "deep_review", deep_review_agent, default="unknown"
         )
         spend = RoleUsage(role="deep_review", model=model)
-        patch = _get_patch(diff)
         task_json = task.model_dump_json() if hasattr(task, "model_dump_json") else str(task)
         prompt = deep_review_prompt(assertions, task_json, patch, transcript)
 

@@ -84,7 +84,7 @@ async def test_inspect_signature_works_on_review_step_after_replay():
         "cfg",
         "task",
         "contract",
-        "diff",
+        "patch",
         "worktree",
         "reviewer_agent",
         "adversary_agent",

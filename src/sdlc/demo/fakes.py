@@ -26,6 +26,7 @@ from pydantic_ai.models.test import TestModel
 from temporalio import activity
 
 from ..agents.roles import AGENT_ACTIVITY_CONFIG
+from ..artifacts.read import load_diff
 from ..artifacts.retention import RetentionInput
 from ..artifacts.store import LocalFileStore
 from ..board.activities import (
@@ -328,8 +329,9 @@ SCRIPTED: list[Callable[..., Any]] = [
 ]
 
 # Production activities the dry run keeps: pure code, or a write under the
-# export root that is the point of the run.
-REAL: list[Callable[..., Any]] = [evaluate_gate, price_usage, export_run_artifacts]
+# export root that is the point of the run. load_diff (FR-702) reads back
+# what the scripted get_task_diff above claim-checked into the store.
+REAL: list[Callable[..., Any]] = [evaluate_gate, price_usage, export_run_artifacts, load_diff]
 
 
 def demo_activities(specs: list[tuple[str, type, BaseModel]]) -> list[Callable[..., Any]]:

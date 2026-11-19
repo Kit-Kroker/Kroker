@@ -34,12 +34,15 @@ from temporalio import workflow as real_workflow
 # `sdlc.stages.code.__init__` re-exports the step FUNCTION, shadowing the
 # module attribute — import the module explicitly to patch its `workflow`.
 code_step = importlib.import_module("sdlc.stages.code.step")
+from sdlc.artifacts.read import load_diff
+from sdlc.artifacts.store import LocalFileStore
 from sdlc.benchmarks.models import BenchmarkOutcome, QualityScore
 from sdlc.core.models import GateOutcome, HarnessKind, PipelineConfig, RoleConfig
 from sdlc.harness.models import HarnessRunResult
 from sdlc.stages.plan.models import DevTask
 from sdlc.stages.qa.models import QAReport
 from sdlc.stages.review.models import ReviewFinding, ReviewReport
+from sdlc.vcs import CodeArtifact
 
 _BASE = datetime(2026, 7, 4, 10, tzinfo=UTC)
 
@@ -78,7 +81,14 @@ class _FakeWorkflow:
         if fn.__name__ == "run_test_suite":
             return QAReport(tests_passed=True, failing_tests=[], issues=[])
         if fn.__name__ == "get_task_diff":
-            return {"files": ["app.py"], "stat": "app.py | 1 +", "patch": "diff --git ..."}
+            # FR-702: a real CodeArtifact with real stored bytes, so the
+            # step's load_diff read-back is the genuine round-trip.
+            ref = LocalFileStore().put(
+                "diff", "wf-t017", f"{arg.label or arg.branch_point}.patch", b"diff --git a/app.py"
+            )
+            return CodeArtifact(files=["app.py"], stat="app.py | 1 +", patch_ref=ref)
+        if fn.__name__ == "load_diff":
+            return await load_diff(arg)
         raise AssertionError(f"unexpected activity {fn.__name__}")
 
 
@@ -145,9 +155,10 @@ def _task() -> DevTask:
     return DevTask(id="t1", title="T", description="D", acceptance_criteria=["ac1"])
 
 
-def _run_step(monkeypatch, *, review_approve=True, cfg=None):
+def _run_step(monkeypatch, tmp_path, *, review_approve=True, cfg=None):
     fake_wf = _FakeWorkflow()
     monkeypatch.setattr(code_step, "workflow", fake_wf)
+    monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path))
     ctx = _FakeCtx(review_approve=review_approve)
 
     import asyncio
@@ -177,12 +188,12 @@ def _by_stage(ctx):
 # --- (1) ordering: the three records partition the attempt (§5.1-5.4) --------
 
 
-def test_attempt_records_partition_the_attempt_clock(monkeypatch):
+def test_attempt_records_partition_the_attempt_clock(monkeypatch, tmp_path):
     """One attempt, tests pass, qa clean, reviewer approves: C (code) ends
     where Q (qa) begins, Q ends where R (review) begins — with the +100 s
     clock every endpoint is distinct, so the partition relations are strict
     wherever the code step controls both sides."""
-    result, ctx, fake_wf = _run_step(monkeypatch)
+    result, ctx, fake_wf = _run_step(monkeypatch, tmp_path)
     assert result.status == "done"
     recs = _by_stage(ctx)
     assert set(recs) == {"code", "qa", "review"}
@@ -212,13 +223,13 @@ def test_attempt_records_partition_the_attempt_clock(monkeypatch):
 # --- (2) each record carries its own role's verdict (§5.5/§5.6) --------------
 
 
-def test_qa_record_passes_when_the_reviewer_rejects(monkeypatch):
+def test_qa_record_passes_when_the_reviewer_rejects(monkeypatch, tmp_path):
     """§5.5/§5.6: tests pass and qa is clean, so the QA record's outcome is
     the QA role's own PASS — while the task does not pass (the step returns
     a non-done TaskResult through the gate) and the review record says FAIL
     (the reviewer's own verdict). The code record stays the deterministic
     tests/qa verdict (PASS here); the task verdict is the TaskResult."""
-    result, ctx, _ = _run_step(monkeypatch, review_approve=False)
+    result, ctx, _ = _run_step(monkeypatch, tmp_path, review_approve=False)
     recs = _by_stage(ctx)
     assert recs["qa"].outcome is BenchmarkOutcome.PASS
     assert recs["review"].outcome is BenchmarkOutcome.FAIL
@@ -228,11 +239,11 @@ def test_qa_record_passes_when_the_reviewer_rejects(monkeypatch):
 # --- (3) the vacuous-lens boundary (§5.8) ------------------------------------
 
 
-def test_no_review_record_when_review_is_disabled(monkeypatch):
+def test_no_review_record_when_review_is_disabled(monkeypatch, tmp_path):
     """§5.8, review half: with cfg.review_enabled False (reviewer agent
     present) no review record claims a timing or verdict for work that did
     not run."""
-    result, ctx, _ = _run_step(monkeypatch, cfg=_cfg(review_enabled=False))
+    result, ctx, _ = _run_step(monkeypatch, tmp_path, cfg=_cfg(review_enabled=False))
     assert result.status == "done"
     assert "review" not in _by_stage(ctx)
     assert {"code", "qa"} == set(_by_stage(ctx))
@@ -272,13 +283,14 @@ class _DriftWorkflow(_FakeWorkflow):
         return await super().execute_activity(fn, arg, **kw)
 
 
-def _run_drift_step(monkeypatch):
+def _run_drift_step(monkeypatch, tmp_path):
     """Attempt 1: qa clean, reviewer rejects -> fix loop. Attempt 2 (a
     repair attempt, containment on, anchor captured from attempt 1's
     checkpoint): the drift backstop runs and FINDS drift. The terminal-REJECT
     gate then decides, so the step returns without a third attempt."""
     fake_wf = _DriftWorkflow()
     monkeypatch.setattr(code_step, "workflow", fake_wf)
+    monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path))
     ctx = _FakeCtx(review_approve=False)
 
     gate_calls: list = []
@@ -310,7 +322,7 @@ def _run_drift_step(monkeypatch):
     return result, ctx, fake_wf, gate_calls
 
 
-def test_drift_found_leaves_the_qa_record_pass_and_the_verdict_quarantined(monkeypatch):
+def test_drift_found_leaves_the_qa_record_pass_and_the_verdict_quarantined(monkeypatch, tmp_path):
     """§5.5: containment drift does not change the QA role's verdict — with
     tests passing and qa clean, the LAST attempt's qa record is PASS even
     though the drift forces the task to the human gate. §5.9: the returned
@@ -318,7 +330,7 @@ def test_drift_found_leaves_the_qa_record_pass_and_the_verdict_quarantined(monke
     at red as status 'quarantined' (the drift-found path goes straight to
     the gate, whose terminal REJECT yields 'quarantined'); this assertion
     must keep holding after the record-verdict change."""
-    result, ctx, fake_wf, gate_calls = _run_drift_step(monkeypatch)
+    result, ctx, fake_wf, gate_calls = _run_drift_step(monkeypatch, tmp_path)
 
     # the drift path really ran, on the repair attempt
     drift_acts = [
@@ -341,12 +353,12 @@ def test_drift_found_leaves_the_qa_record_pass_and_the_verdict_quarantined(monke
     assert result.status == "quarantined"
 
 
-def test_reviewer_rejection_task_result_matches_the_base_verdict(monkeypatch):
+def test_reviewer_rejection_task_result_matches_the_base_verdict(monkeypatch, tmp_path):
     """§5.9, reviewer-rejection scenario: the returned TaskResult equals
     what the base step returns for the same inputs — one attempt, qa pass,
     reviewer reject, terminal-REJECT gate. PINNED at red: status
     'quarantined', attempts 1; the record-span change must not move it."""
-    result, ctx, _ = _run_step(monkeypatch, review_approve=False)
+    result, ctx, _ = _run_step(monkeypatch, tmp_path, review_approve=False)
     # PINNED base behaviour (observed at red)
     assert result.status == "quarantined"
     assert result.attempts == 1
