@@ -211,10 +211,11 @@ Measurement pieces already in the tree, per `ROADMAP.md` and `SDLC-spec-v2.md`:
    so *"planner decomposition — the load-bearing variable in real work — is
    unexercised"* (E-27). Cursor's whole result is about decomposition quality;
    the factory cannot see it yet.
-3. **The learning loop is open.** `reflect()` is registered but the retro
-   *stage* (14) never runs (`RunSummary` unbuilt); nothing writes to `org_bank`
-   (E-25). So SC-4/SC-6 have no signal to measure, and Abdullin's second loop
-   (distil production into eval cases) has no intake.
+3. **The learning loop has no runs behind it.** The wiring is built — retro
+   stage (14) runs (E-32), and the nightly job promotes cross-project gotchas
+   into `org_bank` (E-25, 2026-11-19) — but signal only accrues on runs with
+   `memory.enabled=true` (default false), so SC-4/SC-6 and Abdullin's
+   distil-into-cases loop have no intake to measure yet.
 
 ---
 
@@ -334,7 +335,7 @@ benchmark is tractable: an axis is a config sweep, not a fork.
 |---|---|---|---|
 | **Harness** | `claude -p` vs `opencode run` vs **cursor (to add)** | `harness/adapters.py`, `HARNESSES` (FR-203) | new adapter must normalise into `HarnessRunResult` (§4) |
 | **Model × role** | which model drives each of 11 roles | `STAGE_MODELS` + `agents.yaml` per-role `model` | landed (E-37): per-cell arms + `--role-model`, ADR-6 per run; **proposer arms real since 004** (override is forwarded and validated; pre-004 caveat in §3.2) |
-| **Memory** | Hindsight on/off/watermark, `project` vs `+org` banks | `MemoryConfig` (`memory.enabled` default `False`) | org bank has no writers — **E-25**; retro closes the loop — stage 14 |
+| **Memory** | Hindsight on/off/watermark, `project` vs `+org` banks | `MemoryConfig` (`memory.enabled` default `False`) | writers built — org promotion (**E-25**, 2026-11-19) + retro (E-32); numbers pending memory-on runs + a second project bank |
 | **Case** | greenfield feature specs of graded complexity | `benchmarks/cases/` | only single-run-sized cases exist — need a decomposition-forcing case (§5) |
 
 ### 3.0 Language is a case property, not a fifth axis
@@ -414,11 +415,11 @@ gotchas should make attempt N+1 cheaper, SDLC-spec §6) is the value of memory.
 
 Why it can't run yet, precisely: SC-4 ("repeat-clarification <10% by run 10")
 and SC-6 ("soft-gate override <5%") both need *reflect wiring + real runs*
-(ROADMAP SC-4/SC-6). The nightly project reflect ships (E-12/E-13) but only
-accrues signal on runs with `memory.enabled=true` (default false), the retro
-stage that writes `RunSummary` is unbuilt (stage 14), and nothing writes to
-`org_bank` (E-25). So the memory axis is gated on closing the learning loop —
-which is §6's second priority.
+(ROADMAP SC-4/SC-6). The wiring is complete — nightly project reflect
+(E-12/E-13), the retro stage that writes `RunSummary` (E-32), and org
+promotion (E-25, 2026-11-19) — but signal only accrues on runs with
+`memory.enabled=true` (default false), and promotion first fires when a
+second project bank runs. So the memory axis now waits on real runs alone.
 
 ---
 
@@ -637,8 +638,8 @@ no history to mine):
   Cursor's Field Guide are the same idea: every time the factory fails in real
   use, that failure becomes a case. This is *the* mechanism that grows the
   corpus past the cold start — and it is exactly what the retro stage (14) +
-  `RunSummary` are for. Closing that stage (§6 priority 2) turns production runs
-  into eval intake automatically. Until then, cases are hand-authored only.
+  `RunSummary` are for. That stage is built (E-32), so production runs become
+  eval intake as they accrue. Until they do, cases are hand-authored only.
 
 ### 5.1 Acceptance rule and corpus status (round 015)
 
@@ -821,11 +822,11 @@ undercut, not by size.
    unblocks the first SC signal without waiting on N adapters; further
    languages (E-30a/b/c) follow the corpus, ranked below.
 
-2. **Close the learning loop** — build the retro stage (14): emit `RunSummary`,
-   call the already-registered `reflect()`, and give `org_bank` a writer
-   (**E-25**). *This unblocks SC-4 and SC-6 (P3's exit criterion), turns on the
-   memory axis (§3.3), and opens Abdullin's loop-B case intake (§5).* Three
-   payoffs from one stage.
+2. **Close the learning loop** — built: retro stage (14) emits `RunSummary`
+   and calls `reflect()` (E-32); the nightly job gives `org_bank` promotion
+   writers (**E-25**, 2026-11-19). *Mechanism complete; SC-4/SC-6 (P3's exit
+   criterion), the memory axis (§3.3) and loop-B intake (§5) now wait on real
+   runs — memory-on cells plus a second project bank.*
 
 3. **Full cost attribution + a decomposition case** — promote cost bookkeeping
    from benchmarks-only to run-level counters (**E-19**), attribute per role

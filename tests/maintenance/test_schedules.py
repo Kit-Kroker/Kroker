@@ -29,7 +29,9 @@ from sdlc.schedules.models import (
 # --------------------------------------------------------------------------- #
 # The back-compat pin: the shipped nightly-reflect asset converts today
 # exactly like this, and must convert exactly like this after the
-# generalisation (captured pre-change, 2026-11-14).
+# generalisation (captured pre-change, 2026-11-14). Re-captured 2026-11-19
+# for E-25: the asset now carries org_bank="org", so the pinned args carry
+# it too — everything else is byte-identical.
 # --------------------------------------------------------------------------- #
 
 
@@ -44,7 +46,10 @@ def test_nightly_reflect_to_temporal_is_pinned():
 
     assert sched.action.args == [
         ReflectScheduleInput(
-            banks=["project:default"], backend="hindsight", base_url="http://localhost:8888"
+            banks=["project:default"],
+            backend="hindsight",
+            base_url="http://localhost:8888",
+            org_bank="org",
         )
     ]
     assert sched.spec.cron_expressions == ["0 3 * * *"]

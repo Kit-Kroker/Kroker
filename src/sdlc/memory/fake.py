@@ -7,6 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from .models import (
+    MemoryKind,
     RecallSnapshot,
     RetainItem,
 )
@@ -16,6 +17,7 @@ from .query_hash import recall_query_hash
 
 @dataclass
 class _Entry:
+    kind: MemoryKind
     text: str
     metadata: dict[str, str]
     version: int
@@ -35,7 +37,12 @@ class FakeMemory(Memory):
     async def retain(self, item: RetainItem) -> None:
         bank_entries = self._entries[item.bank]
         bank_entries.append(
-            _Entry(text=item.text, metadata=item.metadata, version=len(bank_entries) + 1)
+            _Entry(
+                kind=item.kind,
+                text=item.text,
+                metadata=item.metadata,
+                version=len(bank_entries) + 1,
+            )
         )
 
     async def recall(
@@ -45,7 +52,9 @@ class FakeMemory(Memory):
         matches = [
             e.text
             for e in self._entries[bank]
-            if e.version <= cutoff and all(e.metadata.get(k) == v for k, v in filters.items())
+            if e.version <= cutoff
+            and all(e.metadata.get(k) == v for k, v in filters.items() if k != "kind")
+            and ("kind" not in filters or e.kind.value == filters["kind"])
         ]
         query_hash = recall_query_hash(bank, query, filters, str(cutoff))
         return RecallSnapshot(

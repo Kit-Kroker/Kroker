@@ -78,7 +78,7 @@ flag in `agent.yaml`.
 - [ ] **AP-5.2** Research: numbered-fragment fetch, citations by `fragment_id`, validator.
 - [ ] **AP-5.3** Analyst as aggregator; `merge_verdict` becomes the release summary.
 - [ ] **AP-5.4** Clarify probes with repo tools, deduplicated and ranked in code; thin prompts rewritten.
-- [ ] **AP-5.5** Memory: verified-only retention, promotion to the `org` bank (E-25), pruning by use.
+- [ ] ⚠️ **AP-5.5** Memory: verified-only retention, promotion to the `org` bank (E-25), pruning by use. *Promotion landed 2026-11-19 (E-25 closed — nightly `promote_org_learnings` + `reflect(org)`, spec `docs/superpowers/specs/2026-11-19-org-bank-promotion-design.md`); verified-only retention and pruning-by-use remain open.*
 
 **Gate:** research grounding rejections near zero; end-to-end pass above the AP-0 baseline by a margin agreed in AP-0.
 

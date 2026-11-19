@@ -22,12 +22,22 @@ KNOWN_SCHEDULE_WORKFLOWS = {"ReflectWorkflow", "MaintenanceKickWorkflow"}
 
 
 class ReflectAction(BaseModel):
-    """The nightly memory-consolidation asset (unchanged since E-12)."""
+    """The nightly memory-consolidation asset (E-12; E-25 adds the org
+    promotion fields)."""
 
     workflow: Literal["ReflectWorkflow"] = "ReflectWorkflow"
     banks: list[str] = Field(min_length=1)
     backend: Literal["fake", "hindsight"] = "fake"
     base_url: str = "http://localhost:8888"
+    # None keeps the job project-only. When set (the shipped asset: "org"),
+    # gotchas recurring across `banks` promote into this bank, which then
+    # reflects too (E-25) — org never rides `banks` itself.
+    org_bank: str | None = None
+    # ge=2 is the promotion floor, not a tuning knob: a threshold of 1 would
+    # mirror a single project's gotchas into org, which is not cross-project
+    # promotion. Both fields default so a pre-E-25 live Schedule whose
+    # recorded args lack them still validates (org half off).
+    promote_min_projects: int = Field(default=2, ge=2)
 
 
 class MaintenanceKickAction(BaseModel):

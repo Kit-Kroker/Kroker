@@ -1,6 +1,7 @@
-"""The shipped nightly-reflect asset (E-13, FR-404). Guards the scope
-boundary: project banks only — org_bank has no writers, so an org schedule
-would be a permanent no-op behind a checked box."""
+"""The shipped nightly-reflect asset (E-13, FR-404; E-25 adds the org half).
+Guards the scope boundary: `banks` stays project-only — the org bank reaches
+the job via the promotion field (`org_bank`), never via a `banks:` entry,
+because nightly promotion is what writes org (E-25)."""
 
 from __future__ import annotations
 
@@ -29,15 +30,23 @@ def test_nightly_reflect_targets_reflect_workflow_nightly():
 
 
 def test_nightly_reflect_is_project_scoped_only():
-    # Scope guard (spec: Findings §3). org_bank has no writers — every
-    # _retain call site in feature.py passes project_bank — so an org bank
-    # here would consolidate nothing, nightly, forever.
+    # Scope guard (spec: Findings §3), E-25 shape: `banks` is still
+    # project-only. The org bank never rides `banks` — org gets its writers
+    # via the nightly promotion below, and consolidating an org entry here
+    # before promotion ran would consolidate nothing.
     a = {x.id: x for x in load_schedules(DEFAULT_SCHEDULES_DIR)}["nightly-reflect"]
     for bank in a.action.banks:
         assert bank.startswith("project:"), (
-            f"{bank!r} is not project-scoped; org reflect is out of scope "
-            f"until something retains to org_bank"
+            f"{bank!r} is not project-scoped; org reaches the job via the "
+            f"promotion field (org_bank), not via banks"
         )
+
+
+def test_nightly_reflect_promotes_to_org():
+    # E-25: org gets writers via this nightly job. The promotion field is
+    # on, so recurring gotchas cross into org and org reflects after.
+    a = {x.id: x for x in load_schedules(DEFAULT_SCHEDULES_DIR)}["nightly-reflect"]
+    assert a.action.org_bank == "org"
 
 
 def test_shipped_asset_translates_to_a_temporal_schedule():
@@ -45,3 +54,6 @@ def test_shipped_asset_translates_to_a_temporal_schedule():
     sched = to_temporal(a)
     assert sched.spec.cron_expressions == [a.spec.cron]
     assert sched.action.workflow == "ReflectWorkflow"
+    # The org half must survive translation: the workflow arg carries the
+    # promotion target, so the fired job promotes before reflecting org.
+    assert sched.action.args[0].org_bank == "org"

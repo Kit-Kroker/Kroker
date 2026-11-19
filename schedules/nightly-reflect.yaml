@@ -1,6 +1,7 @@
-# FR-404 — nightly memory consolidation. Project banks only: org_bank has no
-# writers yet (every _retain in feature.py targets project_bank), so an org
-# entry here would consolidate an empty bank forever. See ROADMAP §9.3.
+# FR-404 — nightly memory consolidation. Project banks consolidate first;
+# gotchas recurring in 2+ of them then promote into the org bank, which
+# reflects too. Org gets its writers via this nightly promotion (E-25) —
+# never via a `banks:` entry, which would consolidate an unwritten bank.
 #
 # Applied with: python -m sdlc.cli schedules apply --dry-run
 spec:
@@ -12,3 +13,4 @@ action:
     - "project:default"
   backend: hindsight
   base_url: "http://localhost:8888"
+  org_bank: "org"
