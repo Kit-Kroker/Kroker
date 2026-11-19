@@ -109,17 +109,21 @@ git commit -m "feat(maintenance): FR-502 risk classification — ops verbs are H
 
 **Interfaces:**
 - Consumes: `bears_human_required` from Task 1; `workflow.patched` (in-workflow only).
-- Produces: the wire behavior later docs describe — `human_only = inc.gate_round > 1 or (bears_human_required(inc.plan) and workflow.patched("maint-risk-class"))`.
+- Produces: the wire behavior later docs describe — `human_only = inc.gate_round > 1 or (bears_human_required(inc.plan) and workflow.patched("maint-risk-class"))`; **and (extended 2026-11-19, fix round 1) the `_reprice` policy submit (`maintenance.py:272-279`) is suppressed for ops-bearing plans behind the same marker**: `if inc.plan.effective > cfg.threshold and not (bears_human_required(inc.plan) and workflow.patched("maint-risk-class")):` — `_reprice` resolves gates via `submit_gate_decision`, which ignores HARD/SOFT, so without this the conjunct's promise has a side door. Classification-first order everywhere (pure-code_fix reprices take no marker).
 
 - [ ] **Step 1: Write the failing temporal test** in `tests/maintenance/test_workflow_risk_class.py`
 
+*(Corrected 2026-11-19, fix round 1 — the original scenario was arithmetically infeasible: `build_break` is JUDGEMENT, ceiling 0.6; a 2-action unreproduced plan floors at 0.40 and `threshold` is bounded `ge=0.5`, so no legal config auto-approves at construction. The only reachable cell: `commit_env_file` → `env_file_tracked`, the fixture's sole MECHANICAL finding, with `threshold=0.7` — unreproduced floor 0.75 > 0.7 gives the RED; the reproduced sibling's 0.55 stays below.)*
+
 Follow the `test_workflow_us1.py` harness verbatim: `WorkflowEnvironment` + `Worker` on a dedicated `TASK_QUEUE = "maint-risk"`, `_cfg`/`_state` helpers, `_maintainer_activities(proposal)` with a TestModel proposal, `fake_triage.TRIAGE_ACTIVITIES`, `commit_build_break` from `tests/maintenance/conftest.py`; `pytestmark = [pytest.mark.temporal, pytest.mark.asyncio]`.
 
-The proposal: one `code_fix` action plus one `ops` action (`ops_action="rollback"`), `self_confidence=0.95` (above the default 0.8 threshold — Review Focus 1). The cell asserts:
+The proposal: one `code_fix` action plus one `ops` action (`ops_action="rollback"`), `self_confidence=0.95` (effective 0.75 > threshold 0.7 — Review Focus 1). The first cell asserts:
 1. after the cycle, the incident is `awaiting_decision` — NOT auto-approved (no `decided_by="policy"` anywhere in the state);
 2. resolving the gate via a human approve (the US-suite `submit_gate_decision` pattern) starts exactly one child seeded with the code_fix paths — the ops action is recorded `not executed — ops proposal only`.
 
 Name it `test_ops_bearing_plan_is_human_only_even_above_threshold`.
+
+The second cell (added 2026-11-19, fix round 1) pins the reprice suppression: an ops-bearing plan that is pending BELOW threshold at construction and whose recompute lifts `effective` above it on reproduction must still receive NO `decided_by="policy"` decision — the gate stays awaiting the human. Name it `test_reprice_cannot_policy_approve_an_ops_bearing_plan`. Document the floor arithmetic in its docstring (the reachability discipline of cell 1).
 
 - [ ] **Step 2: Run to verify RED**
 
