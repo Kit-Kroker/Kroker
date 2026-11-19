@@ -34,6 +34,10 @@ This file carries only what is true *here*.
 - Maintenance imports triage **types** only (`TriageFinding`, `RepoTriage`,
   `FixClass`, `finding_identity`) — never calls triage code from here; the
   triage child workflow is started by `workflows/maintenance.py`.
+- Ops actions are risk-classed (`gate.risk_class`, FR-502): every ops
+  action is `HUMAN_REQUIRED` today, so an ops-bearing plan's repair gate
+  is HARD from birth behind the `maint-risk-class` marker — policy can
+  never approve one; execution stays never (GATE 2).
 
 ## Modules and verbs
 

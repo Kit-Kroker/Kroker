@@ -561,9 +561,10 @@ tuning.
 > today is the triage signals (build probe, secrets, packages…). The section's
 > Execute/Report paragraphs below are now landed (023b); read them as "is".
 > FR-501 and FR-503 are closed (2026-11-19, both halves re-verified green);
-> FR-502's code-fix clause is delivered and re-verified, its ops clause stays
-> open — the honest partial recorded by owner ruling 2026-11-19, superseding
-> the "at P4 close" timing (the deferral itself stands). The three external-idea candidates
+> FR-502 is closed too: ops actions are risk-classed (2026-11-19) — pure
+> classification, HARD-from-birth gate conjunct and reprice suppression
+> behind `maint-risk-class`; execution stays never (GATE 2), the ops
+> adapters stay deferred past P4. The three external-idea candidates
 > (A4, B2, D1 in `docs/reports/external-ideas-2026-09.md`) land on
 > Execute/Report and are unblocked for re-reading with 023b.
 

@@ -20,7 +20,7 @@ There is still no `--gate-policy` or `--on-timeout` flag.
 
 ## `sdlc maintain incidents` (output additions)
 
-- The new columns are `attempt`, `reopens` and `child`.
+- 2026-11-19 refresh — no single column list existed (the 023 base contract's list was never rolled forward, a staleness pre-existing since 023b, and FR-502 adds a column now). The full list today is `INC-n`, `state`, `key`, `seen`, `attempt`, `reopens`, `eff.conf`, `gate`, `class`, `child`: 023b added `attempt`, `reopens` and `child`; FR-502 (2026-11-19) added `class` — one `<verb>[<CLASS>]` tag per classed action, comma-space-joined, `-` when the plan has none.
 - New states render verbatim: `approved`, `queued`, `executing`, `verifying`, `verified`, `reopened`, `closed`.
 - For an incident in `verified`, the child id is shown so the operator can find its merge gate in `sdlc inbox`.
 
