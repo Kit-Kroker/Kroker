@@ -30,8 +30,8 @@ def test_nightly_reflect_targets_reflect_workflow_nightly():
 
 def test_nightly_reflect_is_project_scoped_only():
     # Scope guard (spec: Findings §3). org_bank has no writers — every
-    # _retain call site in feature.py passes project_bank — so an org bank
-    # here would consolidate nothing, nightly, forever.
+    # retain call site (stage steps and workflow hosts) passes project_bank —
+    # so an org bank here would consolidate nothing, nightly, forever.
     a = {x.id: x for x in load_schedules(DEFAULT_SCHEDULES_DIR)}["nightly-reflect"]
     for bank in a.action.banks:
         assert bank.startswith("project:"), (

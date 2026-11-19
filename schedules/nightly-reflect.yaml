@@ -1,5 +1,5 @@
 # FR-404 — nightly memory consolidation. Project banks only: org_bank has no
-# writers yet (every _retain in feature.py targets project_bank), so an org
+# writers yet (every retain call site targets project_bank), so an org
 # entry here would consolidate an empty bank forever. See ROADMAP §9.3.
 #
 # Applied with: python -m sdlc.cli schedules apply --dry-run
