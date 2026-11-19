@@ -3,6 +3,9 @@
 import shutil
 from pathlib import Path
 
+import pytest
+
+from sdlc import runs_paths
 from sdlc.benchmarks.acceptance import (
     Reason,
     SuiteCheck,
@@ -236,7 +239,26 @@ def test_mixed_outcome_same_last_stage_merge():
 
 
 def test_sc003_recompute_stored_acceptance(tmp_path: Path):
-    """SC-003: recompute stored acceptance.yaml via non-offline accept path on tmp_path copy."""
+    """SC-003: recompute stored acceptance.yaml via non-offline accept path on tmp_path copy.
+
+    The evidence store (runs/benchmarks — gitignored machine history) is the
+    input, so the test is data-dependent by design: with NO records at all
+    there is nothing to recompute, and the test skips with a stated reason
+    instead of failing — a fresh clone and CI can never hold the store, and
+    its absence is what made this a standing baseline failure (rounds
+    019-026; the 017 commit already noted 6-of-7 stale oracle_ids). With
+    records present the original contract stands: at least one case's stored
+    runs must match its current oracle identity, else the stored acceptance
+    evidence has drifted.
+    """
+    records_root = Path(runs_paths.benchmarks_root())
+    if not (records_root.is_dir() and any(records_root.rglob("*.jsonl"))):
+        pytest.skip(
+            f"no benchmark records under {records_root} — SC-003 recompute "
+            "needs stored run history (gitignored; exists only on machines "
+            "that ran benchmarks)"
+        )
+
     cases_dir = Path("benchmarks/cases")
     checked = 0
 
@@ -278,4 +300,7 @@ def test_sc003_recompute_stored_acceptance(tmp_path: Path):
         assert recomputed.separation == stored.separation
         checked += 1
 
-    assert checked > 0, "At least one case with stored records must be verified for SC-003"
+    assert checked > 0, (
+        "At least one case with stored records must be verified for SC-003"
+        " (records exist but none match a current oracle identity: drift)"
+    )

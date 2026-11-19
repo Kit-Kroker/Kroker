@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-11-19 (FR-911 closed — the AssessmentWorkflow EDCR shell's four SHALL clauses verified on today's tree: durable pinned-commit DAG with report-after-assess and no phase-status file (replay-pinned), enrich/gate not phases; three stub bodies stay owned by E-51/E-52 on their own rows; battery 102 fast + 24 temporal passed; details in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
+| Last verified | 2026-11-19 (SC-003 baseline id resolved — the data-dependent acceptance-recompute test now skips with a stated reason when the gitignored `runs/benchmarks` store is absent and still fails on real drift; full default tier exit 0, the first green tier since 2026-10-19; same session closed FR-806 + FR-911 and refreshed the month-red E-2 pin — details in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
