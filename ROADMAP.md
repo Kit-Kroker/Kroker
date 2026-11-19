@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-11-18 (round 025 — SC-2 operator-time instrument plus the one fleet run: SC-1 and SC-2 n/a-missed, SC-3 0.385 missed, P4 exit not met, conditional round 026 proposed for the owner; details in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md) and [`docs/operations/fleet-runs.md`](docs/operations/fleet-runs.md)) |
+| Last verified | 2026-11-19 (round 026 — SC-1 0.60 missed (3/5, all misses the validator/collector-artifact class), SC-2 1.47 min passed, SC-3 0.773/0.842-corrected passed, lint conversion 3/3→0/4, first oracle-1.0 success, $9.72/$13.95; P4 exit not met on SC-1 — harness-side fix named; details in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md) and [`docs/operations/fleet-runs.md`](docs/operations/fleet-runs.md)) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -260,7 +260,7 @@
   deadlock) did not bite this run; they remain open.
 - [ ] ⚠️ **P3** — Hindsight memory + confidence-gated soft gates → *SC-4 and SC-6 measurable*
   Memory (recall/retain/watermark) ✅ and soft gates ✅ done; SC-4/SC-6 not yet measurable (need retro/reflect wiring + real runs). **The retro stage that makes them measurable is E-32** (§9.8); the on/off memory delta is the measurement E-31/E-33 exist to run.
-- [ ] ⚠️ **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*. **R025 fleet ran (2026-11-18): SC-1 n/a-missed, SC-2 n/a-missed (export-path finding), SC-3 0.385 missed** — exit criterion **not met**; 0/6 scored successes at $8.755/$8.77 (report: `kroker-fleet-runs-025/fleet-report.md`). Conditional round 026 proposed, owner decides.
+- [ ] ⚠️ **P4** — MCP surface, maintenance loop (DAPER), fleet scale → *SC-1..3 at target*. **R026 fleet ran (2026-11-19): SC-1 0.60 missed (3/5, all three misses the validator/collector-artifact class), SC-2 1.47 min passed, SC-3 0.773/0.842-corrected passed (+0.39 over R025), lint conversion 3/3→0/4, one oracle-1.0 success at $9.72/$13.95** — exit criterion **not met (SC-1)**; the named gap is harness-side (the collector's verdict must derive from the contract test's exit, not a probe chain) (report: `kroker-fleet-runs-026/fleet-report.md`). **R025 for reference:** SC-1/SC-2 n/a-missed, SC-3 0.385 missed, 0/6 successes at $8.755/$8.77 (`kroker-fleet-runs-025/fleet-report.md`).
   MCP surface landed (E-11, 2026-11-14 — FR-602, round 022). DAPER's loop and
   execute/report halves landed (023a loop + gate, 023b execute/report — 2026-11-15;
   FR-502's code-fix clause delivered, its ops clause open). Fleet scale not started.
@@ -482,6 +482,14 @@ as tracked rather than accidental.
   stand-in, interactions counted); the 24 h soft auto-continue path
   never fired. An unattended-mode fleet needs either gates-off runs or
   multi-day parks — an owner decision for the conditional 026.
+  **Measured at R026 (2026-11-19, `kroker-fleet-runs-026/
+  fleet-report.md` §SC)**: **0.60 (3/5, CI95 [0.15, 0.95]) — missed
+  vs ≥0.80, +0.60 over R025's n/a-miss.** HARD-policy fleet, PRD rule
+  (planned gates fine; escalations unplanned); SC-1-strict 0.0 by
+  construction (the automated attendant is a non-policy decider). The
+  two failing runs' 3 unplanned escalations are ALL the
+  validator/collector-artifact class (green contract tests masked by
+  malformed probes) — without it SC-1 reads 5/5.
 - [ ] — **SC-2** ≤15 min operator time — not measurable.
   **Measured at R025 (2026-11-18, fleet report §SC-2)**: n/a — the
   rollup's operator-time medians read retro `summary.json` exports,
@@ -490,6 +498,12 @@ as tracked rather than accidental.
   Companion disclosure: 87 automated attendant interactions, 0 human,
   across smoke + 6 scored runs; on-call latency seconds-to-minutes
   (20 s poll), one pre-attendant 2 h 45 m park.
+  **Measured at R026 (2026-11-19, `kroker-fleet-runs-026/
+  fleet-report.md` §SC)**: **1.47 min median, shipped and all-scored
+  rows alike (n=5, ≤15 target) — PASSED**; the export-path gap is what
+  026's FR-001..005 fixed (the rollup reads the runs root; 5/5
+  summarized). HARD policy, automated attendant, 0 human interactions
+  fleet-wide.
 - [ ] — **SC-3** fix-loop success ≥70% — mechanism exists; no aggregate metric captured. Captured per run as a coordination metric by the benchmark (§9.8, E-36 heatmap): fix-loop attempts vs resolution, per stage.
   **Aggregation landed** (`src/sdlc/benchmarks/sc_rollup.py`, `sdlc benchmark score`);
   the number is n/a until 5+ runs exist.
@@ -497,6 +511,15 @@ as tracked rather than accidental.
   loops, n≥floor) — missed.** Escalations ended in approve-to-proceed,
   not repair; scored set 0/6 successes (best oracle 0.861, blocked at
   `lint_clean` alone).
+  **Measured at R026 (2026-11-19, `kroker-fleet-runs-026/
+  fleet-report.md` §SC)**: **0.773 (17/22) as printed; 0.842 (16/19)
+  FR-004-corrected (the rollup counts the smoke's 3 loops — disclosed
+  defect, backlog card) — PASSED vs ≥0.70, +0.388/+0.457 over R025.**
+  Partition: **SC-3-lint 1.00 (6/6)** — every per-task lint loop
+  resolved in-loop (025: lint struck only at merge, blocking 3/3
+  merge-reaching runs; 026: 0/4 blocked); SC-3-non-lint 0.769
+  corrected. The 3 unresolved loops are all the
+  validator/collector-artifact class.
 - [ ] — **SC-4** repeat-clarification <10% by run 10 — needs reflect wiring (FR-404) + runs. **The per-run signal now accrues:** the retro stage (E-32) emits a `RunSummary` carrying `clarifications[].answered_by` (`human`/`suggested`/`unanswered`) on every terminal path. The cross-run *aggregation* into a repeat-clarification rate remains the benchmark's job (§9.8), via the memory-on cells that generate the run-10 series.
   **Aggregation landed** (`src/sdlc/benchmarks/sc_rollup.py`, `sdlc benchmark score`);
   the number is n/a until 5+ runs exist.

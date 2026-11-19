@@ -4,6 +4,44 @@ Per-round verification history moved verbatim out of the `Last verified` cell of
 [`ROADMAP.md`](../../ROADMAP.md) (task `2026-11-03-roadmap-last-verified-log`).
 Newest first; **append new entries at the top** — never edit the ROADMAP cell
 beyond its one-sentence latest entry. The final entry (2026-10-11, Phase 3) is
+## 2026-11-19 — Round 026 (P4 exit fixes + re-fleet)
+
+Fleet: 5 scored runs + smoke (attempt 2) at one commit `ec3f128f…`,
+HARD policy, arm `zai-coding-plan-glm-5.3`, automated attendant
+(63 interactions, 0 human), $9.7182 judge / $13.95 ceiling, EXA
+within $1.00, zero infra stops. Report:
+`kroker-fleet-runs-026/fleet-report.md`; verification §026-A/§026-B
+in the round's spec dir.
+
+- **SC-1 0.60 (3/5, CI95 [0.15, 0.95]) — MISSED vs ≥0.80** (+0.60
+  over R025's n/a-miss). All three unplanned escalations (readtime
+  T-07, lice T06/T07) are the validator/collector-artifact class:
+  green contract tests masked by malformed inline probes
+  (`tests_passed=false` over "62 tests OK, exit 0"). Without the
+  class: 5/5. SC-1-strict 0.0 by construction (attendant = non-policy
+  decider).
+- **SC-2 1.47 min median (shipped = all-scored, n=5) — PASSED** ≤15;
+  R025 could not measure (export path); 026's FR-001..005 fixed the
+  rollup to read the runs root (5/5 summarized, commit set exactly
+  one by the rollup itself).
+- **SC-3 0.773 (17/22) as printed; 0.842 (16/19) FR-004-corrected —
+  PASSED** vs ≥0.70 (R025: 0.385). Partition: SC-3-lint **1.00 (6/6)**
+  — every per-task lint loop resolved in-loop; SC-3-non-lint 0.769
+  corrected. The rollup counting the smoke's 3 loops is a disclosed
+  FR-004 defect (backlog card).
+- **Lint conversion: 025 3/3 merge-reaching runs blocked by
+  `lint_clean` → 026 0/4 blocked** — per-task lint (T013–T016)
+  catches introduced findings inside the loop instead (6 lint-only
+  loops, all resolved at a1).
+- **First oracle-1.0 success** (cat-cafe repeat; same-commit variance
+  0.639 → 1.0). Scored set 1/5 successes; lice still 0.000 both
+  rounds.
+- **P4 exit NOT met (SC-1)** — the named gap is harness-side: the
+  collector's tests verdict must derive from the contract test's own
+  exit rather than a chain a stray probe can fail (027 candidate,
+  evidence in the fleet report §honest-misses).
+
+
 out of date order as inherited; left as-is.
 
 Trailing note carried by the old cell: (docs(benchmarks): the axis in the living docs (T010))
