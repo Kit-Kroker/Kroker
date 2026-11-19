@@ -190,6 +190,7 @@ git commit -m "feat(maintenance): risk classes surface — gate context names hu
 
 **Files:**
 - Modify: `src/sdlc/maintenance/AGENTS.md` (invariants list)
+- Modify: `.specify/specs/023b-daper-acts-verifies/contracts/cli.md` (the incidents-table column list — stale since 023b, and this round adds the class column; same-round clause update per the root AGENTS.md artifact-boundary rule, added 2026-11-19)
 - Modify: `ROADMAP.md` (FR-502 row ~line 342, "Last verified" cell)
 - Modify: `ARCHITECTURE.md` (§7 banner ~line 563)
 - Modify: `docs/roadmap/last-verified-log.md` (prepend)
