@@ -33,7 +33,11 @@ with workflow.unsafe.imports_passed_through():
     from ..agents.roles import OUTPUT_RETRIES, STAGE_MODELS, t_maintainer
     from ..core.models import GateDecision, GateOutcome, GateSettings
     from ..maintenance.confidence import confidence_floor
-    from ..maintenance.gate import escalation_gate_settings, repair_gate_settings
+    from ..maintenance.gate import (
+        bears_human_required,
+        escalation_gate_settings,
+        repair_gate_settings,
+    )
     from ..maintenance.incidents import step
     from ..maintenance.models import (
         Incident,
@@ -371,7 +375,15 @@ class MaintenanceWorkflow(GateHost):
         # 023b: the gate opens at the incident's CURRENT round, and every
         # round past the first is human-only — a refusal must never be
         # re-approved by policy (no auto-decision, no re-approve loop).
-        human_only = inc.gate_round > 1
+        # 2026-11-19 FR-502 (maint-risk-class): an ops-bearing plan is
+        # human-only from birth too — policy can never approve it, whatever
+        # the confidence. bears_human_required runs BEFORE workflow.patched
+        # so a pure-code_fix run never takes the marker and old histories
+        # replay the conjunct as False, commands unchanged (payload-guard
+        # precedent).
+        human_only = inc.gate_round > 1 or (
+            bears_human_required(inc.plan) and workflow.patched("maint-risk-class")
+        )
         auto = (
             GateDecision(gate=name, outcome=GateOutcome.APPROVE, decided_by="policy")
             if not human_only and inc.plan.effective > cfg.threshold
