@@ -13,6 +13,8 @@ from pathlib import PurePosixPath
 from pydantic import BaseModel, Field
 from temporalio import activity
 
+from .models import CodeArtifact as CodeArtifact  # re-export: FR-702 code-stage consumer
+
 
 def _git(args: list[str], cwd: str) -> subprocess.CompletedProcess:
     """Run git in ``cwd`` with the dubious-ownership check bypassed.

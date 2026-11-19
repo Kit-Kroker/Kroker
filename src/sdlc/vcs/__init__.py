@@ -32,6 +32,7 @@ from .integration import (
     remove_verification_tree,
     setup_integration_branch,
 )
+from .models import CodeArtifact
 from .worktree import (
     CleanupWorktreesInput,
     CleanupWorktreesReport,
@@ -63,6 +64,7 @@ __all__ = [
     "BaseWorktreeInput",
     "CleanupWorktreesInput",
     "CleanupWorktreesReport",
+    "CodeArtifact",
     "CommittedBytesInput",
     "DiffInput",
     "DriftInput",
