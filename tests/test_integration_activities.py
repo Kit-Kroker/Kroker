@@ -75,7 +75,10 @@ def test_setup_returns_worktree_path(git_repo):
     assert (Path(handle.worktree_path) / "README.md").exists()
 
 
-def test_diff_anchors_to_branch_point_not_base(git_repo):
+def test_diff_anchors_to_branch_point_not_base(git_repo, monkeypatch):
+    # FR-702: the diff is claim-checked via LocalFileStore()'s env root —
+    # pin it so the direct (outside-worker) call never writes beside CWD.
+    monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(Path(git_repo).parent / "art"))
     handle = asyncio.run(
         setup_integration_branch(
             IntegrationInput(repo_path=git_repo, run_id=RUN, base_branch="main")
@@ -107,8 +110,8 @@ def test_diff_anchors_to_branch_point_not_base(git_repo):
     _add_commit(b.path, "b.txt", "from B\n", "B work")
     assert res.merged
     diff = asyncio.run(get_task_diff(DiffInput(worktree=b.path, branch_point=b.branch_point)))
-    assert "b.txt" in diff["files"]
-    assert "a.txt" not in diff["files"]  # A's change is upstream, not B's diff
+    assert "b.txt" in diff.files
+    assert "a.txt" not in diff.files  # A's change is upstream, not B's diff
 
 
 def test_merge_conflict_is_detected_and_aborted(git_repo):

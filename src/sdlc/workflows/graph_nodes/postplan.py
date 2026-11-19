@@ -126,6 +126,11 @@ async def analyze_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
         DiffInput(worktree=integration.worktree_path, branch_point=nc.facts.base_sha or ""),
         **pools.on_harness(ACT, cfg.harness_queue),
     )
+    # FR-702 interim: replayed pre-claim-check histories decode their recorded
+    # dict result into CodeArtifact (type-aware decode); flatten back to the
+    # dict view until AnalyzeResult/merge carry the artifact (FR-702 Task 6).
+    if not isinstance(integration_diff, dict):
+        integration_diff = integration_diff.model_dump()
     done = {r.task_id: r for r in results.task_results}
     outcome = await analyze.step(
         nc.ctx,

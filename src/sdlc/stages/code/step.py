@@ -729,6 +729,12 @@ async def step(
             DiffInput(worktree=worktree, branch_point=branch_point),
             **pools.on_harness(ACT, cfg.harness_queue),
         )
+        # FR-702 interim: replayed pre-claim-check histories decode their
+        # recorded dict result into CodeArtifact (the pydantic converter
+        # decodes type-aware), so flatten back to the dict view this stage
+        # still speaks — consumers move to art + load_diff in FR-702 Task 5.
+        if not isinstance(diff, dict):
+            diff = diff.model_dump()
         qa_spend = RoleUsage(role="qa", model=resolve_role_model(cfg, "qa"))
         qa = await qa_step(
             ctx,
