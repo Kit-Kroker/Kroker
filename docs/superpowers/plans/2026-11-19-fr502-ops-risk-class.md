@@ -204,7 +204,7 @@ git commit -m "feat(maintenance): risk classes surface — gate context names hu
 
 `uv run ruff check src/sdlc/maintenance src/sdlc/workflows/maintenance.py && uv run ruff format --check src/sdlc/maintenance src/sdlc/workflows/maintenance.py && uv run mypy && uv run python scripts/check_file_size.py`
 `uv run pytest tests/maintenance/ -q` → exit 0 (492 + the new fast cells: Task 1's four + Task 3's render cells).
-`uv run pytest -m temporal tests/maintenance/ -q` → exit 0 (84 tests: 83 + the new cell).
+**Battery (Task 4, Step 2)** — `uv run pytest -m temporal tests/maintenance/ -q` → exit 0 (all temporal cells, including `test_workflow_risk_class.py` and `tests/maintenance/test_workflow_exec_us5.py` — added 2026-11-19 per the Task 2 review: the only existing e2e pin of the pure-code_fix reprice branch the conjunct modified).
 Any red is fixed in the owning task's files, never suppressed.
 
 - [ ] **Step 3: Flip FR-502 to `[x]`** with the landing note (both clauses delivered: code-fix 023b, ops risk-classing 2026-11-19 — classification pure, HARD-from-birth conjunct, classes surfaced; execution still never per GATE 2; adapters deferred past P4), refresh the one-sentence "Last verified" cell, prepend the full entry to `docs/roadmap/last-verified-log.md` (root AGENTS.md rule), and update the §7 banner's FR-502 sentence to "ops actions are risk-classed (2026-11-19); execution stays never."
