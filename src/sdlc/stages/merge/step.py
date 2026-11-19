@@ -47,7 +47,7 @@ with workflow.unsafe.imports_passed_through():
     from ...observability.trace import RunEventKind
     from ...pending import GateContext
     from ...validators.verdicts import Verdict
-    from ...vcs import BaseWorktree, BaseWorktreeInput, prepare_base_worktree
+    from ...vcs import BaseWorktree, BaseWorktreeInput, CodeArtifact, prepare_base_worktree
     from ..plan.models import PlanDrift
     from ..qa.activities import LintInput, ScopedSecurityScanInput, run_lint, scoped_security_scan
     from ..qa.models import ScopedSecurityReport
@@ -295,7 +295,7 @@ async def step(
     idea: IdeaBrief,
     arch: Any = None,
     plan: Any = None,
-    integration_diff: dict[str, Any] | None = None,
+    integration_diff: CodeArtifact | None = None,
     changed_files: list[str] | None = None,
     base_sha: str = "",
     untraced: list[str] | None = None,
@@ -324,18 +324,15 @@ async def step(
         results_list = []
 
     if changed_files is None:
-        if integration_diff and isinstance(integration_diff, dict):
-            changed_files = list(integration_diff.get("files", []))
-        else:
-            changed_files = []
+        # FR-702: the integration diff rides as a CodeArtifact — the scoped
+        # checks' file list and rename pairs derive straight off the artifact.
+        changed_files = integration_diff.files if integration_diff is not None else []
 
     if untraced is None:
         untraced = []
 
     renames = (
-        [list(p) for p in integration_diff.get("renames", [])]
-        if isinstance(integration_diff, dict)
-        else []
+        [list(pair) for pair in integration_diff.renames] if integration_diff is not None else []
     )
     base: BaseWorktree = await _exec_activity(
         prepare_base_worktree,

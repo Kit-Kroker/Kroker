@@ -9,6 +9,8 @@ from sdlc.memory.models import MemoryKind
 from sdlc.stages import analyze
 from sdlc.stages.analyze.models import AnalysisReport, CriterionTrace
 from sdlc.stages.plan.models import DevTask
+from sdlc.vcs.git import DiffInput
+from sdlc.vcs.models import CodeArtifact
 
 
 @pytest.mark.clause("ANALYZE-1.5")
@@ -72,13 +74,14 @@ async def test_analyze_step_clean_context_execution():
     task = DevTask(
         id="t1", title="Task 1", description="Task description", acceptance_criteria=["criterion-1"]
     )
-    diff = {"stat": "file.py | 2 +-", "patch": "--- a\n+++ b"}
+    diff = CodeArtifact(stat="file.py | 2 +-")
 
     res = await analyze.step(
         ctx,
         cfg=cfg,
         tasks=[task],
         diff=diff,
+        patch="--- a\n+++ b",
         integration_wt="/fake/wt",
         analyst_agent=MagicMock(),
     )
@@ -118,13 +121,14 @@ async def test_analyze_step_retains_gotcha_when_criteria_untraced():
     task = DevTask(
         id="t1", title="Task 1", description="Task description", acceptance_criteria=["criterion-1"]
     )
-    diff = {"stat": "file.py | 2 +-", "patch": "--- a\n+++ b"}
+    diff = CodeArtifact(stat="file.py | 2 +-")
 
     await analyze.step(
         ctx,
         cfg=cfg,
         tasks=[task],
         diff=diff,
+        patch="--- a\n+++ b",
         integration_wt="/fake/wt",
         analyst_agent=MagicMock(),
     )
@@ -133,3 +137,117 @@ async def test_analyze_step_retains_gotcha_when_criteria_untraced():
     gotchas = [text for kind, _, text, _ in ctx.retained if kind == MemoryKind.GOTCHA]
     assert len(gotchas) == 1
     assert "t1: criterion-1" in gotchas[0]
+
+
+@pytest.mark.asyncio
+async def test_analyze_step_self_fetch_uses_integration_label_and_load_diff(monkeypatch):
+    """FR-702: with no ``diff=`` the fallback self-fetches ONCE under the
+    ``integration`` label and materializes the patch text through ONE
+    load_diff read-back — the patch never rides the artifact inline."""
+    import importlib
+
+    from sdlc.artifacts.read import LoadDiffInput, LoadSessionResult
+    from sdlc.core.models import ArtifactRef
+
+    step_mod = importlib.import_module("sdlc.stages.analyze.step")
+    seen: dict = {}
+    ref = ArtifactRef(kind="diff", uri="file:///store/diffs/integration.patch", sha256="0" * 64)
+
+    async def fake_get_task_diff(inp: DiffInput) -> CodeArtifact:
+        seen["diff_input"] = inp
+        return CodeArtifact(files=["a.py"], stat="a.py | 1 +", patch_ref=ref)
+
+    async def fake_load_diff(inp: LoadDiffInput) -> LoadSessionResult:
+        seen["load_input"] = inp
+        return LoadSessionResult(text="++dry patch++", truncated=False)
+
+    monkeypatch.setattr(step_mod, "get_task_diff", fake_get_task_diff)
+    monkeypatch.setattr(step_mod, "load_diff", fake_load_diff)
+
+    class _PromptCtx:
+        def stage(self, *a, **k):
+            pass
+
+        async def run_role(self, cfg, role, model, agent, prompt, into=None):
+            seen["prompt"] = prompt
+            return MagicMock(
+                output=AnalysisReport(
+                    traceability=[
+                        CriterionTrace(task_id="t1", criterion="criterion-1", tests=["test_c1"])
+                    ],
+                    summary="all traced",
+                )
+            )
+
+        async def record(self, cfg, record) -> None:
+            pass
+
+        async def retain(self, *a, **k):
+            pass
+
+    await step_mod.step(
+        _PromptCtx(),
+        cfg=PipelineConfig(),
+        tasks=[
+            DevTask(
+                id="t1",
+                title="Task 1",
+                description="Task description",
+                acceptance_criteria=["criterion-1"],
+            )
+        ],
+        integration_wt="/fake/wt",
+        base_branch="main",
+        analyst_agent=MagicMock(),
+    )
+
+    # one fetch, labeled for the integration diff, against the base branch
+    assert seen["diff_input"].label == "integration"
+    assert seen["diff_input"].worktree == "/fake/wt"
+    assert seen["diff_input"].branch_point == "main"
+    # one read-back of the stored patch, and both land in the prompt
+    assert seen["load_input"].ref is ref
+    assert "a.py | 1 +" in seen["prompt"]
+    assert "++dry patch++" in seen["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_analyze_step_without_worktree_skips_the_self_fetch(monkeypatch):
+    """No worktree -> no self-fetch: the diff stays absent and the prompt
+    carries an empty stat/patch rather than a doomed activity call."""
+    import importlib
+
+    step_mod = importlib.import_module("sdlc.stages.analyze.step")
+
+    async def boom(inp):
+        raise AssertionError("no worktree: get_task_diff must not be scheduled")
+
+    monkeypatch.setattr(step_mod, "get_task_diff", boom)
+
+    class _PromptCtx:
+        def stage(self, *a, **k):
+            pass
+
+        async def run_role(self, cfg, role, model, agent, prompt, into=None):
+            return MagicMock(output=AnalysisReport(traceability=[], summary="nothing traced"))
+
+        async def record(self, cfg, record) -> None:
+            pass
+
+        async def retain(self, *a, **k):
+            pass
+
+    await step_mod.step(
+        _PromptCtx(),
+        cfg=PipelineConfig(),
+        tasks=[
+            DevTask(
+                id="t1",
+                title="Task 1",
+                description="Task description",
+                acceptance_criteria=["criterion-1"],
+            )
+        ],
+        integration_wt="",
+        analyst_agent=MagicMock(),
+    )

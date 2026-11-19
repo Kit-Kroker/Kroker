@@ -30,6 +30,7 @@ from sdlc.stages.merge.models import MergeVerdict
 from sdlc.stages.qa.models import QAReport
 from sdlc.stages.review.lenses import LensOutcome, LensPresence
 from sdlc.stages.review.models import ReviewReport
+from sdlc.vcs.models import CodeArtifact
 from sdlc.workflows.models import TaskResult
 
 
@@ -170,6 +171,68 @@ async def test_merge_fails_closed_on_absolute_gate_failure():
     assert "build_integration_green" in res
     assert len(ctx.gates_called) == 0
     assert any(r["outcome"] == BenchmarkOutcome.FAIL for r in ctx.recorded)
+
+
+@pytest.mark.asyncio
+async def test_scoped_checks_derive_changed_files_and_renames_from_the_artifact():
+    """FR-702: the integration diff rides as a CodeArtifact — the scoped
+    checks' changed_files and rename pairs derive from it, with no dict
+    accessors left in the slice."""
+    ctx = _StubCtx()
+    idea = IdeaBrief(
+        title="Feature",
+        description="Test",
+        repo_url="/repo",
+        mode=ProjectMode.GREENFIELD,
+    )
+    results = [
+        TaskResult(
+            task_id="t1",
+            status="done",
+            attempts=1,
+            branch="b",
+            qa=None,
+            lens_outcomes=_lenses_ran(),
+        )
+    ]
+    failing_gate = GateReport(
+        passed=False,
+        checks=[
+            CheckResult(
+                name="build_integration_green",
+                passed=False,
+                classification=CheckClass.ABSOLUTE,
+                detail="missing QA",
+            )
+        ],
+        blocking=["build_integration_green"],
+        overridden=[],
+    )
+
+    with (
+        patch("sdlc.stages.merge.step.evaluate_gate", new_callable=AsyncMock) as mock_eg,
+        patch("sdlc.stages.merge.step.run_integration_checks", new_callable=AsyncMock) as mock_ic,
+        patch("sdlc.stages.merge.step.measure_coverage", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.scoped_security_scan", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.prepare_base_worktree", new_callable=AsyncMock),
+    ):
+        mock_eg.return_value = failing_gate
+        res = await merge.step(
+            ctx,
+            cfg=PipelineConfig(),
+            task_results=results,
+            integration_wt="/wt",
+            idea=idea,
+            integration_diff=CodeArtifact(
+                files=["src/a.py", "src/b.py"], renames=[["old.py", "new.py"]]
+            ),
+        )
+
+    assert isinstance(res, str)
+    assert res.startswith("rejected:merge:absolute-gate-failed")
+    scoped = mock_ic.call_args.args[0]
+    assert scoped.changed_files == ["src/a.py", "src/b.py"]
+    assert scoped.renames == [["old.py", "new.py"]]
 
 
 @pytest.mark.clause("MERGE-1.3")

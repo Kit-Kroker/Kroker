@@ -13,6 +13,7 @@ from sdlc.graph.router import Activation
 from sdlc.stages.analyze.models import AnalysisReport
 from sdlc.stages.plan.models import DevTask, ImplementationPlan
 from sdlc.vcs import IntegrationHandle
+from sdlc.vcs.models import CodeArtifact
 from sdlc.workflows.graph_catalog import NOT_EXECUTABLE, SHIPPED
 from sdlc.workflows.graph_nodes import HANDLERS, postplan
 from sdlc.workflows.graph_nodes.base import NodeContext, RunFacts, StoredPayload
@@ -263,7 +264,7 @@ def test_merge_rejection_and_pr(monkeypatch):
     analysis = AnalyzeResult(
         report=AnalysisReport(traceability=[], summary="s", confidence=0.5),
         untraced=["c"],
-        integration_diff={"files": []},
+        integration_diff=CodeArtifact(),
     )
     payloads = {
         "code#1.results": StoredPayload(model=BuildResult(task_results=[]), producer="code#1"),
