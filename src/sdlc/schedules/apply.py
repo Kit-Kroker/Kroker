@@ -51,7 +51,11 @@ def to_temporal(a: ScheduleAsset) -> Schedule:
     else:
         args = [
             ReflectScheduleInput(
-                banks=a.action.banks, backend=a.action.backend, base_url=a.action.base_url
+                banks=a.action.banks,
+                backend=a.action.backend,
+                base_url=a.action.base_url,
+                org_bank=a.action.org_bank,
+                promote_min_projects=a.action.promote_min_projects,
             )
         ]
     return Schedule(
@@ -84,7 +88,10 @@ def from_temporal(sid: str, sched: Schedule) -> ScheduleAsset | None:
         asset_action: ScheduleAction = MaintenanceKickAction(project=kinp.project)
     else:
         # Tolerates both a decoded ReflectScheduleInput and the plain dict
-        # the default converter can hand back for an untyped arg.
+        # the default converter can hand back for an untyped arg. A pre-E-25
+        # recorded arg lacks the org fields; both models default them
+        # (None / 2), so such a Schedule still validates with the org half
+        # off — the live schedule keeps reconciling, no re-record needed.
         rinp = ReflectScheduleInput.model_validate(action.args[0])
         asset_action = ReflectAction(
             banks=rinp.banks,
@@ -92,6 +99,8 @@ def from_temporal(sid: str, sched: Schedule) -> ScheduleAsset | None:
             # re-validates the literal at construction.
             backend=cast(Literal["fake", "hindsight"], rinp.backend),
             base_url=rinp.base_url,
+            org_bank=rinp.org_bank,
+            promote_min_projects=rinp.promote_min_projects,
         )
     return ScheduleAsset(
         id=sid,
