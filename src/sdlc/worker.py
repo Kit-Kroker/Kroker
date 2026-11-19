@@ -34,7 +34,7 @@ from .agents.loader import load_registry, validate_registry
 from .agents.payload_guard import has_payload_guard
 from .agents.roles import ALL_TEMPORAL_AGENTS
 from .agents.runner import SdlcPydanticAIPlugin
-from .artifacts.read import load_session
+from .artifacts.read import load_diff, load_session
 from .artifacts.retention import apply_session_retention
 from .assessment.activities import (
     assess_risk,
@@ -224,6 +224,7 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         price_usage,
         apply_session_retention,
         load_session,
+        load_diff,
         publish_artifact_version,
         sync_plan_tasks,
         set_task_authoritative,

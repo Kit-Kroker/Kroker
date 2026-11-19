@@ -39,6 +39,15 @@ class LoadSessionResult(BaseModel):
     truncated: bool
 
 
+class LoadDiffInput(BaseModel):
+    """FR-702: bounded read-back of a stored diff. max_chars is a PROMPT
+    CONTEXT budget, never a storage limit — the store holds the full
+    untruncated patch; the T3 marker names what the budget cut."""
+
+    ref: ArtifactRef
+    max_chars: int = 60_000
+
+
 @activity.defn
 async def load_session(inp: LoadSessionInput) -> LoadSessionResult:
     assert inp.ref.kind == "harness_session", (
@@ -48,6 +57,30 @@ async def load_session(inp: LoadSessionInput) -> LoadSessionResult:
     truncated = len(data) > DEEP_REVIEW_MAX_BYTES
     text = data[:DEEP_REVIEW_MAX_BYTES].decode("utf-8", errors="replace")
     return LoadSessionResult(text=text, truncated=truncated)
+
+
+@activity.defn
+async def load_diff(inp: LoadDiffInput) -> LoadSessionResult:
+    """Bounded materialization of a stored patch for prompts (FR-702).
+
+    Mirrors load_session's kind assertion and reuses its result type. Char
+    semantics with oracle parity (benchmarks/oracle.py _truncate_diff):
+    ``<= max_chars`` passes through unchanged; longer text keeps its exact
+    first max_chars characters and gains the terminal marker naming the
+    omitted count. Decode is errors='replace' so a stored byte stream that
+    is not valid UTF-8 at a boundary becomes U+FFFD, never an exception.
+    """
+    assert inp.ref.kind == "diff", (
+        f"load_diff reads only diffs, got kind={inp.ref.kind!r}"
+    )
+    text = ref_to_path(inp.ref).read_bytes().decode("utf-8", errors="replace")
+    if len(text) <= inp.max_chars:
+        return LoadSessionResult(text=text, truncated=False)
+    omitted = len(text) - inp.max_chars
+    return LoadSessionResult(
+        text=f"{text[: inp.max_chars]}\n...[diff truncated, {omitted} chars omitted]",
+        truncated=True,
+    )
 
 
 def read_recall_snapshot(ref: ArtifactRef) -> RecallSnapshot:
