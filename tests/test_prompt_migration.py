@@ -1,34 +1,41 @@
-"""PROMPT_SHAS must be byte-identical across the instructions.md migration.
+"""PROMPT_SHAS pins the prompt bytes the repo ships.
 
-E-2 moves prompt bytes from Python constants into files. Per the registry
-spec's finding 1 that buys no memoization capability -- the hash is over the
-same bytes -- so the ONLY way this migration can be wrong is if a prompt
-changed while moving. These literals were computed from roles.py before the
-constants were deleted. A diff here is a migration bug, never an improvement.
+E-2 moved prompt bytes from Python constants into files; the original
+literals here were computed from roles.py before the constants were deleted,
+and the migration invariant was "the bytes did not move while moving". That
+held from 2026-07-17 until the 2026-10-19 sweep (31b27dce, FR-041 scrub +
+trailing-newline normalisation) moved all eight pinned prompts in one
+deliberate commit WITHOUT refreshing this pin: the test then sat red on
+main for a month, found at the FR-806 close-out (2026-11-19) -- itself the
+failure mode this test exists to make impossible. Since prompts are
+versioned assets (FR-806), editing one is legitimate and expected; the rule
+now enforced is that a prompt never moves UNNOTICED: a deliberate edit
+refreshes its literal here in the same diff, and a red here means a prompt
+moved with no pin update.
 """
 
 import hashlib
 
 from sdlc.agents.roles import PROMPT_SHAS, REGISTRY, STAGE_ROLES
 
-PRE_MIGRATION_SHAS = {
-    "clarify": "f40fbf6ef7451def3717c0270315e5d3c3897ba288cf96a06daec064454e0560",
-    "architect": "259aa152c105b95d4cc52a50103fb337e2f5df8c482791d7abba15593172232b",
-    "plan": "ffe6717f887ca9d6f7f6f7276b3d0a688a8dc7c76d17d1ef0e06bae4c470563e",
-    "devops": "9d18988b3d1180ed20e93748bb93559bb6c1cb645606eebcdde212d12d866e57",
-    "review": "dcaa8df20374b514a5ac329bef9ac1c42d4e03fe6b264f2496ecb41c6fd635f3",
-    "analyze": "16c37dbf71d1d83800f9904ac835e62b91439066b0d235eb7a274531ec2f71b3",
-    "qa": "f3a65764d65ec2f4c9b46fdb5ab404a414df9edaf579ec729145b173689a6179",
-    "merge_verdict": "a63d593b33ad800bd2251de9c31482315094aea978e41aa306ba759234614c6c",
+PINNED_PROMPT_SHAS = {
+    "clarify": "26db68a05e6b307a9f372378694db871b374584fd653af10d7d055953f6e8cc9",
+    "architect": "21b8cd74f178a7d0830dd0adca58ea699294f8dffcafb7e461db6cdd52f36afd",
+    "plan": "90bf1e5a44ad50328703903309f55d18e7efc3b81cd74c270321b82d59552d9b",
+    "devops": "de348e46042afc75617c795f8e0648ed2848daa965d39997db09b30d4745484f",
+    "review": "03fa507383d2fe7d62b4ee39c96be73e97b30c30ba472b17dfabdfa953ab115d",
+    "analyze": "a2b2759b321740bb470d4aa763e58a63bb4fb137b8e5ff41826746a72e07bb4f",
+    "qa": "74bdf8374f9c51b00ab8d1da8b8f3d04e83849d45a1394fb0362e51eb66bb334",
+    "merge_verdict": "4d6094487f83c70bd13264c33c0efe811375cb8300b8ff67e91f1b0c2230b66d",
 }
 
 
 def test_prompt_shas_did_not_move():
     # Subset, not equality: new roles (e.g. the optional research role added
-    # 2026-07-17) can join PROMPT_SHAS without rocking the migration
-    # invariant. The pinned pre-migration shas must all still match exactly —
-    # THAT is the "prompts didn't move" check.
-    assert PRE_MIGRATION_SHAS.items() <= PROMPT_SHAS.items()
+    # 2026-07-17) can join PROMPT_SHAS without rocking the invariant. The
+    # pinned shas must all still match exactly —
+    # THAT is the "prompts didn't move unnoticed" check.
+    assert PINNED_PROMPT_SHAS.items() <= PROMPT_SHAS.items()
 
 
 def test_every_proposer_role_has_instructions():

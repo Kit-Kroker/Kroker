@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-11-19 (FR-502 complete — ops risk-classing landed and re-verified green on today's tree (`tests/maintenance/` 502 fast + 85 temporal, exit 0); execution stays never per GATE 2, adapters deferred past P4; details in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
+| Last verified | 2026-11-19 (FR-806 closed — prompts-as-versioned-assets verified on today's tree: `PROMPT_SHAS` = file bytes 17/17, a one-byte prompt edit flips `content_key`, E-4's eval loop pins the join; the month-red E-2 pin was found and refreshed (`31b27dce` moved all eight prompts, no pin refresh); scoped battery 25 passed, one pre-existing SC-003 failure noted for the owner; details in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -368,7 +368,7 @@ as tracked rather than accidental.
 - [x] **FR-803** `ValidationContract` frozen at planning (`models.py:184`).
 - [x] **FR-804** materialized diff for clean-context validators (`activities.py:502`).
 - [x] **FR-805** `HandoffSummary` task→task continuity (`models.py:202,275`).
-- [ ] ⚠️ **FR-806** prompts as versioned assets in the memo hash — prompt bytes are hashed into `content_key` ✅; the edit → offline eval → deploy loop is E-4.
+- [x] **FR-806** prompts as versioned assets in the memo hash — **closed 2026-11-19; both clauses verified on today's tree**: prompt bytes are hashed into `content_key` (`PROMPT_SHAS` = sha256 over `agents/<role>/instructions.md` bytes — 17/17 registry↔file match live-verified; `role_host._cached_stage` feeds `PROMPT_SHAS[stage]` into the key and a one-byte prompt edit flips it — E-2/E-3 ✅), and the edit → offline eval → deploy loop is E-4 ✅ (`sdlc eval <role>` A/B-scores a working-tree `instructions.md` against a committed one; the gate's `prompt_sha` joins `BenchmarkRecord.prompt_sha` over the same bytes, pinned by `test_prompt_sha_matches_the_registry_hash`). *Found and fixed in the same round:* the E-2 pin (`test_prompt_shas_did_not_move`) had sat red on `main` since the 2026-10-19 FR-041 sweep (`31b27dce`) moved all eight pinned prompts (trailing-newline normalisation) with no pin refresh — literals refreshed to today's bytes, and the test now states the FR-806 rule: a deliberate prompt edit refreshes the pin in the same diff, so a red always means an unnoticed move.
 
 ### Assessment, Tier 0 — triage (FR-900) *(new scope; PRD v1.1)*
 
