@@ -15,7 +15,7 @@ settings dict keyed by that name alone.
 from __future__ import annotations
 
 from ..core.models import GateConfig, GatePolicy, GateSettings, TimeoutAction
-from .models import MaintenanceConfig
+from .models import MaintenanceConfig, RepairAction, RepairPlan, RiskClass
 
 
 def _require_name(name: str) -> str:
@@ -61,3 +61,27 @@ def escalation_gate_settings(cfg: MaintenanceConfig, name: str) -> GateSettings:
         default_gate_policy=GatePolicy.HARD,
         gate_timeout_hours=cfg.gate_timeout_hours,
     )
+
+
+def risk_class(action: RepairAction) -> RiskClass | None:
+    """The FR-502 class of one action, or None when confidence governs.
+
+    Fail closed (FR-502 Review Focus 2): every ``kind == "ops"`` action is
+    HUMAN_REQUIRED regardless of ``ops_action`` — a None verb (the model
+    has no validator demanding one) classes as needing a human too; the
+    verb never lowers the class. A ``code_fix`` has no class: its gate
+    stays the confidence threshold, exactly as before FR-502. Pure — no
+    confidence is read here; classification and confidence compose only in
+    the gate conjunct."""
+    if action.kind == "ops":
+        return RiskClass.HUMAN_REQUIRED
+    return None
+
+
+def bears_human_required(plan: RepairPlan) -> bool:
+    """Whether the plan carries any action a human must approve (FR-502).
+
+    True iff any action classes (i.e. any ops action — the verb is
+    irrelevant); an empty or all-``code_fix`` plan is False and keeps the
+    confidence gate it always had."""
+    return any(risk_class(a) is not None for a in plan.actions)

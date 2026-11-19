@@ -212,6 +212,16 @@ class Baseline(BaseModel):
     commit_sha: str = ""
 
 
+class RiskClass(StrEnum):
+    """What governs an action's gate (FR-502). Today exactly one class:
+    an ops action always needs a human, while a ``code_fix`` has none —
+    its confidence governs, as before FR-502. The taxonomy grows with the
+    ops adapters: an adapter that earns a lower class adds its member
+    here plus its clause in ``gate.risk_class``."""
+
+    HUMAN_REQUIRED = "human_required"
+
+
 class RepairAction(BaseModel):
     """One proposed action. In 023a nothing executes, so actions are
     recorded as proposed (FR-009)."""
