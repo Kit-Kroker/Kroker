@@ -13,11 +13,11 @@ from pathlib import Path
 from typing import Any
 
 from temporalio.client import Client, WorkflowHandle, WorkflowHistory
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Replayer, UnsandboxedWorkflowRunner, Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from tests.replay.projection import TraceRecorder, close_projection, command_projection
 from tests.replay.scenarios import Scenario
 
@@ -51,7 +51,7 @@ def replayer(*workflows: type) -> Replayer:
     plugin and failure types, with an explicit default workflow tuple."""
     return Replayer(
         workflows=list(workflows) or list(_default_replay_workflows()),
-        data_converter=pydantic_data_converter,
+        data_converter=sdlc_data_converter,
         plugins=[SdlcPydanticAIPlugin()],
     )
 
@@ -82,7 +82,7 @@ async def capture(
         {} if sandboxed else {"workflow_runner": UnsandboxedWorkflowRunner()}
     )
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

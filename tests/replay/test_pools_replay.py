@@ -38,13 +38,13 @@ from typing import Any
 import pytest
 from temporalio.api.enums.v1 import EventType
 from temporalio.client import Client, WorkflowHandle
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
 import sdlc  # noqa: F401  (the package the workflow sandbox passes through)
 from sdlc import pools
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from tests.replay.harness import GOLDEN, HISTORIES, load_history, replayer
 from tests.replay.projection import command_projection
 from tests.replay.scenarios import SCENARIOS
@@ -157,7 +157,7 @@ async def test_routing_on_projection(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     # start_local, not time-skipping: the scenario is signal-driven, and the
     # platform finding of this round is that DescribeTaskQueue needs the dev server.
-    async with await WorkflowEnvironment.start_local(data_converter=pydantic_data_converter) as env:
+    async with await WorkflowEnvironment.start_local(data_converter=sdlc_data_converter) as env:
         async with (
             Worker(
                 env.client,
@@ -254,7 +254,7 @@ async def test_routing_off_projection_is_the_same_golden(
     cfg = scenario.cfg()
     cfg.harness_queue = None
 
-    async with await WorkflowEnvironment.start_local(data_converter=pydantic_data_converter) as env:
+    async with await WorkflowEnvironment.start_local(data_converter=sdlc_data_converter) as env:
         async with Worker(
             env.client,
             task_queue=CORE_QUEUE,

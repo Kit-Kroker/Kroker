@@ -27,7 +27,6 @@ logging.basicConfig(
 
 from pydantic_ai.durable_exec.temporal import TemporalDurability
 from temporalio.client import Client
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 from .agents.loader import load_registry, validate_registry
@@ -77,6 +76,7 @@ from .board.activities import (
     sync_plan_tasks,
 )
 from .calibration.activities import calibration_verdict, record_calibration_samples
+from .converter import sdlc_data_converter
 from .crew.activities import (
     checkpoint_round,
     load_crew,
@@ -401,7 +401,7 @@ async def main() -> None:
 
     client = await Client.connect(
         os.environ.get("TEMPORAL_HOST", "localhost:7233"),
-        data_converter=pydantic_data_converter,
+        data_converter=sdlc_data_converter,
         plugins=[SdlcPydanticAIPlugin()],
     )
 

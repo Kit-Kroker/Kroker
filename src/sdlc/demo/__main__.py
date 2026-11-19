@@ -61,15 +61,15 @@ async def main() -> int:
 
     # After the placeholders: these imports build the agent registry.
     from temporalio.client import Client
-    from temporalio.contrib.pydantic import pydantic_data_converter
 
+    from .converter import sdlc_data_converter
     from .run import render_result, run_demo
 
     host = os.environ.get("TEMPORAL_HOST", "localhost:7233")
     print(f"dry run: scripted agents and activities, no tokens spent (Temporal at {host})")
     if filled:
         print(f"placeholders stand in for {', '.join(filled)}: the dry run never reads them")
-    client = await _connect(host, Client, pydantic_data_converter)
+    client = await _connect(host, Client, sdlc_data_converter)
     if client is None:
         print("start it with: docker compose up -d temporal   (or: temporal server start-dev)")
         return 1
