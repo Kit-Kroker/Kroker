@@ -107,9 +107,11 @@ async def test_promote_end_to_end_on_fake_backend():
 @pytest.mark.asyncio
 async def test_promote_scrubs_before_retain():
     # Seed the fake singleton directly, bypassing the retain activity's own
-    # scrub, so the scrub under test is the one at the promote boundary:
-    # raw "key sk-<40 alnum> fix" in two banks must reach the org bank with
-    # "[REDACTED_API_KEY]" and never the raw key.
+    # scrub, so the scrub under test is the one at the promote boundary.
+    # The org bank is read the same way: recall_snapshot scrubs
+    # item-by-item on read (FR-012), so verifying through it would pass
+    # even if the promote boundary forgot to scrub -- the stored bytes
+    # would be raw and the read would mask them.
     raw_key = "sk-" + "a" * 40
     for bank in ("project:promote-scrub-a", "project:promote-scrub-b"):
         await _fake_singleton.retain(
@@ -122,8 +124,8 @@ async def test_promote_scrubs_before_retain():
         )
     )
     assert n == 1
-    snap = await recall_snapshot(RecallInput(bank="org:promote-scrub", query="q", backend="fake"))
-    assert "[REDACTED_API_KEY]" in snap.items[0]
+    snap = await _fake_singleton.recall("org:promote-scrub", "q", {}, None)
+    assert snap.items == ["key [REDACTED_API_KEY] fix"]
     assert raw_key not in snap.items[0]
 
 
