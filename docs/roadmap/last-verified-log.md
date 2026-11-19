@@ -4,6 +4,10 @@ Per-round verification history moved verbatim out of the `Last verified` cell of
 [`ROADMAP.md`](../../ROADMAP.md) (task `2026-11-03-roadmap-last-verified-log`).
 Newest first; **append new entries at the top** — never edit the ROADMAP cell
 beyond its one-sentence latest entry. The final entry (2026-10-11, Phase 3) is
+## 2026-11-19 — FR-501 close-out
+
+2026-11-19 (FR-501 closed — the DAPER proactive workflow row flips `[ ]` ⚠️ → `[x]`; both halves had landed (023a loop/schedule/nudge/gate + 023b execute/report, 2026-11-15) and the row's last open item was the live execution run, which the owner ruled a recorded residual, not a blocker (023b GATE 1 Q8 → B-FR-022, quickstart §5). Closed on fresh evidence, not the 023b record: round 024 touched this surface after 023b (two-pool routing — `start_repair_child`'s `model_copy`, the maintenance triage inputs, `_enable`'s usage-class exit 2, the routed harness call sites; commits `9dbca738`..`61a1ea28`), so the suites were re-run on today's tree in this checkout: `uv run pytest tests/maintenance/ -q` → exit 0, 492 items (491 passed, 1 skipped — up from 453 at 023b close, the delta is 024's routing cells); `uv run pytest -m temporal tests/maintenance/ -q` → exit 0, 83 tests (count unchanged since 023b). The row keeps its landing description and records the residual verbatim plus the deliberate Detect narrowing (triage signals only; CI, quarantined tasks, error budgets, deploy liveness deferred past P4 — ARCHITECTURE §7 banner). FR-502 stays `[ ]` (ops clause open — honest partial, 023b Part C); FR-503 stays `[ ]` ⚠️ (same both-halves-landed shape; its close-out is a separate owner decision). PRD untouched (023b G7); the FR-501-blocked external ideas (A4/B2/D1) were already re-graded "unblocked for re-reading" in the §7 banner.)
+
 ## 2026-11-19 — Round 026 (P4 exit fixes + re-fleet)
 
 Fleet: 5 scored runs + smoke (attempt 2) at one commit `ec3f128f…`,
