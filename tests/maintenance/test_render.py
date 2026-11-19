@@ -107,9 +107,12 @@ def test_gate_context_carries_the_no_execution_line():
 
 
 def test_table_header_has_the_six_contract_columns():
+    # DATED correction (2026-11-19, FR-502): a seventh column, `class`, now
+    # sits between `gate` and `child` — the ops risk class of the plan's
+    # classed actions (`-` when none). The six contract columns still hold.
     out = incidents_table([])
     assert "INC-n" in out
-    for col in ("state", "key", "seen", "eff.conf", "gate"):
+    for col in ("state", "key", "seen", "eff.conf", "gate", "class"):
         assert col in out
 
 

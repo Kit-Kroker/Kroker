@@ -5,13 +5,14 @@ CLI incidents table (contracts/cli.md) and the retention text.
 from __future__ import annotations
 
 from ..memory.models import MemoryKind
+from .gate import risk_class
 from .models import TERMINAL_INCIDENT_STATES, Incident, IncidentState
 
 NO_EXECUTE_LINE = "approval does NOT execute in 023a — an approved plan is recorded, nothing runs"
 
 _HEADER = (
     f"{'INC-n':<8}  {'state':<22}  {'key':<44}  {'seen':>4}  {'attempt':>7}  "
-    f"{'reopens':>7}  {'eff.conf':>8}  gate  child"
+    f"{'reopens':>7}  {'eff.conf':>8}  gate  {'class':<44}  child"
 )
 
 
@@ -40,9 +41,37 @@ def _gate(incident: Incident) -> str:
     return "-"
 
 
+def _classed_verbs(incident: Incident) -> list[str]:
+    """The classed actions' verbs (FR-502): plan order, deduplicated — two
+    rollback actions render one ``rollback``."""
+    verbs: list[str] = []
+    if incident.plan is not None:
+        for a in incident.plan.actions:
+            if risk_class(a) is not None and a.ops_action not in verbs:
+                verbs.append(str(a.ops_action))
+    return verbs
+
+
+def _classes(incident: Incident) -> str:
+    """The class column (FR-502): one ``<verb>[<CLASS>]`` tag per classed
+    action, comma-space-joined; ``-`` when there is no plan or no classed
+    action — a pure ``code_fix`` plan keeps the confidence-governed render
+    it always had."""
+    if incident.plan is None:
+        return "-"
+    tags: list[str] = []
+    for a in incident.plan.actions:
+        cls = risk_class(a)
+        if cls is not None:
+            tags.append(f"{a.ops_action}[{cls.name}]")
+    return ", ".join(tags) if tags else "-"
+
+
 def gate_context_text(incident: Incident) -> str:
     """The GateContext body for a repair gate: the incident, the plan, the
-    three confidences, and the line that keeps 'approved' honest (FR-012)."""
+    three confidences, the line that names the human-required ops when the
+    plan bears any (FR-502), and the line that keeps 'approved' honest
+    (FR-012)."""
     lines = [f"INC-{incident.no}  {incident.key}", f"state: {incident.state.value}"]
     if incident.plan is None or not incident.plan.actions:
         # FR-009's edge: a plan with zero actions is still gated, rendered
@@ -58,18 +87,25 @@ def gate_context_text(incident: Incident) -> str:
             f"/ effective {p.effective:.2f}",
             f"author: {p.author_model}",
         ]
+    verbs = _classed_verbs(incident)
+    if verbs:
+        lines.append(
+            f"human-required ops: {', '.join(verbs)} — a human must decide; policy cannot approve"
+        )
     lines.append(NO_EXECUTE_LINE)
     return "\n".join(lines)
 
 
 def incidents_table(incidents: list[Incident], *, include_terminal: bool = False) -> str:
     """The `sdlc maintain incidents` table: INC-n  state  key  seen  attempt
-    reopens  eff.conf  gate  child (023b adds attempt/reopens/child — the
-    operator finds a verified incident's merge gate by its child id).
-    Terminal incidents only under --all (contracts/cli.md)."""
+    reopens  eff.conf  gate  class  child (023b adds attempt/reopens/child —
+    the operator finds a verified incident's merge gate by its child id;
+    FR-502 adds class — the ops risk class of the plan's actions, bounded
+    like `key`). Terminal incidents only under --all (contracts/cli.md)."""
     rows = [
         f"INC-{i.no:<7}  {i.state.value:<22}  {i.key:<44.44}  {i.seen_count:>4}  "
-        f"{i.attempt:>7}  {i.reopens:>7}  {_conf(i):>8}  {_gate(i)}  {_child(i)}"
+        f"{i.attempt:>7}  {i.reopens:>7}  {_conf(i):>8}  {_gate(i)}  {_classes(i):<44.44}  "
+        f"{_child(i)}"
         for i in incidents
         if include_terminal or i.state not in TERMINAL_INCIDENT_STATES
     ]
