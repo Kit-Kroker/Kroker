@@ -60,7 +60,7 @@ All of Part B uses the **fleet commit** (HEAD after Part A merges and the docs l
 
 ## Phase 3: Convergence
 
-- [ ] T034 Feed the rollup's summary-dependent fields for benchmark fleets — make `sdlc benchmark score --all` show the commit set and SC-2 operator-time medians without manual record scans, by wiring a benchmark-compatible `RunSummary` source (benchmark-mode runs produce no retro `summary.json`, so R025's rollup returned an empty commit set and 0-measured SC-2; the fleet report used a direct 348-record scan instead) per FR-024/FR-025 (partial).
+- [x] T034 Feed the rollup's summary-dependent fields for benchmark fleets — make `sdlc benchmark score --all` show the commit set and SC-2 operator-time medians without manual record scans, by wiring a benchmark-compatible `RunSummary` source (benchmark-mode runs produce no retro `summary.json`, so R025's rollup returned an empty commit set and 0-measured SC-2; the fleet report used a direct 348-record scan instead) per FR-024/FR-025 (partial). — closed by 026 FR-001..004 (the summaries existed; root resolution fixed)
 
 ## Dependencies
 
