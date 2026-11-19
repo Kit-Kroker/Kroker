@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-11-19 (FR-806 closed — prompts-as-versioned-assets verified on today's tree: `PROMPT_SHAS` = file bytes 17/17, a one-byte prompt edit flips `content_key`, E-4's eval loop pins the join; the month-red E-2 pin was found and refreshed (`31b27dce` moved all eight prompts, no pin refresh); scoped battery 25 passed, one pre-existing SC-003 failure noted for the owner; details in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
+| Last verified | 2026-11-19 (FR-911 closed — the AssessmentWorkflow EDCR shell's four SHALL clauses verified on today's tree: durable pinned-commit DAG with report-after-assess and no phase-status file (replay-pinned), enrich/gate not phases; three stub bodies stay owned by E-51/E-52 on their own rows; battery 102 fast + 24 temporal passed; details in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -388,20 +388,25 @@ as tracked rather than accidental.
 
 ### Assessment, Tier 2 — capability & risk audit (FR-910) *(new scope; PRD v1.1)*
 
-- [ ] ⚠️ **FR-911** `AssessmentWorkflow` EDCR DAG, report-after-assess, no
-  phase-status file (E-45) — **the DAG and both deviations landed 2026-08-10**;
-  six of seven phase bodies were stubs reporting `not_collected` with the E-item
-  that owes them, so an assessment that assessed nothing says so (FR-915).
-  `/enrich` as a declared stage input remains E-56. **2026-08-12 (E-46 plan 1):**
-  the stub count dropped from six to five and `PHASE_OWNER` lost its `SCAN` entry
-  — scan is now built, so the scan phase row is measured and `terminal_status`
-  derives `assessed:partial` on an admitted run. **2026-08-13 (E-46 plan 3):**
-  the scan phase's own thirteen signals all report. **2026-08-15 (E-48 plan 2/3):**
-  the stub count dropped from five to four and `PHASE_OWNER` lost its `DISCOVER` entry
-  — discover is now built and runs measured end-to-end. **2026-08-16 (E-49 plan 1/2):**
-  the stub count dropped from four to three and `PHASE_OWNER` lost its `ASSESS` entry
-  — assess is now built and the phase is measured with deterministic score + judged proposer layer.
-  **2026-08-17 (E-49 plan 3):** the assess phase is complete; the stub count is unchanged at three (report, generate, finish).
+- [x] **FR-911** `AssessmentWorkflow` EDCR DAG, report-after-assess, no
+  phase-status file (E-45) — **closed 2026-11-19; all four SHALL clauses verified
+  on today's tree**: the durable workflow executes init → scan → discover →
+  assess → (gate) → report → generate → finish over a repository pinned at a
+  commit (`workflows/assessment.py:799`, worker-registered `worker.py:315`,
+  CLI-started `cli.py:889`); phase state lives in workflow history with no
+  tracked status file — deviation (b), replay-pinned
+  (`tests/test_assessment_workflow_e2e.py:286`); `report` runs *after* `assess`
+  — deviation (a), pinned at the call site (`assessment.py:832`) and
+  `tests/test_assessment_models.py:54`; and `enrich`/`gate` are not phases — the
+  gate is FR-917's `GateHost` seam between ASSESS and REPORT (E-50 GD1/GD2),
+  and `/enrich` exists in code only as E-56's owed declared input. Three phase
+  bodies remain stubs by design, owned on their own rows: REPORT/GENERATE by
+  E-52 (FR-921, folding into FR-704), FINISH by E-51 (FR-918) — each reports
+  `not_collected` naming its owner (`PHASE_OWNER`, FR-915), and
+  `terminal_status` derives `assessed:partial` on an admitted run. *Shell landed
+  2026-08-10 with six of seven bodies stubs; E-46 scan, E-48 discover, E-49
+  assess filled their bodies (stub count six → three); the E-50 gate landed
+  2026-09-02 — full history in the log.*
 - [x] **FR-912** deterministic scan memoized on `(tree hash, signal version)`; cross-source confidence (E-46). **All three plans landed (2026-08-12, 2026-08-13).** The memo key is `(tree_hash, signal_version, rules_sha)` — `rules_sha` beyond the specified two terms, hashed transitively over shared rule modules and consumed signals, because a hand-maintained version int misses a real input (spec D10). All thirteen signal rows report and every body computes or inherits; `OWED_BY` is empty. Cross-source confidence is live and derived (D8), and now reaches HIGH: S2 and S4 produce, so S5 can merge three or more distinct sources.
 - [x] **FR-913** `CapabilityMap` with stable ids + coverage floor + orphan classification — **also satisfies FR-102** (E-47a/E-47b/E-47c/E-48). **All three plans of E-48 landed 2026-08-15**, wiring the complete discover phase into `AssessmentWorkflow`: context building, baseline dispositions, identity lock, finalize with attribution/decomposition/ownership, proposer judgment, quote/ref verification, citation guard, blueprint comparison, and derived domain model. **Identity half landed 2026-08-08 (E-47a):** surrogate `BC-NNN` ids, weighted-Jaccard re-attachment, audited `IdentityCorrection` (`src/sdlc/capability/`). **Coverage floor + orphans landed 2026-08-13 (E-47b):** attribution and orphan classification in `src/sdlc/assessment/discover/`. **L2 + entity ownership landed 2026-08-14 (E-47c):** `decompose()` and `assign()` in `src/sdlc/assessment/discover/`.
 - [x] **FR-914** byte-exact quote verification against the pinned commit, fail-closed — shares FR-107's verifier (E-43). **Landed 2026-08-06 (E-43) and fully closed 2026-08-15 (E-48 plan 3):** `verify_discover_refs` byte-verifies every evidence path and quote against the pinned commit using `Profile.VERBATIM_BYTES` before dispositions are applied, and a citation guard fails closed if the fabrication rate exceeds 0.10.
