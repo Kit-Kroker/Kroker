@@ -1,11 +1,13 @@
-"""FR-502 e2e: an ops-bearing plan's repair gate is HARD from birth (RED).
+"""FR-502 e2e: an ops-bearing plan's repair gate is HARD from birth.
 
-The one temporal cell of the ops risk-class round (2026-11-19): a mixed
-plan (one ``code_fix`` + one ``ops`` action) whose effective confidence
-sits ABOVE the configured threshold at round 1 must never be resolved by
-policy — the gate owes a human from the moment it is built, and the human
-approval then executes exactly the code_fix subset (GATE 1 Q6 semantics,
-unchanged).
+Two temporal cells of the ops risk-class round (2026-11-19; fix round 1 adds
+the second): a mixed plan (one ``code_fix`` + one ``ops`` action) whose
+effective confidence sits ABOVE the configured threshold at round 1 must
+never be resolved by policy — the gate owes a human from the moment it is
+built (cell 1) and reproduction's ``_reprice`` recompute must not submit a
+policy approval either (cell 2 — ``submit_gate_decision`` lands on HARD
+gates too). The human approval then executes exactly the code_fix subset
+(GATE 1 Q6 semantics, unchanged).
 
 Scenario arithmetic — two forced deviations from the scaffolding list,
 each provable, each required for the cell to go RED at HEAD and GREEN
@@ -220,3 +222,82 @@ async def test_ops_bearing_plan_is_human_only_even_above_threshold(repo_dir):
             assert sibling.state.value == "awaiting_decision"
             assert sibling.execution is None
             assert sibling.executions == []
+
+
+async def test_reprice_cannot_policy_approve_an_ops_bearing_plan(repo_dir):
+    """The `_reprice` side door (fix round 1): reproduction's recompute must
+    not submit a policy approval for an ops-bearing plan either —
+    ``submit_gate_decision`` lands on any gate, HARD included, so without the
+    suppression the conjunct's promise has a side door.
+
+    Arithmetic (reachability discipline, same fault as cell 1):
+    ``env_file_tracked`` is MECHANICAL; the 2-action mixed plan at
+    ``self_confidence=0.95`` under the DEFAULT threshold 0.8. Construction
+    (cycle 2, unreproduced): floor 0.95 - 0.15 - 0.05 = 0.75, effective
+    0.75 < 0.8 — the gate pends BELOW threshold. Reproduction (cycle 3,
+    seen twice): floor 0.95 - 0.05 = 0.90, effective 0.90 > 0.8 — exactly
+    the state where ``_reprice``'s submit fired before FR-502. The
+    ``secret_committed`` sibling (JUDGEMENT) reprices to 0.55, far below,
+    and never submits either way.
+
+    Waiting on the REPRICED floor makes the assertion deterministic: the
+    floor write and the (suppressed) submit are one workflow task, so
+    "floor 0.90 and still no decision" can only mean suppression, not
+    slowness.
+    """
+    async with await WorkflowEnvironment.start_time_skipping(
+        data_converter=pydantic_data_converter
+    ) as env:
+        async with maint_worker(env, task_queue=TASK_QUEUE, proposal=PROPOSAL):
+            handle = await env.client.start_workflow(
+                MaintenanceWorkflow.run,
+                MaintenanceState(config=_cfg(repo_dir, threshold=0.8)),  # the default
+                id="maint-demo",
+                task_queue=TASK_QUEUE,
+            )
+            await handle.signal("nudge")  # cycle 1: baseline
+
+            async def _baseline_recorded() -> bool:
+                return (await handle.query(MaintenanceWorkflow.maintenance_state)).baseline_recorded
+
+            await _until(_baseline_recorded, what="cycle 1 baseline")
+
+            commit_env_file(repo_dir)
+            await handle.signal("nudge")  # cycle 2: detect, plan, gate
+
+            async def _planned() -> bool:
+                inc = await _by_rule(handle, "env_file_tracked")
+                return inc.plan is not None
+
+            await _until(_planned, what="the below-threshold mixed plan")
+            inc = await _by_rule(handle, "env_file_tracked")
+            assert inc.plan is not None
+            assert inc.plan.effective == pytest.approx(0.75)  # below 0.8: pending, not auto
+            assert inc.decision is None
+
+            await handle.signal("nudge")  # cycle 3: reproduced -> _reprice
+
+            async def _repriced() -> bool:
+                inc = await _by_rule(handle, "env_file_tracked")
+                return inc.plan is not None and inc.plan.floor == pytest.approx(0.90)
+
+            await _until(_repriced, what="the recompute to lift the floor above threshold")
+
+            inc = await _by_rule(handle, "env_file_tracked")
+            assert inc.plan is not None
+            assert inc.plan.effective == pytest.approx(0.90)  # now above 0.8
+            # The recompute must NOT resolve the gate: no policy decision
+            # anywhere, the human still owes it.
+            assert inc.state.value == "awaiting_decision", (
+                f"the repriced ops-bearing plan must stay human-gated, got {inc.state.value}"
+            )
+            assert inc.decision is None, (
+                f"the reprice submitted a decision by {inc.decision.decided_by!r} — "
+                "submit_gate_decision lands on HARD gates too; policy must never "
+                "approve an ops-bearing plan"
+            )
+            pending = await handle.query(MaintenanceWorkflow.pending_decisions)
+            assert any(p.gate == f"repair:{inc.no}" and p.round == 1 for p in pending)
+            for other in await _incidents(handle):
+                if other.decision is not None:
+                    assert other.decision.decided_by != "policy", other.key

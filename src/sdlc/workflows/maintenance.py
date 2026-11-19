@@ -252,8 +252,9 @@ class MaintenanceWorkflow(GateHost):
 
     def _reprice(self, inc: Incident) -> None:
         """Recompute floor/effective from current facts; if the recomputed
-        effective now clears the threshold, policy resolves the pending
-        gate (R8: only reproduced mechanical findings clear the default)."""
+        effective now clears the threshold, policy resolves the pending gate
+        (R8: only reproduced mechanical findings clear the default — and,
+        since FR-502, never an ops-bearing plan: that gate owes a human)."""
         assert self._state is not None
         cfg = self._state.config
         if inc.finding is None or inc.decision is not None:
@@ -269,7 +270,16 @@ class MaintenanceWorkflow(GateHost):
         inc.plan = inc.plan.model_copy(
             update={"floor": floor, "effective": min(inc.plan.self_confidence, floor)}
         )
-        if inc.plan.effective > cfg.threshold:
+        # 2026-11-19 FR-502 (maint-risk-class): the recompute never clears
+        # policy for an ops-bearing plan either — submit_gate_decision lands
+        # on any gate, HARD included, so this submit respects the risk class
+        # too. bears_human_required runs before workflow.patched (a
+        # pure-code_fix reprice takes no marker), and a pre-patch history
+        # that DID submit replays identically: no marker -> patched False ->
+        # the submit proceeds exactly as recorded (payload-guard precedent).
+        if inc.plan.effective > cfg.threshold and not (
+            bears_human_required(inc.plan) and workflow.patched("maint-risk-class")
+        ):
             self.submit_gate_decision(
                 GateDecision(
                     gate=f"repair:{inc.no}",
