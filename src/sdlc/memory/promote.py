@@ -4,7 +4,11 @@ Pure logic, no I/O: the nightly reflect job recalls gotchas per project bank
 and promotes the ones that recur across projects into the `org` bank. Prior
 art (agent-architecture plan) rules what belongs there: the org bank holds
 only *stack knowledge* recurring in 2+ projects; project-specific facts stay
-project-side. Task 3 wraps this in a Temporal activity.
+project-side. Task 3 wraps this in a Temporal activity. Recall-window cap:
+only each bank's most recently recalled gotchas are considered (the recall
+window — `RECALL_KEEP = 10` in hindsight_client.py, `[-10:]` in the fake),
+so a gotcha outside that window is never considered; revisit when a real
+bank hits the cap.
 
 Spec: docs/superpowers/specs/2026-11-19-org-bank-promotion-design.md
 """

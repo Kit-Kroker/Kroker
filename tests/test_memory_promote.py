@@ -130,6 +130,23 @@ async def test_promote_scrubs_before_retain():
 
 
 @pytest.mark.asyncio
+async def test_promote_raises_when_backend_recall_raises(monkeypatch):
+    # Fail-visible by design: an empty recall here would read as "no
+    # gotchas recurred" and the org bank would silently go stale. Pins
+    # that nobody wraps the activity's recall in a recall_snapshot-style
+    # silent degrade.
+
+    async def unreachable(*args, **kwargs):
+        raise RuntimeError("backend unreachable")
+
+    monkeypatch.setattr(_fake_singleton, "recall", unreachable)
+    with pytest.raises(RuntimeError, match="backend unreachable"):
+        await promote_org_learnings(
+            PromoteInput(project_banks=["project:raise"], org_bank="org:raise")
+        )
+
+
+@pytest.mark.asyncio
 async def test_promote_with_no_recurrence_returns_zero():
     await retain(
         RetainInput(
