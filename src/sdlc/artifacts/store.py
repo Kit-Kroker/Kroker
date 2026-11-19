@@ -28,6 +28,9 @@ _SUBDIRS = {
     # 021 FR-402: content-addressed recall snapshots, one hash-named file
     # per stage-level recall under <root>/<run_id>/recall/.
     "recall_snapshot": "recall",
+    # FR-702: the full untruncated patch beside the run's sessions — only
+    # the ArtifactRef crosses workflow history.
+    "diff": "diffs",
 }
 
 

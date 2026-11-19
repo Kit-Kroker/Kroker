@@ -30,6 +30,13 @@ def test_ref_round_trips_to_path_and_delete(tmp_path):
     store.delete(ref)  # idempotent — second delete is a no-op
 
 
+def test_diff_kind_lands_under_diffs(tmp_path):
+    store = LocalFileStore(root=tmp_path)
+    ref = store.put("diff", "run-1", "t1-a1.patch", b"diff --git")
+    assert ref.kind == "diff"
+    assert (tmp_path / "run-1" / "diffs" / "t1-a1.patch").read_bytes() == b"diff --git"
+
+
 def test_env_root_fallback(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path / "art"))
     store = LocalFileStore()
