@@ -78,9 +78,9 @@ class BuildResult(BaseModel):
 
 class AnalyzeResult(BaseModel):
     """E-74: the `analyze` node's output. The integration diff is fetched once and
-    shared with merge (feature.py's analyze section), so it rides the payload.
-    `integration_diff` is get_task_diff's CodeArtifact (ADR-3, FR-702): the
-    patch text never rides state — consumers materialize it via load_diff."""
+    shared with the merge node (`workflows/graph_nodes/postplan.py`), so it rides
+    the payload. `integration_diff` is get_task_diff's CodeArtifact (ADR-3, FR-702):
+    the patch text never rides state — consumers materialize it via load_diff."""
 
     report: AnalysisReport
     untraced: list[str]

@@ -143,7 +143,8 @@ Agent class → Temporal construct is **a rule, not a convention**:
   idempotent — *first decision per round wins*.
 - **A decision is not a boolean**: `approve | reject | revise`.
 - **Pydantic AI plugs straight in**: the worker connects with
-  `plugins=[PydanticAIPlugin()]` and a `pydantic_data_converter`; wrapping a
+  `plugins=[PydanticAIPlugin()]` and a `sdlc_data_converter` (pydantic payloads
+  + the FR-702 2MB guard); wrapping a
   proposer with the `TemporalDurability` capability offloads model calls and
   tool I/O to activities.
 

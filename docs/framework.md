@@ -152,8 +152,9 @@ outside functions.
 
 ### In-flight payload compatibility
 
-The worker and client use `pydantic_data_converter`, whose
-`PydanticPayloadConverter.to_payload` sets metadata to `{"encoding": "json/plain"}`
+The worker and client use `sdlc_data_converter` (`src/sdlc/converter.py`,
+the SDK `PydanticPayloadConverter` construction plus the FR-702 2MB guard),
+whose `to_payload` sets metadata to `{"encoding": "json/plain"}`
 and reconstructs models based on the recipient's type hints
 (`temporalio/contrib/pydantic.py:66-99`). Because no Python class path is encoded
 in the payload, moving a Pydantic model between modules does not invalidate

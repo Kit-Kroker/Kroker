@@ -97,6 +97,17 @@ per `docs/documentation-rules.md`). ADR-22 was amended again on
   with worktree affinity and shared storage as prerequisites.
 - **ADR-10 Claim-check for all large payloads.** 2MB history limit as a
   design forcing-function; `ArtifactRef{kind, uri, sha256}` everywhere.
+  *Diff claim-check + the 2MB mechanism built 2026-11-20 (E-92):*
+  `get_task_diff` returns `sdlc.vcs.models.CodeArtifact` — the full patch
+  stored under `kind: "diff"`, consumers read it back through the bounded
+  `artifacts/read.py::load_diff` — and the limit is enforced, not
+  conventional: `sdlc.converter.sdlc_data_converter` refuses to serialize
+  any payload ≥ `MAX_PAYLOAD_BYTES` (2MB) at the one chokepoint on every
+  client and worker, decode untouched (spec
+  `docs/superpowers/specs/2026-11-19-fr702-claim-check-diffs-design.md`).
+  *Still open:* proposer prompts stay guarded, not claim-checked (007's 1 MiB
+  `ProposerPayloadTooLarge`); aggregate parallel-request overflow and
+  in-activity agents.
 - **ADR-11 Deterministic DAG, deliberately — contra the "Bitter Lesson."**
   Current practice argues orchestration should live in prompts/skills so
   architectures improve with each model release. We adopt that *within*

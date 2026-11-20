@@ -311,7 +311,15 @@ Teams adopting coding agents today face four gaps:
   FR-301/302 gate machinery on crossing. Stage-scoped research budgets under
   FR-107 are unchanged.)*
 - FR-702: Payloads through workflow history SHALL stay under 2MB via
-  claim-check `ArtifactRef`s.
+  claim-check `ArtifactRef`s. *(Landed 2026-11-20, E-92: `get_task_diff`
+  stores the full untruncated patch and returns `sdlc.vcs.models.CodeArtifact`
+  (metadata + `patch_ref`); prompt consumers materialize the text through the
+  bounded `artifacts/read.py::load_diff` read-back (60k chars);
+  `sdlc.converter.sdlc_data_converter` refuses to serialize any payload ≥
+  `MAX_PAYLOAD_BYTES` (2MB) on every client and worker — an oversized activity
+  result fails through its existing failure path, an oversized input wedges
+  the run `Running` until terminated. Proposer prompts stay guarded, not
+  claim-checked (`PROPOSER_PAYLOAD_LIMIT_BYTES`, 1 MiB), by design.)*
 - FR-703: Harness containment SHALL be tiered: at P1 a restricted OS user +
   filesystem ACLs (writes scoped to the worktree) + an egress policy
   (model API and git remote only); at fleet scale a container per run. The
