@@ -71,15 +71,13 @@ gives the DAG.
 - **Three states, not two.** `CheckResult.passed` is a bool; a criterion whose
   producer did not collect is therefore *not* a failing `CheckResult` — it is
   an owed row (§5, FD2).
-- **Replay safety.** Filling `_finish` IS a command-sequence change for any
-  history that already completed: pre-E-51 finish issued no commands, and
-  `tests/replay/test_pools_replay.py` replays `assessment_discover_risk.json`
-  against current code in the default tier. Per `tests/replay/AGENTS.md` SG-2,
-  the new branch is gated behind `workflow.patched("finish-e51")` — the
-  `maint-023b-execute` precedent. The id is a wire name recorded in histories
-  (the `GUARD_PATCH_ID` rule): never renamed. A pre-E-51 history replays finish
-  as the no-command stub and carries `finish=None` (the field is defaulted, so
-  the recorded payload also deserializes unchanged).
+- **Replay safety.** Finish computes **inline** (amended 2026-11-20, the E-50
+  `evaluate()` precedent — owner-approved): a pure call inside `_finish` adds
+  **zero workflow commands**, exactly as the pre-E-51 stub issued zero, so the
+  replay corpus (including `assessment_discover_risk.json`) stays green with no
+  patch marker and no new wire name. A pre-E-51 history replays finish
+  computing the report on replay; commands match, and the payload field is
+  defaulted for deserialization.
 
 ## 4. The 14 criteria, mapped
 
@@ -178,13 +176,11 @@ class FinishReport(BaseModel):
 
 **Workflow wiring** (the only workflow edit):
 
-- `evaluate_finish` activity (registered on the worker, structural registration
-  test per the P2-D1 precedent) takes the run's typed halves and returns
-  `FinishOutcome(result: PhaseResult, report: FinishReport | None)`;
-  `_finish` calls it through `run_or_degrade` **behind
-  `workflow.patched("finish-e51")`** (§3), mirroring `_assess`'s degrade path —
-  an activity failure is a phase-level `not_collected` with the reason, never a
-  half-graded report.
+- `evaluate_finish` is a **pure inline call** inside `_finish` (the E-50
+  `evaluate()` precedent — no activity, no worker registration, no patch
+  marker), wrapped in try/except: a pure-code failure is a phase-level
+  `not_collected` with the reason, never a half-graded report — mirroring
+  `_discover`'s `build_map` guard.
 - **Short-circuit** (FD13): finish evaluates only if at least one of scan,
   discover, risk measured; otherwise it reports phase-level not_collected
   naming the first absent phase's reason (scan → discover → risk,
@@ -241,8 +237,10 @@ class FinishReport(BaseModel):
 - **FD15 — the xref census is typed-ids only** (builder-check Q6): structured
   id-typed fields; gate-report prose and `FindingDisposition` are out of scope
   by construction; `CapabilityEdge` is walked via its stored projections.
-- **FD16 — replay gate `workflow.patched("finish-e51")`** (builder-check Q1),
-  the SG-2 / `maint-023b-execute` precedent; the id is a permanent wire name.
+- **FD16 — inline, no patch marker** (amended 2026-11-20 after approval,
+  owner-approved): `evaluate_finish` runs inline like E-50's `evaluate()`,
+  adding zero workflow commands, so no `finish-e51` wire name exists. Had the
+  activity shape been kept, SG-2 would have required the marker.
 - **FD17 — c08's predicate** must not fail a legitimate baseline-only run:
   "every proposer reference verified, guard not tripped" — zero references
   under a measured producer with the judgment layer off is recorded, not
@@ -269,10 +267,9 @@ class FinishReport(BaseModel):
   id-typed fields of the stored projections; sites enumerated and pinned by
   test).
 - Test layout: `tests/test_assessment_finish_*.py` — fast tier for pure
-  checks/xref, temporal tier for the wired `_finish` (worker registration,
-  degrade path, short-circuit, replay of a pre-E-51 history behind the
-  `finish-e51` patch marker), plus the default-tier replay corpus staying
-  green.
+  checks/xref/orchestration, temporal tier for the wired `_finish`
+  (measured end-to-end, inline-failure degrade, short-circuit), and the
+  default-tier replay corpus staying green with zero new commands.
 - The plan (writing-plans skill) splits this the way E-46/E-48/E-49 split —
   likely contracts+criteria, then xref walk+exits, then wiring.
 
@@ -280,9 +277,10 @@ class FinishReport(BaseModel):
 
 Fast tier: pure criteria over synthetic artifacts (one fixture per criterion
 state: pass / fail / owed), sortedness validators, manifest-total pin over
-`c*` ids, the default-tier replay corpus green behind `finish-e51`. Temporal
-tier: `_finish` measured end-to-end on an admitted run; activity failure
+`c*` ids, the default-tier replay corpus green (zero new commands). Temporal
+tier: `_finish` measured end-to-end on an admitted run; an inline failure
 degrades to phase-level not-collected; the all-degraded short-circuit keeps
 `NO_PHASES`; `PHASE_OWNER` structural test drops its FINISH row; a recorded
-pre-E-51 history deserializes with `finish=None`. `check_file_size.py` clean.
+pre-E-51 history deserializes with `finish=None` (or computes on replay —
+commands are unchanged either way). `check_file_size.py` clean.
 Close-out per house rules: FR-918 row, tier-2 E-51 entry, log prepend.
