@@ -254,13 +254,15 @@ async def test_analyze_step_without_worktree_skips_the_self_fetch(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_analyze_step_guard_requires_patch_text_for_a_claim_checked_diff():
-    """Final-review Minor 4: the diff/patch coupling is explicit. A diff
-    carrying a ``patch_ref`` with empty ``patch`` is a caller bug that would
-    silently empty the analyst prompt — the step raises ``ValueError``
-    naming the contract (materialize via ``load_diff``). The ref-less
-    legacy/propose shape (``patch_ref=None``, empty patch) stays legal and
-    runs to completion."""
+async def test_analyze_step_guard_distinguishes_unmaterialized_from_materialized_empty():
+    """Round-2 re-review (Important): ``patch=None`` is the sentinel for
+    "never materialized" — with a ref-carrying diff the step raises
+    ``ValueError`` naming the read-back contract (``load_diff``). The old
+    ``patch == ""`` guard conflated that caller bug with the legitimate
+    materialized-EMPTY value: an empty integration diff stores empty bytes
+    and still returns a ref, so a correct ``analyze_node`` passes ``""``.
+    Legs: (1) ref + None raises; (2) ref + "" completes; (3) ref-less +
+    omitted patch completes (legacy/propose shape, None coerced to "")."""
     import importlib
 
     step_mod = importlib.import_module("sdlc.stages.analyze.step")
@@ -288,28 +290,40 @@ async def test_analyze_step_guard_requires_patch_text_for_a_claim_checked_diff()
 
     tasks = [DevTask(id="t1", title="Task 1", description="D", acceptance_criteria=["criterion-1"])]
 
-    # guard leg: a claim-checked diff without its materialized text raises,
-    # before any role call, naming the read-back contract
+    # leg 1 (guard): a ref'd diff whose patch was never materialized
+    # (None) raises, before any role call, naming the read-back contract
     with pytest.raises(ValueError, match="load_diff"):
         await step_mod.step(
             _Ctx(),
             cfg=PipelineConfig(),
             tasks=tasks,
             diff=CodeArtifact(files=["a.py"], stat="a.py | 1 +", patch_ref=ref),
-            patch="",
+            patch=None,
             integration_wt="/fake/wt",
             analyst_agent=MagicMock(),
         )
 
-    # boundary leg: patch_ref=None + empty patch is the legitimate
-    # legacy/propose shape — no raise, the stage completes
-    outcome = await step_mod.step(
+    # leg 2 (materialized empty): ref set + patch="" is the correct caller
+    # for an empty stored patch — completes, returns an AnalyzeOutcome
+    outcome_empty = await step_mod.step(
         _Ctx(),
         cfg=PipelineConfig(),
         tasks=tasks,
-        diff=CodeArtifact(files=["a.py"], stat="a.py | 1 +"),
+        diff=CodeArtifact(files=["a.py"], stat="a.py | 1 +", patch_ref=ref),
         patch="",
         integration_wt="/fake/wt",
         analyst_agent=MagicMock(),
     )
-    assert isinstance(outcome, analyze.AnalyzeOutcome)
+    assert isinstance(outcome_empty, analyze.AnalyzeOutcome)
+
+    # leg 3 (boundary, legacy/propose): a ref-less diff with the patch
+    # omitted entirely never raises — None coerces to "" for the prompts
+    outcome_legacy = await step_mod.step(
+        _Ctx(),
+        cfg=PipelineConfig(),
+        tasks=tasks,
+        diff=CodeArtifact(files=["a.py"], stat="a.py | 1 +"),
+        integration_wt="/fake/wt",
+        analyst_agent=MagicMock(),
+    )
+    assert isinstance(outcome_legacy, analyze.AnalyzeOutcome)

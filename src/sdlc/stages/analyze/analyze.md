@@ -43,6 +43,7 @@ The slice exports `step` and `ACTIVITIES = [build_trace_inventory]`. [FR-106, FR
 - **Analyst model unavailable / rate-limited**: Step raises, triggering standard retry policy or workflow failure.
 - **Untraced criteria present**: Traced criteria check fails at merge gate, GOTCHA retained in memory.
 - **Malformed diff / worktree access error**: Diff activity raises, caught by Temporal activity retry policy.
-- **Claim-checked diff without patch text**: `step` raises `ValueError` — a `diff` carrying a `patch_ref`
-  must arrive with its materialized `patch` text (the caller reads the ref back via `load_diff`, FR-702);
-  a ref-less diff with empty patch is the legitimate legacy/propose shape and never raises.
+- **Claim-checked diff never materialized**: `step` raises `ValueError` only when a `diff` carrying a
+  `patch_ref` arrives with `patch=None` — the caller never read the ref back via `load_diff` (FR-702).
+  `patch=""` is a legitimate materialized-empty value (an empty integration diff still stores empty
+  bytes and returns a ref); a ref-less diff never raises on any patch shape.

@@ -100,7 +100,7 @@ async def step(
     tasks: list[DevTask] | None = None,
     task_results: list[TaskResult] | dict[str, TaskResult] | None = None,
     diff: CodeArtifact | None = None,
-    patch: str = "",
+    patch: str | None = None,
     contract: ValidationContract | None = None,
     base_branch: str = "main",
     base_sha: str | None = None,
@@ -111,26 +111,28 @@ async def step(
 
     Runs the clean-context Analyst proposer role against the integrated changes
     and returns the AnalyzeOutcome artifact. The diff rides as a CodeArtifact
-    (FR-702); ``patch`` is its materialized text — supplied by the orchestrator
-    (analyze_node) or, when ``diff`` is absent and a worktree is available,
-    fetched once here under the ``integration`` label with ONE load_diff
-    read-back.
+    (FR-702); ``patch`` is its materialized text — ``None`` means never
+    materialized (rejected by the guard when the diff carries a ``patch_ref``;
+    ``""`` is a legitimate materialized-empty value). Supplied by the
+    orchestrator (analyze_node) or, when ``diff`` is absent and a worktree is
+    available, fetched once here under the ``integration`` label with ONE
+    load_diff read-back.
     """
     ctx.stage("analyzing", "analyze")
     _an_started = _now()
     patched = _EVIDENCE_V2()
 
-    if diff is not None and diff.patch_ref is not None and patch == "":
-        # Final-review Minor 4: a claim-checked diff arriving without its
-        # materialized text would silently empty the analyst prompt. The
-        # caller must read the ref back via load_diff (FR-702 read-back
-        # contract). A ref-less artifact with empty patch is the legitimate
-        # legacy/propose shape and must NOT raise — hence the patch_ref
-        # guard here, and the placement before the self-fetch branch (which
-        # supplies its own patch below and keeps today's semantics).
+    if patch is None and diff is not None and diff.patch_ref is not None:
+        # Round-2 re-review (Important): None is the sentinel for "never
+        # materialized" — the one caller bug worth failing loudly. A ref'd
+        # diff MUST arrive with its read-back text (load_diff, FR-702).
+        # "" is the legitimate materialized-EMPTY value — an empty
+        # integration diff still stores empty bytes and returns a ref, so
+        # the old `patch == ""` guard crashed a correct caller. Placed
+        # before the self-fetch branch, which supplies its own patch below.
         raise ValueError(
-            "analyze.step: diff carries a patch_ref but patch is empty — "
-            "materialize it via load_diff before calling (FR-702 read-back contract)"
+            "analyze.step: diff carries a patch_ref but patch was never materialized "
+            "(None) — read it back via load_diff before calling (FR-702 read-back contract)"
         )
 
     if diff is None and integration_wt:
@@ -191,6 +193,10 @@ async def step(
     analyst_spend = RoleUsage(role="analyst", model=resolved_model)
 
     diff_stat = diff.stat if diff is not None else ""
+    # The None sentinel never reaches a prompt builder: a ref-less diff
+    # legitimately arrives with the patch unmaterialized (legacy/propose
+    # shape), while "" is a materialized value and passes through as-is.
+    patch = patch or ""
     diff_patch = patch
 
     if patched:
