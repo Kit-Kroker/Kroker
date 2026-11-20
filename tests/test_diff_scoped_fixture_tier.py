@@ -47,18 +47,18 @@ async def gate(repo: pathlib.Path, base: str):
     ichecks = await run_integration_checks(
         IntegrationChecksInput(
             worktree=str(repo),
-            changed_files=diff["files"],
+            changed_files=diff.files,
             base_worktree=wt.path,
             base_reason=wt.reason,
             base_sha=base,
-            renames=diff["renames"],
+            renames=diff.renames,
         )
     )
     sec = await scoped_security_scan(
         ScopedSecurityScanInput(
             worktree=str(repo),
             base_worktree=wt.path,
-            renames=diff["renames"],
+            renames=diff.renames,
             base_reason=wt.reason,
         )
     )
@@ -77,6 +77,9 @@ ALL_PASS = {
 @pytest.fixture
 def repo(tmp_path, monkeypatch) -> tuple[pathlib.Path, str]:
     monkeypatch.setenv("SDLC_WORKTREES_ROOT", str(tmp_path / "wts"))
+    # FR-702: the gate's get_task_diff claim-checks the patch via the env
+    # root — pin it so the store never writes beside the repo's CWD.
+    monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path / "art"))
     r = tmp_path / "repo"
     r.mkdir()
     git(r, "init", "-q", "-b", "main")

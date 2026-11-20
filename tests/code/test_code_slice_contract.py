@@ -24,6 +24,7 @@ from sdlc.stages.code.models import HandoffClaim, HandoffSummary
 from sdlc.stages.plan.models import DevTask, ValidationContract
 from sdlc.stages.qa.models import QAReport
 from sdlc.stages.review.models import DeepReviewReport, ReviewReport
+from sdlc.vcs import CodeArtifact
 from sdlc.workflows.models import TaskResult
 
 
@@ -146,7 +147,7 @@ async def test_code_step_executes_and_returns_task_result():
         mock_ho.return_value = handoff
         mock_act.side_effect = [
             QAReport(tests_passed=True, issues=[]),  # qa_raw
-            {"files": ["app.py"]},  # diff
+            CodeArtifact(files=["app.py"]),  # diff
         ]
 
         tr = await code.step(
@@ -214,7 +215,7 @@ async def test_code_step_populates_plan_drift_on_done_path():
         mock_ho.return_value = handoff
         mock_act.side_effect = [
             QAReport(tests_passed=True, issues=[]),  # qa_raw
-            {"files": ["app.py", "extra_unhinted.py"]},  # diff
+            CodeArtifact(files=["app.py", "extra_unhinted.py"]),  # diff
         ]
 
         tr = await code.step(
@@ -276,9 +277,9 @@ async def test_code_step_populates_plan_drift_on_quarantine_path():
         mock_deep.return_value = None
         mock_act.side_effect = [
             QAReport(tests_passed=False, issues=["failure"]),
-            {"files": ["buggy.py"]},
+            CodeArtifact(files=["buggy.py"]),
             QAReport(tests_passed=False, issues=["failure"]),
-            {"files": ["buggy.py", "other_unhinted.py"]},
+            CodeArtifact(files=["buggy.py", "other_unhinted.py"]),
         ]
 
         tr = await code.step(
@@ -335,7 +336,7 @@ async def test_code_step_records_benchmark_records():
         mock_ho.return_value = HandoffSummary(task_id="task-2")
         mock_act.side_effect = [
             QAReport(tests_passed=True, issues=[]),
-            {"files": ["auth.py"]},
+            CodeArtifact(files=["auth.py"]),
         ]
 
         await code.step(
@@ -393,9 +394,9 @@ async def test_code_step_escalates_to_task_gate_on_exhaustion():
         mock_deep.return_value = None
         mock_act.side_effect = [
             QAReport(tests_passed=False, issues=["failure"]),
-            {"files": ["buggy.py"]},
+            CodeArtifact(files=["buggy.py"]),
             QAReport(tests_passed=False, issues=["failure"]),
-            {"files": ["buggy.py"]},
+            CodeArtifact(files=["buggy.py"]),
         ]
 
         tr = await code.step(

@@ -15,6 +15,13 @@ def test_put_writes_under_run_sessions_dir(tmp_path):
     assert ref.sha256 == hashlib.sha256(b"hello\n").hexdigest()
 
 
+def test_diff_kind_lands_under_diffs(tmp_path):
+    store = LocalFileStore(root=tmp_path)
+    ref = store.put("diff", "run-1", "t1-a1.patch", b"diff --git")
+    assert ref.kind == "diff"
+    assert (tmp_path / "run-1" / "diffs" / "t1-a1.patch").read_bytes() == b"diff --git"
+
+
 def test_digest_kind_lands_beside_full(tmp_path):
     store = LocalFileStore(root=tmp_path)
     store.put("harness_session_digest", "run-1", "t1-a1.digest.json", b"{}")

@@ -33,6 +33,8 @@ import pytest
 from temporalio import workflow as real_workflow
 
 code_step = importlib.import_module("sdlc.stages.code.step")
+from sdlc.artifacts.read import load_diff
+from sdlc.artifacts.store import LocalFileStore
 from sdlc.benchmarks.models import BenchmarkOutcome, QualityScore
 from sdlc.core.models import GateOutcome, HarnessKind, PipelineConfig, RoleConfig
 from sdlc.harness.models import HarnessRunResult
@@ -43,7 +45,7 @@ from sdlc.stages.qa.models import QAReport
 from sdlc.stages.review.models import ReviewReport
 from sdlc.stages.review.step import _get_qa_raw_json
 from sdlc.toolchain.lint_scope import LintFinding, ScopedLintReport
-from sdlc.vcs import DriftReport
+from sdlc.vcs import CodeArtifact, DriftReport
 
 _BASE = datetime(2026, 7, 4, 10, tzinfo=UTC)
 HEADER = "lint findings introduced by this task (the merge gate's own check):"
@@ -93,7 +95,15 @@ class _FakeWorkflow:
             report = self._qa.pop(0) if len(self._qa) > 1 else self._qa[0]
             return report.model_copy(deep=True)
         if name == "get_task_diff":
-            return {"files": ["app.py"], "stat": "app.py | 1 +", "patch": "diff --git ..."}
+            # FR-702: real artifact + stored bytes; load_diff below is the
+            # genuine read-back, so the clean-context prompts carry exactly
+            # what the store holds.
+            ref = LocalFileStore().put(
+                "diff", "wf-t016", f"{arg.label or arg.branch_point}.patch", b"diff --git a/app.py"
+            )
+            return CodeArtifact(files=["app.py"], stat="app.py | 1 +", patch_ref=ref)
+        if name == "load_diff":
+            return await load_diff(arg)
         if name == "load_drift_globs":
             return DriftGlobs(fence=list(self._fence), report=[])
         if name == "check_test_drift":
@@ -154,9 +164,10 @@ def _task() -> DevTask:
     return DevTask(id="t1", title="T", description="D", acceptance_criteria=["ac1"])
 
 
-def _run(monkeypatch, qa_reports, *, cfg=None, branch_point="bp-123"):
+def _run(monkeypatch, tmp_path, qa_reports, *, cfg=None, branch_point="bp-123"):
     fake_wf = _FakeWorkflow(qa_reports)
     monkeypatch.setattr(code_step, "workflow", fake_wf)
+    monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path))
     ctx = _FakeCtx()
     result = asyncio.run(
         code_step.step(
@@ -210,8 +221,8 @@ TESTS_FAIL = _qa(tests_passed=False, issues=["boom"])
 # --- (A1) what run_test_suite is asked to lint --------------------------------
 
 
-def test_run_test_suite_receives_the_lint_base_and_key(monkeypatch):
-    _, _, wf = _run(monkeypatch, [CLEAN], branch_point="bp-123")
+def test_run_test_suite_receives_the_lint_base_and_key(monkeypatch, tmp_path):
+    _, _, wf = _run(monkeypatch, tmp_path, [CLEAN], branch_point="bp-123")
     assert len(wf.qa_inputs) == 1
     qa_in = wf.qa_inputs[0]
     assert qa_in.lint_base == "bp-123"
@@ -219,18 +230,18 @@ def test_run_test_suite_receives_the_lint_base_and_key(monkeypatch):
     assert qa_in.lint_report_only == []  # attempt 1 is never a repair attempt
 
 
-def test_repair_attempt_passes_the_fence_as_report_only(monkeypatch):
+def test_repair_attempt_passes_the_fence_as_report_only(monkeypatch, tmp_path):
     cfg = _cfg(max_fix_attempts=1, containment=True)
-    _, _, wf = _run(monkeypatch, [TESTS_FAIL, CLEAN], cfg=cfg)
+    _, _, wf = _run(monkeypatch, tmp_path, [TESTS_FAIL, CLEAN], cfg=cfg)
     assert [q.lint_report_only for q in wf.qa_inputs] == [[], ["tests/**"]]
 
 
 # --- (A2) a dirty lint delta fails the attempt and feeds the retry ----------
 
 
-def test_introduced_finding_fails_the_attempt_and_the_retry_carries_it(monkeypatch):
+def test_introduced_finding_fails_the_attempt_and_the_retry_carries_it(monkeypatch, tmp_path):
     dirty = _qa(lint=_lint([_finding()]))
-    _, ctx, wf = _run(monkeypatch, [dirty])
+    _, ctx, wf = _run(monkeypatch, tmp_path, [dirty])
     recs = _by_stage(ctx)
     assert recs["code"][0].outcome is BenchmarkOutcome.FAIL
     assert len(wf.coding_inputs) == 2, "a lint-only failure must trigger a second attempt"
@@ -239,10 +250,10 @@ def test_introduced_finding_fails_the_attempt_and_the_retry_carries_it(monkeypat
     assert prompt.index(HEADER) < prompt.index("I001 app.py: import os")
 
 
-def test_lint_block_lists_25_findings_then_the_remainder(monkeypatch):
+def test_lint_block_lists_25_findings_then_the_remainder(monkeypatch, tmp_path):
     findings = [_finding(path=f"m{i}.py", line=f"import m{i}") for i in range(30)]
     dirty = _qa(lint=_lint(findings))
-    _, _, wf = _run(monkeypatch, [dirty])
+    _, _, wf = _run(monkeypatch, tmp_path, [dirty])
     prompt = wf.coding_inputs[1].prompt
     assert HEADER in prompt
     listed = re.findall(r"^I001 m\d+\.py: import m\d+$", prompt, flags=re.MULTILINE)
@@ -266,17 +277,17 @@ def test_lint_block_lists_25_findings_then_the_remainder(monkeypatch):
         ),
     ],
 )
-def test_lint_none_or_not_collected_never_fails_the_task(monkeypatch, lint):
-    result, ctx, wf = _run(monkeypatch, [_qa(lint=lint)])
+def test_lint_none_or_not_collected_never_fails_the_task(monkeypatch, tmp_path, lint):
+    result, ctx, wf = _run(monkeypatch, tmp_path, [_qa(lint=lint)])
     assert len(wf.coding_inputs) == 1
     assert _by_stage(ctx)["code"][0].outcome is BenchmarkOutcome.PASS
     assert result.status == "done"
 
 
-def test_report_only_introduced_findings_do_not_fail_a_repair_attempt(monkeypatch):
+def test_report_only_introduced_findings_do_not_fail_a_repair_attempt(monkeypatch, tmp_path):
     cfg = _cfg(max_fix_attempts=1, containment=True)
     fenced_only = _qa(lint=_lint([_finding(path="tests/test_x.py", rule="F401", line="import re")]))
-    result, ctx, wf = _run(monkeypatch, [TESTS_FAIL, fenced_only], cfg=cfg)
+    result, ctx, wf = _run(monkeypatch, tmp_path, [TESTS_FAIL, fenced_only], cfg=cfg)
     assert len(wf.coding_inputs) == 2, "report-only findings must not force a third attempt"
     code = _by_stage(ctx)["code"]
     assert code[-1].outcome is BenchmarkOutcome.PASS
@@ -286,9 +297,9 @@ def test_report_only_introduced_findings_do_not_fail_a_repair_attempt(monkeypatc
 # --- (c) the QA record ignores lint; the code record carries it -------------
 
 
-def test_qa_record_ignores_lint_while_the_code_record_fails(monkeypatch):
+def test_qa_record_ignores_lint_while_the_code_record_fails(monkeypatch, tmp_path):
     dirty = _qa(lint=_lint([_finding()]))
-    _, ctx, _ = _run(monkeypatch, [dirty], cfg=_cfg(max_fix_attempts=0))
+    _, ctx, _ = _run(monkeypatch, tmp_path, [dirty], cfg=_cfg(max_fix_attempts=0))
     recs = _by_stage(ctx)
     assert recs["qa"][0].outcome is BenchmarkOutcome.PASS
     assert recs["code"][0].outcome is BenchmarkOutcome.FAIL
@@ -299,10 +310,10 @@ def test_qa_record_ignores_lint_while_the_code_record_fails(monkeypatch):
 SECRET = ("ZZ999", "lintonly.py", "marker-line-xyz")
 
 
-def test_qa_and_review_prompts_never_carry_the_lint_payload(monkeypatch):
+def test_qa_and_review_prompts_never_carry_the_lint_payload(monkeypatch, tmp_path):
     rule, path, line = SECRET
     dirty = _qa(lint=_lint([_finding(path=path, rule=rule, line=line)]))
-    _, ctx, _ = _run(monkeypatch, [dirty], cfg=_cfg(max_fix_attempts=0))
+    _, ctx, _ = _run(monkeypatch, tmp_path, [dirty], cfg=_cfg(max_fix_attempts=0))
     prompts = dict(ctx.role_prompts)
     assert "qa" in prompts and "reviewer" in prompts
     for role in ("qa", "reviewer"):
@@ -364,12 +375,15 @@ def test_lint_fails_when_only_some_introduced_paths_are_report_only():
 # --- chaos / edge cases (026 T016, chaos QA) --------------------------------
 
 
-def _run_with(monkeypatch, qa_reports, *, task=None, cfg=None, branch_point="bp-123", wf_id=None):
+def _run_with(
+    monkeypatch, tmp_path, qa_reports, *, task=None, cfg=None, branch_point="bp-123", wf_id=None
+):
     """_run with the task, workflow id and branch point left open."""
     fake_wf = _FakeWorkflow(qa_reports)
     if wf_id is not None:
         fake_wf.info = lambda: SimpleNamespace(workflow_id=wf_id)
     monkeypatch.setattr(code_step, "workflow", fake_wf)
+    monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path))
     ctx = _FakeCtx()
     result = asyncio.run(
         code_step.step(
@@ -420,13 +434,13 @@ def test_edge_duplicate_fenced_findings_all_pass():
 # (2) the failing-test evidence and the lint block coexist, in that order
 
 
-def test_edge_failing_tests_and_lint_block_both_reach_the_prompt(monkeypatch):
+def test_edge_failing_tests_and_lint_block_both_reach_the_prompt(monkeypatch, tmp_path):
     failing = _qa(
         tests_passed=False,
         issues=["boom"],
         lint=_lint([_finding(path="app.py", rule="I001", line="import os")]),
     )
-    _, _, wf = _run_with(monkeypatch, [failing], cfg=_cfg(max_fix_attempts=1))
+    _, _, wf = _run_with(monkeypatch, tmp_path, [failing], cfg=_cfg(max_fix_attempts=1))
     prompt = wf.coding_inputs[1].prompt
     assert "boom" in prompt  # the test evidence is not displaced
     assert HEADER in prompt
@@ -440,22 +454,24 @@ def _findings(n):
     return [_finding(path=f"m{i}.py", line=f"import m{i}") for i in range(n)]
 
 
-def test_edge_exactly_26_findings_show_25_and_one_more(monkeypatch):
-    _, _, wf = _run_with(monkeypatch, [_qa(lint=_lint(_findings(26)))])
+def test_edge_exactly_26_findings_show_25_and_one_more(monkeypatch, tmp_path):
+    _, _, wf = _run_with(monkeypatch, tmp_path, [_qa(lint=_lint(_findings(26)))])
     prompt = wf.coding_inputs[1].prompt
     assert len(re.findall(r"^I001 m\d+\.py: import m\d+$", prompt, flags=re.MULTILINE)) == 25
     assert "(+1 more)" in prompt
 
 
-def test_edge_exactly_25_findings_show_no_more_line(monkeypatch):
-    _, _, wf = _run_with(monkeypatch, [_qa(lint=_lint(_findings(25)))])
+def test_edge_exactly_25_findings_show_no_more_line(monkeypatch, tmp_path):
+    _, _, wf = _run_with(monkeypatch, tmp_path, [_qa(lint=_lint(_findings(25)))])
     prompt = wf.coding_inputs[1].prompt
     assert len(re.findall(r"^I001 m\d+\.py: import m\d+$", prompt, flags=re.MULTILINE)) == 25
     assert not re.search(r"\(\+\d+ more\)", prompt)
 
 
-def test_edge_zero_findings_means_no_lint_block_even_with_other_issues(monkeypatch):
-    _, _, wf = _run_with(monkeypatch, [_qa(tests_passed=False, issues=["boom"], lint=_lint([]))])
+def test_edge_zero_findings_means_no_lint_block_even_with_other_issues(monkeypatch, tmp_path):
+    _, _, wf = _run_with(
+        monkeypatch, tmp_path, [_qa(tests_passed=False, issues=["boom"], lint=_lint([]))]
+    )
     prompt = wf.coding_inputs[1].prompt
     assert "boom" in prompt
     assert HEADER not in prompt
@@ -464,35 +480,35 @@ def test_edge_zero_findings_means_no_lint_block_even_with_other_issues(monkeypat
 # (4) the wiring: lint_base, lint_key, and the fence on repair only
 
 
-def test_edge_lint_base_follows_the_branch_point_it_is_given(monkeypatch):
-    _, _, wf = _run_with(monkeypatch, [CLEAN], branch_point="bp-XYZ-999")
+def test_edge_lint_base_follows_the_branch_point_it_is_given(monkeypatch, tmp_path):
+    _, _, wf = _run_with(monkeypatch, tmp_path, [CLEAN], branch_point="bp-XYZ-999")
     assert wf.qa_inputs[0].lint_base == "bp-XYZ-999"
 
 
-def test_edge_lint_key_is_built_from_the_workflow_and_task_ids(monkeypatch):
+def test_edge_lint_key_is_built_from_the_workflow_and_task_ids(monkeypatch, tmp_path):
     task = DevTask(id="t9", title="T", description="D", acceptance_criteria=["ac1"])
-    _, _, wf = _run_with(monkeypatch, [CLEAN], task=task, wf_id="wf-other")
+    _, _, wf = _run_with(monkeypatch, tmp_path, [CLEAN], task=task, wf_id="wf-other")
     assert wf.qa_inputs[0].lint_key == "wf-other/base-t9"
 
 
-def test_edge_first_attempt_gets_no_fence_even_with_containment_on(monkeypatch):
+def test_edge_first_attempt_gets_no_fence_even_with_containment_on(monkeypatch, tmp_path):
     cfg = _cfg(max_fix_attempts=1, containment=True)
-    _, _, wf = _run_with(monkeypatch, [CLEAN], cfg=cfg)
+    _, _, wf = _run_with(monkeypatch, tmp_path, [CLEAN], cfg=cfg)
     assert wf.qa_inputs[0].lint_report_only == []
 
 
-def test_edge_repair_attempt_gets_no_fence_when_containment_is_off(monkeypatch):
+def test_edge_repair_attempt_gets_no_fence_when_containment_is_off(monkeypatch, tmp_path):
     cfg = _cfg(max_fix_attempts=1, containment=False)
-    _, _, wf = _run_with(monkeypatch, [TESTS_FAIL, CLEAN], cfg=cfg)
+    _, _, wf = _run_with(monkeypatch, tmp_path, [TESTS_FAIL, CLEAN], cfg=cfg)
     assert [q.lint_report_only for q in wf.qa_inputs] == [[], []]
 
 
 # (5) a lint-failed attempt still runs the review lens
 
 
-def test_edge_lint_failed_attempt_still_runs_the_reviewer(monkeypatch):
+def test_edge_lint_failed_attempt_still_runs_the_reviewer(monkeypatch, tmp_path):
     dirty = _qa(lint=_lint([_finding()]))
-    _, ctx, _ = _run_with(monkeypatch, [dirty], cfg=_cfg(max_fix_attempts=0))
+    _, ctx, _ = _run_with(monkeypatch, tmp_path, [dirty], cfg=_cfg(max_fix_attempts=0))
     assert _by_stage(ctx)["code"][0].outcome is BenchmarkOutcome.FAIL
     reviewer_prompts = [p for role, p in ctx.role_prompts if role == "reviewer"]
     assert reviewer_prompts, "lint failure skipped the review lens"

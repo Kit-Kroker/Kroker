@@ -10,11 +10,12 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from ... import pools
     from ...agents.roles import STAGE_MODELS, resolve_role_model, t_analyst, t_merge_verdict
+    from ...artifacts.read import LoadDiffInput, load_diff
     from ...core.models import GateDecision, GateOutcome, PipelineConfig
     from ...graph.router import Activation
     from ...stages import analyze, deploy, merge
     from ...validators.verdicts import plan_valid
-    from ...vcs import DiffInput, get_task_diff
+    from ...vcs import DiffInput, as_code_artifact, get_task_diff
     from ..build import run_tasks
     from ..models import AnalyzeResult, BuildResult, PullRequest
     from .base import NodeContext, NodeResult, input_model
@@ -121,18 +122,37 @@ async def analyze_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
     assert plan is not None
     integration = nc.facts.integration
     assert integration is not None, "intake sets RunFacts.integration before any post-plan node"
-    integration_diff = await workflow.execute_activity(
+    # FR-702: the integration diff is claim-checked — fetch the small
+    # artifact ONCE (label="integration"); ONE bounded load_diff read-back
+    # materializes the patch text for the analyst prompt. A dict here is a
+    # replayed pre-claim-check history (or a fake pinned to the old shape):
+    # decode-side only — as_code_artifact() normalizes it (patch_ref=None,
+    # legacy inline patch dropped, no read-back scheduled), the same shim
+    # as the code stage.
+    art = await workflow.execute_activity(
         get_task_diff,
-        DiffInput(worktree=integration.worktree_path, branch_point=nc.facts.base_sha or ""),
+        DiffInput(
+            worktree=integration.worktree_path,
+            branch_point=nc.facts.base_sha or "",
+            label="integration",
+        ),
         **pools.on_harness(ACT, cfg.harness_queue),
     )
+    art = as_code_artifact(art)
+    patch = (
+        await workflow.execute_activity(load_diff, LoadDiffInput(ref=art.patch_ref), **ACT)
+        if art.patch_ref
+        else None
+    )
+    patch_text = patch.text if patch else ""
     done = {r.task_id: r for r in results.task_results}
     outcome = await analyze.step(
         nc.ctx,
         cfg=cfg,
         plan=plan,
         task_results=done,
-        diff=integration_diff,
+        diff=art,
+        patch=patch_text,
         integration_wt=integration.worktree_path,
         base_branch=nc.facts.idea.base_branch,
         base_sha=nc.facts.base_sha,
@@ -144,7 +164,7 @@ async def analyze_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
         payload=AnalyzeResult(
             report=outcome.report,
             untraced=outcome.untraced,
-            integration_diff=integration_diff,
+            integration_diff=art,
         ),
     )
 

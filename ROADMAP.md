@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living tracker |
-| Last verified | 2026-11-19 (SC-003 baseline id resolved — the data-dependent acceptance-recompute test now skips with a stated reason when the gitignored `runs/benchmarks` store is absent and still fails on real drift; full default tier exit 0, the first green tier since 2026-10-19; same session closed FR-806 + FR-911 and refreshed the month-red E-2 pin — details in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
+| Last verified | 2026-11-20 (FR-702 + NFR-4 closed — diffs ride claim-checked (`CodeArtifact` from `get_task_diff`, `load_diff` read-back) and the 2MB wire guard (`sdlc_data_converter`) is verified on this branch's gates; ADR-3/ADR-10 index cells and epic E-92 updated to the built truth; details in [`docs/roadmap/last-verified-log.md`](docs/roadmap/last-verified-log.md)) |
 | Source of truth for scope | `PRD.md`, `ARCHITECTURE.md`, `SDLC-spec.md` |
 | Method | Every FR / NFR / SC / US / ADR and the 15-stage DAG checked against actual code, not against prior audit claims |
 
@@ -353,7 +353,7 @@
 
 ### Governance & ops (FR-700)
 - [x] **FR-701** run-level budgets — research ships the FIRST run-level counters (`max_searches`/`max_fetches`/`max_cost_usd`), stage-scoped and enforced inside the tools; E-19 remains the general version. *Landed (E-33):* run-level token/cost counters in `RunSummary.roles` + a `run_budget_usd` budget gate that escalates through the FR-301/302 gate machinery on crossing (approve = one more increment, reject = `rejected:budget`). Stage-scoped research budgets (FR-107) unchanged. *Budget at start (2026-10-06, spec 011):* the budget is settable when a run starts (CLI `--budget-usd`, the dashboard start form; an explicit 0 is rejected); the gate counts priced planning-agent spend only — coding-harness, crew and research-stage spend is not counted (the Cost tab shows total vs counted; a card is filed). "E-19 remains the general version" now means: per-phase budgets (FR-922/E-55) and a pre-run estimate, neither built.
-- [ ] ⚠️ **FR-702** claim-check `ArtifactRef` / 2MB discipline — `ArtifactRef` model exists but diffs travel inline; no `CodeArtifact` union; no size guard. Sessions are now a real claim-check consumer (`ArtifactStore` / `harness_session`, E-38), but diffs still travel inline, so FR-702 stays open.
+- [x] **FR-702** claim-check `ArtifactRef` / 2MB discipline — *Closed 2026-11-20 (E-92):* `get_task_diff` stores the full untruncated patch (`kind: "diff"`, `<root>/<run_id>/diffs/<label>.patch`) and returns `sdlc.vcs.models.CodeArtifact` (files/renames/stat inline + `patch_ref`), prompt consumers materialize through the bounded `artifacts/read.py::load_diff` read-back, `AnalyzeResult.integration_diff` and `HarnessRunResult.diff_ref` carry the artifact, and `sdlc.converter.sdlc_data_converter` (`MAX_PAYLOAD_BYTES` = 2MB) refuses oversized payloads at the one serialization chokepoint on every client and worker.
 - [ ] ⚠️ **FR-703** egress policy — **research is the pipeline's first outbound egress, and it arrives before the egress policy.** *Partially landed (2026-07-24, E-15/E-16):* the `pre_tool` hook now exists and denies out-of-worktree writes, recursive deletes, agent-config rewrites, and non-allowlisted hosts (tool-level); approval escalation for `action: escalate` rules lands via the same hook (E-17). Egress is still env-allowlist + tool-level only — network-level egress and the OS/container tier remain open (E-21).
   *2026-08-08 (E-41a):* `OsvAdvisorySource` adds the pipeline's **second** declared outbound egress after research (FR-107) — declared, opt-in, and off by default. It is still env/tool-level only; E-21 remains the network tier.
 - [x] **FR-704** observability export (`events.jsonl` + `report.html`) — landed with the retro stage (E-32, folding E-22/E-23): `src/sdlc/observability/export.py` renders both, and the `export_run_artifacts` activity (`src/sdlc/observability/activities.py`) writes them per run. *Corrected 2026-09-11: this row said "no `observability/` module" after the module had landed.*
@@ -466,7 +466,7 @@ as tracked rather than accidental.
 - [x] **NFR-1** Durability — Temporal-native.
 - [x] **NFR-2** Scale / two pools — two capability pools (E-91, round 024): core `ai-sdlc` plus `KROKER_HARNESS_QUEUE` harness, routing off by default; five-pool form AP-2.5b.
 - [ ] — **NFR-3** Latency (5s/2s) — untested, not falsifiable from code.
-- [ ] ⚠️ **NFR-4** Auditability — Temporal history reconstructs runs, and the `events.jsonl`/`report.html` export exists (FR-704, E-32). Still partial: claim-check is not load-bearing (FR-702).
+- [x] **NFR-4** Auditability — Temporal history reconstructs runs, the `events.jsonl`/`report.html` export exists (FR-704, E-32), and claim-check is load-bearing for sessions and diffs (FR-702, E-92).
 - [ ] ⚠️ **NFR-5** Security — env allowlist done; `pre_tool` hook landed (2026-07-24, E-15/E-16, tool-level destructive-action + egress denial); OS user, container, network-level egress, scoped-cred injection still absent (E-20/E-21).
 - [x] **NFR-6** Reproducibility vs memoization — watermark-pinned recall + content-addressed cache. *Pinning is exact on `fake` (entry-count cutoff) and a `mentioned_at` cutoff on `hindsight`, which has no point-in-time read: memories retained after the freeze cannot enter a stage input, but ranking is still contaminated by them and post-freeze consolidation can mint observations carrying pre-freeze timestamps. `2026-08-02-hindsight-real-integration-design` §2.1.*
 - [x] **NFR-7** Portability — `MemoryConfig.backend` defaults to `fake`; real Hindsight client for self-hosting, verified against a live container by `tests/test_hindsight_live.py` (the client shipped before 2026-08-02 implemented an invented API and could not have worked).
@@ -563,14 +563,14 @@ as tracked rather than accidental.
 
 - [x] **ADR-1** Temporal owns state
 - [x] **ADR-2** Pydantic AI proposers + harness CLIs
-- [ ] **ADR-3** `CodeArtifact` union (files|diff_ref) — model doesn't exist; diff handling ad hoc.
+- [x] **ADR-3** `CodeArtifact` union (files|diff_ref) — built 2026-11-20 (E-92): `sdlc.vcs.models.CodeArtifact` rides the live path from `get_task_diff` (patch claim-checked); the propose-mode (`files[]`) arm is typed with no producer yet.
 - [x] **ADR-4** Gates as policy-driven durable signal waits (revision loop included)
 - [x] **ADR-5** Memoization + watermark; auditability/memoization split
 - [x] **ADR-6** Anti-collusion review (model-family inequality, clean-context reviewer) — *the boot check validated `agents.yaml`'s `developer` entry, which nothing ran; `cfg.roles["dev"]` did the coding. Re-aimed at `dev` and the two registries mirror-checked at boot (`2026-07-16-registry-drives-every-role`).*
 - [ ] **ADR-7** Repairs execute through the factory — maintenance loop absent.
 - [ ] ⚠️ **ADR-8** Interfaces as stateless shells — true for CLI. **Two documented exceptions, both deliberate:** the agent board API (E-78) serves durable cross-run state no live workflow holds (ADR-21); and the dashboard backend (E-10) holds an in-process fleet poller and subscriber set — not durable state, but not a stateless shell either. The poller exists because a per-request fan-out costs `N_clients × N_runs` while one shared poller costs `N_runs`. ARCHITECTURE.md §8 scopes the claim accordingly.
 - [x] **ADR-9** Two worker pools by capability — built 2026-11-16 (E-91, round 024): core `ai-sdlc` plus `KROKER_HARNESS_QUEUE` harness, run-level routing off by default; the five-pool amendment stays plan (AP-2.5b).
-- [ ] ⚠️ **ADR-10** Claim-check for large payloads — `ArtifactRef` exists but not load-bearing. *Proposer prompts are guarded, not claim-checked: 1 MiB limit, non-retryable `ProposerPayloadTooLarge` before scheduling (007). Uncovered: aggregate parallel-request overflow, in-activity agents.*
+- [ ] ⚠️ **ADR-10** Claim-check for large payloads — *diff claim-check + the 2MB mechanism built 2026-11-20 (E-92):* `CodeArtifact` from `get_task_diff` + the `load_diff` read-back, and `sdlc.converter.sdlc_data_converter` (`MAX_PAYLOAD_BYTES` = 2MB) refuses to serialize at the chokepoint on every client/worker. *Still uncovered:* proposer prompts are guarded, not claim-checked (1 MiB, non-retryable `ProposerPayloadTooLarge` before scheduling, 007); aggregate parallel-request overflow, in-activity agents.
 - [ ] ⚠️ **ADR-11** Deterministic DAG — holds for the 8 live stages; 6 stages absent.
 - [x] **ADR-12** Contract-first, clean-context validators — QA ✅ and review ✅ both clean-context. **(now complete)**
 - [x] **ADR-13** Serial-by-default; resume-bounded; context by reference (`near_context_ceiling` wired).

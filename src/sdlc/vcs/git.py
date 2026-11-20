@@ -13,6 +13,12 @@ from pathlib import PurePosixPath
 from pydantic import BaseModel, Field
 from temporalio import activity
 
+# Final-review Minor 1: the canonical slug lives in artifacts/store.py; the
+# historical local name is an alias here (imported by demo/fakes and the
+# test fakes), never a second copy.
+from ..artifacts.store import safe_name as _safe
+from .models import CodeArtifact as CodeArtifact  # re-export: FR-702 code-stage consumer
+
 
 def _git(args: list[str], cwd: str) -> subprocess.CompletedProcess:
     """Run git in ``cwd`` with the dubious-ownership check bypassed.
@@ -86,18 +92,36 @@ def _rmtree_with_retry(path: str, attempts: int = 3, delay_s: float = 1.0) -> No
     raise last_err
 
 
+def _run_id() -> str:
+    """Run id for the claim-check path: the workflow id while the activity
+    runs inside a worker; outside one (direct unit-test calls) `activity.info()`
+    raises, and the artifact claims under the literal run id "local"."""
+    try:
+        return activity.info().workflow_id or "local"
+    except Exception:
+        return "local"
+
+
 @dataclass
 class DiffInput:
     worktree: str
     branch_point: str  # SHA the task branched from — NOT base_branch
-    max_chars: int = 60_000
+    label: str | None = None  # artifact name; None -> branch_point[:12]
 
 
 @activity.defn
-async def get_task_diff(inp: DiffInput) -> dict:
+async def get_task_diff(inp: DiffInput) -> CodeArtifact:
     """Materialized diff for clean-context validators (FR-804), anchored to
     the task's branch point so a dependent task's diff shows only its own
-    change — upstream work is invisible (Finding #1)."""
+    change — upstream work is invisible (Finding #1).
+
+    FR-702 (E-38): the FULL patch is claim-checked into the artifact store at
+    ``<root>/<run_id>/diffs/<label>.patch`` — no truncation here, the source
+    never cuts — and only the small CodeArtifact (files/renames/stat plus
+    ``patch_ref``) crosses the wire. The visible cut marker is the read-back's
+    job (``load_diff``). A store failure raises, exactly like a git failure:
+    activity-error semantics, no inline fallback.
+    """
     rng = f"{inp.branch_point}...HEAD"
     stat = _git(["diff", "--stat", rng], inp.worktree).stdout
     patch = _git(["diff", rng], inp.worktree).stdout
@@ -112,15 +136,11 @@ async def get_task_diff(inp: DiffInput) -> dict:
         )
         if len(parts) == 3 and parts[0].startswith("R")
     ]
-    # T3 (sbatch 2026-10-19): a cut patch must carry a visible marker —
-    # the oracle's pattern (benchmarks/oracle.py _truncate_diff): keep
-    # exactly the first max_chars chars, then say how much was omitted, so
-    # a reviewer or lens reading the tail knows the diff continued. A cut
-    # at exactly max_chars is no cut (oracle semantics: <= passes through).
-    patch_out = patch[: inp.max_chars]
-    if len(patch) > inp.max_chars:
-        patch_out += f"\n...[diff truncated, {len(patch) - inp.max_chars} chars omitted]"
-    return {"stat": stat, "patch": patch_out, "files": files, "renames": renames}
+    label = _safe(inp.label if inp.label is not None else inp.branch_point[:12])
+    from ..artifacts.store import LocalFileStore
+
+    ref = LocalFileStore().put("diff", _run_id(), f"{label}.patch", patch.encode("utf-8"))
+    return CodeArtifact(files=files, renames=renames, stat=stat, patch_ref=ref)
 
 
 @dataclass

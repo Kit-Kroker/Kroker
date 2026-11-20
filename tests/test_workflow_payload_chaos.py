@@ -11,8 +11,9 @@ Pins the edge behaviour the task specifies:
   extra='forbid' anywhere in core/models.py, so none is tested here)
 - BuildResult: an empty task_results list is legal, instances keep identity
   and order, non-TaskResult junk is rejected
-- AnalyzeResult: the get_task_diff dict shape round-trips, empty
-  collections are legal, a missing report and a non-dict diff are rejected
+- AnalyzeResult: the CodeArtifact shape round-trips (FR-702: dicts no
+  longer ride this field), the empty construct (patch_ref=None) is legal,
+  a missing report and a non-artifact diff are rejected
 - PullRequest: the url is a plain str (the merge node may emit a benchmark
   skip string), non-strings rejected
 - NodeTypeSpec.budget_after: defaults to "none", accepts exactly
@@ -106,37 +107,43 @@ def test_build_result_rejects_non_task_result_items():
 # ---- AnalyzeResult (sdlc.workflows.models) ----------------------------------
 
 
-def test_analyze_result_accepts_the_get_task_diff_shape():
+def test_analyze_result_round_trips_the_artifact_shape():
+    from sdlc.vcs.models import CodeArtifact
     from sdlc.workflows.models import AnalyzeResult
 
-    diff = {"stat": " a | 1 +", "patch": "diff", "files": ["a.py"], "renames": [["b.py", "c.py"]]}
+    art = CodeArtifact(files=["a.py"], renames=[["b.py", "c.py"]], stat=" a | 1 +", patch_ref=None)
 
-    result = AnalyzeResult(report=_report(), untraced=["x.py"], integration_diff=diff)
+    result = AnalyzeResult(report=_report(), untraced=["x.py"], integration_diff=art)
 
-    assert result.integration_diff["renames"] == [["b.py", "c.py"]]
+    assert result.integration_diff is art
+    assert result.integration_diff.renames == [["b.py", "c.py"]]
     assert result.untraced == ["x.py"]
 
 
-def test_analyze_result_allows_empty_collections():
+def test_analyze_result_allows_the_empty_construct():
+    from sdlc.vcs.models import CodeArtifact
     from sdlc.workflows.models import AnalyzeResult
 
-    result = AnalyzeResult(report=_report(), untraced=[], integration_diff={})
+    result = AnalyzeResult(report=_report(), untraced=[], integration_diff=CodeArtifact())
 
-    assert (result.untraced, result.integration_diff) == ([], {})
+    assert result.untraced == []
+    assert result.integration_diff == CodeArtifact()
+    assert result.integration_diff.patch_ref is None
 
 
 def test_analyze_result_requires_the_report():
+    from sdlc.vcs.models import CodeArtifact
     from sdlc.workflows.models import AnalyzeResult
 
     with pytest.raises(ValidationError, match="report"):
-        AnalyzeResult(untraced=[], integration_diff={})
+        AnalyzeResult(untraced=[], integration_diff=CodeArtifact())
 
 
-def test_analyze_result_rejects_a_non_dict_diff():
+def test_analyze_result_rejects_a_non_artifact_diff():
     from sdlc.workflows.models import AnalyzeResult
 
     with pytest.raises(ValidationError, match="integration_diff"):
-        AnalyzeResult(report=_report(), untraced=[], integration_diff=["not-a-dict"])
+        AnalyzeResult(report=_report(), untraced=[], integration_diff=["not-an-artifact"])
 
 
 # ---- PullRequest (sdlc.workflows.models) ------------------------------------

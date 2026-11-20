@@ -56,6 +56,7 @@ from sdlc.stages.requirements.models import (
     requirements_digest,
 )
 from sdlc.vcs import IntegrationHandle
+from sdlc.vcs.models import CodeArtifact
 from sdlc.workflows.graph_catalog import SHIPPED
 from sdlc.workflows.graph_nodes.base import NodeContext, RunFacts, StoredPayload
 from sdlc.workflows.models import AnalyzeResult, BuildResult, PullRequest, SeededWork
@@ -176,7 +177,7 @@ def _analysis(untraced=()):
     return AnalyzeResult(
         report=AnalysisReport(traceability=[], summary="s", confidence=0.5),
         untraced=list(untraced),
-        integration_diff={"files": []},
+        integration_diff=CodeArtifact(),
     )
 
 

@@ -38,7 +38,6 @@ from pydantic_ai.durable_exec.temporal import PydanticAIPlugin, TemporalAgent
 from pydantic_ai.models.test import TestModel
 from temporalio import workflow
 from temporalio.client import Client
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
@@ -50,6 +49,7 @@ if not Path(os.environ.get("SDLC_GRAPH_STORE", "")).is_absolute():
     os.environ["SDLC_GRAPH_STORE"] = str(Path(tempfile.gettempdir()) / "sdlc-test-graphs")
 
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG  # noqa: E402
+from sdlc.converter import sdlc_data_converter  # noqa: E402
 from sdlc.stages.architecture.models import ArchitectureSpec  # noqa: E402
 from sdlc.stages.research.deps import ResearchDeps  # noqa: E402
 from sdlc.stages.research.models import ResearchBrief  # noqa: E402
@@ -132,7 +132,7 @@ def _source_commit() -> str:
 async def main() -> None:
     durable = _build_durable_architect()
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         client: Client = env.client
         async with Worker(

@@ -1,4 +1,5 @@
-"""Claim-check read paths (E-39 deep_review; 021 recall snapshots).
+"""Claim-check read paths (E-39 deep_review; 021 recall snapshots;
+FR-702 diff read-back).
 
 The ONLY reader of a stored HarnessSession. The store holds nothing but
 SCRUBBED bytes (E-38 scrubs before put), so reading it is scrubbed-by-
@@ -6,6 +7,12 @@ construction; the kind assertion pins that this is a session, never some
 other artifact. Byte-capped so a large transcript cannot blow the
 proposer's context — the workflow appends the inline SessionDigest when a
 read is truncated so aggregate signals survive.
+
+load_diff (FR-702) is the only reader of a stored patch and the only
+place the T3 cut happens: get_task_diff stored git's FULL output, so the
+truncation marker is produced here, never at the source. Char-capped
+(decode first, then slice) so a cut at a multi-byte codepoint cannot
+raise.
 
 read_recall_snapshot (021 FR-402) is the verified read-back of a
 content-addressed recall snapshot: wrong kind or hash mismatch raises
@@ -47,6 +54,32 @@ async def load_session(inp: LoadSessionInput) -> LoadSessionResult:
     data = ref_to_path(inp.ref).read_bytes()
     truncated = len(data) > DEEP_REVIEW_MAX_BYTES
     text = data[:DEEP_REVIEW_MAX_BYTES].decode("utf-8", errors="replace")
+    return LoadSessionResult(text=text, truncated=truncated)
+
+
+DIFF_MAX_CHARS = 60_000
+
+
+class LoadDiffInput(BaseModel):
+    ref: ArtifactRef
+    max_chars: int = DIFF_MAX_CHARS
+
+
+@activity.defn
+async def load_diff(inp: LoadDiffInput) -> LoadSessionResult:
+    """Bounded read-back of a stored patch (FR-702). The source never cuts
+    — get_task_diff claim-checked git's FULL output — so this is the only
+    place the T3 marker appears. Character semantics: the full bytes decode
+    first (``errors="replace"``), then the text is sliced at max_chars;
+    exactly max_chars characters passes through clean (``<=``), one more
+    appends ``\\n...[diff truncated, N chars omitted]`` with the exact
+    omitted count."""
+    assert inp.ref.kind == "diff", f"load_diff reads only diffs, got kind={inp.ref.kind!r}"
+    full = ref_to_path(inp.ref).read_bytes().decode("utf-8", errors="replace")
+    truncated = len(full) > inp.max_chars
+    text = full[: inp.max_chars]
+    if truncated:
+        text += f"\n...[diff truncated, {len(full) - inp.max_chars} chars omitted]"
     return LoadSessionResult(text=text, truncated=truncated)
 
 

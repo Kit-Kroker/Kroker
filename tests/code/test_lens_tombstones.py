@@ -13,6 +13,7 @@ from sdlc.stages.plan.models import DevTask, ValidationContract
 from sdlc.stages.qa.models import QAReport
 from sdlc.stages.review.lenses import LensPresence
 from sdlc.stages.review.models import DeepReviewReport, ReviewFinding, ReviewReport
+from sdlc.vcs import CodeArtifact
 
 # Absolute, not relative: there is no tests/__init__.py and pytest runs in
 # prepend import mode, so test modules are top-level. This is the repo's own
@@ -69,7 +70,7 @@ async def test_adversary_failure_is_tombstoned_and_does_not_block_done():
         mock_ho.return_value = None
         mock_act.side_effect = [
             QAReport(tests_passed=True, issues=[]),
-            {"files": ["app.py"]},
+            CodeArtifact(files=["app.py"]),
         ]
 
         tr = await code.step(
@@ -112,7 +113,7 @@ async def test_disabled_adversary_is_declared_absent():
         mock_ho.return_value = None
         mock_act.side_effect = [
             QAReport(tests_passed=True, issues=[]),
-            {"files": ["app.py"]},
+            CodeArtifact(files=["app.py"]),
         ]
 
         tr = await code.step(
@@ -159,7 +160,7 @@ async def test_adversary_runs_when_the_primary_is_disabled():
         mock_ho.return_value = None
         mock_act.side_effect = [
             QAReport(tests_passed=True, issues=[]),
-            {"files": ["app.py"]},
+            CodeArtifact(files=["app.py"]),
         ]
 
         tr = await code.step(
@@ -218,14 +219,15 @@ async def test_blocking_adversary_rejection_still_bites_without_a_primary():
         # blocking adversary rejection puts non-empty issues in the fix loop
         # (_fix_loop_issues unions the adversary's blocking findings), so a
         # SECOND attempt runs before the gate. Each attempt consumes two
-        # execute_activity side effects -- run_test_suite then get_task_diff --
-        # so four entries are required. Same shape as the repo's own
-        # quarantine-path tests (test_code_slice_contract.py:277-282, :394-399).
+        # execute_activity side effects -- run_test_suite then get_task_diff
+        # (patch_ref=None, so no load_diff read-back) -- so four entries are
+        # required. Same shape as the repo's own quarantine-path tests
+        # (test_code_slice_contract.py:277-282, :394-399).
         mock_act.side_effect = [
             QAReport(tests_passed=True, issues=[]),
-            {"files": ["app.py"]},
+            CodeArtifact(files=["app.py"]),
             QAReport(tests_passed=True, issues=[]),
-            {"files": ["app.py"]},
+            CodeArtifact(files=["app.py"]),
         ]
 
         tr = await code.step(
@@ -278,9 +280,9 @@ async def test_unreached_adversary_is_not_reached_not_undeclared_absent():
         # attempt (test_code_slice_contract.py:277-282 is the same shape).
         mock_act.side_effect = [
             QAReport(tests_passed=False, issues=["boom"]),
-            {"files": ["app.py"]},
+            CodeArtifact(files=["app.py"]),
             QAReport(tests_passed=False, issues=["boom"]),
-            {"files": ["app.py"]},
+            CodeArtifact(files=["app.py"]),
         ]
 
         tr = await code.step(

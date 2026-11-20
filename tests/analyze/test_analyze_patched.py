@@ -20,6 +20,7 @@ from sdlc.stages.analyze.models import (
 )
 from sdlc.stages.analyze.prompts import analyst_prompt, analyst_prompt_v2
 from sdlc.stages.plan.models import DevTask
+from sdlc.vcs.models import CodeArtifact
 from sdlc.workflows.models import TaskResult
 
 
@@ -188,7 +189,8 @@ async def test_analyze_step_patched_path(tmp_path):
                 TaskResult(task_id="T1", status="done", attempts=1, branch="branch-1"),
                 TaskResult(task_id="T2", status="done", attempts=1, branch="branch-2"),
             ],
-            diff={"stat": "test_example.py | 1 +", "patch": "+def test_works(): pass"},
+            diff=CodeArtifact(stat="test_example.py | 1 +"),
+            patch="+def test_works(): pass",
             analyst_agent=SimpleNamespace(),
         )
 
@@ -239,7 +241,8 @@ async def test_analyze_step_unpatched_path():
             cfg=cfg,
             integration_wt="/fake/wt",
             tasks=tasks,
-            diff={"stat": "stat", "patch": "patch"},
+            diff=CodeArtifact(stat="stat"),
+            patch="patch",
             analyst_agent=SimpleNamespace(),
         )
 

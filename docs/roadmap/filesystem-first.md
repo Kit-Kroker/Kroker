@@ -347,10 +347,25 @@ is marked **(new scope)** and needs a PRD line before it is real.
   event stream), `ArtifactStore` seam with `file://` backend
   (`src/sdlc/artifacts/`), fail-closed capture in `run_coding_task`,
   retro-time OQ-B7 retention, env-gated Logfire slice. PRD line: FR-109.
-  Diff claim-check (FR-702 proper) and report rendering deliberately not
-  here; TTL still open. Spec
+  Diff claim-check (FR-702 proper) closed by **E-92** (2026-11-20) and report
+  rendering deliberately not here; TTL still open. Spec
   `docs/superpowers/specs/2026-07-23-capture-always-harness-sessions-design.md`,
   plan `docs/superpowers/plans/2026-07-23-capture-always-harness-sessions.md`.
+- [x] **E-92 (new scope; ADR-3/ADR-10)** Diff claim-check — FR-702 proper,
+  E-38's deferred second half. `get_task_diff` stores the full untruncated
+  patch (`kind: "diff"`, `<root>/<run_id>/diffs/<label>.patch` via
+  `LocalFileStore`) and returns `sdlc.vcs.models.CodeArtifact`
+  (files/renames/stat inline, only `patch_ref` crosses history); prompt
+  consumers materialize the text through the bounded
+  `artifacts/read.py::load_diff` read-back (60k chars, T3 marker parity —
+  truncation is a prompt budget now, not a storage limit);
+  `AnalyzeResult.integration_diff` and `HarnessRunResult.diff_ref` carry the
+  artifact; and `sdlc.converter.sdlc_data_converter` (`MAX_PAYLOAD_BYTES`,
+  2MB) refuses to serialize oversized payloads at the one chokepoint on every
+  client and worker. Replay corpus re-baselined (Rule 2) and the crossing
+  wire anchor regenerated once under ruling R-A. Spec
+  `docs/superpowers/specs/2026-11-19-fr702-claim-check-diffs-design.md`, plan
+  `docs/superpowers/plans/2026-11-19-fr702-claim-check-diffs.md`.
 - [x] **E-39 (new scope)** `deep_review` — an optional, opt-in review tier that
   reads the scrubbed `HarnessSession` (E-38) as **data**. This is Cursor's
   full-transcript lens, and it deliberately does what the default reviewer must

@@ -27,14 +27,13 @@ logging.basicConfig(
 
 from pydantic_ai.durable_exec.temporal import TemporalDurability
 from temporalio.client import Client
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 from .agents.loader import load_registry, validate_registry
 from .agents.payload_guard import has_payload_guard
 from .agents.roles import ALL_TEMPORAL_AGENTS
 from .agents.runner import SdlcPydanticAIPlugin
-from .artifacts.read import load_session
+from .artifacts.read import load_diff, load_session
 from .artifacts.retention import apply_session_retention
 from .assessment.activities import (
     assess_risk,
@@ -77,6 +76,7 @@ from .board.activities import (
     sync_plan_tasks,
 )
 from .calibration.activities import calibration_verdict, record_calibration_samples
+from .converter import sdlc_data_converter
 from .crew.activities import (
     checkpoint_round,
     load_crew,
@@ -224,6 +224,7 @@ def get_worker_activities() -> Sequence[Callable[..., Any]]:
         price_usage,
         apply_session_retention,
         load_session,
+        load_diff,
         publish_artifact_version,
         sync_plan_tasks,
         set_task_authoritative,
@@ -402,7 +403,7 @@ async def main() -> None:
 
     client = await Client.connect(
         os.environ.get("TEMPORAL_HOST", "localhost:7233"),
-        data_converter=pydantic_data_converter,
+        data_converter=sdlc_data_converter,
         plugins=[SdlcPydanticAIPlugin()],
     )
 

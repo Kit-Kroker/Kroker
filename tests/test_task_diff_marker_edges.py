@@ -1,33 +1,43 @@
-"""Edge/pin tests for the visible cut marker on get_task_diff's patch
-(sbatch-2026-10-19 T3; task .workspace/tasks/2026-10-03-silent-patch-cut-no-marker.md).
+"""FR-702: the T3 cut lives at the read-back, never at the source.
 
-``src/sdlc/vcs/git.py`` caps ``patch`` at ``max_chars`` with a bare slice —
-a validator reading the tail cannot tell a whole diff from a cut one. The
-planned fix copies the oracle's pattern (``benchmarks/oracle.py``,
-``_truncate_diff``): ``<= max_chars`` passes through unchanged; longer
-patches keep their exact first ``max_chars`` characters and gain a final
-marker naming the omitted count. What is KEPT must not change.
+Two contracts pinned here, one per side of the claim-check.
 
-These tests build a real git repo and reproduce the activity's own
-``git diff <branch_point>...HEAD`` output in-test, so the kept-prefix
-assertion is a byte compare against ground truth, not a paraphrase.
-``check_test_drift``'s own silent cut (git.py:~225) is OUT OF SCOPE for
-T3 and deliberately untested here.
+SOURCE side (get_task_diff): the stored patch is git's own output
+byte-for-byte — no truncation, no marker text is ever injected at the
+source; the metadata is a pure function of the diff; an empty diff still
+claim-checks.
+
+READ side (load_diff): the only place a patch is cut. The first
+max_chars characters pass through clean — a patch of exactly max_chars
+characters is NOT a cut (``<=`` semantics, no marker); one character
+more appends the T3 marker ``\\n...[diff truncated, N chars omitted]``
+with the exact omitted count; the slice is by characters (decode the
+full patch first, ``errors="replace"``), so a cut landing at a
+multi-byte codepoint decodes instead of raising. check_test_drift's own
+silent cut (git.py:~225) stays OUT OF SCOPE here.
 """
 
 from __future__ import annotations
 
+import hashlib
 import pathlib
-import re
 import subprocess
 
 import pytest
 
-from sdlc.benchmarks.oracle import _truncate_diff
+from sdlc.artifacts.read import LoadDiffInput, load_diff
+from sdlc.artifacts.store import LocalFileStore
+from sdlc.core.models import ArtifactRef
 from sdlc.vcs import DiffInput, get_task_diff
 
 GIT = ["git", "-c", "user.email=t@example.test", "-c", "user.name=t"]
-_MARKER = re.compile(r"truncated, (\d+) chars omitted")
+
+
+@pytest.fixture(autouse=True)
+def _artifact_root(tmp_path, monkeypatch):
+    # get_task_diff claim-checks via LocalFileStore() (env-resolved root);
+    # direct calls fall back to run id "local".
+    monkeypatch.setenv("SDLC_ARTIFACT_ROOT", str(tmp_path))
 
 
 def _git(cwd, *args: str) -> str:
@@ -63,81 +73,126 @@ def _repo_with_diff(tmp_path: pathlib.Path) -> tuple[str, str, str]:
     return str(repo), base, real
 
 
-async def _diff(worktree: str, base: str, max_chars: int) -> dict:
-    return await get_task_diff(DiffInput(worktree=worktree, branch_point=base, max_chars=max_chars))
+async def _diff(worktree: str, base: str, label: str):
+    return await get_task_diff(DiffInput(worktree=worktree, branch_point=base, label=label))
+
+
+async def _read(ref: ArtifactRef, **kw):
+    return await load_diff(LoadDiffInput(ref=ref, **kw))
+
+
+# --- source side: get_task_diff stores the FULL patch, uncut --------------
 
 
 @pytest.mark.asyncio
-async def test_at_exactly_max_chars_the_patch_passes_through_uncut(tmp_path):
-    """PIN (green on main; must stay green): the cut boundary is EXCLUSIVE,
-    oracle semantics — len(patch) == max_chars returns the whole patch with
-    no marker. An inclusive boundary would cut the final character and mark
-    a complete diff as truncated."""
+async def test_the_stored_patch_is_gits_own_output_with_no_marker(tmp_path):
     wt, base, real = _repo_with_diff(tmp_path)
-    assert len(real) > 100, "fixture diff unexpectedly small; boundary tests would be vacuous"
-    out = await _diff(wt, base, len(real))
-    assert out["patch"] == real
-    assert "truncated" not in out["patch"]
-
-
-@pytest.mark.asyncio
-async def test_one_char_over_max_carries_a_marker_naming_exactly_one(tmp_path):
-    """RED on main (the cut is silent today): len(patch) == max_chars + 1 is
-    the smallest cut that can exist, and its marker must name the exact
-    omitted count — 1."""
-    wt, base, real = _repo_with_diff(tmp_path)
-    out = await _diff(wt, base, len(real) - 1)
-    m = _MARKER.search(out["patch"])
-    assert m is not None, (
-        f"patch cut at {len(real) - 1} of {len(real)} carries no truncation "
-        f"marker — a validator cannot tell a cut diff from a whole one"
+    art = await _diff(wt, base, "a1")
+    stored = (tmp_path / "local" / "diffs" / "a1.patch").read_bytes()
+    assert stored == real.encode("utf-8"), (
+        "the claim-check must hold git's diff output byte-for-byte — the "
+        "source must not inject a truncation marker (the cut moved to the "
+        "read-back activity)"
     )
-    assert int(m.group(1)) == 1, f"omitted must be exactly 1, marker said {m.group(1)}"
+    assert art.patch_ref is not None
+    assert art.patch_ref.sha256 == hashlib.sha256(stored).hexdigest()
 
 
 @pytest.mark.asyncio
-async def test_cut_keeps_the_exact_prefix_and_appends_the_oracle_marker(tmp_path):
-    """RED on main (marker missing; the prefix half already holds): with a
-    mid-diff cut, the returned patch must equal the oracle's own
-    ``_truncate_diff`` over the reproduced git output — exact first
-    max_chars characters byte-for-byte, then the oracle-shaped marker
-    naming len(real) - max_chars omitted chars. A fix that trims
-    differently, re-wraps, or moves the cut point fails here."""
-    wt, base, real = _repo_with_diff(tmp_path)
-    max_chars = len(real) // 2
-    out = await _diff(wt, base, max_chars)
-    assert out["patch"] == _truncate_diff(real, max_chars), (
-        f"expected patch == _truncate_diff(real, {max_chars}); what is KEPT "
-        f"must be the diff's exact first {max_chars} characters plus the "
-        f"oracle marker (benchmarks/oracle.py pattern the fix copies)"
-    )
+async def test_sibling_keys_and_stored_bytes_are_identical_across_calls(tmp_path):
+    """Two fetches of the same repo produce the same files/renames/stat and
+    the same stored patch — the store is a pure function of the diff."""
+    wt, base, _ = _repo_with_diff(tmp_path)
+    first = await _diff(wt, base, "first")
+    second = await _diff(wt, base, "second")
+    assert second.files == first.files
+    assert second.renames == first.renames
+    assert second.stat == first.stat
+    d = tmp_path / "local" / "diffs"
+    assert (d / "first.patch").read_bytes() == (d / "second.patch").read_bytes()
 
 
 @pytest.mark.asyncio
-async def test_sibling_keys_are_identical_with_and_without_the_cut(tmp_path):
-    """PIN (green on main; must stay green): the marker lives in ``patch``
-    only — stat, files and renames are identical whether the cut fired or
-    not (same repo, two max_chars values)."""
-    wt, base, real = _repo_with_diff(tmp_path)
-    whole = await _diff(wt, base, len(real))
-    cut = await _diff(wt, base, max(1, len(real) // 3))
-    for key in ("stat", "files", "renames"):
-        assert cut[key] == whole[key], f"key {key!r} changed when the cut fired"
+async def test_an_empty_diff_still_claim_checks(tmp_path):
+    """branch_point == HEAD: nothing changed, the patch is empty — the store
+    still holds the (zero-byte) artifact and the metadata still rides."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    (repo / "a.py").write_text("v1\n", encoding="utf-8")
+    _git(repo, "add", "a.py")
+    _git(repo, "commit", "-q", "-m", "base")
+    base = _git(repo, "rev-parse", "HEAD").strip()
+
+    art = await _diff(str(repo), base, "empty")
+
+    assert art.files == [] and art.renames == [] and art.stat == ""
+    stored = (tmp_path / "local" / "diffs" / "empty.patch").read_bytes()
+    assert stored == b""
+    assert art.patch_ref is not None
+    assert art.patch_ref.sha256 == hashlib.sha256(b"").hexdigest()
+
+
+# --- read side: load_diff cuts, and only load_diff cuts -------------------
 
 
 @pytest.mark.asyncio
-async def test_the_marker_is_terminal_and_solitary(tmp_path):
-    """RED on main (no marker exists): the marker is the LAST line of the
-    returned patch and appears exactly once — a marker injected mid-diff or
-    duplicated misleads a reviewer reading the tail."""
-    wt, base, real = _repo_with_diff(tmp_path)
-    out = await _diff(wt, base, len(real) - 1)
-    lines = out["patch"].splitlines()
-    marker_lines = [ln for ln in lines if "truncated" in ln]
-    assert len(marker_lines) == 1, (
-        f"expected exactly one marker line, found {len(marker_lines)}; a "
-        f"duplicated marker double-counts the omission"
-    )
-    assert "truncated" in lines[-1], (
-        f"the marker must be the final line; last line was {lines[-1]!r}"
-    )
+async def test_put_then_load_diff_round_trips_the_stored_text(tmp_path):
+    """Store/read round-trip: what put("diff") wrote is what load_diff
+    reads back — including the zero-byte patch an empty diff produces."""
+    store = LocalFileStore(root=tmp_path)
+    patch = "diff --git a/x.py b/x.py\n+the stored bytes come back verbatim\n"
+    ref = store.put("diff", "run-1", "t1-a1.patch", patch.encode("utf-8"))
+    out = await _read(ref)
+    assert out.text == patch
+    assert out.truncated is False
+
+    empty = store.put("diff", "run-1", "empty.patch", b"")
+    out = await _read(empty)
+    assert out.text == "" and out.truncated is False
+
+
+@pytest.mark.asyncio
+async def test_load_diff_rejects_a_foreign_kind():
+    ref = ArtifactRef(kind="harness_session", uri="file:///x", sha256=None)
+    with pytest.raises(AssertionError, match="load_diff reads only diffs"):
+        await _read(ref)
+
+
+@pytest.mark.asyncio
+async def test_cut_at_exactly_max_chars_is_not_a_cut(tmp_path):
+    """``<=`` semantics: a patch of exactly max_chars characters passes
+    through clean — no marker, truncated stays False."""
+    store = LocalFileStore(root=tmp_path)
+    patch = "a" * 60_000
+    ref = store.put("diff", "run-1", "exact.patch", patch.encode("utf-8"))
+    out = await _read(ref)
+    assert out.text == patch
+    assert out.truncated is False
+    assert "omitted" not in out.text
+
+
+@pytest.mark.asyncio
+async def test_one_char_over_appends_marker_with_the_exact_omitted_count(tmp_path):
+    store = LocalFileStore(root=tmp_path)
+    patch = "b" * (60_000 + 7)
+    ref = store.put("diff", "run-1", "over.patch", patch.encode("utf-8"))
+    out = await _read(ref)
+    assert out.truncated is True
+    assert out.text == "b" * 60_000 + "\n...[diff truncated, 7 chars omitted]"
+
+
+@pytest.mark.asyncio
+async def test_multibyte_cut_lands_on_a_codepoint_without_raising(tmp_path):
+    """€ is 3 bytes in UTF-8: a byte-wise cut at max_chars would slice the
+    sequence mid-codepoint and raise on decode. Char semantics — decode the
+    full patch, then slice characters — must come back without raising,
+    without a replacement character in the kept text, and with the marker
+    counting omitted characters (23), not bytes (69)."""
+    store = LocalFileStore(root=tmp_path)
+    full = "€" * 33
+    ref = store.put("diff", "run-1", "mb.patch", full.encode("utf-8"))
+    out = await _read(ref, max_chars=10)
+    assert out.truncated is True
+    assert out.text == "€" * 10 + "\n...[diff truncated, 23 chars omitted]"
+    assert "\ufffd" not in out.text

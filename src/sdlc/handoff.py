@@ -8,6 +8,7 @@ work to a file the task never opened, and is dropped rather than trusted.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -94,6 +95,24 @@ def claim_survival_score(kept: int, dropped: int) -> Measurement:
     if total == 0:
         return Measurement.not_collected("no claims extracted")
     return Measurement.measured(kept / total)
+
+
+def crosschecked_claims(
+    out: Any, files: list[str], session_text: str | None
+) -> tuple[dict[str, list[HandoffClaim]], int, int]:
+    """Cross-check the extractor's three claim fields in one pass (FR-702
+    move from code/step.py — pure, no ctx, no I/O, table-testable).
+
+    Returns ``(fields, kept, dropped)``: `fields` splats straight into
+    HandoffSummary, and kept/dropped feed claim_survival_score."""
+    kept_total = dropped_total = 0
+    fields: dict[str, list[HandoffClaim]] = {}
+    for name in ("what_changed", "decisions_made", "open_concerns"):
+        checked = cross_check_claims(getattr(out, name), files, session_text=session_text)
+        fields[name] = checked.kept
+        kept_total += len(checked.kept)
+        dropped_total += checked.dropped_paths + checked.dropped_quotes
+    return fields, kept_total, dropped_total
 
 
 def verified_integrity_flags(

@@ -2,7 +2,9 @@
 
 Each fake carries the PRODUCTION activity name, so Temporal dispatches the
 workflow's call to it when only these are registered on the demo worker.
-None of them opens a file, spawns a process or reaches the network.
+None of them spawns a process or reaches the network; the only file writes
+are the sanctioned evidence ones (get_task_diff's claim-check patch,
+E-38's export dump) beside the run's artifact root.
 
 tests/fakes/ holds the test suite's own copies of the same seams; those are
 scripted per test (failures, recorders, staggering) and stay there. This
@@ -24,7 +26,9 @@ from pydantic_ai.models.test import TestModel
 from temporalio import activity
 
 from ..agents.roles import AGENT_ACTIVITY_CONFIG
+from ..artifacts.read import load_diff
 from ..artifacts.retention import RetentionInput
+from ..artifacts.store import LocalFileStore
 from ..board.activities import (
     AttachEvidenceInput,
     PublishArtifactInput,
@@ -67,6 +71,7 @@ from ..stages.qa.models import QAReport, ScopedSecurityReport
 from ..vcs import (
     BaseWorktree,
     BaseWorktreeInput,
+    CodeArtifact,
     DiffInput,
     IntegrationHandle,
     IntegrationInput,
@@ -75,6 +80,7 @@ from ..vcs import (
     WorktreeHandle,
     WorktreeInput,
 )
+from ..vcs.git import _run_id, _safe
 
 # ---- proposer agents -----------------------------------------------------------
 
@@ -166,13 +172,16 @@ async def run_coding_task(inp: CodingTaskInput) -> HarnessRunResult:
 
 
 @activity.defn(name="get_task_diff")
-async def get_task_diff(inp: DiffInput) -> dict:
-    return {
-        "stat": " app/health.py | 6 ++++++",
-        "patch": "diff --git a/app/health.py b/app/health.py\n+ok\n",
-        "files": ["app/health.py"],
-        "renames": [],
-    }
+async def get_task_diff(inp: DiffInput) -> CodeArtifact:
+    patch = "diff --git a/app/health.py b/app/health.py\n+ok\n"
+    label = inp.label if inp.label is not None else inp.branch_point[:12]
+    ref = LocalFileStore().put("diff", _run_id(), f"{_safe(label)}.patch", patch.encode("utf-8"))
+    return CodeArtifact(
+        files=["app/health.py"],
+        renames=[],
+        stat=" app/health.py | 6 ++++++",
+        patch_ref=ref,
+    )
 
 
 @activity.defn(name="run_test_suite")
@@ -320,8 +329,9 @@ SCRIPTED: list[Callable[..., Any]] = [
 ]
 
 # Production activities the dry run keeps: pure code, or a write under the
-# export root that is the point of the run.
-REAL: list[Callable[..., Any]] = [evaluate_gate, price_usage, export_run_artifacts]
+# export root that is the point of the run. load_diff (FR-702) reads back
+# what the scripted get_task_diff above claim-checked into the store.
+REAL: list[Callable[..., Any]] = [evaluate_gate, price_usage, export_run_artifacts, load_diff]
 
 
 def demo_activities(specs: list[tuple[str, type, BaseModel]]) -> list[Callable[..., Any]]:

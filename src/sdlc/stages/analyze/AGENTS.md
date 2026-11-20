@@ -11,6 +11,7 @@ file carries only what is true *here*.
 - The step signature takes `ctx: StageContext` as first argument, never the workflow instance.
 - The step never calls `ctx.gate`: analyze is proposer-only and runs prior to the merge gate.
 - The clean-context Analyst role proposes criterion traces; workflow-side `enforce_traces` (and legacy `untraced_criteria`) enforces them.
+- The integration diff is a `CodeArtifact` (FR-702, E-92): `step` takes `diff: CodeArtifact | None` — inline metadata only; when absent and a worktree is available, the step fetches the artifact once under the `integration` label with ONE `load_diff` read-back for the prompt. The patch text never rides the artifact. The coupling uses a None sentinel: `patch=None` means never materialized — the step raises `ValueError` if the `diff` carries a `patch_ref` (the caller reads it back via `load_diff`); `patch=""` is a legitimate materialized-empty value, and ref-less diffs never raise.
 - The slice exports `step` and `ACTIVITIES = [build_trace_inventory]`.
 
 ## Temporal notes for this slice

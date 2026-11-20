@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 from pathlib import Path
 
 from ..core.models import (
@@ -26,15 +25,13 @@ from ..core.models import (
 from ..harness.base import CodingHarness
 from ..harness.models import SessionDigest
 from ..harness.session import digest_of, scrub_session, session_to_jsonl
-from .store import LocalFileStore
+# Final-review Minor 1: the canonical slug lives in store.py; the historical
+# local name is an alias here, never a second copy.
+from .store import LocalFileStore, safe_name as _safe
 
 _log = logging.getLogger(__name__)
 
 RAW_STREAM_ENV = "SDLC_RAW_STREAM_DIR"
-
-
-def _safe(name: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._-]", "_", name)
 
 
 def _capture_raw_stream(raw_stdout: str, run_id: str, name: str) -> None:
