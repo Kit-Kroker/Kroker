@@ -32,7 +32,7 @@ from .integration import (
     remove_verification_tree,
     setup_integration_branch,
 )
-from .models import CodeArtifact
+from .models import CodeArtifact, as_code_artifact
 from .worktree import (
     CleanupWorktreesInput,
     CleanupWorktreesReport,
@@ -84,6 +84,7 @@ __all__ = [
     "_git",
     "_rmtree_with_retry",
     "_worktrees_root",
+    "as_code_artifact",
     "build_verification_branch",
     "check_test_drift",
     "cleanup_run_worktrees",

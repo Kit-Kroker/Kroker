@@ -15,7 +15,7 @@ with workflow.unsafe.imports_passed_through():
     from ...graph.router import Activation
     from ...stages import analyze, deploy, merge
     from ...validators.verdicts import plan_valid
-    from ...vcs import CodeArtifact, DiffInput, get_task_diff
+    from ...vcs import DiffInput, as_code_artifact, get_task_diff
     from ..build import run_tasks
     from ..models import AnalyzeResult, BuildResult, PullRequest
     from .base import NodeContext, NodeResult, input_model
@@ -126,8 +126,9 @@ async def analyze_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
     # artifact ONCE (label="integration"); ONE bounded load_diff read-back
     # materializes the patch text for the analyst prompt. A dict here is a
     # replayed pre-claim-check history (or a fake pinned to the old shape):
-    # decode-side only, validate it — patch_ref=None, legacy inline patch
-    # dropped, no read-back scheduled (the same shim as the code stage).
+    # decode-side only — as_code_artifact() normalizes it (patch_ref=None,
+    # legacy inline patch dropped, no read-back scheduled), the same shim
+    # as the code stage.
     art = await workflow.execute_activity(
         get_task_diff,
         DiffInput(
@@ -137,10 +138,11 @@ async def analyze_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
         ),
         **pools.on_harness(ACT, cfg.harness_queue),
     )
-    if isinstance(art, dict):
-        art = CodeArtifact.model_validate(art)
-    patch = art.patch_ref and await workflow.execute_activity(
-        load_diff, LoadDiffInput(ref=art.patch_ref), **ACT
+    art = as_code_artifact(art)
+    patch = (
+        await workflow.execute_activity(load_diff, LoadDiffInput(ref=art.patch_ref), **ACT)
+        if art.patch_ref
+        else None
     )
     patch_text = patch.text if patch else ""
     done = {r.task_id: r for r in results.task_results}

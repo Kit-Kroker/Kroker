@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import fnmatch
 import os
-import re
 import stat
 import subprocess
 import time
@@ -14,6 +13,10 @@ from pathlib import PurePosixPath
 from pydantic import BaseModel, Field
 from temporalio import activity
 
+# Final-review Minor 1: the canonical slug lives in artifacts/store.py; the
+# historical local name is an alias here (imported by demo/fakes and the
+# test fakes), never a second copy.
+from ..artifacts.store import safe_name as _safe
 from .models import CodeArtifact as CodeArtifact  # re-export: FR-702 code-stage consumer
 
 
@@ -87,11 +90,6 @@ def _rmtree_with_retry(path: str, attempts: int = 3, delay_s: float = 1.0) -> No
             time.sleep(delay_s)
     assert last_err is not None
     raise last_err
-
-
-def _safe(name: str) -> str:
-    """Filesystem-safe artifact name (verbatim from artifacts/capture.py)."""
-    return re.sub(r"[^A-Za-z0-9._-]", "_", name)
 
 
 def _run_id() -> str:

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from sdlc.core.models import PipelineConfig
+from sdlc.core.models import ArtifactRef, PipelineConfig
 from sdlc.memory.models import MemoryKind
 from sdlc.stages import analyze
 from sdlc.stages.analyze.models import AnalysisReport, CriterionTrace
@@ -251,3 +251,65 @@ async def test_analyze_step_without_worktree_skips_the_self_fetch(monkeypatch):
         integration_wt="",
         analyst_agent=MagicMock(),
     )
+
+
+@pytest.mark.asyncio
+async def test_analyze_step_guard_requires_patch_text_for_a_claim_checked_diff():
+    """Final-review Minor 4: the diff/patch coupling is explicit. A diff
+    carrying a ``patch_ref`` with empty ``patch`` is a caller bug that would
+    silently empty the analyst prompt — the step raises ``ValueError``
+    naming the contract (materialize via ``load_diff``). The ref-less
+    legacy/propose shape (``patch_ref=None``, empty patch) stays legal and
+    runs to completion."""
+    import importlib
+
+    step_mod = importlib.import_module("sdlc.stages.analyze.step")
+    ref = ArtifactRef(kind="diff", uri="file:///store/diffs/integration.patch", sha256="0" * 64)
+
+    class _Ctx:
+        def stage(self, *a, **k):
+            pass
+
+        async def run_role(self, cfg, role, model, agent, prompt, into=None):
+            return MagicMock(
+                output=AnalysisReport(
+                    traceability=[
+                        CriterionTrace(task_id="t1", criterion="criterion-1", tests=["test_c1"])
+                    ],
+                    summary="all traced",
+                )
+            )
+
+        async def record(self, cfg, record) -> None:
+            pass
+
+        async def retain(self, *a, **k):
+            pass
+
+    tasks = [DevTask(id="t1", title="Task 1", description="D", acceptance_criteria=["criterion-1"])]
+
+    # guard leg: a claim-checked diff without its materialized text raises,
+    # before any role call, naming the read-back contract
+    with pytest.raises(ValueError, match="load_diff"):
+        await step_mod.step(
+            _Ctx(),
+            cfg=PipelineConfig(),
+            tasks=tasks,
+            diff=CodeArtifact(files=["a.py"], stat="a.py | 1 +", patch_ref=ref),
+            patch="",
+            integration_wt="/fake/wt",
+            analyst_agent=MagicMock(),
+        )
+
+    # boundary leg: patch_ref=None + empty patch is the legitimate
+    # legacy/propose shape — no raise, the stage completes
+    outcome = await step_mod.step(
+        _Ctx(),
+        cfg=PipelineConfig(),
+        tasks=tasks,
+        diff=CodeArtifact(files=["a.py"], stat="a.py | 1 +"),
+        patch="",
+        integration_wt="/fake/wt",
+        analyst_agent=MagicMock(),
+    )
+    assert isinstance(outcome, analyze.AnalyzeOutcome)

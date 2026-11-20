@@ -114,6 +114,39 @@ def test_pydantic_ai_plugin_preserves_the_guarded_converter() -> None:
         configured.payload_converter.to_payload(_sized_str(MAX_PAYLOAD_BYTES))
 
 
+def test_no_src_callsite_passes_the_raw_pydantic_converter() -> None:
+    """Final-review hardening: ``sdlc_data_converter`` is the only sanctioned
+    converter — anything under ``src/`` that builds a Client or worker on the
+    raw ``pydantic_data_converter`` would silently bypass the 2MB wire guard
+    on every write. Enforced by test, not review convention: no ``src/`` file
+    may pass ``data_converter=pydantic_data_converter``, and the raw
+    identifier may be named only inside ``sdlc/converter.py`` (whose
+    docstring records the guarded lineage). Tests keep importing it as the
+    unguarded decode baseline, exactly as the unit tests above do."""
+    import re
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[1] / "src" / "sdlc"
+    kwarg = re.compile(r"data_converter\s*=\s*pydantic_data_converter\b")
+    kwarg_hits: list[str] = []
+    stray: list[str] = []
+    for p in sorted(src.rglob("*.py")):
+        for i, line in enumerate(p.read_text(encoding="utf-8").splitlines()):
+            rel = f"{p.relative_to(src)}:{i + 1}: {line.strip()}"
+            if kwarg.search(line):
+                kwarg_hits.append(rel)
+            if "pydantic_data_converter" in line and p.name != "converter.py":
+                stray.append(rel)
+    assert kwarg_hits == [], (
+        "raw pydantic_data_converter passed as a converter — use sdlc_data_converter: "
+        + "; ".join(kwarg_hits)
+    )
+    assert stray == [], (
+        "the raw pydantic_data_converter may be named only in sdlc/converter.py "
+        "(docstrings must name sdlc_data_converter): " + "; ".join(stray)
+    )
+
+
 # ------------------------------------------------------------------ temporal
 
 # Every wall-clock wait in the two legs below is capped: a guard test must

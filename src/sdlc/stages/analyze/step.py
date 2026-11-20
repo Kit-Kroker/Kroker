@@ -120,6 +120,19 @@ async def step(
     _an_started = _now()
     patched = _EVIDENCE_V2()
 
+    if diff is not None and diff.patch_ref is not None and patch == "":
+        # Final-review Minor 4: a claim-checked diff arriving without its
+        # materialized text would silently empty the analyst prompt. The
+        # caller must read the ref back via load_diff (FR-702 read-back
+        # contract). A ref-less artifact with empty patch is the legitimate
+        # legacy/propose shape and must NOT raise — hence the patch_ref
+        # guard here, and the placement before the self-fetch branch (which
+        # supplies its own patch below and keeps today's semantics).
+        raise ValueError(
+            "analyze.step: diff carries a patch_ref but patch is empty — "
+            "materialize it via load_diff before calling (FR-702 read-back contract)"
+        )
+
     if diff is None and integration_wt:
         diff = await _exec_activity(
             get_task_diff,

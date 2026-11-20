@@ -1,5 +1,5 @@
 """Runtime deps for the product (requirements) drafter agent. Serializable
-(crosses the Temporal activity boundary via pydantic_data_converter), so it
+(crosses the Temporal activity boundary via sdlc_data_converter), so it
 carries CONFIG and COUNTERS — never a live handle or a filesystem path (the
 research/deps.py house warning applies here too: anything the activity
 needs from the run travels as data, or it does not travel).

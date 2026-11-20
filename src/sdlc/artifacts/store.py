@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlparse
@@ -32,6 +33,13 @@ _SUBDIRS = {
     # <root>/<run_id>/diffs/.
     "diff": "diffs",
 }
+
+
+def safe_name(name: str) -> str:
+    """Filesystem-safe artifact name — the ONE canonical slug (FR-702 final
+    review, Minor 1). Both producers (artifacts/capture, vcs/git) import it,
+    so stored paths can never drift between them."""
+    return re.sub(r"[^A-Za-z0-9._-]", "_", name)
 
 
 def ref_to_path(ref: ArtifactRef) -> Path:

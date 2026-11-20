@@ -49,10 +49,10 @@ with workflow.unsafe.imports_passed_through():
     from ...observability.trace import RunEventKind
     from ...pending import GateContext
     from ...vcs import (
-        CodeArtifact,
         DiffInput,
         DriftInput,
         DriftReport,
+        as_code_artifact,
         check_test_drift,
         get_task_diff,
     )
@@ -694,22 +694,21 @@ async def step(
             QAInput(worktree=worktree, test_cmd=test_cmd, **lint_in),
             **pools.on_harness(_long_act(cfg.roles.get("test", role_cfg)), cfg.harness_queue),
         )
-        # FR-702: the diff is claim-checked — get_task_diff stores git's FULL
-        # output and returns the small artifact; ONE bounded load_diff
-        # read-back materializes the prompt text for every consumer this
-        # attempt. A dict here is a replayed pre-claim-check history
-        # (json/plain payload): validate it — patch_ref=None, no read-back
-        # scheduled — never trust the legacy inline patch back on the wire.
+        # FR-702: the diff is claim-checked — get_task_diff stores git's FULL output
+        # and returns the small artifact; ONE bounded load_diff read-back materializes
+        # the prompt text. A dict here is a replayed pre-claim-check history
+        # (json/plain): as_code_artifact() normalizes it — no read-back, no legacy patch.
         art = await workflow.execute_activity(
             get_task_diff,
             DiffInput(worktree=worktree, branch_point=branch_point, label=f"{task.id}-a{attempt}"),
             **pools.on_harness(ACT, cfg.harness_queue),
         )
-        if isinstance(art, dict):
-            art = CodeArtifact.model_validate(art)
+        art = as_code_artifact(art)
         run.diff_ref = art.patch_ref
-        patch = art.patch_ref and await workflow.execute_activity(
-            load_diff, LoadDiffInput(ref=art.patch_ref), **ACT
+        patch = (
+            await workflow.execute_activity(load_diff, LoadDiffInput(ref=art.patch_ref), **ACT)
+            if art.patch_ref
+            else None
         )
         patch_text = patch.text if patch else ""
         qa_spend = RoleUsage(role="qa", model=resolve_role_model(cfg, "qa"))

@@ -26,6 +26,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import pytest
 from temporalio import workflow as real_workflow
 
 code_step = importlib.import_module("sdlc.stages.code.step")
@@ -37,6 +38,7 @@ from sdlc.stages.plan.models import DevTask
 from sdlc.stages.qa.models import QAReport
 from sdlc.stages.review.models import ReviewReport
 from sdlc.vcs import CodeArtifact
+from sdlc.vcs.models import as_code_artifact
 
 _BASE = datetime(2026, 11, 19, 10, tzinfo=UTC)
 PATCH = "diff --git a/app.py b/app.py\n+MARKER-LINE-702\n"
@@ -189,3 +191,24 @@ def test_legacy_replayed_dict_result_normalizes_without_a_read_back(monkeypatch,
     result, _, fake_wf = _run(monkeypatch, tmp_path, legacy)
     assert result.run.diff_ref is None, "a legacy dict has no ref to claim-check"
     assert fake_wf.load_diff_inputs == []
+
+
+# --- the shared decode shim: three legs (final review, Minor 2) -------------
+
+
+def test_as_code_artifact_helper_three_legs():
+    """The ONE shim both call sites (code stage, postplan's analyze node)
+    decode through — pinned at the helper itself, beside the call-site
+    replay test above."""
+    art = CodeArtifact(files=["app.py"], stat=STAT)
+    assert as_code_artifact(art) is art, "a CodeArtifact passes through unchanged"
+
+    legacy = {"files": ["app.py"], "stat": STAT, "renames": [], "patch": PATCH}
+    norm = as_code_artifact(legacy)
+    assert isinstance(norm, CodeArtifact)
+    assert norm.files == ["app.py"] and norm.stat == STAT, "metadata kept"
+    assert norm.patch_ref is None, "a legacy dict has no ref to claim-check"
+    assert "patch" not in norm.model_dump(), "extra-ignore drops the legacy inline patch"
+
+    with pytest.raises(TypeError):
+        as_code_artifact("not an artifact")
