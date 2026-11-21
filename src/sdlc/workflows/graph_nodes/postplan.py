@@ -10,6 +10,7 @@ from temporalio.common import RetryPolicy
 with workflow.unsafe.imports_passed_through():
     from ... import pools
     from ...agents.roles import STAGE_MODELS, resolve_role_model, t_analyst, t_merge_verdict
+    from ...artifacts.read import LoadDiffInput, load_diff
     from ...core.models import GateDecision, GateOutcome, PipelineConfig
     from ...graph.router import Activation
     from ...stages import analyze, deploy, merge
@@ -121,18 +122,26 @@ async def analyze_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
     assert plan is not None
     integration = nc.facts.integration
     assert integration is not None, "intake sets RunFacts.integration before any post-plan node"
-    integration_diff = await workflow.execute_activity(
+    art = await workflow.execute_activity(
         get_task_diff,
-        DiffInput(worktree=integration.worktree_path, branch_point=nc.facts.base_sha or ""),
+        DiffInput(
+            worktree=integration.worktree_path,
+            branch_point=nc.facts.base_sha or "",
+            label="integration",
+        ),
         **pools.on_harness(ACT, cfg.harness_queue),
     )
+    # FR-702: the analyst's prompt patch is a bounded read-back of the
+    # stored artifact; the payload carries the artifact (metadata + ref).
+    patch = await workflow.execute_activity(load_diff, LoadDiffInput(ref=art.patch_ref), **ACT)
     done = {r.task_id: r for r in results.task_results}
     outcome = await analyze.step(
         nc.ctx,
         cfg=cfg,
         plan=plan,
         task_results=done,
-        diff=integration_diff,
+        diff=art,
+        patch=patch.text,
         integration_wt=integration.worktree_path,
         base_branch=nc.facts.idea.base_branch,
         base_sha=nc.facts.base_sha,
@@ -144,7 +153,7 @@ async def analyze_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
         payload=AnalyzeResult(
             report=outcome.report,
             untraced=outcome.untraced,
-            integration_diff=integration_diff,
+            integration_diff=art,
         ),
     )
 

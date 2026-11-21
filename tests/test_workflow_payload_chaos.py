@@ -26,6 +26,7 @@ from pydantic import ValidationError
 
 from sdlc.graph.node_types import NodePort, NodeTypeSpec
 from sdlc.stages.analyze.models import AnalysisReport
+from sdlc.vcs import CodeArtifact
 from sdlc.workflows.models import TaskResult
 
 
@@ -106,23 +107,24 @@ def test_build_result_rejects_non_task_result_items():
 # ---- AnalyzeResult (sdlc.workflows.models) ----------------------------------
 
 
-def test_analyze_result_accepts_the_get_task_diff_shape():
+def test_analyze_result_accepts_the_code_artifact_shape():
     from sdlc.workflows.models import AnalyzeResult
 
-    diff = {"stat": " a | 1 +", "patch": "diff", "files": ["a.py"], "renames": [["b.py", "c.py"]]}
+    art = CodeArtifact(files=["x.py"], renames=[["b.py", "c.py"]], stat=" x | 1 +")
 
-    result = AnalyzeResult(report=_report(), untraced=["x.py"], integration_diff=diff)
+    result = AnalyzeResult(report=_report(), untraced=["x.py"], integration_diff=art)
 
-    assert result.integration_diff["renames"] == [["b.py", "c.py"]]
+    assert result.integration_diff.renames == [["b.py", "c.py"]]
     assert result.untraced == ["x.py"]
 
 
 def test_analyze_result_allows_empty_collections():
     from sdlc.workflows.models import AnalyzeResult
 
-    result = AnalyzeResult(report=_report(), untraced=[], integration_diff={})
+    result = AnalyzeResult(report=_report(), untraced=[], integration_diff=CodeArtifact())
 
-    assert (result.untraced, result.integration_diff) == ([], {})
+    assert result.untraced == []
+    assert result.integration_diff.files == [] and result.integration_diff.patch_ref is None
 
 
 def test_analyze_result_requires_the_report():

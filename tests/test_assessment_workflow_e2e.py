@@ -573,14 +573,13 @@ async def test_discover_proposer_judgment_and_verification(assessed_repo, tmp_pa
     db = str(tmp_path / "board.sqlite3")
     monkeypatch.setenv("SDLC_BOARD_DB", db)
 
-    from temporalio.contrib.pydantic import sdlc_data_converter
-
     from sdlc.assessment.discover.map import (
         DiscoverAction,
         DiscoverProposal,
         ProposedDisposition,
     )
     from sdlc.assessment.scan.models import EvidenceRef
+    from sdlc.converter import sdlc_data_converter
     from tests.fakes.fake_agents import fake_agent_activities
 
     canned = DiscoverProposal(
@@ -667,14 +666,13 @@ async def test_discover_proposer_trips_guard_fails_closed(assessed_repo, tmp_pat
     db = str(tmp_path / "board.sqlite3")
     monkeypatch.setenv("SDLC_BOARD_DB", db)
 
-    from temporalio.contrib.pydantic import sdlc_data_converter
-
     from sdlc.assessment.discover.map import (
         DiscoverAction,
         DiscoverProposal,
         ProposedDisposition,
     )
     from sdlc.assessment.scan.models import EvidenceRef
+    from sdlc.converter import sdlc_data_converter
     from tests.fakes.fake_agents import fake_agent_activities
 
     canned = DiscoverProposal(
@@ -762,11 +760,11 @@ async def test_discover_proposer_exception_fails_closed(assessed_repo, tmp_path,
     from pydantic_ai.durable_exec.temporal import TemporalDurability
     from pydantic_ai.models.function import FunctionModel
     from temporalio.common import RetryPolicy
-    from temporalio.contrib.pydantic import sdlc_data_converter
     from temporalio.exceptions import ApplicationError
     from temporalio.workflow import ActivityConfig
 
     from sdlc.assessment.discover.map import DiscoverProposal
+    from sdlc.converter import sdlc_data_converter
     from tests.fakes.fake_agents import failing_durable_agent
 
     async def _failing_model(messages, info):
@@ -912,8 +910,6 @@ async def test_risk_proposer_judgment_reaches_the_map(assessed_repo, tmp_path, m
     repo_dir, sha = assessed_repo
     monkeypatch.setenv("SDLC_BOARD_DB", str(tmp_path / "board.sqlite3"))
 
-    from temporalio.contrib.pydantic import sdlc_data_converter
-
     from sdlc.assessment.activities import (
         risk_memo_load,
         risk_memo_store,
@@ -931,6 +927,7 @@ async def test_risk_proposer_judgment_reaches_the_map(assessed_repo, tmp_path, m
         StrideCategory,
     )
     from sdlc.assessment.scan.models import EvidenceRef
+    from sdlc.converter import sdlc_data_converter
     from sdlc.measurement import CollectionState
     from tests.fakes.fake_agents import fake_agent_activities
 
@@ -1033,13 +1030,12 @@ async def test_the_phase_is_measured_with_no_risk_proposer(assessed_repo, tmp_pa
     repo_dir, sha = assessed_repo
     monkeypatch.setenv("SDLC_BOARD_DB", str(tmp_path / "board.sqlite3"))
 
-    from temporalio.contrib.pydantic import sdlc_data_converter
-
     from sdlc.assessment.activities import (
         risk_memo_load,
         risk_memo_store,
         verify_risk_refs,
     )
+    from sdlc.converter import sdlc_data_converter
     from sdlc.measurement import CollectionState
 
     @activity.defn(name="triage_resolve_commit")

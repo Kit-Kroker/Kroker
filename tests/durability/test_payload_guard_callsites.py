@@ -188,7 +188,7 @@ def test_run_adversary_fails_open_on_the_guard_error(monkeypatch):
             cfg=cfg,
             contract=None,
             assertions=["A1"],
-            diff={"patch": "diff --git a/x b/x"},
+            patch="diff --git a/x b/x",
             qa_raw=None,
             task=SimpleNamespace(id="t1"),
             adversary_agent=_RaisingAgent(err),

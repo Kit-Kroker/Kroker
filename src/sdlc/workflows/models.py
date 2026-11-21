@@ -7,7 +7,7 @@ stage slice.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -21,6 +21,7 @@ from ..stages.plan.models import ImplementationPlan, PlanDrift
 from ..stages.qa.models import QAReport
 from ..stages.review.lenses import LensOutcome
 from ..stages.review.models import DeepReviewReport, ReviewReport
+from ..vcs.models import CodeArtifact
 
 
 class SeededWork(BaseModel):
@@ -78,11 +79,12 @@ class BuildResult(BaseModel):
 class AnalyzeResult(BaseModel):
     """E-74: the `analyze` node's output. The integration diff is fetched once and
     shared with merge (feature.py's analyze section), so it rides the payload.
-    `integration_diff` is get_task_diff's dict (files/renames are lists)."""
+    FR-702: `integration_diff` is get_task_diff's CodeArtifact — inline
+    metadata plus the patch_ref; only the ref crosses history."""
 
     report: AnalysisReport
     untraced: list[str]
-    integration_diff: dict[str, Any]
+    integration_diff: CodeArtifact
 
 
 class PullRequest(BaseModel):

@@ -30,7 +30,7 @@ pytestmark = pytest.mark.temporal
 
 @pytest.mark.asyncio
 async def test_run_state_answers_on_a_live_run():
-    from temporalio.contrib.pydantic import sdlc_data_converter
+    from sdlc.converter import sdlc_data_converter
 
     # start_local, not start_time_skipping: fetch_fleet lists workflows, and
     # the time-skipping test service does not implement ListWorkflowExecutions

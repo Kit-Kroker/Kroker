@@ -20,12 +20,14 @@ with workflow.unsafe.imports_passed_through():
     from ... import pools
     from ...agents.loader import model_id
     from ...agents.model_ids import forwarded_model
+    from ...artifacts.read import LoadDiffInput, load_diff
     from ...benchmarks.models import BenchmarkOutcome, TraceBag
     from ...benchmarks.record_builder import stage_record
     from ...core.context import StageContext
     from ...core.models import PipelineConfig, RoleUsage
     from ...memory.models import MemoryKind
     from ...vcs.git import DiffInput, get_task_diff
+    from ...vcs.models import CodeArtifact
     from .activities import InventoryInput, TaskBranchRef, build_trace_inventory
     from .models import (
         AnalysisReport,
@@ -98,7 +100,8 @@ async def step(
     plan: ImplementationPlan | None = None,
     tasks: list[DevTask] | None = None,
     task_results: list[TaskResult] | dict[str, TaskResult] | None = None,
-    diff: dict[str, str] | None = None,
+    diff: CodeArtifact | None = None,
+    patch: str = "",
     contract: ValidationContract | None = None,
     base_branch: str = "main",
     base_sha: str | None = None,
@@ -115,11 +118,17 @@ async def step(
     patched = _EVIDENCE_V2()
 
     if diff is None:
+        # FR-702 fallback (direct callers): fetch the artifact and its
+        # bounded read-back — the node path passes both in.
         diff = await _exec_activity(
             get_task_diff,
-            DiffInput(worktree=integration_wt, branch_point=base_branch),
+            DiffInput(worktree=integration_wt, branch_point=base_branch, label="integration"),
             **pools.on_harness(_ACT, cfg.harness_queue),
         )
+        if diff.patch_ref is not None:
+            patch = (
+                await _exec_activity(load_diff, LoadDiffInput(ref=diff.patch_ref), **_ACT)
+            ).text
 
     authoritative: list[tuple[str, str]] = []
     if tasks is not None:
@@ -167,8 +176,8 @@ async def step(
     resolved_model = str(analyst_model)
     analyst_spend = RoleUsage(role="analyst", model=resolved_model)
 
-    diff_stat = diff.get("stat", "") if diff is not None else ""
-    diff_patch = diff.get("patch", "") if diff is not None else ""
+    diff_stat = diff.stat if diff is not None else ""
+    diff_patch = patch
 
     if patched:
         crit_objects = criterion_keys(authoritative)

@@ -186,10 +186,9 @@ def _namespace(*argv: str) -> argparse.Namespace:
 async def test_start_paths_refuse(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from temporalio.contrib.pydantic import sdlc_data_converter
-
     from sdlc import cli
     from sdlc.benchmarks.cli import _run_matrix
+    from sdlc.converter import sdlc_data_converter
     from sdlc.graph.start import start_graph_run
     from sdlc.maintenance.cli import _enable
     from sdlc.schedules.apply import apply_changes
@@ -305,8 +304,7 @@ def _tree(root: Path) -> set[str]:
 async def test_refusal_precedes_every_side_effect(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from temporalio.contrib.pydantic import sdlc_data_converter
-
+    from sdlc.converter import sdlc_data_converter
     from sdlc.graph.start import start_graph_run
 
     monkeypatch.chdir(tmp_path)
@@ -337,8 +335,7 @@ async def test_refusal_precedes_every_side_effect(
 async def test_blank_harness_queue_is_routing_off(
     monkeypatch: pytest.MonkeyPatch, blank: str
 ) -> None:
-    from temporalio.contrib.pydantic import sdlc_data_converter
-
+    from sdlc.converter import sdlc_data_converter
     from sdlc.schedules.apply import apply_changes
 
     monkeypatch.setenv("KROKER_HARNESS_QUEUE", blank)
@@ -351,8 +348,7 @@ async def test_blank_harness_queue_is_routing_off(
 async def test_a_routing_off_success_does_not_satisfy_a_later_routing_on_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from temporalio.contrib.pydantic import sdlc_data_converter
-
+    from sdlc.converter import sdlc_data_converter
     from sdlc.schedules.apply import apply_changes
 
     async with await WorkflowEnvironment.start_local(data_converter=sdlc_data_converter) as env:

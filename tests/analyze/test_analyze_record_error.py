@@ -23,6 +23,7 @@ from sdlc.benchmarks.models import BenchmarkOutcome
 from sdlc.core.models import PipelineConfig
 from sdlc.stages.analyze.models import AnalysisReport, CriterionTrace
 from sdlc.stages.plan.models import DevTask
+from sdlc.vcs import CodeArtifact
 
 # `sdlc.stages.analyze.__init__` re-exports the step FUNCTION, shadowing the
 # module attribute — import the module explicitly to reach `step`.
@@ -66,7 +67,8 @@ def _run(report: AnalysisReport, tasks):
             cfg=PipelineConfig(),
             integration_wt="/tmp/wt",
             tasks=tasks,
-            diff={"stat": "s", "patch": "p"},
+            diff=CodeArtifact(stat="s"),
+            patch="p",
             analyst_agent=SimpleNamespace(),
         )
     )

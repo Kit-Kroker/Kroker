@@ -9,6 +9,7 @@ from sdlc.memory.models import MemoryKind
 from sdlc.stages import analyze
 from sdlc.stages.analyze.models import AnalysisReport, CriterionTrace
 from sdlc.stages.plan.models import DevTask
+from sdlc.vcs import CodeArtifact
 
 
 @pytest.mark.clause("ANALYZE-1.5")
@@ -72,13 +73,15 @@ async def test_analyze_step_clean_context_execution():
     task = DevTask(
         id="t1", title="Task 1", description="Task description", acceptance_criteria=["criterion-1"]
     )
-    diff = {"stat": "file.py | 2 +-", "patch": "--- a\n+++ b"}
+    diff = CodeArtifact(stat="file.py | 2 +-")
+    patch_text = "--- a\n+++ b"
 
     res = await analyze.step(
         ctx,
         cfg=cfg,
         tasks=[task],
         diff=diff,
+        patch=patch_text,
         integration_wt="/fake/wt",
         analyst_agent=MagicMock(),
     )
@@ -118,13 +121,15 @@ async def test_analyze_step_retains_gotcha_when_criteria_untraced():
     task = DevTask(
         id="t1", title="Task 1", description="Task description", acceptance_criteria=["criterion-1"]
     )
-    diff = {"stat": "file.py | 2 +-", "patch": "--- a\n+++ b"}
+    diff = CodeArtifact(stat="file.py | 2 +-")
+    patch_text = "--- a\n+++ b"
 
     await analyze.step(
         ctx,
         cfg=cfg,
         tasks=[task],
         diff=diff,
+        patch=patch_text,
         integration_wt="/fake/wt",
         analyst_agent=MagicMock(),
     )

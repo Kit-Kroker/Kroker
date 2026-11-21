@@ -357,3 +357,49 @@ async def test_merge_success_creates_pr():
 
     assert res == "https://github.com/org/repo/pull/999"
     assert any(r["outcome"] == BenchmarkOutcome.PASS for r in ctx.recorded)
+
+
+@pytest.mark.clause("MERGE-1.1")
+@pytest.mark.asyncio
+async def test_changed_files_and_renames_derive_from_the_code_artifact():
+    """FR-702: integration_diff is a CodeArtifact — merge reads only the
+    inline metadata (files/renames), never a patch dict."""
+    from sdlc.vcs import CodeArtifact
+
+    ctx = _StubCtx(verdict=MergeVerdict(approve=True, confidence=0.9, rationale="clean"))
+    cfg = PipelineConfig(gates={"merge": GateConfig(policy=GatePolicy.SOFT)})
+    idea = IdeaBrief(title="F", description="D", repo_url="/repo", mode=ProjectMode.GREENFIELD)
+    results = [
+        TaskResult(
+            task_id="t1",
+            status="done",
+            attempts=1,
+            branch="b",
+            qa=QAReport(tests_passed=True),
+            lens_outcomes=_lenses_ran(),
+        )
+    ]
+    art = CodeArtifact(files=["a.py", "b.py"], renames=[["old.py", "new.py"]], stat=" 2 files")
+    passing_gate = GateReport(passed=True, checks=[], blocking=[], overridden=[])
+
+    with (
+        patch("sdlc.stages.merge.step.evaluate_gate", new_callable=AsyncMock) as mock_eg,
+        patch("sdlc.stages.merge.step.run_integration_checks", new_callable=AsyncMock) as mock_ic,
+        patch("sdlc.stages.merge.step.measure_coverage", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.scoped_security_scan", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.prepare_base_worktree", new_callable=AsyncMock),
+        patch("sdlc.stages.merge.step.open_pull_request", new_callable=AsyncMock),
+    ):
+        mock_eg.return_value = passing_gate
+        await merge.step(
+            ctx,
+            cfg=cfg,
+            task_results=results,
+            integration_wt="/wt",
+            idea=idea,
+            integration_diff=art,
+            base_sha="s" * 40,
+        )
+        sent = mock_ic.call_args.args[0]
+        assert sent.changed_files == ["a.py", "b.py"]
+        assert sent.renames == [["old.py", "new.py"]]

@@ -236,7 +236,7 @@ def _make_input(name: str, **kw: Any) -> Any:
 
 @pytest.mark.parametrize("name", _INPUT_NAMES)
 def test_inputs_omit_none(name: str) -> None:
-    from temporalio.contrib.pydantic import sdlc_data_converter
+    from sdlc.converter import sdlc_data_converter
 
     m = _make_input(name)
 
