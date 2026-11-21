@@ -15,6 +15,7 @@ from sdlc.assessment.models import (
     BLOCKED,
     PARTIAL,
     PHASE_ORDER,
+    Assessment,
     InitOutcome,
     PhaseId,
     PhaseResult,
@@ -39,6 +40,7 @@ from sdlc.workflows.assessment import (
     AssessOutcome,
     DiscoverOutcome,
     FinishOutcome,
+    RiskGateStepOutcome,
     assemble,
     no_discover,
     skipped,
@@ -373,7 +375,7 @@ def test_a_failed_judgment_never_fails_the_phase():
 # --- E-50: workflow wiring and gate override update handler --------------
 from datetime import UTC, datetime
 
-from sdlc.assessment.gates.models import RiskGateVerdict
+from sdlc.assessment.gates.models import RiskGateReport, RiskGateVerdict
 from sdlc.assessment.risk.models import (
     RiskSource,
     Severity,
@@ -640,51 +642,92 @@ def _measured_assess_outcome() -> AssessOutcome:
     )
 
 
-def test_finish_measures_on_admitted_run():
-    """E-51: on a run whose three producers measured, finish grades inline --
-    FD16, the E-50 evaluate() precedent, no activity -- and the artifact
-    carries the report while terminal_status stays partial (REPORT/GENERATE
-    are still owed to E-52)."""
+def _drive_run(monkeypatch: pytest.MonkeyPatch, gate_out: RiskGateStepOutcome) -> Assessment:
+    """run() end-to-end, in-process, over this file's fake-activity fixtures.
+
+    The patched seams are exactly the ones Temporal owns: the child triage
+    (execute_child_workflow, plus workflow.info for the child id), the scan
+    fan-out (scan_tree), the two producer phases, and the gate host. run()'s
+    own body, _report/_generate, _finish, and assemble all run REAL -- so the
+    rest list, the finish_out binding, and the assemble kwargs are what a
+    bug like an unbound finish_out on the blocked branch trips over.
+    """
     import asyncio
+    from types import SimpleNamespace
 
-    from sdlc.assessment.gates.models import RiskGateReport
+    import sdlc.workflows.assessment as assessment_module
 
-    scan_out = _scan_outcome()
-    discover_out = _measured_discover_outcome()
-    assess_out = _measured_assess_outcome()
-    wf = AssessmentWorkflow()
-    out = asyncio.run(
-        wf._finish(AssessmentInput(repo_dir="/r"), scan_out, discover_out, assess_out)
+    async def _fake_child(_run: object, _arg: object, **_kw: object) -> object:
+        return _triage()
+
+    async def _fake_scan_tree(*_args: object, **_kwargs: object) -> object:
+        return _scan_outcome()
+
+    async def _fake_discover(_inp: object, _triage: object, _scan_out: object) -> object:
+        return _measured_discover_outcome()
+
+    async def _fake_assess(
+        _inp: object, _triage: object, _discover_out: object, _scan_out: object
+    ) -> object:
+        return _measured_assess_outcome()
+
+    async def _fake_gate(_inp: object, _d: object, _a: object) -> RiskGateStepOutcome:
+        return gate_out
+
+    monkeypatch.setattr(
+        assessment_module.workflow,
+        "info",
+        lambda: SimpleNamespace(workflow_id="test", run_id="r1", task_queue="test-queue"),
     )
-    assert isinstance(out, FinishOutcome), "finish returns its own outcome, not a bare row"
-    assert out.result.phase is PhaseId.FINISH
-    assert out.result.collected.state is CollectionState.MEASURED
-    assert out.report is not None
-    assert out.report.criteria, "the 14-criteria manifest grades over measured producers"
+    monkeypatch.setattr(assessment_module.workflow, "execute_child_workflow", _fake_child)
+    monkeypatch.setattr(assessment_module, "scan_tree", _fake_scan_tree)
+    wf = AssessmentWorkflow()
+    monkeypatch.setattr(wf, "_discover", _fake_discover)
+    monkeypatch.setattr(wf, "_assess", _fake_assess)
+    monkeypatch.setattr(wf, "_risk_gate", _fake_gate)
+    return asyncio.run(wf.run(AssessmentInput(repo_dir="/r")))
 
-    rest = [
-        scan_out.result,
-        discover_out.result,
-        assess_out.result,
-        unbuilt(PhaseId.REPORT),
-        unbuilt(PhaseId.GENERATE),
-        out.result,
-    ]
-    a = assemble(
-        "/r",
-        _init(),
-        True,
-        "verdict ready",
-        rest,
-        scan=scan_out.scan,
-        discover=discover_out.map,
-        risk=assess_out.risk,
-        gates=RiskGateReport(verdict=RiskGateVerdict.PASS),
-        finish=out.report,
+
+def test_finish_measures_on_admitted_run(monkeypatch):
+    """E-51: run() on an admitted run whose three producers measured --
+    _finish grades inline (FD16, the E-50 evaluate() precedent, no
+    activity), the artifact carries the report, and terminal_status stays
+    partial (REPORT/GENERATE are still owed to E-52)."""
+    a = _drive_run(
+        monkeypatch,
+        gate_out=RiskGateStepOutcome(gates=RiskGateReport(verdict=RiskGateVerdict.PASS)),
     )
     finish_row = next(p for p in a.phases if p.phase is PhaseId.FINISH)
     assert finish_row.collected.state is CollectionState.MEASURED
-    assert a.finish is out.report
+    assert a.finish is not None
+    assert a.finish.criteria, "the 14-criteria manifest grades over measured producers"
+    assert a.terminal_status == PARTIAL
+    # The producer pairing the artifact's validators demand, end to end.
+    assert a.scan is not None
+    assert a.discover is not None
+    assert a.risk is not None
+    assert a.gates is not None
+
+
+def test_run_survives_a_blocked_gate_and_carries_no_finish(monkeypatch):
+    """The blocked branch: rest carries risk_gate_skipped rows while the
+    shared return still reads finish_out.report -- so finish_out must be
+    bound on that branch too (an unbound one crashed every blocked run with
+    an UnboundLocalError instead of producing the blocked artifact). No
+    exception escapes, and the blocked artifact carries no report."""
+    a = _drive_run(
+        monkeypatch,
+        gate_out=RiskGateStepOutcome(
+            gates=RiskGateReport(verdict=RiskGateVerdict.BLOCK), blocked=True
+        ),
+    )
+    finish_row = next(p for p in a.phases if p.phase is PhaseId.FINISH)
+    assert finish_row.collected.state is CollectionState.NOT_COLLECTED
+    assert "risk gate" in finish_row.collected.reason
+    assert a.gates is not None
+    assert a.gates.verdict is RiskGateVerdict.BLOCK
+    assert a.gate_override is None
+    assert a.finish is None
     assert a.terminal_status == PARTIAL
 
 
@@ -716,6 +759,7 @@ def test_inline_failure_degrades_to_not_collected(monkeypatch):
     out = asyncio.run(
         wf._finish(AssessmentInput(repo_dir="/r"), scan_out, discover_out, assess_out)
     )
+    assert isinstance(out, FinishOutcome), "finish returns its own outcome, not a bare row"
     assert out.report is None
     assert out.result.phase is PhaseId.FINISH
     assert out.result.collected.state is CollectionState.NOT_COLLECTED

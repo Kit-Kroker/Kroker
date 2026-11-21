@@ -882,13 +882,19 @@ class AssessmentWorkflow(GateHost):
         gate_out = await self._risk_gate(inp, discover_out, assess_out)
 
         if gate_out.blocked:
+            # The blocked artifact carries no finish report -- Assessment.finish
+            # stays None, the pre-E-51 payload shape -- but the binding must
+            # exist: the shared return below reads finish_out.report
+            # unconditionally, and an unbound finish_out crashed every blocked
+            # run instead of producing the blocked artifact.
+            finish_out = FinishOutcome(result=risk_gate_skipped(PhaseId.FINISH))
             rest = [
                 scan_out.result,
                 discover_out.result,
                 assess_out.result,
                 risk_gate_skipped(PhaseId.REPORT),
                 risk_gate_skipped(PhaseId.GENERATE),
-                risk_gate_skipped(PhaseId.FINISH),
+                finish_out.result,
             ]
         else:
             report_row = await self._report(inp)  # AFTER assess -- FR-911 dev. (a)
