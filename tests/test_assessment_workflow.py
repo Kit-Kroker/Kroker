@@ -15,6 +15,7 @@ from sdlc.assessment.models import (
     BLOCKED,
     PARTIAL,
     PHASE_ORDER,
+    Assessment,
     InitOutcome,
     PhaseId,
     PhaseResult,
@@ -36,6 +37,10 @@ from sdlc.workflows.assessment import (
     PHASE_OWNER,
     AssessmentInput,
     AssessmentWorkflow,
+    AssessOutcome,
+    DiscoverOutcome,
+    FinishOutcome,
+    RiskGateStepOutcome,
     assemble,
     no_discover,
     skipped,
@@ -82,10 +87,13 @@ from sdlc.assessment.risk.models import UnifiedRiskMap
 
 
 def _rest_after_discover(discover: PhaseResult | None = None) -> list[PhaseResult]:
-    """SCAN (E-46), DISCOVER (E-48), and ASSESS (E-49) are built; the other three are stubs.
+    """SCAN (E-46), DISCOVER (E-48), ASSESS (E-49), and FINISH (E-51) are built;
+    REPORT and GENERATE remain stubs.
 
     DISCOVER and ASSESS default to not_collected so a caller that does not care about
-    their pairing need not supply their maps.
+    their pairing need not supply their maps. FINISH's fixture row is not_collected:
+    with these producers unmeasured the phase short-circuits (FD13), so it never
+    measures here.
     """
     out = [
         PhaseResult(phase=PhaseId.SCAN, collected=Measurement.measured(0.0)),
@@ -98,8 +106,11 @@ def _rest_after_discover(discover: PhaseResult | None = None) -> list[PhaseResul
     out += [
         unbuilt(p)
         for p in PHASE_ORDER
-        if p not in (PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER, PhaseId.ASSESS)
+        if p not in (PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER, PhaseId.ASSESS, PhaseId.FINISH)
     ]
+    out.append(
+        PhaseResult(phase=PhaseId.FINISH, collected=Measurement.not_collected("finish not run"))
+    )
     return out
 
 
@@ -135,14 +146,15 @@ def test_every_unbuilt_phase_names_the_item_that_owes_it():
 
 
 def test_every_post_init_phase_has_an_owner():
-    # SCAN is built in E-46, DISCOVER in E-48, and ASSESS in E-49, so none is in
-    # PHASE_OWNER; every other post-init phase still names the item that owes
-    # its body.
+    # SCAN is built in E-46, DISCOVER in E-48, ASSESS in E-49, and FINISH in
+    # E-51, so none is in PHASE_OWNER; every other post-init phase still names
+    # the item that owes its body.
     assert set(PHASE_OWNER) == set(PHASE_ORDER) - {
         PhaseId.INIT,
         PhaseId.SCAN,
         PhaseId.DISCOVER,
         PhaseId.ASSESS,
+        PhaseId.FINISH,
     }
 
 
@@ -182,7 +194,10 @@ def test_assemble_on_an_admitted_run_reports_partial_once_scan_lands():
 
 
 def test_assemble_reports_assessed_once_every_phase_collects():
-    """The status flips by itself when E-46..E-52 land -- no workflow edit."""
+    """The status flips by itself when E-46..E-52 land -- no workflow edit.
+    A collected FINISH phase carries its FinishReport -- the pairing the
+    artifact's finish validator (E-51) enforces."""
+    from sdlc.assessment.finish.models import FinishReport
     from sdlc.assessment.gates.models import RiskGateReport, RiskGateVerdict
 
     rest = [
@@ -201,6 +216,7 @@ def test_assemble_reports_assessed_once_every_phase_collects():
             discover=CapabilityMap(collected=Measurement.measured(0.0)),
             risk=UnifiedRiskMap(collected=Measurement.measured(0.0)),
             gates=RiskGateReport(verdict=RiskGateVerdict.PASS),
+            finish=FinishReport(collected=Measurement.measured(1.0)),
         ).terminal_status
         == ASSESSED
     )
@@ -363,7 +379,7 @@ def test_a_failed_judgment_never_fails_the_phase():
 # --- E-50: workflow wiring and gate override update handler --------------
 from datetime import UTC, datetime
 
-from sdlc.assessment.gates.models import RiskGateVerdict
+from sdlc.assessment.gates.models import RiskGateReport, RiskGateVerdict
 from sdlc.assessment.risk.models import (
     RiskSource,
     Severity,
@@ -446,8 +462,11 @@ def test_assemble_threads_gates_through():
     rest += [
         unbuilt(p)
         for p in PHASE_ORDER
-        if p not in (PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER, PhaseId.ASSESS)
+        if p not in (PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER, PhaseId.ASSESS, PhaseId.FINISH)
     ]
+    rest.append(
+        PhaseResult(phase=PhaseId.FINISH, collected=Measurement.not_collected("finish not run"))
+    )
     a = assemble(
         "/r",
         _init(),
@@ -605,3 +624,170 @@ def test_risk_forwards_configured_retries(monkeypatch):
     out = asyncio.run(wf._judge(inp, _triage(), cmap, _risk_map(), proposing=True))
     assert agent.calls == [{}, {"retries": {"output": 3}}]
     assert out.judgment.reason.startswith("the risk proposer ran and failed:")
+
+
+# --- E-51: finish is a built phase --------------------------------------
+
+
+def _measured_discover_outcome() -> DiscoverOutcome:
+    """A measured DISCOVER row carrying its map -- the pairing the artifact's
+    discover validator demands of a measured phase."""
+    return DiscoverOutcome(
+        result=PhaseResult(phase=PhaseId.DISCOVER, collected=Measurement.measured(1.0)),
+        map=CapabilityMap(collected=Measurement.measured(1.0)),
+    )
+
+
+def _measured_assess_outcome() -> AssessOutcome:
+    """A measured ASSESS row carrying its map -- the ASSESS twin."""
+    return AssessOutcome(
+        result=PhaseResult(phase=PhaseId.ASSESS, collected=Measurement.measured(1.0)),
+        risk=_risk_map(),
+    )
+
+
+def _drive_run(monkeypatch: pytest.MonkeyPatch, gate_out: RiskGateStepOutcome) -> Assessment:
+    """run() end-to-end, in-process, over this file's fake-activity fixtures.
+
+    The patched seams are exactly the ones Temporal owns: the child triage
+    (execute_child_workflow, plus workflow.info for the child id), the scan
+    fan-out (scan_tree), the two producer phases, and the gate host. run()'s
+    own body, _report/_generate, _finish, and assemble all run REAL -- so the
+    rest list, the finish_out binding, and the assemble kwargs are what a
+    bug like an unbound finish_out on the blocked branch trips over.
+    """
+    import asyncio
+    from types import SimpleNamespace
+
+    import sdlc.workflows.assessment as assessment_module
+
+    async def _fake_child(_run: object, _arg: object, **_kw: object) -> object:
+        return _triage()
+
+    async def _fake_scan_tree(*_args: object, **_kwargs: object) -> object:
+        return _scan_outcome()
+
+    async def _fake_discover(_inp: object, _triage: object, _scan_out: object) -> object:
+        return _measured_discover_outcome()
+
+    async def _fake_assess(
+        _inp: object, _triage: object, _discover_out: object, _scan_out: object
+    ) -> object:
+        return _measured_assess_outcome()
+
+    async def _fake_gate(_inp: object, _d: object, _a: object) -> RiskGateStepOutcome:
+        return gate_out
+
+    monkeypatch.setattr(
+        assessment_module.workflow,
+        "info",
+        lambda: SimpleNamespace(workflow_id="test", run_id="r1", task_queue="test-queue"),
+    )
+    monkeypatch.setattr(assessment_module.workflow, "execute_child_workflow", _fake_child)
+    monkeypatch.setattr(assessment_module, "scan_tree", _fake_scan_tree)
+    wf = AssessmentWorkflow()
+    monkeypatch.setattr(wf, "_discover", _fake_discover)
+    monkeypatch.setattr(wf, "_assess", _fake_assess)
+    monkeypatch.setattr(wf, "_risk_gate", _fake_gate)
+    return asyncio.run(wf.run(AssessmentInput(repo_dir="/r")))
+
+
+def test_finish_measures_on_admitted_run(monkeypatch):
+    """E-51: run() on an admitted run whose three producers measured --
+    _finish grades inline (FD16, the E-50 evaluate() precedent, no
+    activity), the artifact carries the report, and terminal_status stays
+    partial (REPORT/GENERATE are still owed to E-52)."""
+    a = _drive_run(
+        monkeypatch,
+        gate_out=RiskGateStepOutcome(gates=RiskGateReport(verdict=RiskGateVerdict.PASS)),
+    )
+    finish_row = next(p for p in a.phases if p.phase is PhaseId.FINISH)
+    assert finish_row.collected.state is CollectionState.MEASURED
+    assert a.finish is not None
+    assert a.finish.criteria, "the 14-criteria manifest grades over measured producers"
+    assert a.terminal_status == PARTIAL
+    # The producer pairing the artifact's validators demand, end to end.
+    assert a.scan is not None
+    assert a.discover is not None
+    assert a.risk is not None
+    assert a.gates is not None
+
+
+def test_run_survives_a_blocked_gate_and_carries_no_finish(monkeypatch):
+    """The blocked branch: rest carries risk_gate_skipped rows while the
+    shared return still reads finish_out.report -- so finish_out must be
+    bound on that branch too (an unbound one crashed every blocked run with
+    an UnboundLocalError instead of producing the blocked artifact). No
+    exception escapes, and the blocked artifact carries no report."""
+    a = _drive_run(
+        monkeypatch,
+        gate_out=RiskGateStepOutcome(
+            gates=RiskGateReport(verdict=RiskGateVerdict.BLOCK), blocked=True
+        ),
+    )
+    finish_row = next(p for p in a.phases if p.phase is PhaseId.FINISH)
+    assert finish_row.collected.state is CollectionState.NOT_COLLECTED
+    assert "risk gate" in finish_row.collected.reason
+    assert a.gates is not None
+    assert a.gates.verdict is RiskGateVerdict.BLOCK
+    assert a.gate_override is None
+    assert a.finish is None
+    assert a.terminal_status == PARTIAL
+
+
+def test_phase_owner_loses_finish():
+    """E-46 dropped SCAN from PHASE_OWNER when its body landed; E-48 and E-49
+    did the same for DISCOVER and ASSESS. E-51's move, for FINISH: only the
+    two E-52 stubs remain."""
+    assert PHASE_OWNER == {PhaseId.REPORT: "E-52", PhaseId.GENERATE: "E-52"}
+
+
+def test_inline_failure_degrades_to_not_collected(monkeypatch):
+    """A pure-code failure inside evaluate_finish is a phase-level
+    not_collected carrying the exception -- the no_discover shape, FD16's
+    degraded leg -- never a crashed assessment and never a half-graded
+    report on the artifact."""
+    import asyncio
+
+    import sdlc.workflows.assessment as assessment_module
+    from sdlc.assessment.gates.models import RiskGateReport
+
+    def _boom(**_kwargs: object) -> object:
+        raise RuntimeError("xref exploded")
+
+    monkeypatch.setattr(assessment_module, "evaluate_finish", _boom)
+    scan_out = _scan_outcome()
+    discover_out = _measured_discover_outcome()
+    assess_out = _measured_assess_outcome()
+    wf = AssessmentWorkflow()
+    out = asyncio.run(
+        wf._finish(AssessmentInput(repo_dir="/r"), scan_out, discover_out, assess_out)
+    )
+    assert isinstance(out, FinishOutcome), "finish returns its own outcome, not a bare row"
+    assert out.report is None
+    assert out.result.phase is PhaseId.FINISH
+    assert out.result.collected.state is CollectionState.NOT_COLLECTED
+    assert "evaluate_finish failed" in out.result.collected.reason
+    assert "RuntimeError" in out.result.collected.reason
+
+    rest = [
+        scan_out.result,
+        discover_out.result,
+        assess_out.result,
+        unbuilt(PhaseId.REPORT),
+        unbuilt(PhaseId.GENERATE),
+        out.result,
+    ]
+    a = assemble(
+        "/r",
+        _init(),
+        True,
+        "verdict ready",
+        rest,
+        scan=scan_out.scan,
+        discover=discover_out.map,
+        risk=assess_out.risk,
+        gates=RiskGateReport(verdict=RiskGateVerdict.PASS),
+        finish=out.report,
+    )
+    assert a.finish is None

@@ -75,6 +75,7 @@ with workflow.unsafe.imports_passed_through():
         guard_tripped,
     )
     from ..assessment.discover.verify import RefVerification
+    from ..assessment.finish import FinishReport, evaluate_finish
     from ..assessment.gates.checks import evaluate
     from ..assessment.gates.models import RiskGateOverride, RiskGateReport, RiskGateVerdict
     from ..assessment.models import (
@@ -163,11 +164,10 @@ class AssessmentInput(BaseModel):
 # The E-item owing each unbuilt phase body, so an empty assessment says WHY
 # it is empty rather than merely being empty. SCAN dropped here in E-46,
 # DISCOVER in E-48, and ASSESS in E-49: their bodies are built, so nothing
-# owes them.
+# owes them. FINISH's body landed in E-51.
 PHASE_OWNER: dict[PhaseId, str] = {
     PhaseId.REPORT: "E-52",
     PhaseId.GENERATE: "E-52",
-    PhaseId.FINISH: "E-51",
 }
 
 
@@ -237,6 +237,15 @@ def no_assess(reason: str) -> AssessOutcome:
     )
 
 
+class FinishOutcome(BaseModel):
+    """finish's two halves, mirroring ScanOutcome, DiscoverOutcome and
+    AssessOutcome: the phase row and the graded report (None whenever the
+    phase did not measure)."""
+
+    result: PhaseResult
+    report: FinishReport | None = None
+
+
 class RiskGateStepOutcome(BaseModel):
     """_risk_gate's result: the report (None only when ASSESS did not
     measure), the audited override (None unless BLOCK was approved), and
@@ -294,6 +303,7 @@ def assemble(
     risk: UnifiedRiskMap | None = None,
     gates: RiskGateReport | None = None,
     gate_override: RiskGateOverride | None = None,
+    finish: FinishReport | None = None,
 ) -> Assessment:
     """The ONLY constructor of an Assessment and the only caller of
     terminal_status: one place where the artifact is built means the derived
@@ -332,6 +342,7 @@ def assemble(
         risk=risk,
         gates=gates,
         gate_override=gate_override,
+        finish=finish,
     )
 
 
@@ -787,9 +798,64 @@ class AssessmentWorkflow(GateHost):
         """E-52 owns this body: the evidence bundle and its manifest."""
         return unbuilt(PhaseId.GENERATE)
 
-    async def _finish(self, inp: AssessmentInput) -> PhaseResult:
-        """E-51 owns this body: the 14 acceptance criteria as CheckResults."""
-        return unbuilt(PhaseId.FINISH)
+    async def _finish(
+        self,
+        inp: AssessmentInput,
+        scan_out: ScanOutcome,
+        discover_out: DiscoverOutcome,
+        assess_out: AssessOutcome,
+    ) -> FinishOutcome:
+        """Phase 7 (E-51, FR-918): the 14 acceptance criteria as CheckResults.
+
+        The evaluation is an inline pure call (FD16 -- E-50's evaluate()
+        precedent): no activity, no worker registration, no patch marker,
+        zero new workflow commands. FD13 short-circuits first: with no
+        producer measured there is nothing to grade, and a measuring finish
+        over an all-degraded run would flip NO_PHASES to PARTIAL -- a run
+        that assessed nothing must not read as one that assessed something.
+        A pure-code failure degrades to a phase-level not_collected (the
+        no_discover shape), never a crashed assessment or a half-graded
+        report.
+        """
+        producers = (
+            scan_out.result.collected,
+            discover_out.result.collected,
+            assess_out.result.collected,
+        )
+        if all(m.state is not CollectionState.MEASURED for m in producers):
+            # FD13's short-circuit names the FIRST absent phase in the
+            # scan -> discover -> risk order; the guard fires only when none
+            # of the three measured, so that first is scan, deterministically.
+            return FinishOutcome(
+                result=PhaseResult(
+                    phase=PhaseId.FINISH,
+                    collected=Measurement.not_collected(
+                        "not run: nothing to grade — scan did not collect "
+                        f"({scan_out.result.collected.reason})"
+                    ),
+                )
+            )
+        try:
+            report = evaluate_finish(
+                scan=scan_out.scan,
+                scan_state=scan_out.result.collected,
+                discover=discover_out.map,
+                discover_state=discover_out.result.collected,
+                risk=assess_out.risk,
+                risk_state=assess_out.result.collected,
+            )
+        except Exception as e:  # noqa: BLE001
+            return FinishOutcome(
+                result=PhaseResult(
+                    phase=PhaseId.FINISH,
+                    collected=Measurement.not_collected(
+                        f"evaluate_finish failed: {type(e).__name__}: {e}"[:300]
+                    ),
+                )
+            )
+        return FinishOutcome(
+            result=PhaseResult(phase=PhaseId.FINISH, collected=report.collected), report=report
+        )
 
     def _done(self, a: Assessment) -> Assessment:
         self._assessment = a
@@ -816,22 +882,31 @@ class AssessmentWorkflow(GateHost):
         gate_out = await self._risk_gate(inp, discover_out, assess_out)
 
         if gate_out.blocked:
+            # The blocked artifact carries no finish report -- Assessment.finish
+            # stays None, the pre-E-51 payload shape -- but the binding must
+            # exist: the shared return below reads finish_out.report
+            # unconditionally, and an unbound finish_out crashed every blocked
+            # run instead of producing the blocked artifact.
+            finish_out = FinishOutcome(result=risk_gate_skipped(PhaseId.FINISH))
             rest = [
                 scan_out.result,
                 discover_out.result,
                 assess_out.result,
                 risk_gate_skipped(PhaseId.REPORT),
                 risk_gate_skipped(PhaseId.GENERATE),
-                risk_gate_skipped(PhaseId.FINISH),
+                finish_out.result,
             ]
         else:
+            report_row = await self._report(inp)  # AFTER assess -- FR-911 dev. (a)
+            generate_row = await self._generate(inp)
+            finish_out = await self._finish(inp, scan_out, discover_out, assess_out)
             rest = [
                 scan_out.result,
                 discover_out.result,
                 assess_out.result,
-                await self._report(inp),  # AFTER assess -- FR-911 dev. (a)
-                await self._generate(inp),
-                await self._finish(inp),
+                report_row,
+                generate_row,
+                finish_out.result,
             ]
         return self._done(
             assemble(
@@ -845,5 +920,6 @@ class AssessmentWorkflow(GateHost):
                 risk=assess_out.risk,
                 gates=gate_out.gates,
                 gate_override=gate_out.override,
+                finish=finish_out.report,
             )
         )

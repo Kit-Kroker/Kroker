@@ -6,6 +6,65 @@ Newest first; **append new entries at the top** — never edit the ROADMAP cell
 beyond its one-sentence latest entry. The final entry (2026-10-11, Phase 3) is
 out of date order as inherited; left as-is.
 
+## 2026-11-21 — E-51 landed (acceptance criteria as code)
+
+2026-11-21 (E-51 landed — FR-918's acceptance criteria are computed by code,
+not self-asserted; the FINISH phase measures with no model in the loop and
+`PHASE_OWNER` drops to two stubs (REPORT/GENERATE, both E-52). The roadmap
+row stays `[ ]` ⚠️ partial — c13 is owed on every run until E-52's
+report/generate bodies land and the last criterion evaluates. **What
+landed:** the pure `src/sdlc/assessment/finish/` package — `models.py`
+(`FinishReport` + `CRITERIA_MANIFEST` c01…c14, NFR-10 raising validators:
+criteria/exits rows sorted and unique, owed sorted and deduped),
+`checks.py` (the 14 criteria under FD11's three-state rule; c07 deferred to
+E-56 per FD12, mirroring E-50's deferred composite-threshold clauses; c08
+baseline-safe per FD17 — zero proposer references under a measured producer
+with the judgment layer off is recorded, not failed), `crossref.py` (four
+ABSOLUTE xref domains over typed ids — `xref:bc_ids`,
+`xref:vulnerability_keys`, `xref:capability_edges`,
+`xref:threat_vulnerability_keys` — FD15), `exits.py` (the seven
+`exit:<phase>:*` checks), and `__init__.py`'s `evaluate_finish` — the one
+entry point, whose `collected` is the absolute-ratio (passed ABSOLUTE rows
+over total ABSOLUTE rows; owed rows are not rows, FD3). **Wiring:**
+`AssessmentWorkflow._finish` runs it inline per FD16 — zero new workflow
+commands, no activity, no `finish-e51` wire name — behind FD13's
+short-circuit (finish evaluates only when at least one of
+scan/discover/risk measured; a run that assessed nothing keeps `NO_PHASES`
+and never reads as `PARTIAL`), the blocked-gate path binds
+`finish_out = risk_gate_skipped(FINISH)` so an admitted REJECT run still
+carries the row, and `Assessment.finish` is a typed field. **Battery, as
+observed on the final tree:** fast tier `uv run pytest -q` red with exactly
+the two pre-existing FAILED lines below and nothing else (the counts line
+absent from the redirect — the quirk recorded on 2026-11-19; exit 1 is
+pytest's completed-with-failures code); temporal tier `uv run pytest -m
+temporal tests/test_assessment_workflow_e2e.py
+tests/test_assessment_workflow_risk_gate_e2e.py
+tests/test_assessment_workflow_e2e_proposer_hang_chaos.py
+tests/test_assessment_workflow_finish_e2e.py -q` **exit 0, 26 passed** (14
+e2e + 7 risk-gate + 3 proposer-hang chaos + the two new finish-e2e cells:
+finish measured on an admitted run, all-degraded keeps `NO_PHASES`);
+replay corpus `uv run pytest tests/replay/ -q` **exit 0, 39 passed**;
+`uv run ruff check .` exit 0 ("All checks passed!"); `uv run ruff format
+--check .` exit 0 (2219 files already formatted); `uv run mypy` exit 0
+("Success: no issues found in 462 source files");
+`uv run python scripts/check_file_size.py` exit 0. **Pre-existing reds
+noted, not fixed (not this branch's):** `tests/test_read_fixtures_fresh.py`
+×2 — the fixture pins the primary checkout's absolute path (`root` in
+`compare.json` names `/home/maksim/work/Kroker/…`), so
+`test_committed_recordings_equal_a_fresh_build` and
+`test_pristine_copy_passes_the_record_check` fail in any worktree ("compare
+json is stale") and are green in the primary checkout;
+`tests/maintenance/test_execution.py` size-ratchet gap — pre-existing on
+main before this branch, another item's owner. Commits: `8b6cb4ec`…`a3e6596f`,
+plus the final-review wave `8c2a314a` (the `finish` pairing validator Task 5's
+text omitted — a plan gap the whole-branch review caught; `SharedVulnerability.bc_ids`
+joined the edges census per spec §5; c07's evaluated-fail branch pinned;
+tier-2 FD13 wording split; plan errata)
+(nine: contracts, the xref walk, the 14 criteria + c07 pinning, exits +
+`evaluate_finish`, risk narrowing, FINISH wiring, the blocked-path bind,
+e2e + replay). Scope: the FR-918 row, the tier-2 E-51 entry, this log, and
+the header cell — docs only, no code touched.)
+
 ## 2026-11-21
 
 2026-11-21 (P3 close-out — R027 memory-axis fleet against the frozen R026 stack: commit `ec3f128f`, image `sha256:41b306a…`, `--gate-policy soft`, arm `zai-coding-plan/glm-5.3`, case `deveval-readtime` ×8 (5 memory-ON, 2 OFF controls, 1 infra-quarantined), one commit set, 7/7 scored runs summarized, roots line clean. **SC-4 measured: 1.00 @ n=7 (missed <0.10)** — 54 scored clarifications all human-answered under a deterministic attendant (39 pinned-map, 15 clarifier-suggested on scored runs; 61/42/19 fleet-wide incl. the quarantined attempt); questions-per-run ON 6,6,7,9,8 vs OFF 8,10 — no drying with the warming bank. **SC-6 measured: 1.00 @ n=34 (missed <0.05; advisory 0.147 @ 5/34)** — the first all-SOFT fleet; every soft gate escalated because the calibration ledger is cold and cannot bootstrap (auto-approve needs a calibrated bucket; samples only accrue from auto-approves). the merge gate ran SOFT for the first time, with advisory overrides recorded (5/34). **On/off delta: no measurable memory benefit** (ON oracle 0.167×5 vs OFF 0.333/0.167; roles ≈$1.05 vs $1.21 per run — n-noise). Memory mechanically live for the first time: per-run retain+reflect, bank end-state 552 nodes/59 docs (grew on every ON run), recall observed serving during the round (worker-log lines, not preserved past the post-round recreates); R026's `memory_enabled=True` was a dead flag (hindsight extraction LLM misconfigured — 1134 failed ops on an empty bank, preserved in the R027 preflight snapshot; the 401/provider attribution is operator-observed, pre-fix logs not preserved) — fixed env-only (anthropic provider via the z.ai Anthropic-compatible route, `claude-haiku-4-5`). Three infra stops + one host reboot, all outside the tree, fleet not voided, one owner fresh go after run 4's QA-activity timeout. Spend $8.6 of $15 (roles $7.6977 scored + ~$0.9 quarantined + cents haiku extraction). SC-2-all 1.12 min median @ 7; SC-3 0.615 @ 26 (readtime loop noise). Evidence outside the repo: `kroker-fleet-runs-027/` (report + score) and `kroker-fleet-runs-027-evidence/` (attendant log, announce log, quarantined attempts, preflight). Backlog cards: calibration cold-start deadlock; SC-4 proxy immobility; hindsight `pull_policy: always`.)
