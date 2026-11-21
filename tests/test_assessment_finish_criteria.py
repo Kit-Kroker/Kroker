@@ -530,9 +530,14 @@ def test_producer_absent_makes_family_owed(phase, family):
     assert {c.name for c in checks} == surviving
     assert all(c.passed for c in checks)
     assert {o.split(":")[0] for o in owed} == family | {"c13_five_reports", C14}
+    if phase == "risk":
+        # the pinned static shape (FD12): c07 defers to E-56 even when the
+        # risk phase itself never measured -- the phase failure stays
+        # visible on c04/c05/c06/c09's owed rows.
+        assert "c07_unified_drivers: deferred (E-56)" in owed
     for o in owed:
-        if o.split(":")[0] == "c13_five_reports":
-            continue  # static owner (E-52), never the phase
+        if o.split(":")[0] in ("c07_unified_drivers", "c13_five_reports"):
+            continue  # static owners (E-56/E-52), never the phase
         assert f"({phase}: {reason})" in o, o
 
 

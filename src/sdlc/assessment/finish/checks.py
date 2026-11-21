@@ -7,8 +7,10 @@ a not_collected sub-artifact (attribution coverage, blueprint, domain model,
 a system family) is an EVALUATED FAIL carrying the sub-artifact's own
 reason; measured inputs are pass/fail by the criterion's predicate.
 FD12: c07 defers to E-56 -- `unified` composites cannot exist until QA
-factors have a source -- so it is owed statically while any `.unified` is
-unmeasured and evaluated only once every composite measures. FD17: c08
+factors have a source -- so its owed row keeps the pinned static owner
+whenever the composites cannot be graded (the risk phase unmeasured, or
+any `.unified` unmeasured) and it evaluates only once every composite
+measures. FD17: c08
 never fails a legitimate baseline-only run -- a measured discover phase
 already proves the citation guard did not trip (the phase degrades whole
 when it does, so that failure arrives as an owed row carrying the guard's
@@ -77,14 +79,14 @@ _FAMILY: dict[str, tuple[str, ...]] = {
     C04: ("risk",),
     C05: ("risk",),
     C06: ("risk",),
-    C07: ("risk",),
     C08: ("discover", "risk"),  # the reference count (discover), the judgment mode (risk)
     C09: ("risk",),
     C10: ("discover",),
     C11: ("discover",),
     C12: ("discover",),
-    # c13 is owed outright (E-52) and c14 follows the walk -- neither has a
-    # producer family of its own.
+    # c07, c13 and c14 have no producer family: c07's owner is static
+    # (E-56) whenever the composites cannot be graded, c13 is owed outright
+    # (E-52), and c14 follows the walk.
 }
 
 
@@ -363,7 +365,8 @@ def evaluate_criteria(
 
     FD11's three states, in order: a producer phase absent (state not
     MEASURED) makes the criterion an owed row in the pinned format --
-    c07/c13's owners are static (E-56/E-52); a measured producer with a
+    c07/c13's owners are static (E-56/E-52), so neither names the phase even
+    when the risk phase itself did not measure; a measured producer with a
     not_collected sub-artifact is an evaluated fail; measured inputs are
     pass/fail by the predicate. FD12: c07 is owed to E-56 while any
     `.unified` composite is unmeasured. FD3: c14 is owed while the walk
@@ -387,6 +390,24 @@ def evaluate_criteria(
             else:
                 checks.append(_c14(xref_checks))
             continue
+        if name == C07:
+            # FD12 with the pinned static owner: c07 defers to E-56 whenever
+            # the composites it would grade cannot be had -- any `.unified`
+            # unmeasured (RD3: they do not exist until E-56 gives qa its
+            # source), or a fortiori when the risk phase never measured at
+            # all. The phase failure stays visible on c04/c05/c06/c09's owed
+            # rows; c07's owner is E-56, never the phase.
+            deferred = risk_state.state is not CollectionState.MEASURED
+            if not deferred:
+                assert risk is not None  # measured producers carry their artifact
+                deferred = any(
+                    c.unified.value.state is not CollectionState.MEASURED for c in risk.capabilities
+                )
+            if deferred:
+                owed.append(f"{C07}: deferred (E-56)")
+            else:
+                checks.append(_c07(risk))
+            continue
         absent = next((phase for phase in _FAMILY[name] if not measured[phase]), None)
         if absent is not None:
             owed.append(_owed(name, absent, phase_state[absent]))
@@ -409,16 +430,6 @@ def evaluate_criteria(
         elif name == C06:
             assert risk is not None
             checks.append(_c06(risk))
-        elif name == C07:
-            assert risk is not None
-            # FD12: the deferral, not the predicate, while the composites the
-            # drivers would name cannot exist. E-56 gives qa its source.
-            if any(
-                c.unified.value.state is not CollectionState.MEASURED for c in risk.capabilities
-            ):
-                owed.append(f"{C07}: deferred (E-56)")
-            else:
-                checks.append(_c07(risk))
         elif name == C08:
             assert discover is not None and risk is not None
             checks.append(_c08(discover, risk))
