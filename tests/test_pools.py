@@ -236,12 +236,12 @@ def _make_input(name: str, **kw: Any) -> Any:
 
 @pytest.mark.parametrize("name", _INPUT_NAMES)
 def test_inputs_omit_none(name: str) -> None:
-    from temporalio.contrib.pydantic import pydantic_data_converter
+    from temporalio.contrib.pydantic import sdlc_data_converter
 
     m = _make_input(name)
 
     assert "harness_queue" not in m.model_dump_json()
-    wire = pydantic_data_converter.payload_converter.to_payloads([m])[0].data
+    wire = sdlc_data_converter.payload_converter.to_payloads([m])[0].data
     assert b"harness_queue" not in wire
 
 

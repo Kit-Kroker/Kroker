@@ -9,11 +9,11 @@ import uuid
 
 import pytest
 from temporalio import activity, workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import (
     GateDecision,
     GateOutcome,
@@ -107,7 +107,7 @@ async def test_budget_crossings_regate_and_approve_extends(tmp_path, monkeypatch
     cfg.deploy.enabled = True
     reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
@@ -156,7 +156,7 @@ async def test_budget_reject_terminates_with_retro(tmp_path, monkeypatch):
     cfg = e2e_config()
     cfg.run_budget_usd = 0.5  # first metered call ($1, clarify) crosses
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(

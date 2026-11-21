@@ -38,9 +38,10 @@ from pydantic_ai.durable_exec.temporal import PydanticAIPlugin, TemporalAgent
 from pydantic_ai.models.test import TestModel
 from temporalio import workflow
 from temporalio.client import Client
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
+
+from sdlc.converter import sdlc_data_converter
 
 # Mirror tests/conftest.py: agent construction at import time reads these.
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-dummy")
@@ -132,7 +133,7 @@ def _source_commit() -> str:
 async def main() -> None:
     durable = _build_durable_architect()
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         client: Client = env.client
         async with Worker(

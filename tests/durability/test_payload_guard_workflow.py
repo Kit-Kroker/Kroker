@@ -34,7 +34,6 @@ from pydantic_ai.models.function import FunctionModel
 from temporalio import workflow
 from temporalio.api.enums.v1 import EventType
 from temporalio.client import WorkflowFailureError, WorkflowHistory
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.exceptions import ApplicationError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Replayer, UnsandboxedWorkflowRunner, Worker
@@ -47,6 +46,7 @@ from sdlc.agents.payload_guard import (
 )
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 
 pytestmark = [pytest.mark.temporal]
 
@@ -173,7 +173,7 @@ def _replayer() -> Replayer:
     sdlc.agents, so the replay re-derives the module-level agent safely."""
     return Replayer(
         workflows=[_PayloadGuardProbeWorkflow],
-        data_converter=pydantic_data_converter,
+        data_converter=sdlc_data_converter,
         plugins=[SdlcPydanticAIPlugin()],
     )
 
@@ -184,7 +184,7 @@ async def _run_once(prompt: str, name: str) -> tuple[object | None, WorkflowHist
     shapes are expected depending on the prompt; a FAILED handle's history is
     still fetchable (the first-workflow-task-time tests do exactly that)."""
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -214,7 +214,7 @@ async def test_over_limit_prompt_fails_before_scheduling_with_marker():
     that is the guard's non-retryable ApplicationError; its history carries
     the patch id on the failing branch and schedules NO activity."""
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -291,7 +291,7 @@ async def test_tool_growth_fails_the_crossing_request_unscheduled():
     calls, and exactly one model-function invocation."""
     _GROWTH_MODEL_CALLS.clear()
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

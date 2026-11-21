@@ -19,7 +19,8 @@ import os
 from typing import Any
 
 from temporalio.client import Client
-from temporalio.contrib.pydantic import pydantic_data_converter
+
+from sdlc.converter import sdlc_data_converter
 
 from ..board.store import BoardStore
 from ..dashboard.fleet import FleetPoller
@@ -33,11 +34,11 @@ GRAPH_WORKFLOW_NAME = "GraphWorkflow"
 async def connect() -> Client:
     """The Temporal client every operator surface shares.
 
-    pydantic_data_converter is non-negotiable: without it RunState and
+    sdlc_data_converter is non-negotiable: without it RunState and
     PendingDecision do not round-trip (cli.py:317).
     """
     return await Client.connect(
-        os.environ.get("TEMPORAL_HOST", "localhost:7233"), data_converter=pydantic_data_converter
+        os.environ.get("TEMPORAL_HOST", "localhost:7233"), data_converter=sdlc_data_converter
     )
 
 

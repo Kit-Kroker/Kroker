@@ -38,7 +38,8 @@ from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 from temporalio.client import Client, WorkflowHandle
-from temporalio.contrib.pydantic import pydantic_data_converter
+
+from sdlc.converter import sdlc_data_converter
 
 from .core.models import (
     GateOutcome,
@@ -529,7 +530,7 @@ async def main() -> None:
     if _needs_temporal_client(args):
         client = await Client.connect(
             os.environ.get("TEMPORAL_HOST", "localhost:7233"),
-            data_converter=pydantic_data_converter,
+            data_converter=sdlc_data_converter,
         )
 
     if args.cmd == "maintain":

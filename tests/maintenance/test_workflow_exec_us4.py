@@ -36,11 +36,11 @@ from pathlib import Path
 import pytest
 from temporalio import activity
 from temporalio.client import WorkflowExecutionStatus
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateDecision, GateOutcome
 from sdlc.maintenance.models import (
     MaintenanceConfig,
@@ -286,7 +286,7 @@ async def test_a_merged_fix_seen_on_the_default_branch_is_closed(repo_dir):
     stays False here."""
     arm: dict = {"on": False}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "fix", arm):
             handle, child_id = await _drive_to_verified(env, repo_dir, "fix", arm)
@@ -317,7 +317,7 @@ async def test_a_squash_merged_fix_is_resolved_externally_with_no_lesson(repo_di
     provable provenance (R8)."""
     arm: dict = {"on": False}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "squash:fix", arm):
             handle, child_id = await _drive_to_verified(env, repo_dir, "squash:fix", arm)
@@ -345,7 +345,7 @@ async def test_a_fix_that_is_never_merged_stays_verified(repo_dir):
     No render check here: the incidents table has no note column until T047."""
     arm: dict = {"on": False}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "fix", arm):
             handle, _ = await _drive_to_verified(env, repo_dir, "fix", arm)
@@ -381,7 +381,7 @@ async def test_a_regression_after_merge_is_dirty_and_reopens_without_a_reject(re
     no dirty stamp.) With T031's re-plan wired, ``reopened`` is transient."""
     arm: dict = {"on": False}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "fix", arm):
             handle, child_id = await _drive_to_verified(env, repo_dir, "fix", arm)
@@ -419,7 +419,7 @@ async def test_a_not_collected_cycle_neither_strands_nor_degrades_the_closure(re
     resolved_externally, and not reopened. The next collected cycle closes it."""
     arm: dict = {"on": False}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "fix", arm):
             handle, child_id = await _drive_to_verified(env, repo_dir, "fix", arm)
@@ -453,7 +453,7 @@ async def test_a_closed_incident_is_terminal_and_inert(repo_dir):
 
     arm: dict = {"on": False}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "fix", arm):
             handle, child_id = await _drive_to_verified(env, repo_dir, "fix", arm)

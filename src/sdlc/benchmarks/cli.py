@@ -280,7 +280,8 @@ async def _run_matrix(
     allow_parked: bool = False,
 ) -> str:
     from temporalio.client import Client
-    from temporalio.contrib.pydantic import pydantic_data_converter
+
+    from sdlc.converter import sdlc_data_converter
 
     spec = load_case_spec(case_path)
     # 012 (contract §1.3): a registered rubric or veto file that is missing
@@ -340,7 +341,7 @@ async def _run_matrix(
     if gate_policy is not None:
         spec = spec.model_copy(update={"gate_policy": GatePolicy(gate_policy)})
     client = await Client.connect(
-        os.environ.get("TEMPORAL_HOST", "localhost:7233"), data_converter=pydantic_data_converter
+        os.environ.get("TEMPORAL_HOST", "localhost:7233"), data_converter=sdlc_data_converter
     )
     from ..pools import require_harness_poller, resolve_harness_queue
     from ..worker import TASK_QUEUE

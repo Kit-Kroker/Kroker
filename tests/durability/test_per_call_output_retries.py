@@ -43,12 +43,12 @@ from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from temporalio import workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 
 pytestmark = [pytest.mark.temporal]
 
@@ -125,7 +125,7 @@ async def _probe(output_retries: int | None) -> tuple[int | None, list[int], str
     ]
     _REQUESTS.clear()
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

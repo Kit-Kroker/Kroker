@@ -23,8 +23,9 @@ from pydantic import BaseModel
 from temporalio import workflow
 from temporalio.api.enums.v1 import EventType, ParentClosePolicy
 from temporalio.client import WorkflowExecutionStatus
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
+
+from sdlc.converter import sdlc_data_converter
 
 with _workflow.unsafe.imports_passed_through():
     # Mark THIS module pass-through so the workflow sandbox reuses the real
@@ -123,7 +124,7 @@ async def _run_parent(env: WorkflowEnvironment, repo_dir) -> tuple[str, object]:
 async def test_start_returns_without_awaiting_the_child(repo_dir):
     """R1: the first start returns 'started' while the child is still RUNNING."""
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         result, _ = await _run_parent(env, repo_dir)
         first, _, _ = result.partition("/")
@@ -141,7 +142,7 @@ async def test_start_returns_without_awaiting_the_child(repo_dir):
 async def test_second_start_with_same_id_returns_attached(repo_dir):
     """R1: a second start of the same child id is 'attached', not an error."""
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         result, _ = await _run_parent(env, repo_dir)
         _, _, second = result.partition("/")
@@ -153,7 +154,7 @@ async def test_second_start_with_same_id_returns_attached(repo_dir):
 async def test_child_start_is_recorded_with_abandon(repo_dir):
     """R1: the child start in the parent's history uses ParentClosePolicy.ABANDON."""
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         _, handle = await _run_parent(env, repo_dir)
         history = await handle.fetch_history()
@@ -176,7 +177,7 @@ async def test_no_deprecate_patch_marker_in_parent_history(repo_dir):
     """R1: start_repair_child adds no deprecate_patch marker (the e74 patch id
     must not appear in any recorded event of the parent's history)."""
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         _, handle = await _run_parent(env, repo_dir)
         history = await handle.fetch_history()
@@ -314,7 +315,7 @@ async def test_start_with_the_id_of_a_completed_child_returns_attached_not_resta
 
     monkeypatch.setenv("SDLC_WORKTREES_ROOT", str(tmp_path / "wts"))
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with maint_worker(
             env,
@@ -379,7 +380,7 @@ async def test_sha_base_branch_reaches_the_child_run_input_unchanged(repo_dir):
     from sdlc.workflows.models import GraphRunInput
 
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with maint_worker(
             env,
@@ -418,7 +419,7 @@ async def test_child_id_is_used_verbatim_for_the_started_workflow(repo_dir):
     """R1 edge: the id passed to start_repair_child is the started child's
     workflow id, with no rewriting or prefixing."""
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with maint_worker(
             env,

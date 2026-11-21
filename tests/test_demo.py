@@ -11,11 +11,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 
 from sdlc.agents.roles import ALL_TEMPORAL_AGENTS
 from sdlc.channels.contract import Reply
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateOutcome
 from sdlc.demo.canned import AGENT_SPECS, demo_config, demo_idea
 from sdlc.demo.env import PLACEHOLDER, PROVIDER_KEYS, use_placeholder_keys
@@ -122,7 +122,7 @@ async def test_demo_runs_end_to_end(monkeypatch, tmp_path):
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     lines: list[str] = []
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         # Each gate opens a durable timer; with skipping on, the test server
         # can jump to its expiry before the driver's signal lands.

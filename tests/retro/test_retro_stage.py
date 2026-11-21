@@ -8,12 +8,12 @@ import uuid
 
 import pytest
 from temporalio import workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.artifacts.retention import RetentionInput
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import (
     GateDecision,
     GateOutcome,
@@ -90,7 +90,7 @@ async def test_retro_populates_run_summary_on_deploy(tmp_path, monkeypatch):
         *fake_agent_activities(AGENT_SPECS),
     ]
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
@@ -142,7 +142,7 @@ async def test_retro_fires_on_rejected_path(tmp_path, monkeypatch):
         *fake_agent_activities(AGENT_SPECS),
     ]
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
@@ -181,7 +181,7 @@ async def test_export_failure_does_not_change_outcome(tmp_path, monkeypatch):
         *fake_agent_activities(AGENT_SPECS),
     ]
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
@@ -223,7 +223,7 @@ async def test_retention_invoked_keep_full_on_rejected_path(tmp_path, monkeypatc
         *fake_agent_activities(AGENT_SPECS),
     ]
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(

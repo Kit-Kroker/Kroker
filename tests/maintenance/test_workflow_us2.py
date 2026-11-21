@@ -6,7 +6,7 @@ names a real gap T025 must fix. No assertion is weakened to pass.
 
 Contract: tasks.md T024 (US2 AC1–5, FR-010/011/012, SC-003).
 Scaffolding: tests/maintenance/test_workflow_us1.py (fakes, SdlcPydanticAIPlugin,
-pydantic_data_converter, _until polling, fake notify, fake_triage activities
+sdlc_data_converter, _until polling, fake notify, fake_triage activities
 keyed off the fixture repo), tests/maintenance/test_inbox_decide.py part (b)
 for the transport-level reject.
 
@@ -22,13 +22,13 @@ import time
 
 import pytest
 from temporalio import activity, workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.channels.contract import Reply
 from sdlc.channels.transport import Selector, resolve, submit
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateOutcome
 from sdlc.maintenance.models import (
     MaintenanceConfig,
@@ -124,7 +124,7 @@ def _incidents(handle):
 
 async def test_silence_past_gate_timeout_times_out_never_approves(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -173,7 +173,7 @@ async def test_silence_past_gate_timeout_times_out_never_approves(repo_dir):
 
 async def test_judgement_finding_at_self_1_0_is_human_gated_not_auto_approved(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -219,7 +219,7 @@ async def test_judgement_finding_at_self_1_0_is_human_gated_not_auto_approved(re
 
 async def test_mechanical_reproduced_on_two_cycles_reaches_policy_approval(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -282,7 +282,7 @@ async def test_mechanical_reproduced_on_two_cycles_reaches_policy_approval(repo_
 
 async def test_human_reject_records_actor_reason_and_never_replans(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -346,7 +346,7 @@ async def test_human_reject_records_actor_reason_and_never_replans(repo_dir):
 
 async def test_revise_is_reject_with_guidance_in_note(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -397,7 +397,7 @@ async def test_revise_is_reject_with_guidance_in_note(repo_dir):
 async def test_gate_opening_calls_the_notify_activity(repo_dir):
     calls: list = []
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -445,7 +445,7 @@ async def test_gate_opening_calls_the_notify_activity(repo_dir):
 
 async def test_history_with_a_decision_replays_clean(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

@@ -33,11 +33,11 @@ from pathlib import Path
 import pytest
 from temporalio import activity
 from temporalio.client import WorkflowFailureError
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateDecision, GateOutcome
 from sdlc.maintenance.models import (
     MaintenanceConfig,
@@ -242,7 +242,7 @@ async def test_three_nofix_attempts_then_escalated_with_one_notification(repo_di
     """
     notifications: list[NotifyInput] = []
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "nofix", notifications):
             handle = await _start(env, _cfg(repo_dir))
@@ -312,7 +312,7 @@ async def test_configfail_escalates_after_attempt_one_without_a_reopen(repo_dir)
     escalates at once, with no reopen and no second child."""
     notifications: list[NotifyInput] = []
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "configfail", notifications):
             handle = await _start(env, _cfg(repo_dir))
@@ -344,7 +344,7 @@ async def test_persisted_detects_while_executing_never_move_reopens(repo_dir):
     PERSISTED bumps seen_count and consecutive_seen but never reopens."""
     notifications: list[NotifyInput] = []
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "hang", notifications):
             handle = await _start(env, _cfg(repo_dir))
@@ -380,7 +380,7 @@ async def test_escalation_is_terminal_with_no_residue_on_the_execute_path(repo_d
 
     notifications: list[NotifyInput] = []
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "configfail", notifications):
             handle = await _start(env, _cfg(repo_dir))

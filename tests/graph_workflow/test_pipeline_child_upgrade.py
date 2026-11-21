@@ -16,10 +16,10 @@ from typing import Any
 import pytest
 from temporalio import workflow
 from temporalio.api.enums.v1 import EventType
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
+from sdlc.converter import sdlc_data_converter
 from sdlc.workflows.pipeline_child import execute_pipeline_child
 from tests.fakes.canned import e2e_config, greenfield_idea
 from tests.replay.harness import replayer
@@ -65,7 +65,7 @@ def _child_types(history) -> list[str]:
 @pytest.mark.asyncio
 async def test_a_new_parent_starts_graph_children_and_its_history_replays():
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

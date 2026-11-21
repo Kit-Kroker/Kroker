@@ -32,9 +32,9 @@ import json
 import pathlib
 
 import pytest
-from temporalio.contrib.pydantic import pydantic_data_converter
 
 from sdlc.benchmarks.models import BenchmarkRecord
+from sdlc.converter import sdlc_data_converter
 from sdlc.pricing import PriceUsageInput
 from tests.replay.harness import GRAPH_STARTER, capture, load_history
 from tests.replay.scenarios import SCENARIOS
@@ -66,7 +66,7 @@ FROZEN_FIXTURE = pathlib.Path("tests/durability/fixtures/priced_usage_pre_e74.js
 def _scheduled_inputs(events, activity_name: str, model_type: type) -> list:
     """Decode the input payload of every ActivityTaskScheduled with the given
     activity type, in schedule order."""
-    converter = pydantic_data_converter.payload_converter
+    converter = sdlc_data_converter.payload_converter
     decoded: list = []
     for ev in events:
         if not ev.HasField("activity_task_scheduled_event_attributes"):

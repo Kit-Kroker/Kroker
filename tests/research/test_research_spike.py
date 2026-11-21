@@ -36,11 +36,11 @@ from pydantic_ai.capabilities import ResolveModelId
 from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models.test import TestModel
 from temporalio import workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
@@ -117,7 +117,7 @@ class _SpikeWorkflow:
 async def test_output_validator_survives_temporalization_and_runs_activity_side():
     _VALIDATOR_RAN_IN.clear()
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -190,7 +190,7 @@ async def test_codemode_run_code_executes_through_temporal_agent():
     # converts that hang into a deterministic asyncio.TimeoutError so the
     # suite can complete. See FINDING B.
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

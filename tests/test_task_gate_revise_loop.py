@@ -26,11 +26,11 @@ from dataclasses import dataclass, field
 
 import pytest
 from temporalio import activity, workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import (
     GateConfig,
     GateDecision,
@@ -160,7 +160,7 @@ async def _wait_for_status(handle, target: str, timeout_s: float = 20.0):
 async def _run(cfg, tmp_path, monkeypatch, tag, driver):
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

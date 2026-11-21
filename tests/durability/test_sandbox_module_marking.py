@@ -19,11 +19,11 @@ the pin in the same change that creates it.
 
 from pathlib import Path
 
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Replayer
 from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.workflows.crew import CrewTaskWorkflow
 from sdlc.workflows.deployment import DeploymentWorkflow
 from sdlc.workflows.graph import GraphWorkflow
@@ -75,7 +75,7 @@ def test_workflow_runner_still_passes_through_pydantic_ai():
     inside a workflow task, TMPRL1101)."""
     config = Replayer(
         workflows=[GraphWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
-        data_converter=pydantic_data_converter,
+        data_converter=sdlc_data_converter,
         plugins=[SdlcPydanticAIPlugin()],
     ).config(active_config=True)
 

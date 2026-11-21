@@ -20,8 +20,8 @@ import os
 
 import pytest
 from temporalio.api.enums.v1 import EventType
-from temporalio.contrib.pydantic import pydantic_data_converter
 
+from sdlc.converter import sdlc_data_converter
 from sdlc.memory.activities import RetainInput
 from sdlc.stages.research import verify
 from tests.replay.harness import (
@@ -98,7 +98,7 @@ def test_fixture_holds_the_grounded_retain_path():
             continue
         attrs = event.activity_task_scheduled_event_attributes
         if attrs.activity_type.name == "retain":
-            (inp,) = pydantic_data_converter.payload_converter.from_payloads(
+            (inp,) = sdlc_data_converter.payload_converter.from_payloads(
                 list(attrs.input.payloads), [RetainInput]
             )
             kinds.append(inp.item.kind)

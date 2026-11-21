@@ -46,9 +46,9 @@ import re
 import time
 
 import pytest
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateDecision, GateOutcome
 from sdlc.maintenance.execution import OPS_REFUSAL_OUTCOME
 from sdlc.maintenance.models import (
@@ -131,7 +131,7 @@ async def _by_rule(handle, rule: str):
 
 async def test_ops_bearing_plan_is_human_only_even_above_threshold(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with maint_worker(env, task_queue=TASK_QUEUE, proposal=PROPOSAL):
             handle = await env.client.start_workflow(
@@ -246,7 +246,7 @@ async def test_reprice_cannot_policy_approve_an_ops_bearing_plan(repo_dir):
     slowness.
     """
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with maint_worker(env, task_queue=TASK_QUEUE, proposal=PROPOSAL):
             handle = await env.client.start_workflow(

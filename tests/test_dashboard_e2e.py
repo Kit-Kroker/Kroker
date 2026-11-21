@@ -30,13 +30,13 @@ pytestmark = pytest.mark.temporal
 
 @pytest.mark.asyncio
 async def test_run_state_answers_on_a_live_run():
-    from temporalio.contrib.pydantic import pydantic_data_converter
+    from temporalio.contrib.pydantic import sdlc_data_converter
 
     # start_local, not start_time_skipping: fetch_fleet lists workflows, and
     # the time-skipping test service does not implement ListWorkflowExecutions
     # (UNIMPLEMENTED on temporalio 1.31). The dev-server subprocess this
     # env actually spawns serves the full visibility API.
-    async with await WorkflowEnvironment.start_local(data_converter=pydantic_data_converter) as env:
+    async with await WorkflowEnvironment.start_local(data_converter=sdlc_data_converter) as env:
         async with Worker(
             env.client, task_queue="dash-e2e", workflows=[GraphWorkflow], activities=[]
         ):

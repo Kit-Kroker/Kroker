@@ -34,7 +34,6 @@ from types import SimpleNamespace
 
 import pytest
 from temporalio import activity, workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
@@ -42,6 +41,7 @@ from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.channels.contract import Reply
 from sdlc.channels.inbox import fetch_inbox
 from sdlc.channels.transport import Selector, resolve, submit
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateOutcome
 from sdlc.maintenance.models import MaintenanceConfig, MaintenanceState, RepairProposal
 from sdlc.pending import GateContext, gate_pending
@@ -172,7 +172,7 @@ async def test_reject_over_the_existing_decision_path_rejects_the_incident(repo_
     GateHost-only MaintenanceWorkflow run it must resolve repair:1 and the
     incident must become `rejected`."""
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

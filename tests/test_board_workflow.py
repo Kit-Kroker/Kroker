@@ -15,7 +15,6 @@ import uuid
 
 import pytest
 from temporalio import activity, workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
@@ -28,6 +27,7 @@ from sdlc.board.activities import (
 )
 from sdlc.board.models import ArtifactStatus, TaskStatus
 from sdlc.board.store import BoardStore
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import (
     GateConfig,
     GateDecision,
@@ -111,7 +111,7 @@ async def test_shipped_run_publishes_artifacts_tasks_and_evidence(board_env):
     cfg = _unattended_cfg()
     tag = f"board-ship-{uuid.uuid4()}"
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -175,7 +175,7 @@ async def test_rejected_architecture_records_rejected_and_keeps_pointer(board_en
     cfg.gates["architecture"] = GateConfig(policy=GatePolicy.HARD)
     tag = f"board-rej-{uuid.uuid4()}"
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(

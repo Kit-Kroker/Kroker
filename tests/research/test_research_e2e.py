@@ -13,12 +13,12 @@ from pydantic_ai.capabilities import ResolveModelId
 from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models.test import TestModel
 from temporalio import workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import (
     GateConfig,
     GateDecision,
@@ -180,7 +180,7 @@ async def test_research_stage_runs_and_hands_off():
     cfg.deploy.enabled = True
     reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         # Disable auto-skipping: real (48h) gate timers otherwise race the
         # signal delivery (same justification as test_e2e_greenfield).
@@ -249,7 +249,7 @@ async def test_research_stage_degrades_instead_of_blocking_on_grounding_violatio
     cfg.deploy.enabled = True
     reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
@@ -310,7 +310,7 @@ async def test_research_stage_degrades_instead_of_crashing_on_usage_limit_exceed
     cfg.deploy.enabled = True
     reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(

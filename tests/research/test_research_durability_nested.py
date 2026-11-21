@@ -26,13 +26,13 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import ResolveModelId
 from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models.test import TestModel
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 import sdlc.agents.roles as roles
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.observability.activities import export_run_artifacts
 from sdlc.stages.architecture.models import ArchitectureSpec
 from sdlc.stages.merge.activities import evaluate_gate
@@ -128,7 +128,7 @@ async def test_nested_research_runs_in_activity_and_budget_still_bounds(tmp_path
 
     cfg = _research_cfg()
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         # Sandbox runner (default) through the mitigated plugin: the
         # production-shaped worker.

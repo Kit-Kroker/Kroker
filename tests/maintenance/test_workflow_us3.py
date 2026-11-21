@@ -17,11 +17,11 @@ import time
 
 import pytest
 from temporalio import activity, workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.maintenance.models import MaintenanceConfig, MaintenanceState, RepairProposal
 from sdlc.workflows.maintenance import MaintenanceKickWorkflow, MaintenanceWorkflow
 from sdlc.workflows.triage import TriageProbeInput, TriageWorkflow
@@ -111,7 +111,7 @@ def _cycle(handle):
 
 async def test_kicker_nudges_a_running_loop_and_a_cycle_runs(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -142,7 +142,7 @@ async def test_kicker_nudges_a_running_loop_and_a_cycle_runs(repo_dir):
 
 async def test_kicker_without_a_loop_returns_not_enabled_without_retry(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -167,7 +167,7 @@ async def test_kicker_without_a_loop_returns_not_enabled_without_retry(repo_dir)
 
 async def test_three_nudges_during_a_cycle_coalesce_into_one_follow_up(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -207,7 +207,7 @@ async def test_history_rolls_over_at_idle_carrying_incidents_and_baseline(repo_d
     # (analysis_failed, no plan, no gate).
     failing = _failing_maintainer_activities()
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -276,7 +276,7 @@ async def test_history_rolls_over_at_idle_carrying_incidents_and_baseline(repo_d
 
 async def test_pending_gate_defers_the_roll_over(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -319,7 +319,7 @@ async def test_pending_gate_defers_the_roll_over(repo_dir):
 
 async def test_disable_withdraws_an_open_gate_and_ends_the_loop(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -353,7 +353,7 @@ async def test_disable_withdraws_an_open_gate_and_ends_the_loop(repo_dir):
 
 async def test_re_enable_starts_fresh_with_a_new_baseline(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -440,7 +440,7 @@ async def test_worker_restart_mid_cycle_duplicates_nothing(repo_dir):
         fake_notify,
     ]
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         # max_cached_workflows=0 everywhere: without workflow caching there
         # is no sticky task queue, so the in-flight run is never pinned to a
@@ -516,7 +516,7 @@ async def test_worker_restart_mid_cycle_duplicates_nothing(repo_dir):
 
 async def test_replay_clean_across_the_roll_over(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

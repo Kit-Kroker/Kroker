@@ -41,12 +41,12 @@ from pydantic_ai.models.test import TestModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 from temporalio import workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.observability.sub_run_usage import SubRunUsage, metadata_for
 from sdlc.stages.architecture.models import ArchitectureSpec
 from sdlc.stages.research.deps import ResearchDeps
@@ -337,7 +337,7 @@ async def test_durable_report_differs_only_by_the_metadata_key():
     T008 the reported run fails by ImportError (tool_return missing)."""
     queue = "c12-wire-layer-1"
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

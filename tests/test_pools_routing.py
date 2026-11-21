@@ -53,7 +53,6 @@ import pytest
 from temporalio import activity, workflow
 from temporalio.api.enums.v1 import EventType
 from temporalio.client import Client, WorkflowHandle
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import (
     Interceptor,
@@ -71,6 +70,7 @@ from sdlc.benchmarks.cell import CellProgress
 from sdlc.benchmarks.models import AxisBag, BenchmarkRecord, CaseSpec
 from sdlc.benchmarks.oracle import OracleGrade
 from sdlc.benchmarks.provenance import Provenance
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateConfig, GatePolicy, HarnessKind, RoleConfig
 from sdlc.crew.activities import (
     CheckpointInput,
@@ -154,7 +154,7 @@ async def _rig(
 ) -> AsyncIterator[Client]:
     """Routed: core + harness workers. Unrouted: the core worker hosts everything."""
     core_acts, harness_acts = _split(bundle)
-    async with await WorkflowEnvironment.start_local(data_converter=pydantic_data_converter) as env:
+    async with await WorkflowEnvironment.start_local(data_converter=sdlc_data_converter) as env:
         client = env.client
         core = Worker(
             client,
@@ -761,7 +761,7 @@ def _assert_repair_child_input_carries_queue(histories: list[Any]) -> None:
             attrs = ev.start_child_workflow_execution_initiated_event_attributes
             if attrs.workflow_type.name != "GraphWorkflow":
                 continue
-            [decoded] = pydantic_data_converter.payload_converter.from_payloads(
+            [decoded] = sdlc_data_converter.payload_converter.from_payloads(
                 list(attrs.input.payloads), [dict]
             )
             inputs.append(decoded)
