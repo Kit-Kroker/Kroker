@@ -51,14 +51,14 @@ async def gate(repo: pathlib.Path, base: str):
             base_worktree=wt.path,
             base_reason=wt.reason,
             base_sha=base,
-            renames=diff["renames"],
+            renames=diff.renames,
         )
     )
     sec = await scoped_security_scan(
         ScopedSecurityScanInput(
             worktree=str(repo),
             base_worktree=wt.path,
-            renames=diff["renames"],
+            renames=diff.renames,
             base_reason=wt.reason,
         )
     )
