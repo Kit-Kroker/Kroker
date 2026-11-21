@@ -24,6 +24,7 @@ from pydantic_ai.models.test import TestModel
 from temporalio import activity
 
 from ..agents.roles import AGENT_ACTIVITY_CONFIG
+from ..artifacts.read import load_diff
 from ..artifacts.retention import RetentionInput
 from ..board.activities import (
     AttachEvidenceInput,
@@ -308,6 +309,7 @@ SCRIPTED: list[Callable[..., Any]] = [
     create_worktree,
     run_coding_task,
     get_task_diff,
+    load_diff,  # FR-702: real read-back serving the fake artifact above
     run_test_suite,
     run_lint,
     scoped_security_scan,

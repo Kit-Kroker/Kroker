@@ -133,7 +133,13 @@ async def analyze_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
     )
     # FR-702: the analyst's prompt patch is a bounded read-back of the
     # stored artifact; the payload carries the artifact (metadata + ref).
-    patch = await workflow.execute_activity(load_diff, LoadDiffInput(ref=art.patch_ref), **ACT)
+    # patch_ref=None (propose arm / legacy fakes) -> empty text, NO
+    # read-back command (Review Focus 3).
+    patch_text = (
+        (await workflow.execute_activity(load_diff, LoadDiffInput(ref=art.patch_ref), **ACT)).text
+        if art.patch_ref is not None
+        else ""
+    )
     done = {r.task_id: r for r in results.task_results}
     outcome = await analyze.step(
         nc.ctx,
@@ -141,7 +147,7 @@ async def analyze_node(nc: NodeContext, act: Activation, cfg: PipelineConfig) ->
         plan=plan,
         task_results=done,
         diff=art,
-        patch=patch.text,
+        patch=patch_text,
         integration_wt=integration.worktree_path,
         base_branch=nc.facts.idea.base_branch,
         base_sha=nc.facts.base_sha,

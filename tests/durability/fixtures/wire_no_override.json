@@ -19,6 +19,7 @@
   "run_coding_task",
   "run_test_suite",
   "get_task_diff",
+  "load_diff",
   "agent__qa_analyst_agent__model_request",
   "price_usage",
   "agent__reviewer_agent__model_request",
@@ -28,6 +29,8 @@
   "attach_task_evidence",
   "merge_into_integration",
   "get_task_diff",
+  "load_diff",
+  "build_trace_inventory",
   "agent__analyst_agent__model_request",
   "price_usage",
   "prepare_base_worktree",
@@ -39,7 +42,8 @@
   "open_pull_request",
   "notify",
   "export_run_artifacts",
-  "apply_session_retention"
+  "apply_session_retention",
+  "cleanup_run_worktrees"
  ],
  "model_requests": [
   {
@@ -56,11 +60,11 @@
   },
   {
    "activity": "agent__qa_analyst_agent__model_request",
-   "model_id": "zai:glm-5.3"
+   "model_id": "zai:glm-5.3-flash"
   },
   {
    "activity": "agent__reviewer_agent__model_request",
-   "model_id": "zai:glm-5.3"
+   "model_id": "zai:glm-5.3-flash"
   },
   {
    "activity": "agent__analyst_agent__model_request",

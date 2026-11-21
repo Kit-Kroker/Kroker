@@ -7,12 +7,14 @@
   "activity:run_coding_task",
   "activity:run_test_suite",
   "activity:get_task_diff",
+  "activity:load_diff",
   "activity:agent__qa_analyst_agent__model_request",
   "activity:price_usage",
   "activity:agent__reviewer_agent__model_request",
   "activity:price_usage",
   "activity:merge_into_integration",
   "activity:get_task_diff",
+  "activity:load_diff",
   "activity:build_trace_inventory",
   "activity:agent__analyst_agent__model_request",
   "activity:price_usage",
@@ -30,7 +32,7 @@
   "activity:apply_session_retention",
   "activity:cleanup_run_worktrees"
  ],
- "source_commit": "986da8566703005deedda9d8374fd0426aff21fe",
+ "source_commit": "da9e014fdde6e036245624d1495b65cc0985893f",
  "trace": [
   [
    "stage",

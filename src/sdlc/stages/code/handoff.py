@@ -5,18 +5,32 @@ ceiling — a pure, line-neutral move following ``acts.py`` (024 T021) and
 ``freeze.py``: ``step.py`` imports this under the ``_run_handoff`` name,
 so every call site keeps working. The claim cross-check itself is pure
 and lives in ``sdlc.handoff``; this module only runs the lens.
+
+ALL runtime imports sit at module top inside the passthrough block —
+step.py's own shape. Payload types (HandoffSummary above all) imported
+inside the function body load as a SECOND class inside the workflow
+sandbox, and TaskResult's validator then rejects the handoff it just
+built ("instance of HandoffSummary" failing isinstance HandoffSummary);
+the passthrough block keeps one class object across both worlds.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from temporalio import workflow
 
-if TYPE_CHECKING:
+with workflow.unsafe.imports_passed_through():
+    from ...artifacts.read import LoadSessionInput, load_session
+    from ...benchmarks.models import BenchmarkOutcome
+    from ...benchmarks.record_builder import stage_record
     from ...core.context import StageContext
-    from ...core.models import PipelineConfig
+    from ...core.models import PipelineConfig, RoleUsage
+    from ...handoff import claim_survival_score, cross_check_claims
+    from ...harness.session import session_text_from_jsonl
+    from .acts import ACT
+    from .models import HandoffSummary
 
 
 def _now() -> datetime:
@@ -36,17 +50,7 @@ async def run_handoff(
     files: list[str],
     task: Any,
     handoff_agent: Any = None,
-):
-    from ...agents.roles import resolve_role_model
-    from ...artifacts.read import LoadSessionInput, load_session
-    from ...benchmarks.models import BenchmarkOutcome
-    from ...benchmarks.record_builder import stage_record
-    from ...core.models import RoleUsage
-    from ...handoff import claim_survival_score, cross_check_claims
-    from ...harness.session import session_text_from_jsonl
-    from .acts import ACT
-    from .models import HandoffSummary
-
+) -> HandoffSummary:
     fallback = HandoffSummary(task_id=task.id, files_touched=files)
     if not (
         handoff_agent is not None
@@ -56,6 +60,11 @@ async def run_handoff(
         return fallback
     _started = _now()
     try:
+        # Lazy like the original step.py body: agents.roles EAGERLY builds
+        # the agent registry at import, and a module-level edge here puts
+        # that build inside unrelated import chains (loader circular).
+        from ...agents.roles import resolve_role_model
+
         loaded = await workflow.execute_activity(
             load_session, LoadSessionInput(ref=run.session_ref), **ACT
         )
