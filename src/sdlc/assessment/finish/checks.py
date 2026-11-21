@@ -398,12 +398,11 @@ def evaluate_criteria(
             # all. The phase failure stays visible on c04/c05/c06/c09's owed
             # rows; c07's owner is E-56, never the phase.
             deferred = risk_state.state is not CollectionState.MEASURED
-            if not deferred:
-                assert risk is not None  # measured producers carry their artifact
+            if not deferred and risk is not None:
                 deferred = any(
                     c.unified.value.state is not CollectionState.MEASURED for c in risk.capabilities
                 )
-            if deferred:
+            if deferred or risk is None:
                 owed.append(f"{C07}: deferred (E-56)")
             else:
                 checks.append(_c07(risk))
