@@ -117,7 +117,7 @@ The five input classes the spec implies that no ordinary task exercises; each is
   - Owed producer mapping (FD11 rule 1): a criterion whose producer phase is absent (state not MEASURED) is owed with owner `f"{phase}: {reason}"`; c07/c13 owners are static (`E-56`/`E-52`).
 
 - [ ] **Step 1: Write the failing tests** — `tests/test_assessment_finish_criteria.py`, one parametrized fixture family over (clean, degraded, absent) × (discover, risk):
-  - `test_clean_run_evaluates_twelve_criteria` — clean artifacts → 12 evaluated rows (c01–c12, c14; c13 owed) + exactly 1 owed row; `test_manifest_pin`: `{r.name for r in checks} | {o.split(":")[0] for o in owed} == set(CRITERIA_MANIFEST)`.
+  - `test_clean_run_evaluates_thirteen_criteria` — clean artifacts → 13 evaluated rows (c01–c12, c14; c13 owed) + exactly 1 owed row; `test_manifest_pin`: `{r.name for r in checks} | {o.split(":")[0] for o in owed} == set(CRITERIA_MANIFEST)`.
   - `test_c07_deferred_to_e56`, `test_c13_owed_to_e52` — owed strings verbatim.
   - `test_c08_baseline_run_records_not_fails` — `propose_discover` off shape: `total_references == 0` → c08 passes with mode in detail.
   - `test_c10_subreport_not_collected_fails_not_owed` — discover MEASURED, `attribution.coverage` not_collected → c10 fail, detail carries the reason.
