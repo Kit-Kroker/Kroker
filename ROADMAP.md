@@ -493,7 +493,7 @@ as tracked rather than accidental.
   two failing runs' 3 unplanned escalations are ALL the
   validator/collector-artifact class (green contract tests masked by
   malformed probes) — without it SC-1 reads 5/5.
-- [ ] — **SC-2** ≤15 min operator time — **measured, passed (R026 1.47 min)**.
+- [x] **SC-2** ≤15 min operator time — **measured, passed (R026 1.47 min)**.
   **Measured at R025 (2026-11-18, fleet report §SC-2)**: n/a — the
   rollup's operator-time medians read retro `summary.json` exports,
   which benchmark-mode runs do not produce (backlog finding: the
@@ -507,7 +507,7 @@ as tracked rather than accidental.
   026's FR-001..005 fixed (the rollup reads the runs root; 5/5
   summarized). HARD policy, automated attendant, 0 human interactions
   fleet-wide.
-- [ ] — **SC-3** fix-loop success ≥70% — **measured, passed (R026 0.773 / 0.842-corrected).** Aggregated by `src/sdlc/benchmarks/sc_rollup.py` / `sdlc benchmark score`; fix-loop attempts vs resolution per stage is the E-36 heatmap (§9.8).
+- [x] **SC-3** fix-loop success ≥70% — **measured, passed (R026 0.773 / 0.842-corrected).** Aggregated by `src/sdlc/benchmarks/sc_rollup.py` / `sdlc benchmark score`; fix-loop attempts vs resolution per stage is the E-36 heatmap (§9.8).
   **Measured at R025 (2026-11-18, fleet report §SC-3)**: **0.385 (5/13
   loops, n≥floor) — missed.** Escalations ended in approve-to-proceed,
   not repair; scored set 0/6 successes (best oracle 0.861, blocked at
