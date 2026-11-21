@@ -43,7 +43,7 @@ from sdlc.stages.qa.models import QAReport
 from sdlc.stages.review.models import ReviewReport
 from sdlc.stages.review.step import _get_qa_raw_json
 from sdlc.toolchain.lint_scope import LintFinding, ScopedLintReport
-from sdlc.vcs import DriftReport
+from sdlc.vcs import CodeArtifact, DriftReport
 
 _BASE = datetime(2026, 7, 4, 10, tzinfo=UTC)
 HEADER = "lint findings introduced by this task (the merge gate's own check):"
@@ -93,7 +93,7 @@ class _FakeWorkflow:
             report = self._qa.pop(0) if len(self._qa) > 1 else self._qa[0]
             return report.model_copy(deep=True)
         if name == "get_task_diff":
-            return {"files": ["app.py"], "stat": "app.py | 1 +", "patch": "diff --git ..."}
+            return CodeArtifact(files=["app.py"], stat="app.py | 1 +", patch_ref=None)
         if name == "load_drift_globs":
             return DriftGlobs(fence=list(self._fence), report=[])
         if name == "check_test_drift":

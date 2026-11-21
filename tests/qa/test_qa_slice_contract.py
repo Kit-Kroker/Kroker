@@ -60,7 +60,8 @@ async def test_qa_step_clean_context_execution():
     task.acceptance_criteria = ["assertion-1"]
     contract = MagicMock()
     contract.assertions = ["assertion-1"]
-    diff = {"stat": "file.py | 2 +-", "patch": "--- a\n+++ b"}
+    stat = "file.py | 2 +-"
+    patch = "--- a\n+++ b"
     qa_raw = QAReport(tests_passed=True, issues=[])
 
     result = await qa.step(
@@ -68,7 +69,8 @@ async def test_qa_step_clean_context_execution():
         cfg=cfg,
         task=task,
         contract=contract,
-        diff=diff,
+        stat=stat,
+        patch=patch,
         worktree="/fake",
         qa_agent=MagicMock(),
         qa_raw=qa_raw,

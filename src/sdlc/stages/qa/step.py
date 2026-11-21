@@ -136,7 +136,8 @@ async def step(
     cfg: PipelineConfig,
     task: Any,
     contract: Any,
-    diff: dict[str, Any],
+    stat: str = "",
+    patch: str = "",
     worktree: str,
     qa_agent: Any,
     qa_raw: QAReport | None = None,
@@ -196,8 +197,8 @@ async def step(
         # clean-context judge, which would then parrot it as its own
         # finding. The report itself (records, rollup) keeps the field.
         qa_raw.model_dump_json(exclude={"lint"}),
-        diff.get("stat", "") if isinstance(diff, dict) else "",
-        diff.get("patch", "") if isinstance(diff, dict) else "",
+        stat,
+        patch,
     )
 
     role_res = await ctx.run_role(

@@ -40,6 +40,7 @@ from sdlc.harness.models import HarnessRunResult
 from sdlc.stages.plan.models import DevTask
 from sdlc.stages.qa.models import QAReport
 from sdlc.stages.review.models import ReviewFinding, ReviewReport
+from sdlc.vcs import CodeArtifact
 
 _BASE = datetime(2026, 7, 4, 10, tzinfo=UTC)
 
@@ -78,7 +79,7 @@ class _FakeWorkflow:
         if fn.__name__ == "run_test_suite":
             return QAReport(tests_passed=True, failing_tests=[], issues=[])
         if fn.__name__ == "get_task_diff":
-            return {"files": ["app.py"], "stat": "app.py | 1 +", "patch": "diff --git ..."}
+            return CodeArtifact(files=["app.py"], stat="app.py | 1 +", patch_ref=None)
         raise AssertionError(f"unexpected activity {fn.__name__}")
 
 
@@ -351,3 +352,42 @@ def test_reviewer_rejection_task_result_matches_the_base_verdict(monkeypatch):
     assert result.status == "quarantined"
     assert result.attempts == 1
     assert result.qa.tests_passed is True
+
+
+def test_patch_ref_none_flows_empty_and_never_loads_diff(monkeypatch):
+    """Review Focus 3 (FR-702): a CodeArtifact with patch_ref=None (the
+    propose-mode/legacy arm) must flow through the attempt with EMPTY
+    patch text, leave run.diff_ref None, and schedule NO load_diff — the
+    fake workflow's unexpected-activity AssertionError is the trip-wire,
+    and activity_names pins it explicitly."""
+    import asyncio
+
+    prompts: dict[str, str] = {}
+
+    class _Ctx(_FakeCtx):
+        async def run_role(self, cfg, role, model, agent, prompt, into=None):
+            prompts[role] = prompt
+            return await super().run_role(cfg, role, model, agent, prompt, into=into)
+
+    fake_wf = _FakeWorkflow()
+    monkeypatch.setattr(code_step, "workflow", fake_wf)
+    result = asyncio.run(
+        code_step.step(
+            _Ctx(),
+            cfg=_cfg(),
+            task=_task(),
+            worktree="/tmp/wt",
+            branch="b",
+            branch_point="bp",
+            qa_agent=SimpleNamespace(),
+            reviewer_agent=SimpleNamespace(),
+            adversary_agent=None,
+            deep_review_agent=None,
+            handoff_agent=None,
+        )
+    )
+    assert result.run is not None
+    assert result.run.diff_ref is None, "no ref crossed, so the run record claims none"
+    assert all(name != "load_diff" for name, _ in fake_wf.activity_calls)
+    assert "diff --git" not in prompts.get("qa", ""), "no patch text may be invented"
+    assert "app.py | 1 +" in prompts.get("qa", ""), "stat still flows inline"

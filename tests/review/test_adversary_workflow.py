@@ -64,10 +64,12 @@ def test_low_severity_adversary_findings_are_not_blocking():
 import pathlib
 
 # 020 T026 (plan T051): the feature.py term is dropped — the live
-# async def _run_handoff lives in stages/code/step.py, already in the concat.
+# async def _run_handoff lives in the code slice (FR-702 moved it to
+# stages/code/handoff.py for the file-size ceiling), both in the concat.
 TASK_HOST_SRC = pathlib.Path("src/sdlc/workflows/task_host.py")
 STAGE_SRC = pathlib.Path("src/sdlc/stages/review/step.py")
 CODE_SRC = pathlib.Path("src/sdlc/stages/code/step.py")
+HANDOFF_SRC = pathlib.Path("src/sdlc/stages/code/handoff.py")
 
 
 def _src() -> str:
@@ -77,6 +79,8 @@ def _src() -> str:
         + STAGE_SRC.read_text(encoding="utf-8")
         + "\n"
         + CODE_SRC.read_text(encoding="utf-8")
+        + "\n"
+        + HANDOFF_SRC.read_text(encoding="utf-8")
     )
 
 
@@ -147,7 +151,9 @@ def test_cause_records_carry_no_fix_attempts():
 
 def test_handoff_is_fail_open_and_never_reaches_a_validator():
     src = _src()
-    idx = src.find("async def _run_handoff")
+    # FR-702 moved the runner to stages/code/handoff.py as run_handoff
+    # (step.py imports it as _run_handoff) — the fail-open shape is the pin.
+    idx = src.find("async def run_handoff")
     assert idx != -1
     body = src[idx : idx + 2600]
     assert "return fallback" in body

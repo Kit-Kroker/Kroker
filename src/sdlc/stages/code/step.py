@@ -23,7 +23,7 @@ from temporalio.exceptions import ChildWorkflowError
 # pydantic then rejects (first post-B0 brownfield run, DS12).
 with workflow.unsafe.imports_passed_through():
     from ... import pools
-    from ...artifacts.read import LoadSessionInput, load_session
+    from ...artifacts.read import LoadDiffInput, load_diff
     from ...benchmarks.models import BenchmarkOutcome, WasteBag
     from ...benchmarks.record_builder import stage_record
     from ...core.context import StageContext
@@ -64,7 +64,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from .attempt_failure import _lint_input, _lint_ok, _qa_failure, attempt_failure
     from .freeze import _drift_note, _is_repair_attempt, _next_anchor
-    from .models import HandoffSummary
+    from .handoff import run_handoff as _run_handoff
     from .usage import _record_attempt_usage
 DEFAULT_TEST_CMD = "pytest -q --maxfail=25"
 
@@ -314,7 +314,7 @@ async def _run_adversary(
     cfg: PipelineConfig,
     contract: Any,
     assertions: list[str],
-    diff: dict[str, Any],
+    patch: str,
     qa_raw: Any,
     task: Any,
     adversary_agent: Any = None,
@@ -327,7 +327,7 @@ async def _run_adversary(
         cfg=cfg,
         contract=contract,
         assertions=assertions,
-        diff=diff,
+        patch=patch,
         qa_raw=qa_raw,
         task=task,
         adversary_agent=adversary_agent,
@@ -341,7 +341,7 @@ async def _run_deep_review(
     run: Any,
     contract: Any,
     assertions: list[str],
-    diff: dict[str, Any],
+    patch: str,
     task: Any,
     deep_review_agent: Any = None,
 ) -> DeepReviewReport | None:
@@ -361,93 +361,11 @@ async def _run_deep_review(
         run=run,
         contract=contract,
         assertions=assertions,
-        diff=diff,
+        patch=patch,
         task=task,
         deep_review_agent=deep_review_agent,
         deep_review_model=resolve_role_model(cfg, "deep_review"),
     )
-
-
-async def _run_handoff(
-    ctx: StageContext,
-    cfg: PipelineConfig,
-    run: Any,
-    contract: Any,
-    assertions: list[str],
-    diff: dict[str, Any],
-    task: Any,
-    handoff_agent: Any = None,
-) -> HandoffSummary:
-    files = diff.get("files", [])
-    fallback = HandoffSummary(task_id=task.id, files_touched=files)
-    if not (
-        handoff_agent is not None
-        and run is not None
-        and getattr(run, "session_ref", None) is not None
-    ):
-        return fallback
-    _started = _now()
-    try:
-        from ...agents.roles import resolve_role_model
-        from ...handoff import claim_survival_score, cross_check_claims
-        from ...harness.session import session_text_from_jsonl
-
-        loaded = await workflow.execute_activity(
-            load_session, LoadSessionInput(ref=run.session_ref), **ACT
-        )
-        model = resolve_role_model(cfg, "handoff")
-        spend = RoleUsage(role="handoff", model=model)
-        session_text = session_text_from_jsonl(loaded.text)
-        out = (
-            await ctx.run_role(
-                cfg,
-                "handoff",
-                model,
-                handoff_agent,
-                "Frozen contract assertions:\n- "
-                + "\n- ".join(assertions)
-                + f"\nDiff:\n{diff.get('patch', '')}"
-                + "\nScrubbed harness transcript:\n"
-                + session_text,
-                into=spend,
-            )
-        ).output
-
-        kept_total = 0
-        dropped_total = 0
-        fields = {}
-        for name in ("what_changed", "decisions_made", "open_concerns"):
-            checked = cross_check_claims(getattr(out, name), files, session_text=session_text)
-            fields[name] = checked.kept
-            kept_total += len(checked.kept)
-            dropped_total += checked.dropped_paths + checked.dropped_quotes
-
-        handoff = HandoffSummary(task_id=task.id, files_touched=files, **fields)
-        await ctx.record(
-            cfg,
-            stage_record(
-                cfg,
-                stage="handoff",
-                role="handoff",
-                started=_started,
-                ended=_now(),
-                quality_score=claim_survival_score(kept_total, dropped_total).value,
-                judge="handoff",
-                outcome=BenchmarkOutcome.PASS,
-                model=model,
-                spend=spend,
-                task_id=task.id,
-                fix_attempts=0,
-            ),
-        )
-        return handoff
-    except Exception:
-        workflow.logger.warning(
-            "handoff extraction failed for task %s; using mechanical handoff",
-            task.id,
-            exc_info=True,
-        )
-        return fallback
 
 
 async def step(
@@ -724,18 +642,31 @@ async def step(
             QAInput(worktree=worktree, test_cmd=test_cmd, **lint_in),
             **pools.on_harness(_long_act(cfg.roles.get("test", role_cfg)), cfg.harness_queue),
         )
-        diff = await workflow.execute_activity(
+        art = await workflow.execute_activity(
             get_task_diff,
-            DiffInput(worktree=worktree, branch_point=branch_point),
+            DiffInput(worktree=worktree, branch_point=branch_point, label=f"{task.id}-a{attempt}"),
             **pools.on_harness(ACT, cfg.harness_queue),
         )
+        # FR-702: the patch text prompts consume is a BOUNDED read-back of
+        # the stored artifact — never the artifact itself on the wire. A
+        # patch_ref-less artifact (propose arm / legacy fakes) means empty
+        # patch text and NO read-back call (Review Focus 3).
+        patch_loaded = (
+            await workflow.execute_activity(load_diff, LoadDiffInput(ref=art.patch_ref), **ACT)
+            if art.patch_ref is not None
+            else None
+        )
+        patch_text = patch_loaded.text if patch_loaded is not None else ""
+        if run is not None:
+            run.diff_ref = art.patch_ref  # D6: the claim-check rides TaskResult
         qa_spend = RoleUsage(role="qa", model=resolve_role_model(cfg, "qa"))
         qa = await qa_step(
             ctx,
             cfg=cfg,
             task=task,
             contract=contract,
-            diff=diff,
+            stat=art.stat,
+            patch=patch_text,
             worktree=worktree,
             qa_agent=qa_agent,
             qa_raw=qa_raw,
@@ -748,7 +679,7 @@ async def step(
             cfg=cfg,
             task=task,
             contract=contract,
-            diff=diff,
+            patch=patch_text,
             worktree=worktree,
             reviewer_agent=reviewer_agent,
             qa_raw=qa_raw,
@@ -771,7 +702,7 @@ async def step(
         )
         review_ok = primary_admits(review_outcome)
         failure = attempt_failure(qa_raw, qa, drift, review_ok, review, report_only)
-        plan_drift = compute_plan_drift(task, diff.get("files", []), drop_generated=_DRIFT_V2())
+        plan_drift = compute_plan_drift(task, art.files, drop_generated=_DRIFT_V2())
 
         await ctx.record(
             cfg,
@@ -842,7 +773,7 @@ async def step(
                 cfg,
                 contract,
                 assertions,
-                diff,
+                patch_text,
                 qa_raw,
                 task,
                 adversary_agent=adversary_agent,
@@ -861,12 +792,20 @@ async def step(
                     run,
                     contract,
                     assertions,
-                    diff,
+                    patch_text,
                     task,
                     deep_review_agent=deep_review_agent,
                 )
                 handoff = await _run_handoff(
-                    ctx, cfg, run, contract, assertions, diff, task, handoff_agent=handoff_agent
+                    ctx,
+                    cfg,
+                    run,
+                    contract,
+                    assertions,
+                    patch_text,
+                    art.files,
+                    task,
+                    handoff_agent=handoff_agent,
                 )
                 return TaskResult(
                     task_id=task.id,
@@ -939,7 +878,14 @@ async def step(
                 continue
 
             deep = await _run_deep_review(
-                ctx, cfg, run, contract, assertions, diff, task, deep_review_agent=deep_review_agent
+                ctx,
+                cfg,
+                run,
+                contract,
+                assertions,
+                patch_text,
+                task,
+                deep_review_agent=deep_review_agent,
             )
             return TaskResult(
                 task_id=task.id,
@@ -974,7 +920,7 @@ async def step(
                 "mandated stack below.\n"
                 if getattr(qa, "stack_mismatch", False)
                 else "A previous session implemented part of this in the same "
-                f"worktree (files: {', '.join(diff.get('files', [])[:20])}). "
+                f"worktree (files: {', '.join(art.files[:20])}). "
                 "Review the current state, then fix these unmet contract "
                 "assertions.\n"
             )

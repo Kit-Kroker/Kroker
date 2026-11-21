@@ -36,7 +36,7 @@ def test_review_step_signature_and_no_gate():
     assert "cfg" in param_names
     assert "task" in param_names
     assert "contract" in param_names
-    assert "diff" in param_names
+    assert "patch" in param_names
     assert "reviewer_agent" in param_names
     assert "adversary_agent" in param_names
     assert "deep_review_agent" in param_names
@@ -80,7 +80,7 @@ async def test_review_step_clean_context_execution():
     task.acceptance_criteria = ["assertion-1"]
     contract = MagicMock()
     contract.assertions = ["assertion-1"]
-    diff = {"patch": "--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new"}
+    patch = "--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new"
     qa_raw = QAReport(tests_passed=True, issues=[])
 
     result = await review.step(
@@ -88,7 +88,7 @@ async def test_review_step_clean_context_execution():
         cfg=cfg,
         task=task,
         contract=contract,
-        diff=diff,
+        patch=patch,
         reviewer_agent=MagicMock(),
         qa_raw=qa_raw,
     )
@@ -140,7 +140,7 @@ async def test_adversary_fail_open_and_retention():
     task = MagicMock()
     task.id = "t1"
     contract = MagicMock()
-    diff = {"patch": "diff patch"}
+    patch = "diff patch"
     qa_raw = QAReport(tests_passed=True, issues=[])
 
     report = await review.run_adversary(
@@ -148,7 +148,7 @@ async def test_adversary_fail_open_and_retention():
         cfg=cfg,
         contract=contract,
         assertions=["A1"],
-        diff=diff,
+        patch=patch,
         qa_raw=qa_raw,
         task=task,
         adversary_agent=MagicMock(),
@@ -170,7 +170,7 @@ async def test_adversary_fail_open_and_retention():
         cfg=cfg,
         contract=contract,
         assertions=["A1"],
-        diff=diff,
+        patch=patch,
         qa_raw=qa_raw,
         task=task,
         adversary_agent=MagicMock(),
@@ -232,7 +232,7 @@ async def test_deep_review_fail_open_and_integrity_verification(monkeypatch):
     task = MagicMock()
     task.id = "t1"
     contract = MagicMock()
-    diff = {"patch": "diff patch"}
+    patch = "diff patch"
 
     report = await review.run_deep_review(
         ctx,
@@ -240,7 +240,7 @@ async def test_deep_review_fail_open_and_integrity_verification(monkeypatch):
         run=run,
         contract=contract,
         assertions=["A1"],
-        diff=diff,
+        patch=patch,
         task=task,
         deep_review_agent=MagicMock(),
     )
@@ -262,7 +262,7 @@ async def test_deep_review_fail_open_and_integrity_verification(monkeypatch):
         run=run,
         contract=contract,
         assertions=["A1"],
-        diff=diff,
+        patch=patch,
         task=task,
         deep_review_agent=MagicMock(),
     )
