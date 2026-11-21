@@ -299,8 +299,11 @@ def test_assemble_threads_the_scan_payload_through():
     rest += [
         unbuilt(p)
         for p in PHASE_ORDER
-        if p not in (PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER, PhaseId.ASSESS)
+        if p not in (PhaseId.INIT, PhaseId.SCAN, PhaseId.DISCOVER, PhaseId.ASSESS, PhaseId.FINISH)
     ]
+    rest.append(
+        PhaseResult(phase=PhaseId.FINISH, collected=Measurement.not_collected("finish not run"))
+    )
     a = assemble("/r", _init_out(), True, "verdict ready", rest, scan=_scan_result())
     assert a.scan is not None
     assert a.terminal_status == PARTIAL

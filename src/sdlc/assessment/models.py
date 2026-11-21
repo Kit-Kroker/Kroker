@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, model_validator
 from ..measurement import CollectionState, Measurement
 from ..triage.models import RepoTriage
 from .discover.map import CapabilityMap
+from .finish.models import FinishReport
 from .gates.models import RiskGateOverride, RiskGateReport, RiskGateVerdict
 from .risk.models import UnifiedRiskMap
 from .scan.models import ScanResult
@@ -117,6 +118,8 @@ class Assessment(BaseModel):
     # E-50's typed fields (FR-917 / FR-304).
     gates: RiskGateReport | None = None
     gate_override: RiskGateOverride | None = None
+    # E-51's typed field (FR-918).
+    finish: FinishReport | None = None
 
     @model_validator(mode="after")
     def _no_triage_means_not_admitted(self) -> Assessment:
