@@ -55,7 +55,11 @@ noted, not fixed (not this branch's):** `tests/test_read_fixtures_fresh.py`
 `test_pristine_copy_passes_the_record_check` fail in any worktree ("compare
 json is stale") and are green in the primary checkout;
 `tests/maintenance/test_execution.py` size-ratchet gap — pre-existing on
-main before this branch, another item's owner. Commits: `8b6cb4ec`…`a3e6596f`
+main before this branch, another item's owner. Commits: `8b6cb4ec`…`a3e6596f`,
+plus the final-review wave `8c2a314a` (the `finish` pairing validator Task 5's
+text omitted — a plan gap the whole-branch review caught; `SharedVulnerability.bc_ids`
+joined the edges census per spec §5; c07's evaluated-fail branch pinned;
+tier-2 FD13 wording split; plan errata)
 (nine: contracts, the xref walk, the 14 criteria + c07 pinning, exits +
 `evaluate_finish`, risk narrowing, FINISH wiring, the blocked-path bind,
 e2e + replay). Scope: the FR-918 row, the tier-2 E-51 entry, this log, and
