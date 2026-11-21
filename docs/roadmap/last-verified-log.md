@@ -6,6 +6,61 @@ Newest first; **append new entries at the top** — never edit the ROADMAP cell
 beyond its one-sentence latest entry. The final entry (2026-10-11, Phase 3) is
 out of date order as inherited; left as-is.
 
+## 2026-11-21 — E-51 landed (acceptance criteria as code)
+
+2026-11-21 (E-51 landed — FR-918's acceptance criteria are computed by code,
+not self-asserted; the FINISH phase measures with no model in the loop and
+`PHASE_OWNER` drops to two stubs (REPORT/GENERATE, both E-52). The roadmap
+row stays `[ ]` ⚠️ partial — c13 is owed on every run until E-52's
+report/generate bodies land and the last criterion evaluates. **What
+landed:** the pure `src/sdlc/assessment/finish/` package — `models.py`
+(`FinishReport` + `CRITERIA_MANIFEST` c01…c14, NFR-10 raising validators:
+criteria/exits rows sorted and unique, owed sorted and deduped),
+`checks.py` (the 14 criteria under FD11's three-state rule; c07 deferred to
+E-56 per FD12, mirroring E-50's deferred composite-threshold clauses; c08
+baseline-safe per FD17 — zero proposer references under a measured producer
+with the judgment layer off is recorded, not failed), `crossref.py` (four
+ABSOLUTE xref domains over typed ids — `xref:bc_ids`,
+`xref:vulnerability_keys`, `xref:capability_edges`,
+`xref:threat_vulnerability_keys` — FD15), `exits.py` (the seven
+`exit:<phase>:*` checks), and `__init__.py`'s `evaluate_finish` — the one
+entry point, whose `collected` is the absolute-ratio (passed ABSOLUTE rows
+over total ABSOLUTE rows; owed rows are not rows, FD3). **Wiring:**
+`AssessmentWorkflow._finish` runs it inline per FD16 — zero new workflow
+commands, no activity, no `finish-e51` wire name — behind FD13's
+short-circuit (finish evaluates only when at least one of
+scan/discover/risk measured; a run that assessed nothing keeps `NO_PHASES`
+and never reads as `PARTIAL`), the blocked-gate path binds
+`finish_out = risk_gate_skipped(FINISH)` so an admitted REJECT run still
+carries the row, and `Assessment.finish` is a typed field. **Battery, as
+observed on the final tree:** fast tier `uv run pytest -q` red with exactly
+the two pre-existing FAILED lines below and nothing else (the counts line
+absent from the redirect — the quirk recorded on 2026-11-19; exit 1 is
+pytest's completed-with-failures code); temporal tier `uv run pytest -m
+temporal tests/test_assessment_workflow_e2e.py
+tests/test_assessment_workflow_risk_gate_e2e.py
+tests/test_assessment_workflow_e2e_proposer_hang_chaos.py
+tests/test_assessment_workflow_finish_e2e.py -q` **exit 0, 26 passed** (14
+e2e + 7 risk-gate + 3 proposer-hang chaos + the two new finish-e2e cells:
+finish measured on an admitted run, all-degraded keeps `NO_PHASES`);
+replay corpus `uv run pytest tests/replay/ -q` **exit 0, 39 passed**;
+`uv run ruff check .` exit 0 ("All checks passed!"); `uv run ruff format
+--check .` exit 0 (2219 files already formatted); `uv run mypy` exit 0
+("Success: no issues found in 462 source files");
+`uv run python scripts/check_file_size.py` exit 0. **Pre-existing reds
+noted, not fixed (not this branch's):** `tests/test_read_fixtures_fresh.py`
+×2 — the fixture pins the primary checkout's absolute path (`root` in
+`compare.json` names `/home/maksim/work/Kroker/…`), so
+`test_committed_recordings_equal_a_fresh_build` and
+`test_pristine_copy_passes_the_record_check` fail in any worktree ("compare
+json is stale") and are green in the primary checkout;
+`tests/maintenance/test_execution.py` size-ratchet gap — pre-existing on
+main before this branch, another item's owner. Commits: `8b6cb4ec`…`a3e6596f`
+(nine: contracts, the xref walk, the 14 criteria + c07 pinning, exits +
+`evaluate_finish`, risk narrowing, FINISH wiring, the blocked-path bind,
+e2e + replay). Scope: the FR-918 row, the tier-2 E-51 entry, this log, and
+the header cell — docs only, no code touched.)
+
 ## 2026-11-19 — SC-003 baseline failure resolved (data-dependent test)
 
 2026-11-19 (follow-up to the FR-806 close-out, same session — `tests/test_benchmark_acceptance_stalled.py::test_sc003_recompute_stored_acceptance`, a standing baseline id since round 019 (tracked in every round's `baseline-failures.txt` through 026), goes green. **Root cause:** the test recomputes stored `acceptance.yaml` from benchmark records under `runs/benchmarks` — a gitignored machine-history store. It passed at 017 ("7 passed in 114s", 017 verification.md) only because that history existed on this machine; the store has since been pruned (only `runs/pipeline` remains), so every later run failed `checked > 0` against zero records — a shape no fresh clone or CI could ever satisfy. The 017 commit message itself recorded the adjacent drift ("6 of 7 stored acceptance.yaml files have stale oracle_ids against current trees"). **Fix (test-only):** with no records at all under `runs_paths.benchmarks_root()`, the test now `pytest.skip`s with a stated reason instead of failing; with records present the contract is unchanged — zero oracle-identity matches still fails, now with a drift-naming message — and the skip provably does not swallow that signal: under a synthetic store (`SDLC_BENCHMARKS_ROOT` + one valid record whose `oracle_id` matches nothing) the test still fails at the assert. **Not fixed, owner's call:** the underlying acceptance/oracle drift on machines that still hold records — re-baselining committed `acceptance.yaml` needs real run history (none exists on this machine), and synthesising runs to regenerate it would falsify benchmark evidence. **Battery:** `uv run pytest tests/test_benchmark_acceptance_stalled.py -q -rs` → 6 passed + 1 skipped, reason stated ("no benchmark records under runs/benchmarks — SC-003 recompute needs stored run history"); the synthetic-store run → FAILED at the drift assert (intended); `uv run ruff check` + `uv run ruff format --check` on the file exit 0; `uv run python scripts/check_file_size.py` exit 0; **full default tier `uv run pytest -q` exit 0 — no failures**, the first green full tier since 2026-10-19 (pytest's final counts line is absent from this environment's redirects — a quirk on every full-tier run today; exit 0 is the verdict). With the FR-806 pin refresh earlier this session, both of 026's baseline ids are resolved on this tree.)

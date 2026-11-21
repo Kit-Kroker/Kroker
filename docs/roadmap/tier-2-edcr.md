@@ -170,12 +170,29 @@ the factory rather than as prompts.
   never reads as a pass (FR-915), and the confirmed-vulnerability clause
   likewise defers when `judgment` did not collect, because CONFIRMED is
   only reachable through the proposer (baseline rows are POTENTIAL).
-- [ ] **E-51 — acceptance criteria as code** → FR-918. The 14 terminal criteria
+- [x] **E-51 — acceptance criteria as code** → FR-918. The 14 terminal criteria
   and every per-phase exit criterion as `CheckResult`s computed from typed
   artifacts. Cross-reference integrity — every capability, threat, vulnerability
   and testability id cited anywhere resolves to a real record — is an
   **absolute** check, because a bundle with a dangling reference is not a
   weaker audit, it is an unverifiable one.
+  *Landed 2026-11-21.* The pure `src/sdlc/assessment/finish/` package —
+  `FinishReport` + the pinned `CRITERIA_MANIFEST` (c01…c14), the 14 criteria,
+  the four **absolute** `xref:*` domains over typed ids, the seven
+  `exit:<phase>:*` rows — with `evaluate_finish` as its one entry point, run
+  inline by `AssessmentWorkflow._finish`: **FD1** report-only — FR-918 says
+  *evaluate*, not gate, so no gate surface moves; **FD16** inline like E-50's
+  `evaluate()` — zero new workflow commands, no activity, no `finish-e51`
+  wire name; **FD13** short-circuit — finish evaluates only when at least one
+  of scan/discover/risk measured, and the blocked-gate path binds
+  `risk_gate_skipped` instead, so `NO_PHASES` never flips to `PARTIAL`;
+  **FD11** three-state — producer phase absent ⇒ owed, a measured producer
+  with a `not_collected` sub-artifact ⇒ evaluated fail carrying the reason,
+  measured inputs ⇒ pass/fail by predicate, so an absent producer never reads
+  as a pass or a fail (FD3); **FD12** c07 defers to E-56, owed rather than
+  failed, mirroring E-50's deferred composite-threshold clauses.
+  `PHASE_OWNER` lost its FINISH entry — stubs three → two (REPORT/GENERATE,
+  both E-52); c13 is owed on every run until those same two bodies land.
 - [ ] **E-52 — role reports + evidence bundle** → FR-921, FR-704.
   Architect / developer / SDET / security / stakeholder reports plus a
   machine-readable manifest, every finding carrying its verification status, all
