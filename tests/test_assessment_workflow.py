@@ -194,7 +194,10 @@ def test_assemble_on_an_admitted_run_reports_partial_once_scan_lands():
 
 
 def test_assemble_reports_assessed_once_every_phase_collects():
-    """The status flips by itself when E-46..E-52 land -- no workflow edit."""
+    """The status flips by itself when E-46..E-52 land -- no workflow edit.
+    A collected FINISH phase carries its FinishReport -- the pairing the
+    artifact's finish validator (E-51) enforces."""
+    from sdlc.assessment.finish.models import FinishReport
     from sdlc.assessment.gates.models import RiskGateReport, RiskGateVerdict
 
     rest = [
@@ -213,6 +216,7 @@ def test_assemble_reports_assessed_once_every_phase_collects():
             discover=CapabilityMap(collected=Measurement.measured(0.0)),
             risk=UnifiedRiskMap(collected=Measurement.measured(0.0)),
             gates=RiskGateReport(verdict=RiskGateVerdict.PASS),
+            finish=FinishReport(collected=Measurement.measured(1.0)),
         ).terminal_status
         == ASSESSED
     )

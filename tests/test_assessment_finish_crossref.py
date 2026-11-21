@@ -113,8 +113,10 @@ def test_clean_map_passes_all_domains():
 
 
 def test_broken_bc_citation_fails_absolute():
-    """A SharedVulnerability citing BC-099 (no such capability) fails the
-    bc_ids domain -- ABSOLUTE, naming the dangling citation -- and only it."""
+    """A SharedVulnerability citing BC-099 (no such capability) fails BOTH
+    bc-id domains -- ABSOLUTE, each naming the dangling citation:
+    xref:bc_ids walks every id-typed field, and xref:capability_edges walks
+    SharedVulnerability.bc_ids as a stored projection (spec section 5)."""
     risk = _risk(
         capability_risk("BC-001", vulnerabilities=(_vuln("k1"),)),
         capability_risk("BC-002", vulnerabilities=(_vuln("k2"),)),
@@ -136,8 +138,11 @@ def test_broken_bc_citation_fails_absolute():
     assert broken.passed is False
     assert "BC-099" in broken.detail
     assert broken.classification is CheckClass.ABSOLUTE
+    edges = by_name["xref:capability_edges"]
+    assert edges.passed is False
+    assert "BC-099" in edges.detail
+    assert edges.classification is CheckClass.ABSOLUTE
     assert by_name["xref:vulnerability_keys"].passed is True
-    assert by_name["xref:capability_edges"].passed is True
     assert by_name["xref:threat_vulnerability_keys"].passed is True
 
 

@@ -184,8 +184,10 @@ the factory rather than as prompts.
   *evaluate*, not gate, so no gate surface moves; **FD16** inline like E-50's
   `evaluate()` — zero new workflow commands, no activity, no `finish-e51`
   wire name; **FD13** short-circuit — finish evaluates only when at least one
-  of scan/discover/risk measured, and the blocked-gate path binds
-  `risk_gate_skipped` instead, so `NO_PHASES` never flips to `PARTIAL`;
+  of scan/discover/risk measured, and it is that short-circuit alone which
+  keeps `NO_PHASES` from flipping to `PARTIAL`; separately, a BLOCKed and
+  unoverridden gate leaves finish `risk_gate_skipped`, which lands as
+  `PARTIAL` by design (E-51's own blocked-run test pins it);
   **FD11** three-state — producer phase absent ⇒ owed, a measured producer
   with a `not_collected` sub-artifact ⇒ evaluated fail carrying the reason,
   measured inputs ⇒ pass/fail by predicate, so an absent producer never reads

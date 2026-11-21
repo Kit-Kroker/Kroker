@@ -228,6 +228,26 @@ class Assessment(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _finish_agrees_with_its_phase(self) -> Assessment:
+        """_scan_agrees_with_its_phase, for FINISH (E-51)."""
+        row = next((p for p in self.phases if p.phase is PhaseId.FINISH), None)
+        if row is None:  # unreachable: the DAG validator
+            return self  # already required every phase
+        measured = row.collected.state is CollectionState.MEASURED
+        if measured and self.finish is None:
+            raise ValueError(
+                "finish phase is measured but no FinishReport is present -- a "
+                "measured phase produced an artifact by definition"
+            )
+        if not measured and self.finish is not None:
+            raise ValueError(
+                f"finish phase is {row.collected.state.value} but a "
+                f"FinishReport is present -- an assessment cannot claim it "
+                f"did not finish while shipping a finish report"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _gates_agrees_with_risk(self) -> Assessment:
         """GD5: the risk gate evaluates the risk map, so it runs iff the
         risk phase produced one (self.risk is not None -> gates is not None;

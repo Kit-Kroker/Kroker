@@ -157,6 +157,8 @@ The five input classes the spec implies that no ordinary task exercises; each is
 
 ### Task 5: artifact field and workflow wiring
 
+> **Errata (final fix wave):** Task 5's text omitted the phase-agreement validator for the new `finish` field — the `_scan_agrees_with_its_phase` pattern every prior typed field carries — so `_finish_agrees_with_its_phase` and its two mismatch-shape tests were added in the final review wave.
+
 **Files:**
 - Modify: `src/sdlc/assessment/models.py` (the `Assessment` model — add field + import)
 - Modify: `src/sdlc/workflows/assessment.py` (`PHASE_OWNER`, `FinishOutcome`, `_finish`, `run`, `assemble` call)

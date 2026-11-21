@@ -61,11 +61,14 @@ def _bc_id_cites(risk: UnifiedRiskMap) -> list[str]:
 
 
 def _edge_endpoint_cites(risk: UnifiedRiskMap) -> list[str]:
-    """Both endpoints of every stored projection of CapabilityEdge -- Cascade
-    paths, TrustBoundary endpoints, EscalationPath paths. The edge model
-    itself is deliberately not stored (RD10); its projections are."""
+    """Every bc_id in the stored projections of CapabilityEdge -- Cascade
+    paths, TrustBoundary endpoints, EscalationPath paths, and
+    SharedVulnerability.bc_ids (spec section 5 names it among the stored
+    projections). The edge model itself is deliberately not stored (RD10);
+    its projections are."""
     return (
-        [bc for c in risk.system.cascades for bc in c.path]
+        [bc for s in risk.system.shared_vulnerabilities for bc in s.bc_ids]
+        + [bc for c in risk.system.cascades for bc in c.path]
         + [bc for b in risk.system.trust_boundaries for bc in (b.source_bc_id, b.target_bc_id)]
         + [bc for p in risk.system.escalation_paths for bc in p.path]
     )
@@ -151,7 +154,8 @@ def _vulnerability_keys_domain(risk: UnifiedRiskMap) -> CheckResult:
 
 def _capability_edges_domain(discover: CapabilityMap, risk: UnifiedRiskMap) -> CheckResult:
     """xref:capability_edges (FD9): every bc_id in the stored projections of
-    CapabilityEdge resolves to a locked capability, both endpoints."""
+    CapabilityEdge -- SharedVulnerability.bc_ids members included -- resolves
+    to a locked capability, both endpoints."""
     return _absolute(
         CAPABILITY_EDGES,
         "unresolved capability edge endpoints",

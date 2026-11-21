@@ -431,6 +431,29 @@ def test_c07_deferred_to_e56():
     )
 
 
+def test_c07_evaluated_branch_fails_without_drivers():
+    """The post-E-56 evaluated branch, pinned before E-56 exists: a MEASURED
+    unified composite with no drivers is constructible per risk/models.py
+    (the schema does not couple drivers to the score), so once E-56 lands a
+    driverless score fails c07 naming the bc_id -- the first post-E-56
+    regression lands in CI, not in review."""
+    driverless = Composite(
+        value=Measurement.measured(0.7),
+        factors=(Factor(key="a", value=Measurement.measured(1.0)),),
+    )
+    discover = _clean_discover("BC-001")
+    risk = _risk_map(_risk_row("BC-001", unified=driverless))
+    xc, xo = _xref(discover, risk)
+    checks, owed = _evaluate(
+        discover=discover, risk=risk, scan=_scan(), xref_checks=xc, xref_owed=xo
+    )
+    assert "c07_unified_drivers: deferred (E-56)" not in owed
+    c07 = next(c for c in checks if c.name == "c07_unified_drivers")
+    assert c07.passed is False
+    assert "BC-001" in c07.detail
+    assert c07.classification is CheckClass.ABSOLUTE
+
+
 def test_c13_owed_to_e52():
     discover, risk = _clean_discover(), _clean_risk("BC-001")
     xc, xo = _xref(discover, risk)

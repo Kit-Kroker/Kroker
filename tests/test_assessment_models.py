@@ -263,11 +263,12 @@ def test_a_measured_scan_phase_requires_a_payload():
 
 
 def test_a_measured_scan_phase_with_a_payload_constructs():
-    # DISCOVER and ASSESS are held not-measured: this test is about the SCAN pairing, and
-    # a measured DISCOVER/ASSESS would now also require their payloads (E-48, E-49).
+    # DISCOVER, ASSESS and FINISH are held not-measured: this test is about the SCAN pairing, and
+    # a measured DISCOVER/ASSESS would now also require their payloads (E-48, E-49), a measured
+    # FINISH its FinishReport (E-51).
     phases = [
         p
-        if p.phase not in (PhaseId.DISCOVER, PhaseId.ASSESS)
+        if p.phase not in (PhaseId.DISCOVER, PhaseId.ASSESS, PhaseId.FINISH)
         else PhaseResult(
             phase=p.phase, collected=Measurement.not_collected(f"{p.phase.value} not run")
         )
@@ -315,16 +316,20 @@ from sdlc.assessment.discover.map import CapabilityMap
 
 def _discover_dag(discover_measured: bool) -> list[PhaseResult]:
     """The whole DAG with DISCOVER either measured or not, every other phase
-    measured (holding ASSESS not-measured). _scan_dag's shape, for the other pairing."""
+    measured (holding ASSESS not-measured, and FINISH since E-51 -- a
+    measured FINISH row demands a FinishReport). _scan_dag's shape, for the
+    other pairing."""
     out = []
     for phase in PHASE_ORDER:
         if phase is PhaseId.DISCOVER and not discover_measured:
             out.append(
                 PhaseResult(phase=phase, collected=Measurement.not_collected("discover not run"))
             )
-        elif phase is PhaseId.ASSESS:
+        elif phase in (PhaseId.ASSESS, PhaseId.FINISH):
             out.append(
-                PhaseResult(phase=phase, collected=Measurement.not_collected("assess not run"))
+                PhaseResult(
+                    phase=phase, collected=Measurement.not_collected(f"{phase.value} not run")
+                )
             )
         else:
             out.append(PhaseResult(phase=phase, collected=Measurement.measured(1.0)))
@@ -384,16 +389,20 @@ from sdlc.assessment.risk.models import UnifiedRiskMap
 
 
 def _assess_dag(assess_measured: bool) -> list[PhaseResult]:
+    """Holds DISCOVER not-measured so it does not require a CapabilityMap,
+    and FINISH since E-51 -- a measured FINISH row demands a FinishReport
+    (the same isolation every earlier sibling helper applies)."""
     out = []
     for phase in PHASE_ORDER:
         if phase is PhaseId.ASSESS and not assess_measured:
             out.append(
                 PhaseResult(phase=phase, collected=Measurement.not_collected("assess not run"))
             )
-        elif phase is PhaseId.DISCOVER:
-            # hold discover not-measured so it does not require a CapabilityMap
+        elif phase in (PhaseId.DISCOVER, PhaseId.FINISH):
             out.append(
-                PhaseResult(phase=phase, collected=Measurement.not_collected("discover not run"))
+                PhaseResult(
+                    phase=phase, collected=Measurement.not_collected(f"{phase.value} not run")
+                )
             )
         else:
             out.append(PhaseResult(phase=phase, collected=Measurement.measured(1.0)))
@@ -597,3 +606,80 @@ def test_an_override_is_rejected_when_verdict_is_warn():
             gates=_report(RiskGateVerdict.WARN),
             gate_override=override,
         )
+
+
+# --- E-51: the finish payload and its phase-agreement validator ----------
+from sdlc.assessment.finish.models import FinishReport
+
+
+def _finish_dag(finish_measured: bool) -> list[PhaseResult]:
+    """_assess_dag's shape, for the FINISH pairing: DISCOVER and ASSESS are
+    held not-measured (a measured row would demand their own payloads), so
+    FINISH is the only pairing under test."""
+    out = []
+    for phase in PHASE_ORDER:
+        if phase is PhaseId.FINISH and not finish_measured:
+            out.append(
+                PhaseResult(phase=phase, collected=Measurement.not_collected("finish not run"))
+            )
+        elif phase in (PhaseId.DISCOVER, PhaseId.ASSESS):
+            out.append(
+                PhaseResult(
+                    phase=phase, collected=Measurement.not_collected(f"{phase.value} not run")
+                )
+            )
+        else:
+            out.append(PhaseResult(phase=phase, collected=Measurement.measured(1.0)))
+    return out
+
+
+def test_a_measured_finish_phase_requires_a_report():
+    """The fourth instance of the pairing pattern: a measured FINISH row
+    shipping no FinishReport is an assessment claiming finish ran while
+    presenting nothing it graded. DISCOVER/ASSESS are held not-measured by
+    the helper, so no risk map or gates report rides along."""
+    phases = _finish_dag(finish_measured=True)
+    with pytest.raises(ValidationError, match="no FinishReport"):
+        Assessment(
+            repo_dir="/r",
+            triage=_triage(),
+            admitted=True,
+            admission_reason="verdict ready",
+            phases=phases,
+            terminal_status=terminal_status(True, phases),
+            scan=_scan_result(),
+            finish=None,
+        )
+
+
+def test_an_unmeasured_finish_phase_must_not_carry_a_report():
+    """The other lying shape: the short-circuit, the blocked gate and a
+    degraded evaluate_finish all leave finish not_collected with no report
+    -- a FinishReport beside such a row contradicts the row itself."""
+    phases = _finish_dag(finish_measured=False)
+    with pytest.raises(ValidationError, match="did not finish"):
+        Assessment(
+            repo_dir="/r",
+            triage=_triage(),
+            admitted=True,
+            admission_reason="verdict ready",
+            phases=phases,
+            terminal_status=terminal_status(True, phases),
+            scan=_scan_result(),
+            finish=FinishReport(collected=Measurement.measured(1.0)),
+        )
+
+
+def test_a_measured_finish_phase_with_a_report_constructs():
+    phases = _finish_dag(finish_measured=True)
+    a = Assessment(
+        repo_dir="/r",
+        triage=_triage(),
+        admitted=True,
+        admission_reason="verdict ready",
+        phases=phases,
+        terminal_status=terminal_status(True, phases),
+        scan=_scan_result(),
+        finish=FinishReport(collected=Measurement.measured(1.0)),
+    )
+    assert a.finish is not None
