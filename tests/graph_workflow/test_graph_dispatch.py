@@ -12,11 +12,11 @@ from temporalio import activity, workflow
 from temporalio.api.enums.v1 import EventType
 from temporalio.client import WorkflowFailureError
 from temporalio.common import RetryPolicy
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.exceptions import ApplicationError, CancelledError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import PipelineConfig
 from sdlc.graph import GraphRouter, validate
 from sdlc.workflows.graph_dispatch import GraphDispatcher, outcome_string
@@ -281,7 +281,7 @@ class DispatchProbe:
 
 async def _env_run(scenario: str, drive=None):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(

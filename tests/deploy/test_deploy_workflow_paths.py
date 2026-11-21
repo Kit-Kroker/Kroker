@@ -9,11 +9,11 @@ import uuid
 
 import pytest
 from temporalio import workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import (
     GateConfig,
     GateDecision,
@@ -72,7 +72,7 @@ async def _run(cfg, tmp_path, monkeypatch, tag, driver=None):
     worker/environment close is an RPC error (F3 behavioral read)."""
     monkeypatch.setenv("SDLC_EXPORT_ROOT", str(tmp_path))
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

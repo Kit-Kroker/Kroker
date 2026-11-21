@@ -21,11 +21,11 @@ import uuid
 
 import pytest
 from temporalio.api.enums.v1 import EventType
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.workflows.deployment import DeploymentWorkflow
 from sdlc.workflows.graph import GraphWorkflow
 from sdlc.workflows.graph_catalog import build_run_input
@@ -63,7 +63,7 @@ async def test_first_workflow_task_completes_under_the_deadlock_threshold(tmp_pa
     scenario.before()
 
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         # Deliberately NO workflow_runner override: the sandboxed runner via
         # the mitigated plugin IS the production-shaped path under test.
@@ -131,7 +131,7 @@ async def test_first_task_under_budget_with_non_anthropic_override(tmp_path, mon
         return c
 
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

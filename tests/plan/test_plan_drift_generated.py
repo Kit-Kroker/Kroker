@@ -26,6 +26,7 @@ from sdlc.stages.plan.models import (
 )
 from sdlc.stages.qa.models import QAReport
 from sdlc.stages.review.models import DeepReviewReport, ReviewReport
+from sdlc.vcs import CodeArtifact
 
 
 def _task(files_hint: list[str]) -> DevTask:
@@ -203,7 +204,7 @@ async def test_code_step_drift_unpatched_passes_unfiltered_diff():
         mock_ho.return_value = handoff
         mock_act.side_effect = [
             QAReport(tests_passed=True, issues=[]),  # qa_raw
-            {"files": ["app.py", ".pytest_cache/cache.json"]},  # diff
+            CodeArtifact(files=["app.py", ".pytest_cache/cache.json"]),
         ]
 
         tr = await code.step(
@@ -265,7 +266,7 @@ async def test_code_step_drift_patched_filters_generated_diff():
         mock_ho.return_value = handoff
         mock_act.side_effect = [
             QAReport(tests_passed=True, issues=[]),  # qa_raw
-            {"files": ["app.py", ".pytest_cache/cache.json"]},  # diff
+            CodeArtifact(files=["app.py", ".pytest_cache/cache.json"]),
         ]
 
         tr = await code.step(

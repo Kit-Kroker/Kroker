@@ -5,8 +5,8 @@ from __future__ import annotations
 from temporalio.api.enums.v1 import EventType
 from temporalio.api.history.v1 import HistoryEvent
 from temporalio.client import WorkflowHistory
-from temporalio.contrib.pydantic import pydantic_data_converter
 
+from sdlc.converter import sdlc_data_converter
 from tests.replay.projection import close_projection, command_projection
 
 
@@ -39,7 +39,7 @@ def test_command_projection_keeps_order_and_kinds():
 
 def test_close_projection_completed_failed_canceled():
     done = HistoryEvent(event_type=EventType.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
-    payloads = pydantic_data_converter.payload_converter.to_payloads(["deployed:x"])
+    payloads = sdlc_data_converter.payload_converter.to_payloads(["deployed:x"])
     done.workflow_execution_completed_event_attributes.result.payloads.extend(payloads)
     assert close_projection(_history(done)) == "deployed:x"
 

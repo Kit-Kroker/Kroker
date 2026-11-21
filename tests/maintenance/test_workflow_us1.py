@@ -18,12 +18,12 @@ import pytest
 from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models.function import FunctionModel
 from temporalio import activity, workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.maintenance.models import MaintenanceConfig, MaintenanceState, RepairProposal
 from sdlc.workflows.maintenance import MaintenanceWorkflow
 from sdlc.workflows.triage import TriageWorkflow
@@ -109,7 +109,7 @@ def _failing_maintainer_activities():
 async def test_cycle_one_records_baseline_and_opens_nothing(repo_dir):
     before = _repo_fingerprint(repo_dir)
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -144,7 +144,7 @@ async def test_cycle_one_records_baseline_and_opens_nothing(repo_dir):
 async def test_a_break_becomes_one_incident_one_plan_one_gate(repo_dir):
     before = _repo_fingerprint(repo_dir)
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -204,7 +204,7 @@ async def test_proposer_failure_degrades_retries_then_escalates(repo_dir):
     failing_acts = _failing_maintainer_activities()
 
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -261,7 +261,7 @@ async def test_zero_action_plan_still_gates_as_no_action_proposed(repo_dir):
         analysis="The evidence supports no repair.", actions=[], self_confidence=0.5
     )
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -304,7 +304,7 @@ async def test_zero_action_plan_still_gates_as_no_action_proposed(repo_dir):
 
 async def test_history_replays_clean(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -355,7 +355,7 @@ async def test_history_replays_clean(repo_dir):
 
 async def test_a_pending_gate_never_blocks_the_next_cycle(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

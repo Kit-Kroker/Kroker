@@ -102,7 +102,7 @@ class StubHandle:
     """Records signals; returns scripted query results, one per call.
 
     Results are raw JSON-shaped dicts, matching what a by-name query returns
-    through pydantic_data_converter before validation.
+    through sdlc_data_converter before validation.
     """
 
     def __init__(self, id: str, responses):

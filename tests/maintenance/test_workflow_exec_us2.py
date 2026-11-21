@@ -53,11 +53,11 @@ from pathlib import Path
 import pytest
 from temporalio import activity
 from temporalio.client import WorkflowExecutionStatus, WorkflowFailureError
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateDecision, GateOutcome
 from sdlc.maintenance.models import (
     MaintenanceConfig,
@@ -311,7 +311,7 @@ async def _drive_to_started(env, repo, *, cfg: MaintenanceConfig):
 async def test_fix_is_verified_and_the_child_keeps_its_merge_gate(repo_dir):
     base = head_sha(repo_dir)
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "fix"):
             handle, child_id = await _drive_to_parked(env, repo_dir, "fix")
@@ -345,7 +345,7 @@ async def test_fix_is_verified_and_the_child_keeps_its_merge_gate(repo_dir):
 
 async def test_nofix_gets_exactly_one_reject_and_the_incident_reopens(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "nofix"):
             handle, child_id = await _drive_to_parked(env, repo_dir, "nofix")
@@ -368,7 +368,7 @@ async def test_nofix_gets_exactly_one_reject_and_the_incident_reopens(repo_dir):
 
 async def test_empty_diff_parks_dirty_and_the_incident_reopens(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "empty"):
             handle, child_id = await _drive_to_parked(env, repo_dir, "empty")
@@ -389,7 +389,7 @@ async def test_empty_diff_parks_dirty_and_the_incident_reopens(repo_dir):
 
 async def test_a_child_that_fails_before_parking_reopens_with_no_merge_decision(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "fail"):
             handle, child_id = await _drive_to_started(env, repo_dir, cfg=_execute_cfg(repo_dir))
@@ -410,7 +410,7 @@ async def test_a_child_that_fails_before_parking_reopens_with_no_merge_decision(
 
 async def test_a_verify_triage_that_is_not_collected_stays_verifying(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "nofix", not_collect_verify=True):
             handle, _ = await _drive_to_parked(env, repo_dir, "nofix", not_collect_verify=True)
@@ -431,7 +431,7 @@ async def test_a_verify_triage_that_is_not_collected_stays_verifying(repo_dir):
 
 async def test_a_missing_integration_branch_is_recorded_conflicted_and_rejected(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "nofix"):
             handle, child_id = await _drive_to_parked(env, repo_dir, "nofix")
@@ -459,7 +459,7 @@ async def test_a_missing_integration_branch_is_recorded_conflicted_and_rejected(
 
 async def test_a_child_that_never_parks_times_out_and_the_incident_reopens(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "hang"):
             handle, child_id = await _drive_to_started(
@@ -487,7 +487,7 @@ async def test_a_child_that_never_parks_times_out_and_the_incident_reopens(repo_
 
 async def test_fix_history_replays_clean(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "fix"):
             handle, _ = await _drive_to_parked(env, repo_dir, "fix")
@@ -503,7 +503,7 @@ async def test_fix_history_replays_clean(repo_dir):
 
 async def test_nofix_history_replays_clean(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "nofix"):
             handle, _ = await _drive_to_parked(env, repo_dir, "nofix")
@@ -534,7 +534,7 @@ async def test_the_verify_child_runs_under_its_wire_id_distinct_from_the_cycle_t
     maint-<project>-<run8>-inc<no>-a<attempt>-verify. It is awaited, completed,
     and is never shaped like the cycle triage id maint-<project>-c<cycle>-triage."""
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "fix"):
             handle, child_id = await _drive_to_parked(env, repo_dir, "fix")
@@ -552,7 +552,7 @@ async def test_the_verify_pass_leaves_refs_worktrees_and_head_exactly_as_it_foun
     nudge. After the verify cycle (REJECT, reopen, cleanup), it must be unchanged.
     The reopened assertion first proves the verify pass actually ran."""
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "nofix"):
             handle, _ = await _drive_to_parked(env, repo_dir, "nofix")

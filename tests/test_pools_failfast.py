@@ -186,10 +186,9 @@ def _namespace(*argv: str) -> argparse.Namespace:
 async def test_start_paths_refuse(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from temporalio.contrib.pydantic import pydantic_data_converter
-
     from sdlc import cli
     from sdlc.benchmarks.cli import _run_matrix
+    from sdlc.converter import sdlc_data_converter
     from sdlc.graph.start import start_graph_run
     from sdlc.maintenance.cli import _enable
     from sdlc.schedules.apply import apply_changes
@@ -210,7 +209,7 @@ async def test_start_paths_refuse(
         return await _run_matrix(str(BENCH_CASE), arm=BENCH_ARM, skip_smoke=True, allow_parked=True)
 
     # start_local, not time-skipping: DescribeTaskQueue is unimplemented there.
-    async with await WorkflowEnvironment.start_local(data_converter=pydantic_data_converter) as env:
+    async with await WorkflowEnvironment.start_local(data_converter=sdlc_data_converter) as env:
         client = env.client
         monkeypatch.setenv("TEMPORAL_HOST", client.service_client.config.target_host)
         enable_args = _namespace(
@@ -305,8 +304,7 @@ def _tree(root: Path) -> set[str]:
 async def test_refusal_precedes_every_side_effect(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from temporalio.contrib.pydantic import pydantic_data_converter
-
+    from sdlc.converter import sdlc_data_converter
     from sdlc.graph.start import start_graph_run
 
     monkeypatch.chdir(tmp_path)
@@ -314,7 +312,7 @@ async def test_refusal_precedes_every_side_effect(
     store = _RecordingStore()
     before = _tree(tmp_path)
 
-    async with await WorkflowEnvironment.start_local(data_converter=pydantic_data_converter) as env:
+    async with await WorkflowEnvironment.start_local(data_converter=sdlc_data_converter) as env:
         with pytest.raises(HarnessQueueUnpolled):
             await asyncio.wait_for(
                 start_graph_run(
@@ -337,13 +335,12 @@ async def test_refusal_precedes_every_side_effect(
 async def test_blank_harness_queue_is_routing_off(
     monkeypatch: pytest.MonkeyPatch, blank: str
 ) -> None:
-    from temporalio.contrib.pydantic import pydantic_data_converter
-
+    from sdlc.converter import sdlc_data_converter
     from sdlc.schedules.apply import apply_changes
 
     monkeypatch.setenv("KROKER_HARNESS_QUEUE", blank)
 
-    async with await WorkflowEnvironment.start_local(data_converter=pydantic_data_converter) as env:
+    async with await WorkflowEnvironment.start_local(data_converter=sdlc_data_converter) as env:
         # No worker polls anything; blank means routing off, so this must not refuse.
         assert await asyncio.wait_for(apply_changes(env.client, [], []), timeout=10) == []
 
@@ -351,11 +348,10 @@ async def test_blank_harness_queue_is_routing_off(
 async def test_a_routing_off_success_does_not_satisfy_a_later_routing_on_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from temporalio.contrib.pydantic import pydantic_data_converter
-
+    from sdlc.converter import sdlc_data_converter
     from sdlc.schedules.apply import apply_changes
 
-    async with await WorkflowEnvironment.start_local(data_converter=pydantic_data_converter) as env:
+    async with await WorkflowEnvironment.start_local(data_converter=sdlc_data_converter) as env:
         client = env.client
 
         async def refuses() -> None:

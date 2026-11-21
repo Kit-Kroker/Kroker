@@ -10,11 +10,11 @@ from pathlib import Path
 
 import pytest
 from temporalio import workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.exceptions import ApplicationError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import PipelineConfig
 from sdlc.graph import (
     ACTIVATION,
@@ -179,7 +179,7 @@ def _view(d: GraphDispatcher) -> GraphRunView:
 
 async def _run(scenario: str, drive=None):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
@@ -409,7 +409,7 @@ class AttribProbe:
 
 async def _run_attrib(scenario: str) -> list[dict]:
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(

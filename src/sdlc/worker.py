@@ -29,6 +29,8 @@ from pydantic_ai.durable_exec.temporal import TemporalDurability
 from temporalio.client import Client
 from temporalio.worker import Worker
 
+from sdlc.converter import sdlc_data_converter
+
 from .agents.loader import load_registry, validate_registry
 from .agents.payload_guard import has_payload_guard
 from .agents.roles import ALL_TEMPORAL_AGENTS

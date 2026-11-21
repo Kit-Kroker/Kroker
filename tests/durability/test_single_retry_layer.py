@@ -35,7 +35,6 @@ import pytest
 from pydantic_ai import Agent
 from pydantic_ai.durable_exec.temporal import TemporalDurability
 from temporalio import workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
@@ -46,6 +45,7 @@ from sdlc.agents.roles import (
     REGISTRY,
 )
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.stages.research.stage import research_subquestion
 
 from ._http_stub import ProviderStub
@@ -112,7 +112,7 @@ async def _run_one_call(mode: str) -> tuple[str | None, int, BaseException | Non
         os.environ["ZAI_BASE_URL"] = stub.base_url
         try:
             async with await WorkflowEnvironment.start_time_skipping(
-                data_converter=pydantic_data_converter
+                data_converter=sdlc_data_converter
             ) as env:
                 async with Worker(
                     env.client,
@@ -241,7 +241,7 @@ async def test_subquestion_always_429_is_bounded_by_the_research_budget():
         os.environ["ZAI_BASE_URL"] = stub.base_url
         try:
             async with await WorkflowEnvironment.start_time_skipping(
-                data_converter=pydantic_data_converter
+                data_converter=sdlc_data_converter
             ) as env:
                 async with Worker(
                     env.client,
@@ -304,7 +304,7 @@ async def test_override_provider_always_429_is_bounded_by_the_attempt_budget():
         os.environ["OPENAI_BASE_URL"] = stub.base_url
         try:
             async with await WorkflowEnvironment.start_time_skipping(
-                data_converter=pydantic_data_converter
+                data_converter=sdlc_data_converter
             ) as env:
                 async with Worker(
                     env.client,

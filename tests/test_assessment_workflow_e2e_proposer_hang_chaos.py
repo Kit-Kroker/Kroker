@@ -44,7 +44,6 @@ from pydantic_ai.capabilities import ResolveModelId
 from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.models.function import FunctionModel
 from temporalio import activity
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.exceptions import ApplicationError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
@@ -89,6 +88,7 @@ from sdlc.assessment.risk.models import (
     StrideCategory,
 )
 from sdlc.assessment.scan.models import EvidenceRef
+from sdlc.converter import sdlc_data_converter
 from sdlc.measurement import CollectionState, Measurement
 from sdlc.triage.activities import (
     TriageDependencyInput,
@@ -376,7 +376,7 @@ async def test_a_degraded_run_leaves_no_memo_poison_for_a_healthy_rerun(
     )
 
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         # Run 1: discover served, risk proposer served by NO worker.
         async with Worker(
@@ -442,7 +442,7 @@ async def test_a_retryable_risk_proposer_failure_exhausts_and_degrades(
     flaky_risk = _flaky_agent_activities("risk_agent", RiskProposal)
 
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,
@@ -486,7 +486,7 @@ async def test_a_retryable_discover_proposer_failure_fails_the_phase_closed(
     flaky_discover = _flaky_agent_activities("discover_agent", DiscoverProposal)
 
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

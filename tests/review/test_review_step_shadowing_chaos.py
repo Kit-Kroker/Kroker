@@ -29,11 +29,11 @@ import importlib
 import inspect
 
 import pytest
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Replayer
 
 import sdlc.stages.review as review_pkg
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.workflows.crew import CrewTaskWorkflow
 from sdlc.workflows.deployment import DeploymentWorkflow
 from sdlc.workflows.graph import GraphWorkflow
@@ -43,7 +43,7 @@ from tests.replay.harness import load_history
 def _replay_chain() -> Replayer:
     return Replayer(
         workflows=[GraphWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
-        data_converter=pydantic_data_converter,
+        data_converter=sdlc_data_converter,
         plugins=[SdlcPydanticAIPlugin()],
     )
 

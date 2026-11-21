@@ -40,12 +40,12 @@ from pydantic_ai.durable_exec.temporal import TemporalDurability
 from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from temporalio import activity, workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.maintenance.models import (
     MaintenanceConfig,
     MaintenanceState,
@@ -275,7 +275,7 @@ async def test_three_approved_incidents_start_one_per_cycle_and_never_re_gate(re
     faults = {"paths": []}
     notifications: list[NotifyInput] = []
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, faults, notifications):
             handle = await _start(env, _cfg(repo_dir, max_starts_per_cycle=1))
@@ -318,7 +318,7 @@ async def test_a_fourth_incident_stays_queued_with_one_window_notice_per_cycle(r
     faults = {"paths": []}
     notifications: list[NotifyInput] = []
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, faults, notifications):
             handle = await _start(env, _cfg(repo_dir, max_starts_per_cycle=3))
@@ -359,7 +359,7 @@ async def test_the_window_survives_a_forced_roll_over(repo_dir):
     faults = {"paths": []}
     notifications: list[NotifyInput] = []
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, faults, notifications):
             handle = await _start(
@@ -459,7 +459,7 @@ async def test_an_overlapping_incident_queues_without_holding_the_cycle_or_start
     faults = {"paths": []}
     notifications: list[NotifyInput] = []
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _overlap_worker(env, faults, notifications):
             handle = await _start(env, _cfg(repo_dir, max_starts_per_cycle=2))

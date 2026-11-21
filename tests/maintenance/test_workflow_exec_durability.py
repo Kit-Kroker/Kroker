@@ -48,12 +48,12 @@ from pydantic_ai.models.function import FunctionModel
 from temporalio import activity, workflow
 from temporalio.api.enums.v1 import EventType
 from temporalio.client import WorkflowExecutionStatus
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateDecision, GateOutcome
 from sdlc.maintenance.activities import probe_repair_child
 from sdlc.maintenance.models import (
@@ -349,7 +349,7 @@ async def test_a_worker_crash_mid_verify_leaves_one_child_one_record_one_retenti
     state = {"not_collect_verify": False}
     hold = {"armed": False, "held": False, "event": threading.Event()}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         worker_b = _worker(env, state, hold, max_cached=0)
         run_b = asyncio.create_task(worker_b.run())
@@ -422,7 +422,7 @@ async def test_a_parked_child_re_attaches_after_a_roll_over_with_the_state_carri
     state = {"not_collect_verify": True}
     hold = {"armed": False, "held": False, "event": threading.Event()}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, state, hold):
             handle = await _start(env, _cfg(repo_dir, max_cycles_per_history=2))
@@ -503,7 +503,7 @@ async def test_disable_withdraws_verifying_and_awaiting_incidents_and_leaves_the
     state = {"not_collect_verify": False}
     hold = {"armed": False, "held": False, "event": threading.Event()}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, state, hold):
             handle, child_id = await _disable_scenario(env, repo_dir, state, hold)
@@ -535,7 +535,7 @@ async def test_a_re_enabled_loop_starts_a_child_with_a_fresh_run8(repo_dir):
     state = {"not_collect_verify": False}
     hold = {"armed": False, "held": False, "event": threading.Event()}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, state, hold):
             handle, old_child = await _disable_scenario(env, repo_dir, state, hold)
@@ -578,7 +578,7 @@ async def test_a_second_disable_after_the_loop_ended_is_refused_and_the_child_su
     state = {"not_collect_verify": False}
     hold = {"armed": False, "held": False, "event": threading.Event()}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, state, hold):
             handle, child_id = await _disable_scenario(env, repo_dir, state, hold)

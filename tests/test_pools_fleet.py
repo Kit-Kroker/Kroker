@@ -42,7 +42,6 @@ import pytest
 from temporalio import activity
 from temporalio.api.enums.v1 import EventType
 from temporalio.client import Client, WorkflowHandle
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
@@ -51,6 +50,7 @@ from sdlc.benchmarks.cli import bench_workflow_id
 from sdlc.benchmarks.models import BenchmarkRecord, CaseSpec
 from sdlc.calibration.activities import VerdictInput
 from sdlc.calibration.models import INSUFFICIENT, CalibrationVerdict
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateDecision, GateOutcome
 from sdlc.demo.fakes import demo_activities
 from sdlc.harness.models import HarnessRunResult
@@ -158,7 +158,7 @@ async def _fleet_rig() -> AsyncIterator[Client]:
     from sdlc.workflows.graph import GraphWorkflow
 
     core_acts, harness_acts = _split(_bundle())
-    async with await WorkflowEnvironment.start_local(data_converter=pydantic_data_converter) as env:
+    async with await WorkflowEnvironment.start_local(data_converter=sdlc_data_converter) as env:
         async with (
             Worker(
                 env.client,

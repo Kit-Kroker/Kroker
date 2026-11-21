@@ -37,7 +37,6 @@ from types import SimpleNamespace
 
 import pytest
 from temporalio import workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
@@ -46,6 +45,7 @@ from sdlc.agents.roles import STAGE_MODELS, resolve_role_model
 from sdlc.agents.runner import SdlcPydanticAIPlugin
 from sdlc.benchmarks.models import Arm, BenchmarkCell, CaseSpec
 from sdlc.benchmarks.workflow import _cell_config
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import HarnessKind, PipelineConfig, RoleConfig
 from sdlc.memoization.activities import cache_get, cache_put
 from sdlc.pricing import PriceUsageInput
@@ -83,7 +83,7 @@ def _ids() -> list[tuple[str, str | None]]:
 def _price_models(history) -> list[str]:
     """Every scheduled price_usage input's model, in order (the priced-model
     label — decode pattern per tests/durability/test_priced_usage_parity.py)."""
-    converter = pydantic_data_converter.payload_converter
+    converter = sdlc_data_converter.payload_converter
     models: list[str] = []
     for ev in history.events:
         if not ev.HasField("activity_task_scheduled_event_attributes"):
@@ -361,7 +361,7 @@ async def test_g_architect_research_tool_resolves_the_research_override():
     brief = ResearchBrief(summary="tool brief")
     activities = fake_agent_activities([("research_agent", ResearchBrief, brief)])
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

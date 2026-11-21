@@ -25,11 +25,11 @@ from pathlib import Path
 import pytest
 from temporalio.api.enums.v1 import EventType
 from temporalio.client import WorkflowHistory
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Replayer, UnsandboxedWorkflowRunner, Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.workflows.crew import CrewTaskWorkflow
 from sdlc.workflows.deployment import DeploymentWorkflow
 from sdlc.workflows.graph import GraphWorkflow
@@ -45,7 +45,7 @@ QUEUE = "003-inflight-resume"
 def _replayer() -> Replayer:
     return Replayer(
         workflows=[GraphWorkflow, DeploymentWorkflow, CrewTaskWorkflow],
-        data_converter=pydantic_data_converter,
+        data_converter=sdlc_data_converter,
         plugins=[SdlcPydanticAIPlugin()],
     )
 
@@ -102,7 +102,7 @@ async def test_live_continuation_prefix_matches_and_completes(tmp_path: Path, mo
     scenario.before()
 
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client,

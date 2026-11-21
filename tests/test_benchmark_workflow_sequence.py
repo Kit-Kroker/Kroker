@@ -35,10 +35,11 @@ import uuid
 
 import pytest
 from temporalio import activity, workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.exceptions import ApplicationError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
+
+from sdlc.converter import sdlc_data_converter
 
 with workflow.unsafe.imports_passed_through():
     from sdlc.benchmarks.axis import AxisInput
@@ -197,7 +198,7 @@ def _grade(score=1.0, **kw) -> OracleGrade:
 
 async def _run_parent(spec_json: str) -> str:
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         # the budget-gate pattern: wall-clock worker pacing, or the parent's
         # wait on the child workflow can deadlock the time-skipping clock

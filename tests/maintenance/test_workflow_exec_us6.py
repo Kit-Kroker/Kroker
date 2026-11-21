@@ -34,11 +34,11 @@ from pathlib import Path
 import pytest
 from temporalio import activity, workflow
 from temporalio.client import WorkflowExecutionStatus
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateDecision, GateOutcome
 from sdlc.maintenance.models import (
     MaintenanceConfig,
@@ -280,7 +280,7 @@ async def test_a_closed_incident_is_retained_once_as_a_lesson(repo_dir, memory):
     cycles add nothing: the retained flag makes the retention idempotent."""
     arm: dict = {"on": False}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "fix", arm):
             handle, child_id = await _drive_to_verified(env, repo_dir, "fix", arm)
@@ -312,7 +312,7 @@ async def test_an_escalated_incident_is_retained_once_as_an_experience(repo_dir,
     INCIDENT_EXPERIENCE, with ``retained`` True."""
     arm: dict = {"on": False}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "configfail", arm):
             handle = await _start(env, _cfg(repo_dir))
@@ -349,7 +349,7 @@ async def test_a_failing_memory_backend_never_stops_the_incident_closing(repo_di
     memory.fail = True
     arm: dict = {"on": False}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "fix", arm):
             handle, child_id = await _drive_to_verified(env, repo_dir, "fix", arm)
@@ -378,7 +378,7 @@ async def test_a_verified_incident_writes_nothing(repo_dir, memory):
     verified, and the backend records nothing across several more cycles."""
     arm: dict = {"on": False}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "fix", arm):
             handle, _ = await _drive_to_verified(env, repo_dir, "fix", arm)
@@ -403,7 +403,7 @@ async def test_a_lesson_flow_writes_only_lessons_and_each_item_is_well_formed(re
     worker, which is too heavy for one cell."""
     arm: dict = {"on": False}
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, "fix", arm):
             handle, child_id = await _drive_to_verified(env, repo_dir, "fix", arm)

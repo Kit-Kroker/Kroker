@@ -11,9 +11,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from temporalio.client import WorkflowExecutionStatus
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.service import RPCError, RPCStatusCode
 
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import PipelineConfig
 from sdlc.dashboard import graph_wire
 from sdlc.dashboard.api import create_router
@@ -58,7 +58,7 @@ class _Handle:
         self.history_reads += 1
         if self.history_gone:
             raise RPCError("history purged", RPCStatusCode.NOT_FOUND, b"")
-        [payload] = await pydantic_data_converter.encode([RUN_INPUT])
+        [payload] = await sdlc_data_converter.encode([RUN_INPUT])
         attrs = SimpleNamespace(input=SimpleNamespace(payloads=[payload]))
         yield SimpleNamespace(workflow_execution_started_event_attributes=attrs)
 
@@ -71,7 +71,7 @@ class _Handle:
 
 
 class _Client:
-    data_converter = pydantic_data_converter
+    data_converter = sdlc_data_converter
 
     def __init__(self, handles):
         self.handles = handles
@@ -220,7 +220,7 @@ class _DriftHandle(_Handle):
         self.history_reads += 1
         if self.history_gone:
             raise RPCError("history purged", RPCStatusCode.NOT_FOUND, b"")
-        [payload] = await pydantic_data_converter.encode([self._run_input])
+        [payload] = await sdlc_data_converter.encode([self._run_input])
         attrs = SimpleNamespace(input=SimpleNamespace(payloads=[payload]))
         yield SimpleNamespace(workflow_execution_started_event_attributes=attrs)
 

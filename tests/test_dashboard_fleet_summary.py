@@ -25,8 +25,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from temporalio.client import WorkflowExecutionStatus
-from temporalio.contrib.pydantic import pydantic_data_converter
 
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateConfig, PipelineConfig, RunState, RunSummary, TimeoutAction
 from sdlc.dashboard.fleet import FleetSnapshot
 from sdlc.dashboard.read_routes import register_read_routes
@@ -58,7 +58,7 @@ class _InputHandle(_Handle):
 
     async def fetch_history_events(self):
         self.history_reads += 1
-        [payload] = await pydantic_data_converter.encode([self._run_input])
+        [payload] = await sdlc_data_converter.encode([self._run_input])
         attrs = SimpleNamespace(input=SimpleNamespace(payloads=[payload]))
         yield SimpleNamespace(workflow_execution_started_event_attributes=attrs)
 

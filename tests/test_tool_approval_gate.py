@@ -9,11 +9,11 @@ import uuid
 
 import pytest
 from temporalio import activity, workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import (
     GateDecision,
     GateOutcome,
@@ -152,7 +152,7 @@ async def test_deferral_raises_a_gate_and_the_grant_reaches_the_resume(tmp_path,
     cfg.deploy.enabled = True
     reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
@@ -222,7 +222,7 @@ async def test_rejection_is_delivered_and_the_task_continues(tmp_path, monkeypat
     cfg.deploy.enabled = True
     reset_deploy()
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(
@@ -295,7 +295,7 @@ async def test_the_cap_stops_asking_and_the_loop_terminates(tmp_path, monkeypatc
     cfg = e2e_config()
     cfg.max_tool_escalations = 1
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with env.auto_time_skipping_disabled():
             async with Worker(

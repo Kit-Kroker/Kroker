@@ -19,8 +19,8 @@ from typing import Any
 
 import pytest
 from temporalio.api.enums.v1 import EventType
-from temporalio.contrib.pydantic import pydantic_data_converter
 
+from sdlc.converter import sdlc_data_converter
 from sdlc.pricing import PriceUsageInput
 from tests.replay.architect_research_usage import NAME, REPORT, SCENARIO
 from tests.replay.harness import (
@@ -46,7 +46,7 @@ def _scheduled(history) -> list[tuple[str, Any]]:
 def _decode_price_usage(event) -> PriceUsageInput:
     """Decode one scheduled `price_usage` input (the 009 decode pattern)."""
     attrs = event.activity_task_scheduled_event_attributes
-    (inp,) = pydantic_data_converter.payload_converter.from_payloads(
+    (inp,) = sdlc_data_converter.payload_converter.from_payloads(
         list(attrs.input.payloads), [PriceUsageInput]
     )
     return inp

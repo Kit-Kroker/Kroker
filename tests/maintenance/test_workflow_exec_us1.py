@@ -38,11 +38,11 @@ from contextlib import asynccontextmanager
 
 import pytest
 from temporalio import activity, workflow
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateDecision, GateOutcome
 from sdlc.maintenance.models import (
     MaintenanceConfig,
@@ -219,7 +219,7 @@ async def _drive_policy_start(env, repo):
 
 async def test_policy_start_runs_exactly_one_child_and_the_cycle_never_waits(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, _proposal(_code())):
             handle = await _drive_policy_start(env, repo_dir)
@@ -265,7 +265,7 @@ async def test_policy_start_runs_exactly_one_child_and_the_cycle_never_waits(rep
 
 async def test_human_approval_starts_one_child_titled_from_the_repair_work(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, _proposal(_code())):
             handle = await _start(env, _execute_cfg(repo_dir))
@@ -305,7 +305,7 @@ async def test_human_approval_starts_one_child_titled_from_the_repair_work(repo_
 
 async def test_mixed_plan_starts_one_child_and_records_the_ops_action_as_not_executed(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, _proposal(_code(), _ops())):
             handle = await _start(env, _execute_cfg(repo_dir))
@@ -337,7 +337,7 @@ async def test_mixed_plan_starts_one_child_and_records_the_ops_action_as_not_exe
 
 async def test_ops_only_plan_starts_nothing_and_goes_back_to_round_two(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, _proposal(_ops())):
             handle = await _start(env, _execute_cfg(repo_dir))
@@ -373,7 +373,7 @@ async def test_ops_only_plan_starts_nothing_and_goes_back_to_round_two(repo_dir)
 async def test_execute_off_lands_approved_not_executed_and_starts_nothing(repo_dir):
     """Regression pin: the 023a path. Expected to PASS at HEAD."""
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, _proposal(_code())):
             handle = await _start(env, _cfg(repo_dir))  # execute defaults to False
@@ -428,7 +428,7 @@ async def _drive_refusal(env, repo, notifications: list[NotifyInput]):
 async def test_refused_judgement_is_regated_as_round_two_and_never_reapproved(repo_dir):
     notifications: list[NotifyInput] = []
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, _proposal(_code()), notifications):
             handle = await _drive_refusal(env, repo_dir, notifications)
@@ -452,7 +452,7 @@ async def test_refused_judgement_is_regated_as_round_two_and_never_reapproved(re
 
 async def test_policy_start_history_replays_clean(repo_dir):
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, _proposal(_code())):
             handle = await _drive_policy_start(env, repo_dir)
@@ -467,7 +467,7 @@ async def test_policy_start_history_replays_clean(repo_dir):
 async def test_refusal_history_replays_clean(repo_dir):
     notifications: list[NotifyInput] = []
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, _proposal(_code()), notifications):
             handle = await _drive_refusal(env, repo_dir, notifications)
@@ -493,7 +493,7 @@ async def test_equal_effective_and_threshold_is_refused_under_execute_and_starts
     must not start a child on any later cycle.
     """
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env, _proposal(_code())):
             handle = await _start(env, _execute_cfg(repo_dir, threshold=0.9))

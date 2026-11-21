@@ -9,10 +9,10 @@ import uuid
 import pytest
 from temporalio import activity, workflow
 from temporalio.client import WorkflowFailureError
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
+from sdlc.converter import sdlc_data_converter
 from sdlc.memory.activities import PromoteInput, ReflectInput
 
 with workflow.unsafe.imports_passed_through():
@@ -73,7 +73,7 @@ async def _run(env: WorkflowEnvironment, inp: ReflectScheduleInput) -> int:
 @pytest.mark.asyncio
 async def test_each_bank_gets_its_own_reflect_execution():
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         count = await _run(env, ReflectScheduleInput(banks=["project:a", "project:b", "project:c"]))
     assert count == 3
@@ -84,7 +84,7 @@ async def test_each_bank_gets_its_own_reflect_execution():
 async def test_one_failing_bank_does_not_skip_the_rest():
     FAIL_BANKS.add("project:b")
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with pytest.raises(WorkflowFailureError):
             await _run(env, ReflectScheduleInput(banks=["project:a", "project:b", "project:c"]))
@@ -98,7 +98,7 @@ async def test_a_failing_bank_fails_the_workflow_visibly():
     # failed workflow, never a silent no-op (spec: eve's failure mode).
     FAIL_BANKS.add("project:only")
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with pytest.raises(Exception) as ei:
             await _run(env, ReflectScheduleInput(banks=["project:only"]))
@@ -113,7 +113,7 @@ async def test_a_failing_bank_fails_the_workflow_visibly():
 @pytest.mark.asyncio
 async def test_all_banks_succeeding_returns_full_count():
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         count = await _run(env, ReflectScheduleInput(banks=["project:default"]))
     assert count == 1
@@ -129,7 +129,7 @@ async def test_backend_and_base_url_reach_the_activity():
         seen.append(inp)
 
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with Worker(
             env.client, task_queue=TASK_QUEUE, workflows=[ReflectWorkflow], activities=[capturing]
@@ -149,7 +149,7 @@ async def test_backend_and_base_url_reach_the_activity():
 @pytest.mark.asyncio
 async def test_org_path_promotes_then_reflects_org():
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         count = await _run(
             env, ReflectScheduleInput(banks=["project:a", "project:b"], org_bank="org")
@@ -176,7 +176,7 @@ async def test_no_org_bank_runs_no_promotion():
     assert decoded.org_bank is None
     assert decoded.promote_min_projects == 2
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         count = await _run(env, ReflectScheduleInput(banks=["project:a", "project:b"]))
     assert count == 2
@@ -189,7 +189,7 @@ async def test_no_org_bank_runs_no_promotion():
 async def test_promotion_failure_fails_the_run():
     FAIL_PROMOTE.add("org")
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with pytest.raises(WorkflowFailureError) as ei:
             await _run(env, ReflectScheduleInput(banks=["project:a", "project:b"], org_bank="org"))
@@ -205,7 +205,7 @@ async def test_org_reflect_failure_fails_the_run():
     # Promotion fine, org reflect backend down -> visible failure naming the bank.
     FAIL_BANKS.add("org")
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         with pytest.raises(WorkflowFailureError) as ei:
             await _run(env, ReflectScheduleInput(banks=["project:a", "project:b"], org_bank="org"))

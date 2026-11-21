@@ -29,9 +29,9 @@ import pytest
 from pydantic import BaseModel
 from temporalio import workflow
 from temporalio.client import WorkflowFailureError
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateDecision, GateOutcome, IdeaBrief
 from sdlc.maintenance.models import RepairProposal
 from sdlc.workflows.graph_catalog import build_run_input
@@ -136,7 +136,7 @@ async def test_running_child_probes_as_running(repo_dir, worktrees):
     base = commit_env_file(repo_dir)
     child_id = "maint-demo-abcd1234-inc1-a1"
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env):
             await _start_child(env, child_id, _run_input("hang: never parks", base, str(repo_dir)))
@@ -150,7 +150,7 @@ async def test_child_parked_at_merge_probes_as_awaiting_merge(repo_dir, worktree
     base = commit_env_file(repo_dir)
     child_id = "maint-demo-abcd1234-inc2-a1"
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env):
             child = await _start_child(
@@ -177,7 +177,7 @@ async def test_approved_child_probes_as_completed_with_its_result(repo_dir, work
     base = commit_env_file(repo_dir)
     child_id = "maint-demo-abcd1234-inc3-a1"
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env):
             child = await _start_child(
@@ -212,7 +212,7 @@ async def test_configfail_child_probes_as_failed_and_non_retryable(repo_dir, wor
     base = commit_env_file(repo_dir)
     child_id = "maint-demo-abcd1234-inc4-a1"
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env):
             child = await _start_child(
@@ -232,7 +232,7 @@ async def test_retryable_failure_probes_as_failed_and_not_non_retryable(repo_dir
     base = commit_env_file(repo_dir)
     child_id = "maint-demo-abcd1234-inc5-a1"
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env):
             child = await _start_child(
@@ -250,7 +250,7 @@ async def test_unknown_child_id_probes_as_not_found(repo_dir, worktrees):
     """An id that was never started maps to phase 'not_found'."""
     commit_env_file(repo_dir)
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env):
             probe = await _probe(env, "maint-demo-abcd1234-inc99-a9", "unknown")
@@ -266,7 +266,7 @@ async def test_rejected_child_probes_as_completed_with_the_verbatim_rejection(re
     base = commit_env_file(repo_dir)
     child_id = "maint-demo-abcd1234-inc6-a1"
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env):
             child = await _start_child(
@@ -306,7 +306,7 @@ async def test_probing_a_child_twice_is_stable_and_read_only(repo_dir, worktrees
     base = commit_env_file(repo_dir)
     child_id = "maint-demo-abcd1234-inc7-a1"
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with _worker(env):
             await _start_child(

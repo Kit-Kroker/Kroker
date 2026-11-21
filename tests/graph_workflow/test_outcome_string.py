@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import pytest
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.exceptions import FailureError
 from temporalio.worker import Replayer
 
 from sdlc.agents.runner import SdlcPydanticAIPlugin
+from sdlc.converter import sdlc_data_converter
 from sdlc.graph import validate
 from sdlc.graph.router import NodeState, RouterState
 from sdlc.workflows.graph import GraphWorkflow
@@ -21,7 +21,7 @@ TOPOLOGY = validate(SHIPPED["default"], roles=roles()).topology
 def test_failure_types_cover_temporal_and_the_plugin():
     config = Replayer(
         workflows=[GraphWorkflow],
-        data_converter=pydantic_data_converter,
+        data_converter=sdlc_data_converter,
         plugins=[SdlcPydanticAIPlugin()],
     ).config(active_config=True)
     assert set(config["workflow_failure_exception_types"]) <= set(FAILURE_TYPES)

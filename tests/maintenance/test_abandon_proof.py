@@ -24,10 +24,10 @@ import pytest
 import temporalio.workflow as _workflow
 from pydantic import BaseModel
 from temporalio.common import WorkflowIDReusePolicy
-from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.testing import WorkflowEnvironment
 
+from sdlc.converter import sdlc_data_converter
 from sdlc.core.models import GateDecision, GateOutcome, IdeaBrief
 from sdlc.maintenance.models import RepairProposal
 from sdlc.workflows.graph_catalog import build_run_input
@@ -152,7 +152,7 @@ async def test_child_survives_continue_as_new_signal_and_parent_termination(repo
     inp = ProofParentInput(run_input=run_input, child_id=CHILD_ID, task_queue=TASK_QUEUE)
 
     async with await WorkflowEnvironment.start_time_skipping(
-        data_converter=pydantic_data_converter
+        data_converter=sdlc_data_converter
     ) as env:
         async with maint_worker(
             env,

@@ -32,9 +32,9 @@ pytestmark = pytest.mark.temporal
 
 @pytest.mark.asyncio
 async def test_verbs_answer_against_a_live_run():
-    from temporalio.contrib.pydantic import pydantic_data_converter
+    from sdlc.converter import sdlc_data_converter
 
-    async with await WorkflowEnvironment.start_local(data_converter=pydantic_data_converter) as env:
+    async with await WorkflowEnvironment.start_local(data_converter=sdlc_data_converter) as env:
         async with Worker(
             env.client, task_queue="chat-e2e", workflows=[GraphWorkflow], activities=[]
         ):
