@@ -189,6 +189,7 @@ async def fake_check_brownfield_delta(inp: DeltaCheckInput) -> CheckResult:
     return build_check(DELTA_CHECK, True, CheckClass.ABSOLUTE, "all resolve (fake)")
 
 
+from sdlc.artifacts.read import load_diff
 from sdlc.artifacts.retention import RetentionInput
 
 
@@ -247,6 +248,10 @@ GIT_FAKES = [
     fake_build_trace_inventory,
     fake_read_dead_attempt_usage,
     price_usage,  # E-33: real activity — pure local table lookup, no network
+    # FR-702: real activity — reads back the artifact fake_get_task_diff just
+    # stored through the same LocalFileStore, so the code stage's bounded
+    # read-back exercises the real wire shape in captures and replays.
+    load_diff,
     # A-terminal: real activity — in a capture environment the run's worktree
     # directory never exists, so it returns the deterministic missing=True
     # report and touches nothing (the same no-network shape as price_usage).
