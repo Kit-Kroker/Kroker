@@ -9,7 +9,7 @@ file carries only what is true *here*.
 
 - Cross-stage calls are banned. The review stage does not call other stages.
 - The step signature takes `ctx: StageContext` as first argument, never the workflow instance.
-- Clean-context: the primary reviewer and adversary lenses receive contract assertions, deterministic test output, and materialized diff patch only. They never touch harness sessions or worker narratives.
+- Clean-context: the primary reviewer and adversary lenses receive contract assertions, deterministic test output, and materialized diff patch only. They never touch harness sessions or worker narratives. (FR-702: the patch arrives materialized via the `load_diff` bounded read-back — a plain `patch: str` argument, never the artifact or a dict; what the lens sees is unchanged.)
 - Deep review is an advisory lens that inspects the scrubbed session transcript. It is never consulted in task pass/fail gating.
 - Lenses are fail-open at the task layer: safety lenses must never fail task delivery. They are never *silent*, though — every gating lens records a `LensOutcome` tombstone (`lenses.py`), and the merge gate grades it.
 - `lenses.py` holds the C8 tombstone types and decision rules as pure functions (no `ctx`, no I/O, table-testable); `step.py` does not duplicate them.

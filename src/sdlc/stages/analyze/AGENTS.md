@@ -11,6 +11,7 @@ file carries only what is true *here*.
 - The step signature takes `ctx: StageContext` as first argument, never the workflow instance.
 - The step never calls `ctx.gate`: analyze is proposer-only and runs prior to the merge gate.
 - The clean-context Analyst role proposes criterion traces; workflow-side `enforce_traces` (and legacy `untraced_criteria`) enforces them.
+- (FR-702) `diff` is a `CodeArtifact` (inline files/renames/stat + `patch_ref`); prompt patch text arrives materialized as the `patch: str` argument via the `load_diff` bounded read-back. A `patch_ref=None` artifact (propose arm) means empty patch text and no read-back command.
 - The slice exports `step` and `ACTIVITIES = [build_trace_inventory]`.
 
 ## Temporal notes for this slice

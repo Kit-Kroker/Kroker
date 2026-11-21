@@ -18,6 +18,7 @@ file carries only what is true *here*.
 - `attempt_failure.py` holds the pure classifiers (`attempt_failure`, `_qa_failure`, `_lint_ok`, `_lint_input`) behind `task_passed` and `BenchmarkRecord.failure`. The attempt's cause goes in `failure`, never in `error` (CODE-1.10). `_lint_ok` is the only place that decides a lint finding fails a task: fences are report-only and an unmeasured lint passes (CODE-1.9).
 - The C8 lens tombstones are classified here but defined in the review slice (`stages/review/lenses.py`); this slice never re-implements the presence rules or the admission predicates.
 - QA and review stages are invoked clean-context, validating against the frozen contract.
+- (FR-702) The attempt fetches the diff once via `get_task_diff` → `CodeArtifact`, stores the run's claim-check on `run.diff_ref`, and materializes prompt patch text through the `load_diff` bounded read-back (a `patch_ref=None` artifact — propose arm / legacy fakes — means empty patch text and NO read-back command, Review Focus 3). `_run_handoff` lives in `handoff.py` (moved for the file-size ceiling; imported here as `_run_handoff`).
 - The review loop's reviewer label is the run's resolved model
   (`resolve_role_model(cfg, "review")`), never the registry default: under a
   `reviewer` override the label, the priced model and the model that serves

@@ -97,6 +97,10 @@ per `docs/documentation-rules.md`). ADR-22 was amended again on
   with worktree affinity and shared storage as prerequisites.
 - **ADR-10 Claim-check for all large payloads.** 2MB history limit as a
   design forcing-function; `ArtifactRef{kind, uri, sha256}` everywhere.
+  *Built (E-92, 2026-11-21): the guard is `sdlc.converter.sdlc_data_converter`
+  (`MAX_PAYLOAD_BYTES = 2MB`, `PayloadTooLargeError` naming the claim-check
+  fix) at the payload-converter chokepoint on every client and worker; diffs
+  travel as `CodeArtifact` refs with `load_diff` read-back.*
 - **ADR-11 Deterministic DAG, deliberately — contra the "Bitter Lesson."**
   Current practice argues orchestration should live in prompts/skills so
   architectures improve with each model release. We adopt that *within*

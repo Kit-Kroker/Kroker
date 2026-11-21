@@ -41,7 +41,7 @@ flag in `agent.yaml`.
 - [x] **AP-2.5a** Two capability task queues and worker pools, run-level routing (NFR-2, ADR-9). *Delivered 2026-11-16 (E-91, round 024): the core pool on `ai-sdlc` plus the harness pool on `KROKER_HARNESS_QUEUE`, routing off by default (`docs/operations/worker-pools.md`, ADR-9 status).*
 - [ ] **AP-2.5b** Per-role task queues routed from `RoleSpec`, the five-pool form (NFR-2, ADR-9; depends on AP-2.1).
 - [ ] **AP-2.6** Worker-specific task queue for worktree affinity, with recreate-on-loss; task branches pushed to shared storage at each checkpoint.
-- [ ] **AP-2.7** `S3ArtifactStore` and Temporal `ExternalStorage` on every client and worker (FR-702, ADR-10).
+- [ ] **AP-2.7** `S3ArtifactStore` and Temporal `ExternalStorage` on every client and worker (ADR-10 fleet backends). *Reworded 2026-11-21: FR-702's local claim-check discipline landed (E-92 — `CodeArtifact` diffs, `load_diff`, the 2MB `sdlc.converter` guard); what remains here is the fleet-scale S3/ExternalStorage backend only.*
 - [ ] **AP-2.8** Per-role lifecycle events on `RunEvent`: model, tool start/end, approval, usage.
 - [ ] **AP-2.9** `RoleRunner` port with SDK-neutral tool definitions and event schema; pydantic-ai the only adapter, behaviour unchanged (ADR-23).
 

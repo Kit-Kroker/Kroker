@@ -337,6 +337,19 @@ is marked **(new scope)** and needs a PRD line before it is real.
   the one open sub-point (OQ-B7). Normalising the transcript is the **harness adapter's** job,
   beside the resume-handle it already owns (`claude --resume` / `opencode -s`) —
   same registry, same pattern as `HarnessRunResult` and `ToolchainAdapter`.
+- [x] **E-92 (2026-11-21)** FR-702 close-out — claim-check diffs + the 2MB
+  wire guard. Resolves the diff half E-38's "diffs *and* sessions both force
+  it" anticipated: `get_task_diff` returns `sdlc.vcs.models.CodeArtifact`
+  (files/renames/stat inline, the FULL untruncated patch stored under
+  `<root>/<run_id>/diffs/`), `artifacts/read.py::load_diff` is the bounded
+  prompt read-back (T3 marker parity), `AnalyzeResult.integration_diff` and
+  `merge`'s changed-files/renames read the artifact, `HarnessRunResult.diff_ref`
+  rides `TaskResult`, and `sdlc.converter.sdlc_data_converter` refuses any
+  payload ≥2MB at serialization on every client and worker (oversized results
+  exhaust their activity failure path; oversized inputs wedge `Running` until
+  terminated — deploy drains first, no `workflow.patched`). Spec:
+  `docs/superpowers/specs/2026-11-19-fr702-claim-check-diffs-design.md`;
+  plan: `docs/superpowers/plans/2026-11-19-fr702-claim-check-diffs.md`.
   **This is the concrete P5 trajectory-harvesting seam** (ARCHITECTURE §10): the
   session is most of what `events.jsonl`/`report.html` should render (**E-22/E-23**)
   and the extraction point for trajectory eval + small-model distillation.
