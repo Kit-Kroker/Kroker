@@ -392,3 +392,34 @@ per `docs/documentation-rules.md`). ADR-22 was amended again on
   outcome, only in the prompt. *Trade-off:* per-trigger budgets are lost;
   the knob is per-run config, and the benchmark's per-task `fix_attempts`
   records (BENCHMARK.md §4.3) are the instrument for revisiting the number.
+- **ADR-26 A control-plane store holds what has no run to live in**
+  *(decided 2026-11-22 from the v13 console design,
+  `docs/reference/kroker-ui-spec-v13.md`; not built; amends FR-604)*. The
+  v13 console needs durable objects that belong to no workflow: the company,
+  projects, members and their roles, the per-project "Who decides" table,
+  chat threads and their messages and cards, automations, integration
+  connections and per-project bindings, agent-access grants, per-user MCP
+  tokens, and small per-user state (pins, theme). These live in one
+  **control-plane store, Postgres**, behind a `control_plane/` service in
+  `src/sdlc/` with its own API; no interface owns a database. The split is
+  the same as ADR-21's: **run state stays in Temporal** (runs, pending
+  decisions, `GateDecision`s and who made them), artifacts stay in the
+  claim-check store, memory in Hindsight, graphs content-addressed under
+  `graphs/<sha>.yaml`, agent configuration in `agents/<role>/` files. The
+  control plane references a run by workflow id and a decision by its
+  pending key; it never copies their state. Answering a decision is always a
+  Temporal signal, so "first answer wins" is decided by the workflow, and a
+  chat's decision card is a reference that renders the workflow's answer.
+  Every row carries `company_id` from the first migration, so FR-1001 later
+  becomes a placement change (schema or database per tenant), not a data
+  migration. **FR-604 is narrowed, not dropped:** surfaces stay stateless
+  shells over Temporal for run state, and over the control-plane API for
+  everything else. *Rejected:* YAML files in the repository, as
+  `schedules/` does (no safe concurrent writes from many people, and a chat
+  message is not a file); a Temporal entity workflow per chat or project
+  (history grows without bound, listing across entities needs visibility
+  queries that cannot sort or page by project, and continue-as-new would
+  carry every message forward); extending the board's SQLite (ADR-21 scopes
+  it to one project's task graph, and a single file is not a multi-user
+  service). *Trade-off:* a second stateful system to migrate, back up and
+  restore; on-prem packaging (FR-1006) ships it as one more container.

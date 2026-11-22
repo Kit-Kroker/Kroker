@@ -1,5 +1,14 @@
 # Suggested ordering across §§10–14
 
+> **2026-11-22 — phases re-planned on the v13 console design.** The team
+> console is now **P7** ([`console.md`](console.md), E-93…E-109, PRD
+> FR-1500), next after P4. The hosted multi-tenant service is **P8**
+> (E-57…E-63) and the outcome loop **P9** (E-64…E-71); where this file says
+> P7 or P8 below, read P8 and P9. Tier 2 audit depth (item 6, E-52…E-56) is
+> scheduled after the console. E-57 + E-58 (item 5) stay P8, but E-93's
+> control-plane store carries `company_id` from day one so FR-1001 is a
+> placement change later, not a migration.
+
 > **2026-11-14 — owner chose P4 first.** The owner's "finish all of needed"
 > ruling (Option B, spec
 > [`.specify/specs/023-daper-maintenance-loop/spec.md`](../../.specify/specs/023-daper-maintenance-loop/spec.md) §A.0)

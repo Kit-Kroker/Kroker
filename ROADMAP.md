@@ -265,13 +265,15 @@
   execute/report halves landed (023a loop + gate, 023b execute/report — 2026-11-15;
   FR-502 complete 2026-11-19 — ops risk-classed, execution stays never). Fleet scale not started.
 - [x] **P5** — Triage + tidy-up (Tier 0/1), operator-run, single tenant → *one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded*
-  E-40/E-41/E-42/E-43/E-44 all landed in code. The row's `[x]` means "exit criterion **demonstrated**" (see P1 above). **Partial close, 2026-11-22:** (a) the deferred four-scenario `TidyUpWorkflow` temporal e2e landed as `cd33ab5b` (5 temporal tests: the 4 plan scenarios + 1 chaos edge; reviewer-gated, timing race and vacuous assertions fixed, then approved) — orchestrator-verified: temporal 5/5, fast tier green, ruff/format/mypy/check_file_size green; the triage fan-out e2e (`tests/test_triage_workflow_e2e.py`) passed 10/10 on this host on 2026-11-21, also orchestrator-verified. (b) The live operator-run demonstration (2026-11-21, owner-approved) got as far as: triage of an unfamiliar repository with verdict READY (all four readiness metrics measured, build probe collected); a 5-item MECHANICAL backlog (`misconfig:debug_enabled` high, `misconfig:allowed_hosts_wildcard`, `dependencies:unpinned_dependency` ×2, `baseline:gitignore_missing`); both human gates serviced (`select`, `tidy_up` approve); and a seeded fix run (`tidyup-p5-demo-repo-20261121T210954Z-fix-00`) whose patch PASSED the absolute merge checks — then the run died at `open_pull_request` (no `origin` remote; non-retryable, `merge/activities.py:221`), and fix-01 was terminated mid-flight by an owner STOP ruling. (c) **Honest residual:** no before/after delta was collected — the cycle stopped at the PR/origin blocker by owner STOP. Cards filed 2026-11-22: `safe-directory-env-ignored-on-clone`, `build-probe-clone-hardlinks-cross-device`, `tidyup-fix-run-needs-github-origin`. The delta stays owner-deferred, the same "closed on fixtures" precedent as FR-501. Operator-run only; **does not depend on P7**.
+  E-40/E-41/E-42/E-43/E-44 all landed in code. The row's `[x]` means "exit criterion **demonstrated**" (see P1 above). **Partial close, 2026-11-22:** (a) the deferred four-scenario `TidyUpWorkflow` temporal e2e landed as `cd33ab5b` (5 temporal tests: the 4 plan scenarios + 1 chaos edge; reviewer-gated, timing race and vacuous assertions fixed, then approved) — orchestrator-verified: temporal 5/5, fast tier green, ruff/format/mypy/check_file_size green; the triage fan-out e2e (`tests/test_triage_workflow_e2e.py`) passed 10/10 on this host on 2026-11-21, also orchestrator-verified. (b) The live operator-run demonstration (2026-11-21, owner-approved) got as far as: triage of an unfamiliar repository with verdict READY (all four readiness metrics measured, build probe collected); a 5-item MECHANICAL backlog (`misconfig:debug_enabled` high, `misconfig:allowed_hosts_wildcard`, `dependencies:unpinned_dependency` ×2, `baseline:gitignore_missing`); both human gates serviced (`select`, `tidy_up` approve); and a seeded fix run (`tidyup-p5-demo-repo-20261121T210954Z-fix-00`) whose patch PASSED the absolute merge checks — then the run died at `open_pull_request` (no `origin` remote; non-retryable, `merge/activities.py:221`), and fix-01 was terminated mid-flight by an owner STOP ruling. (c) **Honest residual:** no before/after delta was collected — the cycle stopped at the PR/origin blocker by owner STOP. Cards filed 2026-11-22: `safe-directory-env-ignored-on-clone`, `build-probe-clone-hardlinks-cross-device`, `tidyup-fix-run-needs-github-origin`. The delta stays owner-deferred, the same "closed on fixtures" precedent as FR-501. Operator-run only; **does not depend on P7 or P8**.
 - [ ] ⚠️ **P6** — Capability & risk audit (Tier 2) + evidence bundle → *one repository audited end-to-end with SC-7 held and a bundle handed over*
-  **Opened 2026-08-10** with E-45's DAG shell. Gated on P5's readiness verdict (FR-903), not merely sequenced after it — and the gate now requires a **human** approval to admit a tree that is not READY. Three of seven phase bodies are now live and measured end-to-end: scan (E-46), discover (E-48), and assess (E-49, all three plans).
-- [ ] **P7** — Hosted multi-tenant service → *NFR-8 adversarial test green; FR-1002 container tier live; a tenant onboards unassisted*
-  Not started (§12, E-57…E-63). **FR-1002 is the gating item for admitting any external tenant**, not a hardening task: today a customer's `npm install` executes as the worker user with the worker's toolchain and unrestricted network egress.
-- [ ] **P8** — Product outcome loop → *one hypothesis pre-registered, shipped, and decided by its own rule (SC-11/SC-12)*
-  Not started (§13, E-64…E-71). E-67 (`DeployPlan`/`DeployReport`) delivered the deploy contract; the outcome loop still needs the observation/keep-kill half (E-70).
+  **Opened 2026-08-10** with E-45's DAG shell. Gated on P5's readiness verdict (FR-903), not merely sequenced after it — and the gate now requires a **human** approval to admit a tree that is not READY. Three of seven phase bodies are now live and measured end-to-end: scan (E-46), discover (E-48), and assess (E-49, all three plans). **2026-11-22 — remaining depth (E-52…E-56) scheduled after P7** (owner decision on the v13 console re-plan); P6 neither blocks nor is blocked by P7.
+- [ ] **P7** — Team console (FR-1500), one company, self-hosted → *in one project with ≥3 people in distinct roles: a work item started from chat reaches merge with every decision routed by role and recorded with a real principal; one pipeline or agent change goes draft → measure → publish; one automation from an external trigger goes shadow → live*
+  **Opened 2026-11-22** from the v13 console design (`docs/reference/kroker-ui-spec-v13.md`; PRD v1.3). Not started. Epics E-93…E-109 in [`docs/roadmap/console.md`](docs/roadmap/console.md), in five groups: C0 foundations (control-plane store per ADR-26, principals and roles, the v13 shell), C1 daily loop (role-routed decisions, work items with provenance, chat with Kroker's confirmed actions, cross-run read surfaces), C2 run depth (live session, steer, pull to local), C3 factory (draft → measure → publish, layered agent config, shadow `agent.custom` steps, measured proposals, harness catalogue, agent builder), C4 reach (connections and agent access, automations). Takes the company half of FR-1004 from E-60 (as E-94); tenancy, minted credentials and the model proxy stay P8.
+- [ ] **P8** — Hosted multi-tenant service → *NFR-8 adversarial test green; FR-1002 container tier live; a tenant onboards unassisted*
+  Not started (§12, E-57…E-63). Was P7 until 2026-11-22; builds on P7's projects and principals. **FR-1002 is the gating item for admitting any external tenant**, not a hardening task: today a customer's `npm install` executes as the worker user with the worker's toolchain and unrestricted network egress.
+- [ ] **P9** — Product outcome loop → *one hypothesis pre-registered, shipped, and decided by its own rule (SC-11/SC-12)*
+  Not started (§13, E-64…E-71). Was P8 until 2026-11-22. E-67 (`DeployPlan`/`DeployReport`) delivered the deploy contract; the outcome loop still needs the observation/keep-kill half (E-70).
 
 ---
 
@@ -349,7 +351,7 @@
   live (`revise` landed with E-7; gate rounds are now derived from the pending item,
   not typed by the operator; the cross-run `inbox` verb is live — the earlier
   "missing" note was stale, spec 010 N7).
-- [x] **FR-604** stateless shells, no interface DB — true for CLI.
+- [x] **FR-604** stateless shells, no interface DB — true for CLI. *Narrowed 2026-11-22 by ADR-26:* run state only through Temporal; objects with no run (projects, people, chats, automations, connections) through the control-plane API (E-93). No surface owns a database.
 
 ### Governance & ops (FR-700)
 - [x] **FR-701** run-level budgets — research ships the FIRST run-level counters (`max_searches`/`max_fetches`/`max_cost_usd`), stage-scoped and enforced inside the tools; E-19 remains the general version. *Landed (E-33):* run-level token/cost counters in `RunSummary.roles` + a `run_budget_usd` budget gate that escalates through the FR-301/302 gate machinery on crossing (approve = one more increment, reject = `rejected:budget`). Stage-scoped research budgets (FR-107) unchanged. *Budget at start (2026-10-06, spec 011):* the budget is settable when a run starts (CLI `--budget-usd`, the dashboard start form; an explicit 0 is rejected); the gate counts priced planning-agent spend only — coding-harness, crew and research-stage spend is not counted (the Cost tab shows total vs counted; a card is filed). "E-19 remains the general version" now means: per-phase budgets (FR-922/E-55) and a pre-run estimate, neither built.
@@ -419,15 +421,17 @@ as tracked rather than accidental.
 - [ ] **FR-921** evidence bundle: manifest + five role reports + verification status + gates + fix-run sessions (E-52).
 - [ ] **FR-922** per-phase budgets; exhaustion escalates, partials marked partial (E-55).
 
-### Service platform (FR-1000) *(new scope; PRD v1.1)*
+### Service platform (FR-1000) *(new scope; PRD v1.1)* — P8
 
-- [ ] **FR-1001** tenancy by construction — namespace + store prefix + bank namespace; resolves OQ-4 (E-58).
+*Rows re-aligned with PRD FR-1001…FR-1007 on 2026-11-22: the previous list (token vault, metering + billing, audit log, customer dashboard backend, webhook delivery under FR-1003…FR-1007) had drifted from the PRD's numbering and from the epic file.*
+
+- [ ] **FR-1001** tenancy by construction — namespace + store prefix + bank namespace; resolves OQ-4 (E-58). The control-plane store carries `company_id` from its first migration (ADR-26, E-93).
 - [ ] **FR-1002** untrusted-code isolation — per-run container, non-root, network-level egress allowlist. **Precondition for any external tenant** (E-21 + E-57).
-- [ ] **FR-1003** token vault — envelope encryption, per-tenant keys, zero plaintext persistence (E-59).
-- [ ] **FR-1004** metering + billing — per-run token / compute / wall-time tracking; per-tenant quota enforcement (E-60).
-- [ ] **FR-1005** audit log — append-only, tamper-evident hash chain for all customer actions (E-61).
-- [ ] **FR-1006** customer dashboard backend — tenant-isolated query APIs over assessments, runs, and gates (E-62).
-- [ ] **FR-1007** customer webhook delivery — guaranteed at-least-once with HMAC signing and exponential backoff (E-63).
+- [ ] **FR-1003** repository connection — VCS app install, short-TTL repo-scoped tokens minted per run and never persisted, PR-only delivery (E-59).
+- [ ] **FR-1004** identity and authorization — authenticated surfaces, a real principal on every `GateDecision`, per-tenant roles. **Company half moves to P7 as E-94** (principals and roles in one company); SSO, per-tenant roles and remote MCP auth stay E-60.
+- [ ] **FR-1005** metered cost attribution — per-tenant, per-run cost from the FR-701 counters, exportable, ceilings through the gate machinery (E-61).
+- [ ] **FR-1006** deployment topologies — one artifact, on-prem single-tenant or hosted multi-tenant, configurable model provider (E-62). The key vault and per-run model proxy named by the v13 spec have no epic yet; closest fit is here.
+- [ ] **FR-1007** retention and audited purge — per-tenant retention for evidence, transcripts and memory (E-63).
 
 ### Product outcome (FR-1100) *(new scope; PRD v1.1)*
 
@@ -458,6 +462,26 @@ as tracked rather than accidental.
 - [x] **FR-1404** design tokens are the only place a colour, size or font literal appears; names are semantic per the canvas at `records/2026-09-05-console-restyle/` (E-89).
 - [x] **FR-1405** the showcase is exportable as a Claude Design preview bundle (`npm run ds:bundle` → `interfaces/ui/dist-ds/`) (E-89).
 - [x] **FR-1406** the Node toolchain is gated in CI — one wrapper, `python scripts/check_ui.py`, invoked identically by `ci.yml` and `scripts/verify.py` (E-89).
+
+### Console (FR-1500) *(new scope; PRD v1.3 2026-11-22)* — P7
+
+Detail and ordering: [`docs/roadmap/console.md`](docs/roadmap/console.md). Source: `docs/reference/kroker-ui-spec-v13.md`.
+
+- [ ] **FR-1501** projects — people + goal + bound repos/tools; every item, chat, decision, artifact and metric carries its project (E-93, E-95).
+- [ ] **FR-1502** decisions routed to roles — per-project "Who decides" table, first answer wins, real principal recorded, unanswered tool escalation = deny (E-94, E-96).
+- [ ] **FR-1503** plain-language decisions — lead, facts, outcome per answer, technical details; one card on every surface (E-96).
+- [ ] **FR-1504** chat threads; Kroker proposes, a person confirms — typed action set over the operator verbs (E-98).
+- [ ] **FR-1505** work items with provenance — source, external ref, project, waiting-on (E-97).
+- [ ] **FR-1506** live session, steer at tool boundary, pull to local / push back (E-100, E-101).
+- [ ] **FR-1507** draft → measure → publish for pipelines and agents; simple view over `canonical_stage` (E-102, E-103).
+- [ ] **FR-1508** shadow first; `agent.custom` with typed outputs (E-104).
+- [ ] **FR-1509** layered configuration company → project → agent, ADR-6 at choice time (E-103).
+- [ ] **FR-1510** agent builder; read-only dry-run on stored inputs (E-107).
+- [ ] **FR-1511** harness catalogue; install = adapter + one verified case (E-106).
+- [ ] **FR-1512** automations — trigger, action, identity, budget owner; shadow; `intake.issue` (E-109).
+- [ ] **FR-1513** proposals measured before applied, through the prompt gate (E-105).
+- [ ] **FR-1514** connections, bindings, agent access (E-108).
+- [ ] **FR-1515** cross-run read surfaces — artifacts, memory (blocked on OQ-11), metrics with decision wait time (E-99).
 
 ---
 
@@ -600,6 +624,7 @@ as tracked rather than accidental.
 - [ ] **ADR-22** A deterministic workflow of bounded ReAct agents — proposer roles gain read-only, commit-pinned repo tools inside a step budget; coordinator and swarm excluded *inside the chain*. **Amended 2026-11-11:** swarm mode is admitted as a second mode beside it (docs/adr.md). Decided 2026-10-11 from `docs/reports/Kroker Agent Architecture & Implementation Plan.md`; not built (AP-2…AP-4).
 - [ ] **ADR-23** Kroker owns the role contract; the AI SDK is an adapter behind a `RoleRunner` port. Not built (AP-2.9; a second adapter is AP-6, only when a reason appears).
 - [ ] ⚠️ **ADR-24** Evidence before verdict; code computes the verdict (`approve`, `tests_passed`, `plan_valid`). **The `plan_valid` half landed 2026-11-15 (FR-301):** `sdlc/validators/verdicts.py` — the evidence schemas' first consumer — computes it, and the plan gate's SOFT auto-approve conjunct requires it. `approve`/`tests_passed` (reviewer/QA) remain AP-3; architect validators remain AP-4.4. Already-recorded pieces of it: §7's `ReviewReport` field ordering, FR-205 validators.
+- [ ] **ADR-26** A control-plane store (Postgres) holds what has no run to live in — projects, people and roles, chats, automations, connections; run state stays in Temporal and is referenced, never copied; narrows FR-604. Decided 2026-11-22 from the v13 console design; not built (E-93).
 
 > **2026-10-11 — amendments to ADR-2, ADR-6, ADR-9 and ADR-12** (docs/adr.md) follow the same plan and are not built. **The ADR-6 `[x]` above is true of the mechanism and not of what it guarantees:** `check_adr6_families` compares provider prefixes, and on `main` the reviewer is `zai:glm-5.3` while `dev` is `zai-coding-plan/glm-5.3` — different prefixes, same model. FR-204 and US-5 inherit the same caveat. The amendment moves the check to the model id and widens it to every judge. **Ordering:** this is AP-1.0, ahead of any conclusion about the reviewer drawn from the benchmark — reviewer data from default-arm runs was produced on the developer's weights. **Landed 2026-11-11 (AP-1.0):** the check compares model ids over every judge (`reviewer`, `deep_review`, `qa`, `merge_verdict`), the judges ship on `zai:glm-5.3-flash`, and the replay fixtures were re-baselined (provenance-only golden diff). Weights are decorrelated, vendor is not.
 
@@ -626,6 +651,8 @@ as tracked rather than accidental.
 
 ## 8. Recommended next increments (ranked by invariant undercut, not effort)
 
+> **P7 — the team console (opened 2026-11-22).** The owner re-planned the phases on the v13 console design: the console is the next phase after P4, single company and self-hosted; hosted multi-tenancy moves to P8, the outcome loop to P9, and P6's remaining audit depth waits until after P7. Start with C0 in order — **E-93** (control-plane store, ADR-26) → **E-94** (principals and roles) → **E-95** (v13 shell) — then E-96/E-97 in parallel. Settle **OQ-11** (memory bank per project or per repository) before E-99's memory half. Detail: [`docs/roadmap/console.md`](docs/roadmap/console.md).
+
 1. **Finish P4 — DAPER maintenance loop + two worker pools (the active program; owner override 2026-11-14, Option B).** The owner chose P4 first — "finish all of needed" = the P4 row and its exit criterion (SC-1..3 at target) — reversing the 2026-11-11 swarm-first order (the intent doc records this as a dated addendum, its body unedited; spec: [`.specify/specs/023-daper-maintenance-loop/spec.md`](.specify/specs/023-daper-maintenance-loop/spec.md) §A.0). The **loop half landed 023a (2026-11-15)**: E-14 + FR-501's loop/schedule/nudge/gate + FR-503's gate half; **023b's execute/report landed (2026-11-15)** — FR-501/503 complete; **FR-502 complete (2026-11-19)** — ops risk-classed, execution stays never (GATE 2). The **pools half landed (round 024, 2026-11-16)**: two capability queues built (**NFR-2**/ADR-9/AP-2.5a), run-level routing off by default. R025 ran the fleet on 2026-11-18 (SC-1/SC-2 n/a-missed, SC-3 0.385 missed); the conditional round 026 ran and closed 2026-11-19: SC-2 1.47 min and SC-3 0.773/0.842-corrected pass, SC-1 0.60 misses ≥0.80, so P4's exit criterion is still not met (2 of 3; the miss is the validator/collector-artifact class, `.workspace/tasks/2026-11-19-validator-artifacts-mask-green-tests.md`). Swarm mode is parked (item 6).
 2. ~~**Close P1 honestly** — CI-runnable end-to-end run through `FeatureWorkflow` + wire the `security_no_critical` absolute check.~~ **Done** on `feat/p1-consolidation` (`3cfbe62`…`41c9185`); plan `docs/superpowers/plans/2026-07-15-p1-consolidation.md`.
 3. ~~**Analyze/Analyst stage** — unlocks coverage + criterion→test traceability advisory checks (FR-106).~~ **Done** on `feat/analyst-stage`; plan `docs/superpowers/plans/2026-07-16-analyst-stage.md`, spec `docs/superpowers/specs/2026-07-16-analyst-stage-traceability-coverage-design.md`.
@@ -651,8 +678,9 @@ in-flight work lives in its design doc until merge.
 | Filesystem-first work items (`E-`) | [`filesystem-first.md`](docs/roadmap/filesystem-first.md) |
 | Tier 0 — repository triage & tidy-up (`E-40`…`E-44`) | [`tier-0-triage.md`](docs/roadmap/tier-0-triage.md) |
 | Tier 2 — the EDCR port (`E-45`…`E-56`) | [`tier-2-edcr.md`](docs/roadmap/tier-2-edcr.md) |
-| Service platform (`E-57`…`E-63`) | [`service-platform.md`](docs/roadmap/service-platform.md) |
-| Product outcome (`E-64`…`E-71`) | [`product-outcome.md`](docs/roadmap/product-outcome.md) |
+| Team console, P7 (`E-93`…`E-109`) | [`console.md`](docs/roadmap/console.md) |
+| Service platform, P8 (`E-57`…`E-63`) | [`service-platform.md`](docs/roadmap/service-platform.md) |
+| Product outcome, P9 (`E-64`…`E-71`) | [`product-outcome.md`](docs/roadmap/product-outcome.md) |
 | Pipeline as data (`E-72`…`E-77`) | [`pipeline-as-data.md`](docs/roadmap/pipeline-as-data.md) |
 | Suggested ordering across the groups | [`ordering.md`](docs/roadmap/ordering.md) |
 | Agent board (`E-78`) | [`agent-board.md`](docs/roadmap/agent-board.md) |
