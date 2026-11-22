@@ -78,7 +78,6 @@ from .board.activities import (
     sync_plan_tasks,
 )
 from .calibration.activities import calibration_verdict, record_calibration_samples
-from .converter import sdlc_data_converter
 from .crew.activities import (
     checkpoint_round,
     load_crew,
