@@ -10,10 +10,10 @@ describe('mapFleetSummary (018 T048 RED)', () => {
   it('maps the recorded fixture to camelCase rows and unreadable ids', () => {
     const summary = mapFleetSummary(fixture as never)
     const graph = summary.runs.find((r) => r.runId === 'graph-run')!
-    expect(graph.graphSha).toBe('a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38')
+    expect(graph.graphSha).toBe('2bfa5ac58df5454c6dff6a84e77a4b7d3950f49cc4e44187f2ad79505dc952e6')
     expect(graph.graphName).toBe('default')
     expect(graph.arm).toEqual({ harness: 'opencode', model: 'zai-coding-plan/glm-5.3' })
-    expect(graph.traversals).toHaveLength(2)
+    expect(graph.traversals).toHaveLength(3)
     expect(graph.traversals[0]).toMatchObject({
       used: 0,
       max: 2,
@@ -41,21 +41,21 @@ describe('mapFleetSummary (018 T048 RED)', () => {
 // --- 018 T060 (RED): the shipped-graphs mapper --------------------------------
 
 describe('mapShippedGraphs (018 T060 RED)', () => {
-  it('maps the recorded fixture: three graphs, null description/when preserved, counts from the wire numbers', () => {
+  it('maps the recorded fixture: five graphs, null description/when preserved, counts from the wire numbers', () => {
     const shipped = mapShippedGraphs(shippedFixture as never)
     expect(shipped.graphs.map((g: { name: string }) => g.name)).toEqual([
-      'default', 'default-research', 'seeded',
+      'default', 'default-research', 'default-constitution', 'default-requirements', 'seeded',
     ])
     const def = shipped.graphs[0] as Record<string, unknown>
-    expect(def['sha']).toBe('a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38')
+    expect(def['sha']).toBe('2bfa5ac58df5454c6dff6a84e77a4b7d3950f49cc4e44187f2ad79505dc952e6')
     expect(def['description']).toBeNull()
     expect(def['when']).toBeNull()
     expect(def['counts']).toEqual([
       { label: 'nodes', n: 12 },
       { label: 'gates', n: 2 },
-      { label: 'edges', n: 20 },
+      { label: 'edges', n: 21 },
     ])
-    const seeded = shipped.graphs[2] as Record<string, unknown>
+    const seeded = shipped.graphs[4] as Record<string, unknown>
     expect((seeded['counts'] as Array<{ label: string; n: number }>)[1]).toEqual({ label: 'gates', n: 0 })
   })
 

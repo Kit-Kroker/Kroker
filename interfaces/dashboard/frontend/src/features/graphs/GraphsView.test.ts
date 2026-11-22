@@ -17,7 +17,7 @@ vi.mock('../../api/client', () => ({ api }))
 
 const RouterLinkStub = { props: ['to'], template: '<a data-testid="stub-link"><slot /></a>' }
 
-const DEFAULT_SHA = 'a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38'
+const DEFAULT_SHA = '2bfa5ac58df5454c6dff6a84e77a4b7d3950f49cc4e44187f2ad79505dc952e6'
 
 // The mapped shape DashboardApi.getShippedGraphs serves (camelCase; counts
 // built from the wire's nodes/gates/edges).
@@ -69,7 +69,13 @@ describe('GraphsView (v5, 018 T060 RED)', () => {
   it('renders one card per shipped graph, by name', async () => {
     const { w } = await mountView()
     const names = w.findAll('[data-testid="catalog-name"]').map((n) => n.text())
-    expect(names).toEqual(['default', 'default-research', 'seeded'])
+    expect(names).toEqual([
+      'default',
+      'default-research',
+      'default-constitution',
+      'default-requirements',
+      'seeded',
+    ])
     // A null description/when reads not measured on the card (FR-915).
     expect(w.text()).toContain('not measured')
   })
@@ -77,7 +83,7 @@ describe('GraphsView (v5, 018 T060 RED)', () => {
   it("the card's action navigates to /graphs/<sha>", async () => {
     const { w, router } = await mountView()
     const actions = w.findAll('[data-testid="catalog-action"]')
-    expect(actions).toHaveLength(3)
+    expect(actions).toHaveLength(5)
     expect(actions[0].text()).toBe('Open in Design')
     await actions[0].trigger('click')
     await flushPromises()

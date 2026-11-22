@@ -10,13 +10,13 @@ test.use({ baseURL: APP_BASE_URL })
 
 // The shipped default's sha (the recorded graph response and the
 // graphs-shipped fixture agree on it).
-const DEFAULT_SHA = 'a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38'
+const DEFAULT_SHA = '2bfa5ac58df5454c6dff6a84e77a4b7d3950f49cc4e44187f2ad79505dc952e6'
 // The recorded parse of the default with architect.spec's edge capped at 5
 // (the toolbar displays the first 12 chars).
 // The sha the backend's parse_object really computes for the default
 // with architect.spec->architecture.artifact max_traversals 5 (the
 // recorded fixture's parse.sha; regenerate to re-check).
-const EDGE_MT_SHA12 = 'c12486c5664d'
+const EDGE_MT_SHA12 = 'e5b792832170'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -111,7 +111,7 @@ test('a payload-mismatched drop is refused with its reason and creates no edge',
   await page.goto(`/#/graphs/${DEFAULT_SHA}?from=run:feature-graph-demo`)
   await expect(page.locator('[data-testid="design-view"] [data-testid="graph-node"]')).toHaveCount(12)
   const edges = page.locator('[data-testid="design-view"] [data-testid="graph-edge"]')
-  await expect(edges).toHaveCount(20)
+  await expect(edges).toHaveCount(21)
   // architect.spec (ArchitectureSpec) -> merge.analysis (AnalyzeResult).
   const source = page.locator('[data-testid="graph-node"][data-key="architect"] [data-handleid="out:spec"]')
   const target = page.locator('[data-testid="graph-node"][data-key="merge"] [data-handleid="in:analysis"]')
@@ -125,7 +125,7 @@ test('a payload-mismatched drop is refused with its reason and creates no edge',
   await page.mouse.up()
   // Whatever the drag's reach, no edge is ever created from a mismatched
   // pair (the fence and the store both refuse).
-  await expect(edges).toHaveCount(20)
+  await expect(edges).toHaveCount(21)
 })
 
 test('Run this version is gated to the saved unchanged default and states its reason', async ({ page }) => {  // clause: CONSOLE-43
@@ -147,10 +147,12 @@ test('Run this version is gated to the saved unchanged default and states its re
 test('Graphs shows one card per shipped graph and the panel; unsourced values read not measured', async ({ page }) => {  // clause: CONSOLE-44
   await page.goto('/#/graphs')
   const names = page.locator('[data-testid="catalog-name"]')
-  await expect(names).toHaveCount(3)
+  await expect(names).toHaveCount(5)
   await expect(names.nth(0)).toHaveText('default')
   await expect(names.nth(1)).toHaveText('default-research')
-  await expect(names.nth(2)).toHaveText('seeded')
+  await expect(names.nth(2)).toHaveText('default-constitution')
+  await expect(names.nth(3)).toHaveText('default-requirements')
+  await expect(names.nth(4)).toHaveText('seeded')
   await expect(page.locator('[data-testid="catalog-action"]').first()).toHaveText('Open in Design')
   await expect(page.locator('[data-testid="config-panel"]')).toBeVisible()
   await expect(page.locator('[data-testid="catalog-description"]').first()).toHaveText('not measured')

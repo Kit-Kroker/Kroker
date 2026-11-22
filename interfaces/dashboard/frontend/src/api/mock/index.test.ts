@@ -440,13 +440,13 @@ describe('the shipped graphs mock (018 T060)', () => {
     api = createMockApi({ simulateLive: false })
   })
 
-  it('serves three graphs by name with their shas', async () => {
+  it('serves five graphs by name with their shas', async () => {
     const graphs = (await api.getShippedGraphs()).graphs
     expect(graphs.map((g: { name: string }) => g.name)).toEqual([
-      'default', 'default-research', 'seeded',
+      'default', 'default-research', 'default-constitution', 'default-requirements', 'seeded',
     ])
     expect(graphs.find((g: { name: string }) => g.name === 'default')!.sha).toBe(
-      'a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38',
+      '2bfa5ac58df5454c6dff6a84e77a4b7d3950f49cc4e44187f2ad79505dc952e6',
     )
   })
 
