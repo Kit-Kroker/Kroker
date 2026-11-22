@@ -30,6 +30,10 @@ test('the header Design switch opens Design holding the run\'s graph', async ({ 
   // The header's Observe/Design switch.
   const designTab = page.locator('[data-testid="run-switch"] .rtab', { hasText: 'Design' })
   await expect(designTab).toBeVisible()
+  // The tab is visible before the fleet summary loads, and until then it
+  // points at the bare catalog (/graphs). Wait for its real target, the run's
+  // pinned sha, or a slow runner clicks it early and lands on Graphs.
+  await expect(designTab).toHaveAttribute('href', /#\/graphs\/[0-9a-f]{64}\?from=run:feature-graph-demo$/)
   await designTab.click()
   await expect(page.locator('[data-testid="design-view"]')).toBeVisible()
   await expect(page.locator('[data-testid="design-view"] [data-testid="graph-node"]')).toHaveCount(12)
