@@ -1,4 +1,10 @@
-# Service platform (`E-57`…`E-63`) → FR-1000, NFR-8, NFR-9
+# Service platform (`E-57`…`E-63`) → FR-1000, NFR-8, NFR-9 — P8
+
+> **2026-11-22.** This group is phase **P8** (was P7); the team console took
+> P7 ([`console.md`](console.md)). E-60 splits: principals and roles inside
+> one company move to P7 as **E-94**; SSO, per-tenant roles and
+> authenticated remote MCP stay here. The v13 spec's key vault and per-run
+> model proxy have no epic yet; E-62 is the closest fit.
 
 **E-57 and E-58 are preconditions for admitting an external tenant, not
 hardening.** Everything in §§10–11 can be delivered by an operator on

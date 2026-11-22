@@ -15,7 +15,7 @@ vi.mock('../api/client', () => ({ api, API_MODE: 'mock' as const }))
 import { router } from './router'
 
 const PRE = preCode.parse as { ok: true; graph: GraphWire; sha: string }
-const DEFAULT_SHA = 'a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38'
+const DEFAULT_SHA = '2bfa5ac58df5454c6dff6a84e77a4b7d3950f49cc4e44187f2ad79505dc952e6'
 
 const loadRun = (sha: string | null) => {
   api.getRunGraph.mockResolvedValue({ kind: 'graph', sha, graph: PRE.graph, back_edges: [] })

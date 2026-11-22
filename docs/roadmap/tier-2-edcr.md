@@ -1,5 +1,9 @@
 # Tier 2 — the EDCR port (`E-45`…`E-56`) → FR-910
 
+> **2026-11-22.** Remaining audit depth (E-52…E-56) is scheduled after P7,
+> the team console (owner decision on the v13 re-plan). P6 stays
+> operator-run and independent of P7 and P8.
+
 **What the port is actually for.** BrownKit's methodology is sound and its
 artifact set is well specified; what it cannot do is *enforce itself*. `/gate`
 writes no files and explicitly permits continuation when `/assess` never ran.

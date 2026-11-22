@@ -1,6 +1,6 @@
 {
   "available": true,
-  "root": "/home/maksim/work/Kroker/tests/fixtures/compare",
+  "root": "tests/fixtures/compare",
   "description": "SC weights quality 0.6 \u00b7 cost 0.2 \u00b7 speed 0.2, judge anthropic:claude-sonnet-5",
   "graphs": [
     "a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38",

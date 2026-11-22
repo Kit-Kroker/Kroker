@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | Draft v1.2 |
-| Date | 2026-07-02 (amended 2026-07-25, 2026-09-12) |
+| Status | Draft v1.3 |
+| Date | 2026-07-02 (amended 2026-07-25, 2026-09-12, 2026-11-22) |
 | Related | `ARCHITECTURE.md`, `SDLC-spec.md` (v2 + v2.1 addendum), `docs/superpowers/specs/2026-07-25-brownfield-assessment-and-outcome-measurement-design.md` |
 
 > **2026-07-25 amendment.** Adds two user groups and four requirement families:
@@ -29,6 +29,18 @@
 > hardcoded pipeline rather than running beside it. Cutover semantics for
 > in-flight runs are settled the same day: **grace-retention** (OQ-10,
 > resolved — see §11).
+
+> **2026-11-22 amendment (v1.3).** Admits one requirement family: **FR-1500**
+> (the team console: projects with people and roles, decisions routed to a
+> role, a chat thread per task in which Kroker proposes and a person confirms,
+> draft → measure → publish for pipelines and agents, shadow-first custom
+> steps, agents and automations). Source: the v13 console design and its
+> screen-by-screen spec, `docs/reference/kroker-ui-spec-v13.md`; the E-item
+> breakdown lives in `docs/roadmap/console.md` (E-93…E-109). Rollout gains a
+> phase: the console is **P7**, single company and self-hosted; the hosted
+> multi-tenant service moves to **P8** and the product outcome loop to
+> **P9** (§9). FR-604 is narrowed by ADR-26: surfaces stay stateless, and
+> objects that belong to no run live in a control-plane store.
 
 ---
 
@@ -300,7 +312,10 @@ Teams adopting coding agents today face four gaps:
 - FR-602: MCP server exposing list/detail/inbox/answer/decide/start tools.
 - FR-603: CLI covering the same operations.
 - FR-604: All surfaces SHALL be stateless shells over Temporal queries and
-  signals (no interface-owned database).
+  signals (no interface-owned database). *Narrowed 2026-11-22 (ADR-26):*
+  run state is read and written only through Temporal; objects that belong
+  to no run (projects, people, chats, automations, connections) are read and
+  written through the control-plane API. No surface owns a database.
 
 ### Governance & ops (FR-700)
 - FR-701: Budgets (wall-clock, steps, LLM cost) per run; exhaustion SHALL
@@ -633,6 +648,104 @@ benchmarks, and audit trail.
   the graph that actually ran. A type with no mapping records as `unknown` —
   never silently as a canonical stage.
 
+### Console (FR-1500) *(new scope; PRD v1.3 2026-11-22)*
+
+FR-601 gave one operator a dashboard over runs. FR-1500 turns it into a
+console a team works in: a project holds people with roles, every decision
+reaches the role that owns it, each task has a chat thread, and every change
+to how work is done (a pipeline, an agent, an automation) is drafted,
+measured and published rather than edited live. The screen-by-screen
+contract is `docs/reference/kroker-ui-spec-v13.md`; this section states what
+must hold whatever the screens look like. Scope is one company, self-hosted;
+tenancy and self-serve onboarding stay FR-1000.
+
+- **FR-1501 — Projects.** A project SHALL be a named set of people with a
+  goal, bound to repositories and tools. Every work item, chat, decision,
+  artifact, memory view and metric SHALL carry its project, and every view
+  SHALL filter by the selected project; "All projects" SHALL aggregate only
+  projects the viewer belongs to. Projects live in the control-plane store
+  (ADR-26).
+- **FR-1502 — Decisions routed to roles.** Each project SHALL keep a
+  "Who decides" table mapping every decision kind (clarify question,
+  `gate.architecture`, `gate.plan`, task gate, tool escalation, design
+  review, merge, deploy, budget) to a role. Everyone holding that role SHALL
+  see the decision; the first answer on any surface SHALL win and SHALL be
+  recorded with the answering principal (FR-1004). The table extends
+  `policy/notifications.yaml`: its target becomes a project role instead of a
+  webhook. An unanswered tool escalation SHALL resolve as deny.
+- **FR-1503 — Plain-language decisions.** Every pending decision SHALL carry
+  a one-sentence lead, a facts grid, the outcome of each available answer,
+  and the raw technical fields behind a disclosure. One decision SHALL render
+  identically in the Inbox, its chat and any notification channel; answering
+  it SHALL remove it from every surface.
+- **FR-1504 — Chat, and Kroker proposes, a person confirms.** Each task SHALL
+  have a chat thread with people, a visibility (project or only its
+  participants), messages, system events and cards. The assistant SHALL act
+  only through a fixed, typed action set (queue work, create a graph, save a
+  version, answer a decision, apply a proposal, navigate), and no action
+  SHALL change state without an explicit confirm by a person.
+- **FR-1505 — Work items with provenance.** A work item SHALL record its
+  source (CLI, chat, Linear, GitHub, Slack, Sentry, MCP agent, benchmark) and
+  external reference, its project, its pinned graph and arm, and who it
+  waits on. An item waiting on a person SHALL show who on every list that
+  shows the item.
+- **FR-1506 — Live session, steer, pull to local.** The run view SHALL stream
+  a harness session's events (FR-109, ADR-16). Guidance typed by a person
+  SHALL be delivered as a user turn at the next tool boundary, queued while a
+  tool escalation pauses the session. A person MAY pull a task to their own
+  machine over MCP: the run SHALL wait under a lock that expires, and a push
+  back SHALL run the task's frozen tests before review and QA.
+- **FR-1507 — Draft, measure, publish.** A change to a pipeline or an agent
+  SHALL go into a draft; measure SHALL benchmark the draft against the live
+  version and report the result as a decision; publish SHALL create a new
+  version that only new runs pin (FR-1203, ADR-5). Making an older version
+  live SHALL change only what new runs pin. A simple view SHALL present a
+  graph as phases and steps derived from `canonical_stage` (FR-1206), and
+  SHALL never edit wiring; ports and edges are edited only in the canvas
+  (FR-1205).
+- **FR-1508 — Shadow first, custom steps.** New steps, agents and automations
+  SHALL start in shadow: they run and record verdicts but SHALL NOT route,
+  block, open decisions or post to external systems until made live. A
+  custom step SHALL be a generic `agent.custom` node whose output is one of
+  a closed set of typed models (check report, document, code change), so
+  NG8 holds: a custom step adds a typed node, never an untyped one.
+- **FR-1509 — Layered configuration.** Agent and step settings SHALL resolve
+  company → project → agent, the lower layer overriding the upper. Every
+  surface SHALL show where an effective value comes from and SHALL let the
+  lower layer reset to inherit. ADR-6 SHALL be enforced at choice time: a
+  checker on the writer's model family is refused with the fix offered.
+- **FR-1510 — Agent builder.** An agent, a step or an automation MAY be
+  drafted in conversation with the assistant; the conversation SHALL write
+  only the same draft fields a form would, and every field SHALL stay
+  editable. A draft SHALL be testable by replaying it read-only on the
+  stored inputs of recent runs (claim-check artifacts, FR-702): nothing is
+  written and nobody is asked.
+- **FR-1511 — Harness catalogue.** Installing a harness SHALL mean an adapter
+  plus one verified benchmark case; until then no agent can select it. Each
+  harness SHALL declare what Kroker controls under it (access limits, asking
+  a person, session visibility, cost), and strict containment SHALL refuse a
+  harness that enforces nothing.
+- **FR-1512 — Automations.** Every automation SHALL have a trigger (event or
+  schedule), an action (a pipeline or a single agent), an identity it runs as
+  and a budget owner, and SHALL start in shadow. Issue, chat and alert
+  triggers SHALL enter through `intake.issue`.
+- **FR-1513 — Proposals measured before applied.** An improvement proposed by
+  the retro (E-32) SHALL be measured on the benchmark, one change per
+  measurement, before a person MAY apply it; applying SHALL create a new
+  version through prompt-gate (E-82). The factory never applies a proposal
+  on its own (NG4).
+- **FR-1514 — Connections, bindings, agent access.** Company owners SHALL
+  connect integrations and project leads SHALL bind them to a project; every
+  change SHALL be an audited policy diff. Each agent role SHALL be granted
+  per-tool access (none, read, comment, test, write) per project, and an
+  agent SHALL reach only what is granted (FR-703); per-run minted tokens are
+  FR-1003.
+- **FR-1515 — Cross-run read surfaces.** Artifacts SHALL be listable by
+  project and kind with a link to their run and chat; memory SHALL be
+  readable by bank and kind, and each run SHALL link its per-stage recall
+  snapshot; metrics SHALL break down by project and source and SHALL include
+  the time decisions wait on people.
+
 ## 7. Non-functional requirements
 
 - NFR-1 **Durability:** no run state lost on worker/server restart; waits of
@@ -711,14 +824,19 @@ benchmarks, and audit trail.
 | P4 | MCP surface, maintenance loop (DAPER), fleet scale | SC-1..3 at target |
 | P5 | Triage + tidy-up (Tier 0/1), operator-run, single tenant | one unfamiliar repository triaged, a mechanical backlog fixed through governed runs, before/after delta recorded |
 | P6 | Capability & risk audit (Tier 2) + evidence bundle | one repository audited end-to-end with SC-7 held and a bundle handed over |
-| P7 | Hosted multi-tenant service | NFR-8 adversarial test green; FR-1002 container tier live; a tenant onboards without operator assistance |
-| P8 | Product outcome loop | one hypothesis pre-registered, shipped, and decided by its own rule (SC-11/SC-12) |
+| P7 | Team console (FR-1500), one company, self-hosted | in one project with at least three people in distinct roles: a work item started from chat reaches merge with every decision routed by role and recorded with a real principal; one pipeline or agent change goes draft → measure → publish; one automation from an external trigger goes shadow → live |
+| P8 | Hosted multi-tenant service | NFR-8 adversarial test green; FR-1002 container tier live; a tenant onboards without operator assistance |
+| P9 | Product outcome loop | one hypothesis pre-registered, shipped, and decided by its own rule (SC-11/SC-12) |
 
-**Phase independence.** P5/P6 do not depend on P7: assessment delivered by an
-operator on repositories they are authorised to run needs neither tenancy nor
-self-serve onboarding. P7 is what converts operator-delivered work into a
-product strangers can use, and FR-1002 is its gating item. FR-913 lands *inside*
-P2, since it is how FR-102's `CodebaseMap` gets built.
+**Phase independence.** P5/P6 do not depend on P7 or P8: assessment
+delivered by an operator on repositories they are authorised to run needs
+neither a team console, tenancy nor self-serve onboarding. Phase numbers are
+not a work order: P6's remaining audit depth is scheduled after P7 (owner
+decision, 2026-11-22). P7 turns a one-operator dashboard into a console a
+team inside one company works in; it needs FR-1004's principals and roles,
+but not tenancy. P8 is what converts that into a product strangers can use,
+and FR-1002 is its gating item. FR-913 lands *inside* P2, since it is how
+FR-102's `CodebaseMap` gets built.
 
 ## 10. Risks & mitigations
 
@@ -778,7 +896,7 @@ P2, since it is how FR-102's `CodebaseMap` gets built.
   its expiry timer) and over hard-cut-and-restart (restart under the same
   workflow id currently breaks on stale `sdlc/*` branches, a known open
   defect, so failed runs would land on a broken recovery path). Also the only
-  policy that survives P7: a hosted multi-tenant factory cannot kill customer
+  policy that survives P8: a hosted multi-tenant factory cannot kill customer
   runs at deploy time.
   **Amended 2026-09-15 (E-74 U7):** the deletion is a separate follow-up
   even when nothing is in flight at cutover, and it additionally waits for
@@ -786,3 +904,8 @@ P2, since it is how FR-102's `CodebaseMap` gets built.
   cutover deploy (their replay still starts FeatureWorkflow children).
   (Same question, same number as
   `docs/roadmap/pipeline-as-data.md` OQ-10.)
+- OQ-11: The console's project is people plus a goal and may span several
+  repositories; a Hindsight bank today is per repository (`project:<repo>`).
+  Is a memory bank per console project or per repository, and what does a
+  multi-repo project recall? Decide before FR-1515's memory surface ships
+  (`docs/reference/kroker-ui-spec-v13.md` §6.2).

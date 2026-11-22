@@ -34,3 +34,8 @@ interfaces/mcp/target/
 test-results/
 playwright-report/
 /graphs/
+
+# v13 console design sources (local only)
+/docs/reference/Pipeline management prototype-project/
+/docs/reference/kroker-ui-spec-v13.md
+/docs/evidence/

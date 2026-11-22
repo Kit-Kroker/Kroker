@@ -102,11 +102,17 @@ def build() -> dict[str, Any]:
     wire = asyncio.run(fleet_summary(poller, run_graphs))
     # 018 T068 (R-9): the compare recording reads the same fixture tree the
     # route tests drive (tests/fixtures/compare - never live data).
-    compare_wire = compare(runs_root=str(ROOT / "tests" / "fixtures" / "compare"))
+    compare_dir = ROOT / "tests" / "fixtures" / "compare"
+    compare_obj = json.loads(compare(runs_root=str(compare_dir)).model_dump_json())
+    # The route echoes the absolute runs root it read. Recorded as-is, the
+    # fixture would carry whichever checkout generated it (/home/<user>/...)
+    # and test_read_fixtures_fresh would fail on every other machine, so the
+    # recording stores the repo-relative form.
+    compare_obj["root"] = compare_dir.relative_to(ROOT).as_posix()
     return {
         "fleet-summary.json": json.loads(wire.model_dump_json()),
         "graphs-shipped.json": json.loads(shipped_graphs().model_dump_json()),
-        "compare.json": json.loads(compare_wire.model_dump_json()),
+        "compare.json": compare_obj,
         # 018 T075 (R-8): the interfaces recording over the shipped policy
         # and the repo's own registry - the same read the route serves.
         "interfaces.json": json.loads(interfaces().model_dump_json()),

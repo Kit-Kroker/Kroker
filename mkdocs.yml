@@ -74,6 +74,7 @@ nav:
       - docs/roadmap:
           - agent-architecture-plan: roadmap/agent-architecture-plan.md
           - agent-board: roadmap/agent-board.md
+          - console: roadmap/console.md
           - crew: roadmap/crew.md
           - filesystem-first: roadmap/filesystem-first.md
           - ordering: roadmap/ordering.md

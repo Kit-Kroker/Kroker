@@ -51,7 +51,7 @@ interface SummaryRow {
 
 const summaryRow = (over: Partial<SummaryRow>): SummaryRow => ({
   runId: 'run-1',
-  graphSha: 'a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38',
+  graphSha: '2bfa5ac58df5454c6dff6a84e77a4b7d3950f49cc4e44187f2ad79505dc952e6',
   graphName: 'default',
   arm: { harness: 'opencode', model: 'glm' },
   traversals: [],

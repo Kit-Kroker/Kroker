@@ -21,7 +21,7 @@ const OUTCOMES: Record<string, FleetRunSummary['outcome']> = {
   'feature-budget-demo': { state: 'rejected', reason: null, result: 'rejected:budget' },
 }
 
-const DEFAULT_SHA = 'a021c25b8f7e012faaf9f4de9664d8cc5b11a977c1b878e20d50cfec78b23c38'
+const DEFAULT_SHA = '2bfa5ac58df5454c6dff6a84e77a4b7d3950f49cc4e44187f2ad79505dc952e6'
 
 const BOUNDED = [
   {
@@ -31,6 +31,11 @@ const BOUNDED = [
   },
   {
     edge: { source: 'plan', sourcePort: 'revise', target: 'planner', targetPort: 'guidance' },
+    used: 0,
+    max: 2,
+  },
+  {
+    edge: { source: 'plan_check', sourcePort: 'revise', target: 'planner', targetPort: 'guidance' },
     used: 0,
     max: 2,
   },

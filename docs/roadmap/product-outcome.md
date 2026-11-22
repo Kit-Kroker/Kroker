@@ -1,4 +1,7 @@
-# Product outcome (`E-64`…`E-71`) → FR-1100
+# Product outcome (`E-64`…`E-71`) → FR-1100 — P9
+
+> **2026-11-22.** This group is phase **P9** (was P8) after the team console
+> took P7; nothing in it changed.
 
 **The framing.** The factory measures *itself* very well — SC-1..6, the
 benchmark matrix, rubric calibration (FR-110), capture-always transcripts

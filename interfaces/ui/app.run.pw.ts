@@ -12,12 +12,12 @@ test.beforeEach(async ({ page }) => {
 test('a graph run renders its nodes and its curved backward edges', async ({ page }) => {  // clause: CONSOLE-4
   await page.goto('/#/runs/feature-graph-demo')
   const canvas = page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')
-  // The recorded default graph: 12 nodes, the 2 revise loops curved. The
+  // The recorded default graph: 12 nodes, the 3 revise loops curved. The
   // blocked projection carries no traversals, so no counter renders here --
   // the counter feature stays pinned by GRAPH_CANVAS-3 (showcase) and the
   // adapter rows over the escalated recording.
   await expect(canvas.locator('[data-testid="graph-node"]')).toHaveCount(12)
-  await expect(canvas.locator('.cmp-graph-edge-backward')).toHaveCount(2)
+  await expect(canvas.locator('.cmp-graph-edge-backward')).toHaveCount(3)
   await expect(canvas.locator('.cmp-graph-node-blocked')).toHaveCount(1)
   await expect(canvas.locator('.cmp-graph-node-skipped')).toHaveCount(1)
 })
@@ -28,10 +28,10 @@ test('run-state re-renders never drop the canvas edges', async ({ page }) => {  
   await page.clock.install()
   await page.goto('/#/runs/feature-graph-demo')
   const canvas = page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')
-  await expect(canvas.locator('[data-testid="graph-edge"]')).toHaveCount(20)
+  await expect(canvas.locator('[data-testid="graph-edge"]')).toHaveCount(21)
   // Fire RunView's 1 s clock deterministically -- no sleep, no flake budget.
   await page.clock.runFor(5000)
-  await expect(canvas.locator('[data-testid="graph-edge"]')).toHaveCount(20)
+  await expect(canvas.locator('[data-testid="graph-edge"]')).toHaveCount(21)
   await expect(canvas.locator('.cmp-graph-node-blocked')).toHaveCount(1)
 })
 
@@ -111,12 +111,12 @@ test('the elapsed clock flows while the canvas structure survives a minute of ti
   await page.goto('/#/runs/feature-graph-demo')
   const canvas = page.locator('[data-testid="run-view"] [data-testid="graph-canvas"]')
   const metrics = canvas.locator('[data-key="architecture"] [data-testid="node-metrics"]')
-  await expect(canvas.locator('[data-testid="graph-edge"]')).toHaveCount(20)
+  await expect(canvas.locator('[data-testid="graph-edge"]')).toHaveCount(21)
   const before = await metrics.textContent()
   await page.clock.runFor(70_000)
   const after = await metrics.textContent()
   expect(after).not.toBe(before)  // the clock really ticks
-  await expect(canvas.locator('[data-testid="graph-edge"]')).toHaveCount(20)
+  await expect(canvas.locator('[data-testid="graph-edge"]')).toHaveCount(21)
   await expect(canvas.locator('.cmp-graph-node-blocked')).toHaveCount(1)
 })
 

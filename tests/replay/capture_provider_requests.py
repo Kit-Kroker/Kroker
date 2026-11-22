@@ -51,7 +51,6 @@ if not Path(os.environ.get("SDLC_GRAPH_STORE", "")).is_absolute():
     os.environ["SDLC_GRAPH_STORE"] = str(Path(tempfile.gettempdir()) / "sdlc-test-graphs")
 
 from sdlc.agents.roles import AGENT_ACTIVITY_CONFIG  # noqa: E402
-from sdlc.converter import sdlc_data_converter  # noqa: E402
 from sdlc.stages.architecture.models import ArchitectureSpec  # noqa: E402
 from sdlc.stages.research.deps import ResearchDeps  # noqa: E402
 from sdlc.stages.research.models import ResearchBrief  # noqa: E402
