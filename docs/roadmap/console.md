@@ -2,7 +2,7 @@
 
 **Source.** The v13 console design (Pipeline Canvas v13, exported under
 `docs/reference/Pipeline management prototype-project/`) and its
-screen-by-screen spec, [`docs/reference/kroker-ui-spec-v13.md`](../reference/kroker-ui-spec-v13.md).
+screen-by-screen spec, `docs/reference/kroker-ui-spec-v13.md` (local, gitignored).
 The spec's section numbers are cited as *spec §n* below. Requirements:
 PRD FR-1500 (v1.3, 2026-11-22). Storage decision: ADR-26.
 
