@@ -6,6 +6,10 @@ Newest first; **append new entries at the top** — never edit the ROADMAP cell
 beyond its one-sentence latest entry. The final entry (2026-10-11, Phase 3) is
 out of date order as inherited; left as-is.
 
+## 2026-11-22
+
+2026-11-22 (P5 close-out, partial — the deferred four-scenario `TidyUpWorkflow` temporal e2e landed as commit `cd33ab5b` (5 temporal tests: the 4 plan scenarios + 1 chaos edge; reviewer-gated — fixes-needed on a timing race and vacuous assertions, fixed with a barrier and real assertions, then approve). Orchestrator re-run: temporal 5/5, fast tier green, `ruff`/`ruff format`/`mypy`/`check_file_size` green. The P5 row flips `[ ]` ⚠️ → `[x]` on the owner's ruling: exit criterion demonstrated in part, with the residual stated. **Live operator-run demo (2026-11-21, owner-approved):** triage of an unfamiliar repository → verdict READY (all four readiness metrics measured, build probe collected); 5-item MECHANICAL backlog (`misconfig:debug_enabled` high; `misconfig:allowed_hosts_wildcard`; `dependencies:unpinned_dependency` ×2; `baseline:gitignore_missing`); both human gates serviced (`select`, `tidy_up` approve); seeded fix run `tidyup-p5-demo-repo-20261121T210954Z-fix-00` — patch PASSED the absolute merge checks, then the run died at `open_pull_request` (no `origin` remote; non-retryable, `merge/activities.py:221`); fix-01 terminated mid-flight by an owner STOP ruling. **Residual, honest:** no before/after delta was collected — the cycle stopped at the PR/origin blocker; the delta stays owner-deferred (the FR-501 "closed on fixtures" precedent). Cards filed 2026-11-22: `safe-directory-env-ignored-on-clone`, `build-probe-clone-hardlinks-cross-device`, `tidyup-fix-run-needs-github-origin`. P6's gate on P5's readiness verdict (FR-903) is unchanged.)
+
 ## 2026-11-21 — E-51 landed (acceptance criteria as code)
 
 2026-11-21 (E-51 landed — FR-918's acceptance criteria are computed by code,
