@@ -27,7 +27,7 @@ dependencies = [
     "httpx>=0.28.1",
     "defusedxml>=0.7",
     "genai-prices>=0.0.60",
-    "pydantic-ai-harness[codemode,exa]>=0.61,<0.62",
+    "pydantic-ai-harness[codemode,exa]>=0.61,<0.72",
     "fastapi>=0.141.1",
     "uvicorn>=0.30",
     # Round 015 quality axis: erosion (radon) and verbosity (ast-grep)
