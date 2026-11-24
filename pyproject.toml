@@ -21,7 +21,7 @@ dependencies = [
     # changes (the research role imports harness.exa._toolset) landed on every
     # rebuild. Keep the bound, uv.lock, and the adapters' assumptions moving
     # together in one upgrade PR.
-    "pydantic-ai-slim[anthropic,openai,google,temporal]>=2.61,<2.62",
+    "pydantic-ai-slim[anthropic,openai,google,temporal]>=2.61,<2.72",
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
     "httpx>=0.28.1",
